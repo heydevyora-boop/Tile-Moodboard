@@ -133,12 +133,23 @@ def _ensure_visualization_folder(
         folder_name
     )
 
-    folder_id = (
+    # get_or_create_folder returns the full Drive folder object
+    # ({id, name, mimeType, parents}), not just its id -- passing
+    # that object straight through as the next call's parent_id
+    # stringifies the whole dict into the Drive `q` filter, which
+    # Google rejects with HttpError 400 ("Invalid Value").
+    folder = (
         drive_folders.get_or_create_folder(
             drive_service,
             folder_name,
             parent_id,
         )
+    )
+
+    folder_id = (
+        folder.get("id")
+        if isinstance(folder, dict)
+        else folder
     )
 
     if not folder_id:
