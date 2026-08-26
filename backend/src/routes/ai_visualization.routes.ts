@@ -25,6 +25,11 @@ router.post(
         product_id,
         surface,
         scene_image_path,
+        scene_image_url,
+        scene_image_mode,
+        generate_random_scene,
+        spreadsheet_id,
+        sheet_name,
         scene_id,
         theme,
         requirements,
@@ -68,22 +73,11 @@ router.post(
         });
       }
 
-      if (
-        typeof scene_image_path !== 'string' ||
-        !scene_image_path.trim()
-      ) {
-        return res.status(400).json({
-          success: false,
-
-          error: {
-            type:
-              'VALIDATION_ERROR',
-
-            message:
-              'scene_image_path is required.',
-          },
-        });
-      }
+      // scene_image_path is intentionally optional: an empty value
+      // (or scene_image_mode "random" / generate_random_scene)
+      // tells Python to generate a bathroom scene instead of
+      // fetching one. Requiring it non-empty here would reject
+      // that request with a 400 before it ever reaches Python.
 
       // ========================================================
       // NODE → PYTHON
@@ -100,7 +94,38 @@ router.post(
               .toUpperCase(),
 
           scene_image_path:
-            scene_image_path.trim(),
+            typeof scene_image_path ===
+            'string'
+              ? scene_image_path.trim()
+              : undefined,
+
+          scene_image_url:
+            typeof scene_image_url ===
+            'string'
+              ? scene_image_url.trim()
+              : undefined,
+
+          scene_image_mode:
+            typeof scene_image_mode ===
+            'string'
+              ? scene_image_mode.trim()
+              : undefined,
+
+          generate_random_scene:
+            generate_random_scene ===
+            true,
+
+          spreadsheet_id:
+            typeof spreadsheet_id ===
+            'string'
+              ? spreadsheet_id.trim()
+              : undefined,
+
+          sheet_name:
+            typeof sheet_name ===
+            'string'
+              ? sheet_name.trim()
+              : undefined,
 
           scene_id:
             typeof scene_id ===

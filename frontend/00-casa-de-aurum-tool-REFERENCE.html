@@ -1448,11 +1448,29 @@ function normalizeScene(scene, index) {
   /*
    * A scene ID such as SEED_feminine_01 or feminine_01 is NOT
    * an image location. Never convert such IDs into Google Drive
-   * URLs or filesystem paths.
+   * URLs or filesystem paths — including when a placeholder ID has
+   * already been wrapped into a Drive URL server-side (for example
+   * https://drive.google.com/uc?id=SEED_feminine_01), which is the
+   * actual value seeded reference images return and is not a real
+   * Drive file.
    */
-  const isPlaceholderId =
-    /^(SEED_|feminine_|bathroom-|scene-)/i.test(path) &&
-    !/\.(png|jpe?g|webp|bmp)$/i.test(path);
+  function isPlaceholderSceneValue(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return false;
+
+    const driveIdMatch =
+      raw.match(/[?&]id=([^&]+)/i) ||
+      raw.match(/\/d\/([^/]+)/i);
+
+    const candidate = driveIdMatch ? driveIdMatch[1] : raw;
+
+    return (
+      /^(SEED_|feminine_|masculine_|bathroom-|scene-)/i.test(candidate) &&
+      !/\.(png|jpe?g|webp|bmp)$/i.test(candidate)
+    );
+  }
+
+  const isPlaceholderId = isPlaceholderSceneValue(path);
 
   const usablePath =
     !isPlaceholderId &&
@@ -1463,7 +1481,8 @@ function normalizeScene(scene, index) {
     );
 
   const usableImageUrl =
-    /^https?:\/\//i.test(String(imageUrl || '').trim())
+    /^https?:\/\//i.test(String(imageUrl || '').trim()) &&
+    !isPlaceholderSceneValue(imageUrl)
       ? String(imageUrl).trim()
       : '';
 
