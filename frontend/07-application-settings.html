@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Casa de Aurum — Application Settings</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#221D18;
+    --charcoal:#1A1611;
+    --stone-50:#F1ECE1;
+    --stone-100:#E9E2D3;
+    --stone-200:#DFD5BF;
+    --stone-400:#B7AB94;
+    --stone-600:#78705F;
+    --stone-700:#4B443A;
+    --brass:#AD8348;
+    --brass-light:#D8B677;
+    --clay:#9C4B2C;
+    --sage:#7A9165;
+    --line: rgba(34,29,24,0.14);
+    --shadow: 0 12px 30px rgba(26,22,17,0.14);
+    --radius: 3px;
+    --display: 'Fraunces', serif;
+    --sans: 'Inter', sans-serif;
+    --mono: 'IBM Plex Mono', monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{background:var(--stone-50);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased;}
+  .grain{
+    position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.05;
+    background-image:radial-gradient(circle at 1px 1px, #000 1px, transparent 0);
+    background-size:3px 3px;
+  }
+
+  header.top{position:relative;z-index:2;padding:26px clamp(18px,4vw,56px) 0;background:var(--stone-50);border-bottom:1px solid var(--line);}
+  .brandrow{display:flex;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;gap:14px;padding-bottom:20px;}
+  .wordmark{display:flex;flex-direction:column;gap:2px;}
+  .wordmark .name{font-family:var(--display);font-weight:600;font-size:clamp(22px,3vw,30px);letter-spacing:.04em;color:var(--charcoal);}
+  .wordmark .name em{font-style:normal;color:var(--brass);}
+  .wordmark .sub{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--stone-600);}
+  .flowchip{font-family:var(--mono);font-size:11px;color:var(--stone-600);letter-spacing:.04em;}
+
+  .swatch-rail{display:flex;gap:0;border:1px solid var(--line);border-bottom:none;overflow:hidden;}
+  .swatch-rail div{flex:1;height:9px;}
+  .sw1{background:linear-gradient(100deg,#C9BFA9,#DCD2BC);}
+  .sw2{background:linear-gradient(100deg,#3B342A,#5A4F40);}
+  .sw3{background:linear-gradient(100deg,var(--brass),var(--brass-light));}
+  .sw4{background:linear-gradient(100deg,var(--clay),#B96A45);}
+  .sw5{background:linear-gradient(100deg,#7C8577,#9CA793);}
+  .sw6{background:linear-gradient(100deg,#E9E2D3,#F6F1E6);}
+  .sw7{background:linear-gradient(100deg,#4B443A,#2A251E);}
+  .sw8{background:linear-gradient(100deg,#C7A25E,#8F6B34);}
+
+  .crumb{
+    display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+    padding:16px clamp(18px,4vw,56px);font-family:var(--mono);font-size:11.5px;letter-spacing:.03em;
+    color:var(--stone-600);border-bottom:1px solid var(--line);background:#fff;
+  }
+  .crumb a{color:var(--stone-600);text-decoration:none;}
+  .crumb .sep{color:var(--stone-400);}
+  .crumb .now{color:var(--charcoal);font-weight:600;}
+
+  main{position:relative;z-index:1;max-width:1180px;margin:0 auto;padding:40px clamp(18px,4vw,56px) 90px;}
+
+  .tool-head{
+    display:flex;justify-content:space-between;align-items:flex-end;gap:20px;flex-wrap:wrap;
+    margin-bottom:28px;border-bottom:1px solid var(--line);padding-bottom:18px;
+  }
+  .tool-head h1{font-family:var(--display);font-weight:600;font-size:clamp(26px,3.4vw,36px);margin:0 0 6px;color:var(--charcoal);}
+  .tool-head p{margin:0;max-width:56ch;color:var(--stone-700);font-size:14.5px;line-height:1.55;}
+  .badge{
+    font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--brass);border:1px solid var(--brass);padding:5px 10px;border-radius:2px;white-space:nowrap;
+  }
+  .badge.warn{color:var(--clay);border-color:var(--clay);}
+
+  .panel{background:#fff;border:1px solid var(--line);border-radius:var(--radius);margin-bottom:20px;}
+  .panel-head{padding:14px 18px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;}
+  .panel-head h3{margin:0;font-size:12.5px;letter-spacing:.1em;text-transform:uppercase;font-family:var(--mono);color:var(--stone-700);font-weight:500;}
+  .panel-head .hint{font-family:var(--sans);font-size:11.5px;color:var(--stone-400);font-weight:400;}
+  .panel-body{padding:18px;}
+
+  /* ============ CONNECTED SERVICES ============ */
+  .svc-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  @media (max-width:760px){.svc-grid{grid-template-columns:1fr;}}
+  .svc-card{
+    border:1px solid var(--line);border-radius:5px;padding:14px 16px;
+    display:flex;align-items:flex-start;justify-content:space-between;gap:12px;
+  }
+  .svc-card .si{display:flex;gap:11px;align-items:flex-start;}
+  .svc-card .ic{
+    width:34px;height:34px;border-radius:6px;flex:none;background:var(--stone-100);
+    display:flex;align-items:center;justify-content:center;font-size:16px;
+  }
+  .svc-card .t{font-size:13.5px;font-weight:700;color:var(--ink);margin-bottom:2px;}
+  .svc-card .d{font-size:11.5px;color:var(--stone-600);line-height:1.4;}
+  .svc-status{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10.5px;margin-top:7px;}
+  .svc-status .dot{width:7px;height:7px;border-radius:50%;}
+  .svc-status.on .dot{background:var(--sage);}
+  .svc-status.on{color:var(--sage);}
+  .svc-status.off .dot{background:var(--stone-400);}
+  .svc-status.off{color:var(--stone-600);}
+  .svc-action{
+    font-family:var(--sans);font-size:11.5px;font-weight:600;background:none;border:1px solid var(--line);
+    padding:6px 12px;border-radius:2px;cursor:pointer;color:var(--stone-700);white-space:nowrap;
+  }
+  .svc-action:hover{border-color:var(--brass);color:var(--brass);}
+  .svc-action.connect{border-color:var(--brass);color:var(--brass);}
+
+  /* ============ KEY TABLE ============ */
+  table.keys{width:100%;border-collapse:collapse;font-size:13px;}
+  table.keys th{
+    text-align:left;font-weight:500;color:var(--stone-600);text-transform:uppercase;font-size:10.5px;
+    letter-spacing:.06em;padding:9px 10px;border-bottom:1px solid var(--line);font-family:var(--mono);
+  }
+  table.keys td{padding:11px 10px;border-bottom:1px solid var(--line);vertical-align:middle;}
+  table.keys tr:last-child td{border-bottom:none;}
+  .keyname{font-weight:600;color:var(--ink);font-size:13px;}
+  .keyname .sub{display:block;font-weight:400;font-size:11px;color:var(--stone-600);font-family:var(--mono);margin-top:2px;}
+  .keyval{
+    display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:12px;
+    background:var(--stone-50);border:1px solid var(--line);border-radius:2px;padding:5px 9px;color:var(--stone-700);
+  }
+  .keyval .reveal{cursor:pointer;color:var(--stone-400);font-size:11px;}
+  .keyval .reveal:hover{color:var(--brass);}
+  .rowact{display:flex;gap:14px;}
+  .rowact a{font-family:var(--mono);font-size:11px;color:var(--stone-600);text-decoration:none;cursor:pointer;}
+  .rowact a:hover{color:var(--brass);}
+  .rowact a.danger:hover{color:var(--clay);}
+  .status-pill{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:11px;color:var(--stone-700);}
+  .status-pill .dot{width:7px;height:7px;border-radius:50%;flex:none;}
+  .status-pill.active .dot{background:var(--sage);}
+  .status-pill.expiring .dot{background:var(--brass);}
+
+  /* ============ ADD KEY ============ */
+  .split-grid{display:grid;grid-template-columns:1fr 1.15fr;gap:20px;align-items:start;}
+  @media (max-width:900px){.split-grid{grid-template-columns:1fr;}}
+  .field{margin-bottom:14px;}
+  .field:last-child{margin-bottom:0;}
+  .field label{display:block;font-size:12px;color:var(--stone-600);margin-bottom:6px;font-family:var(--mono);letter-spacing:.03em;}
+  .field input, .field select{
+    width:100%;font-family:var(--mono);font-size:13px;padding:10px 11px;
+    border:1px solid var(--line);border-radius:2px;background:var(--stone-50);color:var(--ink);
+  }
+  .field input:focus, .field select:focus{outline:2px solid var(--brass);outline-offset:1px;}
+  .field .desc{font-size:12px;color:var(--stone-600);margin-top:5px;line-height:1.45;}
+  button.primary{
+    font-family:var(--sans);font-weight:600;font-size:13.5px;background:var(--charcoal);color:var(--stone-50);
+    border:none;padding:12px 22px;border-radius:2px;cursor:pointer;letter-spacing:.01em;transition:background .15s ease;
+  }
+  button.primary:hover{background:#000;}
+
+  /* ============ USAGE ============ */
+  .usage-row{padding:13px 0;border-bottom:1px dashed var(--line);}
+  .usage-row:last-child{border-bottom:none;padding-bottom:0;}
+  .usage-row:first-child{padding-top:0;}
+  .usage-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:7px;}
+  .usage-top .t{font-size:12.5px;font-weight:600;color:var(--ink);}
+  .usage-top .v{font-family:var(--mono);font-size:11.5px;color:var(--stone-600);}
+  .usage-bar-wrap{background:var(--stone-100);border-radius:2px;overflow:hidden;height:6px;}
+  .usage-bar{height:100%;background:linear-gradient(90deg,var(--brass),var(--brass-light));}
+  .usage-bar.high{background:linear-gradient(90deg,var(--clay),#B96A45);}
+
+  /* ============ DANGER ZONE ============ */
+  .panel.danger{border-color:rgba(156,75,44,.35);}
+  .panel.danger .panel-head{background:#FBF3EE;border-bottom-color:rgba(156,75,44,.2);}
+  .panel.danger .panel-head h3{color:var(--clay);}
+  .danger-row{
+    display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;
+    padding:12px 0;border-bottom:1px dashed rgba(156,75,44,.2);
+  }
+  .danger-row:last-child{border-bottom:none;padding-bottom:0;}
+  .danger-row:first-child{padding-top:0;}
+  .danger-row .t{font-size:13px;font-weight:600;color:var(--ink);}
+  .danger-row .d{font-size:12px;color:var(--stone-600);}
+  button.danger-btn{
+    font-family:var(--sans);font-weight:600;font-size:12.5px;background:none;color:var(--clay);
+    border:1px solid var(--clay);padding:8px 14px;border-radius:2px;cursor:pointer;white-space:nowrap;
+  }
+  button.danger-btn:hover{background:var(--clay);color:#fff;}
+
+  footer.note{
+    max-width:1180px;margin:0 auto;padding:0 clamp(18px,4vw,56px) 50px;
+    font-family:var(--mono);font-size:11px;color:var(--stone-400);text-align:center;
+  }
+</style>
+</head>
+<body>
+<div class="grain"></div>
+
+<header class="top">
+  <div class="brandrow">
+    <div class="wordmark">
+      <div class="name">CASA DE A<em>U</em>RUM</div>
+      <div class="sub">Internal Studio Tools · Not for external distribution</div>
+    </div>
+    <div class="flowchip">① EXTRACT → ② RULES → ③ DEPLOY → ④ BRIEF → ⑤ PRINT → ⑥ SEND &nbsp;·&nbsp; <span id="whoami"></span> &nbsp;·&nbsp; <a href="#" id="logoutLink" style="color:var(--clay);">Sign out</a></div>
+  </div>
+  <div class="swatch-rail">
+    <div class="sw1"></div><div class="sw2"></div><div class="sw3"></div><div class="sw4"></div>
+    <div class="sw5"></div><div class="sw6"></div><div class="sw7"></div><div class="sw8"></div>
+  </div>
+</header>
+
+<div class="crumb">
+  <a href="dashboard.html">Admin Dashboard</a><span class="sep">/</span>
+  <span class="now">Application Settings</span>
+</div>
+
+<div id="restrictedBanner" style="display:none;background:#FBF3E8;border:1px solid var(--brass);color:var(--stone-700);font-family:var(--mono);font-size:12px;padding:10px 14px;margin:0 clamp(18px,4vw,56px);border-radius:2px;">
+  You can view these settings, but only an Owner can change them.
+</div>
+
+<main>
+  <div class="tool-head">
+    <div>
+      <h1>Application Settings</h1>
+      <p>Store details, print defaults, and generation defaults used across the toolkit. Viewable by all staff; only an Owner can change them.</p>
+    </div>
+    <span class="badge" id="summaryBadge">Loading...</span>
+  </div>
+
+  <!-- ============ COMPANY INFORMATION ============ -->
+  <div class="panel">
+    <div class="panel-head"><h3>Company Information<span class="hint">Used on exported print boards &amp; shared links</span></h3></div>
+    <div class="panel-body">
+      <div class="field"><label>Company name</label><input type="text" id="companyName"></div>
+      <div class="field"><label>Address</label><input type="text" id="companyAddress"></div>
+      <div class="field"><label>Phone</label><input type="text" id="companyPhone"></div>
+      <div class="field"><label>Email</label><input type="text" id="companyEmail"></div>
+      <div class="field"><label>Tax ID</label><input type="text" id="companyTaxId"></div>
+      <div class="field"><label>Website</label><input type="text" id="companyWebsite"></div>
+      <div id="companyError" style="display:none;color:var(--clay);font-size:12px;margin-bottom:8px;"></div>
+      <button class="primary" id="saveCompanyBtn">Save company info</button>
+    </div>
+  </div>
+
+  <!-- ============ API KEYS (managed on its own page) ============ -->
+  <div class="panel">
+    <div class="panel-head"><h3>API Keys &amp; Credentials<span class="hint">Managed on a dedicated page</span></h3></div>
+    <div class="panel-body">
+      <p style="font-size:13px;color:var(--stone-600);margin:0 0 10px;">Gemini and other service credentials are stored and rotated from the dedicated API Keys &amp; Integrations page.</p>
+      <a class="svc-action" href="04-api-keys-integrations.html" style="display:inline-block;text-decoration:none;">Manage API Keys →</a>
+    </div>
+  </div>
+
+  <!-- ============ PRINT SETTINGS ============ -->
+  <div class="panel">
+    <div class="panel-head"><h3>Print Settings<span class="hint">Defaults applied when a new print board is created</span></h3></div>
+    <div class="panel-body">
+      <div class="field"><label>Default DPI</label><input type="number" id="printDpi" min="72" max="1200"></div>
+      <div class="field"><label>Default format</label>
+        <select id="printFormat">
+          <option value="CASSETTE_PANEL">Cassette Panel</option>
+          <option value="ACP_SIGNBOARD">ACP Signboard</option>
+          <option value="MOOD_BOARD_PRINT">Mood Board Print</option>
+          <option value="CUSTOM">Custom</option>
+        </select>
+      </div>
+      <div class="field"><label>Default file format</label>
+        <select id="printFileFormat">
+          <option value="PDF">PDF</option>
+          <option value="PNG">PNG</option>
+        </select>
+      </div>
+      <div class="field"><label>Default unit</label>
+        <select id="printUnit">
+          <option value="FT">Feet</option>
+          <option value="IN">Inches</option>
+          <option value="CM">Centimeters</option>
+          <option value="MM">Millimeters</option>
+        </select>
+      </div>
+      <div id="printError" style="display:none;color:var(--clay);font-size:12px;margin-bottom:8px;"></div>
+      <button class="primary" id="savePrintBtn">Save print settings</button>
+    </div>
+  </div>
+
+  <!-- ============ DEFAULT RULES ============ -->
+  <div class="panel">
+    <div class="panel-head"><h3>Default Rules<span class="hint">Used by the Mood Board Generator when a brief doesn't specify them</span></h3></div>
+    <div class="panel-body">
+      <div class="field"><label>Minimum tiles per combination</label><input type="number" id="rulesMinTiles" min="1" max="50"></div>
+      <div class="field"><label>Combinations to generate</label><input type="number" id="rulesMaxCombinations" min="1" max="20"></div>
+      <div class="field"><label>Default room type <span class="hint" style="text-transform:none;letter-spacing:0;">(used only if the brief doesn't name one)</span></label><input type="text" id="rulesDefaultRoom" placeholder="e.g. Living Room"></div>
+      <div class="field"><label>Default style tag <span class="hint" style="text-transform:none;letter-spacing:0;">(used only if the brief doesn't name one)</span></label><input type="text" id="rulesDefaultStyle" placeholder="e.g. Minimal"></div>
+      <div id="rulesError" style="display:none;color:var(--clay);font-size:12px;margin-bottom:8px;"></div>
+      <button class="primary" id="saveRulesBtn">Save default rules</button>
+    </div>
+  </div>
+
+  <!-- ============ GENERAL CONFIGURATION ============ -->
+  <div class="panel">
+    <div class="panel-head"><h3>General Configuration</h3></div>
+    <div class="panel-body">
+      <div class="field"><label>Timezone</label><input type="text" id="generalTimezone" placeholder="e.g. Asia/Kolkata"></div>
+      <div class="field"><label>Currency</label><input type="text" id="generalCurrency" placeholder="e.g. INR"></div>
+      <div class="field"><label>Date format</label><input type="text" id="generalDateFormat" placeholder="e.g. DD/MM/YYYY"></div>
+      <div class="field"><label>Session timeout (minutes)</label><input type="number" id="generalSessionTimeout" min="5" max="1440"></div>
+      <div id="generalError" style="display:none;color:var(--clay);font-size:12px;margin-bottom:8px;"></div>
+      <button class="primary" id="saveGeneralBtn">Save general configuration</button>
+    </div>
+  </div>
+</main>
+
+<footer class="note">CASA DE AURUM — INTERNAL OPERATIONS TOOL · BUILT FOR STORE USE ONLY · NOT FOR RESALE OR DISTRIBUTION</footer>
+
+<script src="assets/api-client.js"></script>
+<script src="assets/notifications.js"></script>
+<script>
+  const ROLE_LABEL = { OWNER: 'Owner', ADMIN: 'Manager', STAFF: 'Sales Staff' };
+  let isOwner = false;
+
+  function setError(id, message) {
+    const box = document.getElementById(id);
+    if (message) { box.textContent = message; box.style.display = 'block'; }
+    else { box.style.display = 'none'; }
+  }
+
+  function fillCompany(s) {
+    document.getElementById('companyName').value = s.name || '';
+    document.getElementById('companyAddress').value = s.address || '';
+    document.getElementById('companyPhone').value = s.phone || '';
+    document.getElementById('companyEmail').value = s.email || '';
+    document.getElementById('companyTaxId').value = s.taxId || '';
+    document.getElementById('companyWebsite').value = s.website || '';
+  }
+  function fillPrint(s) {
+    document.getElementById('printDpi').value = s.defaultDpi;
+    document.getElementById('printFormat').value = s.defaultFormat;
+    document.getElementById('printFileFormat').value = s.defaultFileFormat;
+    document.getElementById('printUnit').value = s.defaultUnit;
+  }
+  function fillRules(s) {
+    document.getElementById('rulesMinTiles').value = s.defaultMinTiles;
+    document.getElementById('rulesMaxCombinations').value = s.defaultMaxCombinations;
+    document.getElementById('rulesDefaultRoom').value = s.defaultRoomType || '';
+    document.getElementById('rulesDefaultStyle').value = s.defaultStyleTag || '';
+  }
+  function fillGeneral(s) {
+    document.getElementById('generalTimezone').value = s.timezone;
+    document.getElementById('generalCurrency').value = s.currency;
+    document.getElementById('generalDateFormat').value = s.dateFormat;
+    document.getElementById('generalSessionTimeout').value = s.sessionTimeoutMinutes;
+  }
+
+  async function loadAllSettings() {
+    const all = await CasaApi.settings.getAll();
+    fillCompany(all.company);
+    fillPrint(all.print);
+    fillRules(all.rules);
+    fillGeneral(all.general);
+  }
+
+  function disableIfNotOwner() {
+    if (isOwner) return;
+    document.querySelectorAll('main input, main select, main button.primary').forEach((el) => { el.disabled = true; });
+  }
+
+  async function saveCategory(category, payload, errorId, btnId, btnLabel) {
+    setError(errorId, null);
+    const btn = document.getElementById(btnId);
+    btn.disabled = true;
+    btn.textContent = 'Saving...';
+    try {
+      await CasaApi.settings.updateCategory(category, payload);
+      CasaNotify.success(`${btnLabel} saved.`);
+    } catch (err) {
+      setError(errorId, err.message || 'Failed to save.');
+      CasaNotify.error(err.message || 'Failed to save.');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = btnLabel;
+    }
+  }
+
+  document.getElementById('saveCompanyBtn').addEventListener('click', () => saveCategory('company', {
+    name: document.getElementById('companyName').value.trim(),
+    address: document.getElementById('companyAddress').value.trim(),
+    phone: document.getElementById('companyPhone').value.trim(),
+    email: document.getElementById('companyEmail').value.trim(),
+    taxId: document.getElementById('companyTaxId').value.trim(),
+    website: document.getElementById('companyWebsite').value.trim(),
+  }, 'companyError', 'saveCompanyBtn', 'Save company info'));
+
+  document.getElementById('savePrintBtn').addEventListener('click', () => saveCategory('print', {
+    defaultDpi: Number(document.getElementById('printDpi').value),
+    defaultFormat: document.getElementById('printFormat').value,
+    defaultFileFormat: document.getElementById('printFileFormat').value,
+    defaultUnit: document.getElementById('printUnit').value,
+  }, 'printError', 'savePrintBtn', 'Save print settings'));
+
+  document.getElementById('saveRulesBtn').addEventListener('click', () => saveCategory('rules', {
+    defaultMinTiles: Number(document.getElementById('rulesMinTiles').value),
+    defaultMaxCombinations: Number(document.getElementById('rulesMaxCombinations').value),
+    defaultRoomType: document.getElementById('rulesDefaultRoom').value.trim(),
+    defaultStyleTag: document.getElementById('rulesDefaultStyle').value.trim(),
+  }, 'rulesError', 'saveRulesBtn', 'Save default rules'));
+
+  document.getElementById('saveGeneralBtn').addEventListener('click', () => saveCategory('general', {
+    timezone: document.getElementById('generalTimezone').value.trim(),
+    currency: document.getElementById('generalCurrency').value.trim(),
+    dateFormat: document.getElementById('generalDateFormat').value.trim(),
+    sessionTimeoutMinutes: Number(document.getElementById('generalSessionTimeout').value),
+  }, 'generalError', 'saveGeneralBtn', 'Save general configuration'));
+
+  (async () => {
+    const currentUser = await CasaApi.requireAuth();
+    document.getElementById('whoami').textContent = `${currentUser.name} (${ROLE_LABEL[currentUser.role.name] || currentUser.role.name})`;
+    document.getElementById('logoutLink').addEventListener('click', (e) => { e.preventDefault(); CasaApi.auth.logout(); });
+    isOwner = currentUser.role.name === 'OWNER';
+
+    if (!isOwner) {
+      document.getElementById('restrictedBanner').style.display = 'block';
+    }
+
+    try {
+      await loadAllSettings();
+      document.getElementById('summaryBadge').textContent = 'Settings loaded';
+    } catch (err) {
+      document.getElementById('summaryBadge').textContent = 'Failed to load settings';
+      CasaNotify.error(err.message || 'Failed to load settings.');
+    }
+    disableIfNotOwner();
+  })();
+</script>
+</body>
+</html>

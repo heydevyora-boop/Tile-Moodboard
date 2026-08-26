@@ -1,0 +1,35 @@
+{
+  "product_type": "tile",
+
+  "keep_rules": [
+    "standalone product image",
+    "single identifiable tile or product",
+    "plain or predominantly white background",
+    "clear product boundary",
+    "sufficient resolution"
+  ],
+
+  "reject_rules": [
+    "lifestyle image",
+    "room interior",
+    "installation photograph",
+    "logo",
+    "icon",
+    "decorative graphic",
+    "banner",
+    "texture-only image",
+    "background design",
+    "multiple unrelated products"
+  ],
+
+  "thresholds": {
+    "accept": 70,
+    "review": 40,
+    "reject": 39
+  },
+
+  "minimum_resolution": {
+    "width": 200,
+    "height": 200
+  }
+}

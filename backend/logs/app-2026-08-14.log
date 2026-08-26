@@ -1,0 +1,15 @@
+{"level":"info","message":"✅ Database connected","timestamp":"2026-08-14T12:08:00.063Z"}
+{"level":"info","message":"Image Processing Queue worker registered","timestamp":"2026-08-14T12:08:00.075Z"}
+{"level":"info","message":"Export Queue worker registered","timestamp":"2026-08-14T12:08:00.076Z"}
+{"level":"info","message":"🚀 Casa de Aurum Internal Tool running in development mode on port 5000","timestamp":"2026-08-14T12:08:00.112Z"}
+{"level":"info","message":"   API base: http://localhost:5000/api/v1","timestamp":"2026-08-14T12:08:00.113Z"}
+{"level":"info","message":"   Health:   http://localhost:5000/api/v1/health","timestamp":"2026-08-14T12:08:00.114Z"}
+{"level":"error","message":"Prisma error: \nInvalid `prisma.job.findFirst()` invocation in\nC:\\Users\\Aryan\\Downloads\\Casa De Aurum\\backend\\src\\services\\jobQueue.service.ts:81:34\n\n  78 \n  79 while (runtime.running.size < runtime.concurrency) {\n  80   const now = new Date();\n→ 81   const due = await prisma.job.findFirst(\nCan't reach database server at `aws-0-ap-south-1.pooler.supabase.com:6543`\n\nPlease make sure your database server is running at `aws-0-ap-south-1.pooler.supabase.com:6543`.","timestamp":"2026-08-14T12:13:10.397Z"}
+{"level":"info","message":"✅ Database connected","timestamp":"2026-08-14T12:33:00.767Z"}
+{"level":"info","message":"Image Processing Queue worker registered","timestamp":"2026-08-14T12:33:00.772Z"}
+{"level":"info","message":"Export Queue worker registered","timestamp":"2026-08-14T12:33:00.773Z"}
+{"level":"info","message":"🚀 Casa de Aurum Internal Tool running in development mode on port 5000","timestamp":"2026-08-14T12:33:00.824Z"}
+{"level":"info","message":"   API base: http://localhost:5000/api/v1","timestamp":"2026-08-14T12:33:00.825Z"}
+{"level":"info","message":"   Health:   http://localhost:5000/api/v1/health","timestamp":"2026-08-14T12:33:00.827Z"}
+{"level":"error","message":"Prisma error: Error in PostgreSQL connection: Error { kind: Io, cause: Some(Os { code: 10054, kind: ConnectionReset, message: \"An existing connection was forcibly closed by the remote host.\" }) }","timestamp":"2026-08-14T12:36:35.419Z"}
+{"error":"Can't reach database server at `aws-0-ap-south-1.pooler.supabase.com:6543`\n\nPlease make sure your database server is running at `aws-0-ap-south-1.pooler.supabase.com:6543`.","level":"error","message":"❌ Database connection failed","timestamp":"2026-08-14T12:58:31.382Z"}

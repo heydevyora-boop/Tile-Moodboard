@@ -1,0 +1,25 @@
+{
+    "keep": {
+        "days": true,
+        "amount": 30
+    },
+    "auditLog": "C:\\Users\\Aryan\\Downloads\\Casa De Aurum\\backend\\logs\\.a3dfabc2e0c808df51f6974471356cc5fa53bd05-audit.json",
+    "files": [
+        {
+            "date": 1786520314103,
+            "name": "C:\\Users\\Aryan\\Downloads\\Casa De Aurum\\backend\\logs\\error-2026-08-12.log",
+            "hash": "678a1e4c8f0ee4e709276e2decdd39d1c6bc5183e869e6548bb50bfeef66a8e1"
+        },
+        {
+            "date": 1786709025115,
+            "name": "C:\\Users\\Aryan\\Downloads\\Casa De Aurum\\backend\\logs\\error-2026-08-14.log",
+            "hash": "aa08bfaba74a09221654bd55202a3a6d59079a8d1910a6ea64cdc3901049c238"
+        },
+        {
+            "date": 1787638621715,
+            "name": "C:\\Users\\Aryan\\Downloads\\Casa De Aurum\\backend\\logs\\error-2026-08-25.log",
+            "hash": "015aca5c376783ea55928ca571e401356251f875fa0a1a493c72c867010e6f97"
+        }
+    ],
+    "hashType": "sha256"
+}

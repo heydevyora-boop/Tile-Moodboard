@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Casa de Aurum — User &amp; Staff Management</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#221D18;
+    --charcoal:#1A1611;
+    --stone-50:#F1ECE1;
+    --stone-100:#E9E2D3;
+    --stone-200:#DFD5BF;
+    --stone-400:#B7AB94;
+    --stone-600:#78705F;
+    --stone-700:#4B443A;
+    --brass:#AD8348;
+    --brass-light:#D8B677;
+    --clay:#9C4B2C;
+    --sage:#7A9165;
+    --line: rgba(34,29,24,0.14);
+    --shadow: 0 12px 30px rgba(26,22,17,0.14);
+    --radius: 3px;
+    --display: 'Fraunces', serif;
+    --sans: 'Inter', sans-serif;
+    --mono: 'IBM Plex Mono', monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{background:var(--stone-50);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased;}
+  .grain{
+    position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.05;
+    background-image:radial-gradient(circle at 1px 1px, #000 1px, transparent 0);
+    background-size:3px 3px;
+  }
+
+  /* ============ HEADER (shared) ============ */
+  header.top{position:relative;z-index:2;padding:26px clamp(18px,4vw,56px) 0;background:var(--stone-50);border-bottom:1px solid var(--line);}
+  .brandrow{display:flex;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;gap:14px;padding-bottom:20px;}
+  .wordmark{display:flex;flex-direction:column;gap:2px;}
+  .wordmark .name{font-family:var(--display);font-weight:600;font-size:clamp(22px,3vw,30px);letter-spacing:.04em;color:var(--charcoal);}
+  .wordmark .name em{font-style:normal;color:var(--brass);}
+  .wordmark .sub{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--stone-600);}
+  .flowchip{font-family:var(--mono);font-size:11px;color:var(--stone-600);letter-spacing:.04em;}
+
+  .swatch-rail{display:flex;gap:0;border:1px solid var(--line);border-bottom:none;overflow:hidden;}
+  .swatch-rail div{flex:1;height:9px;}
+  .sw1{background:linear-gradient(100deg,#C9BFA9,#DCD2BC);}
+  .sw2{background:linear-gradient(100deg,#3B342A,#5A4F40);}
+  .sw3{background:linear-gradient(100deg,var(--brass),var(--brass-light));}
+  .sw4{background:linear-gradient(100deg,var(--clay),#B96A45);}
+  .sw5{background:linear-gradient(100deg,#7C8577,#9CA793);}
+  .sw6{background:linear-gradient(100deg,#E9E2D3,#F6F1E6);}
+  .sw7{background:linear-gradient(100deg,#4B443A,#2A251E);}
+  .sw8{background:linear-gradient(100deg,#C7A25E,#8F6B34);}
+
+  .crumb{
+    display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+    padding:16px clamp(18px,4vw,56px);font-family:var(--mono);font-size:11.5px;letter-spacing:.03em;
+    color:var(--stone-600);border-bottom:1px solid var(--line);background:#fff;
+  }
+  .crumb a{color:var(--stone-600);text-decoration:none;}
+  .crumb .sep{color:var(--stone-400);}
+  .crumb .now{color:var(--charcoal);font-weight:600;}
+
+  main{position:relative;z-index:1;max-width:1180px;margin:0 auto;padding:40px clamp(18px,4vw,56px) 90px;}
+
+  .tool-head{
+    display:flex;justify-content:space-between;align-items:flex-end;gap:20px;flex-wrap:wrap;
+    margin-bottom:28px;border-bottom:1px solid var(--line);padding-bottom:18px;
+  }
+  .tool-head h1{font-family:var(--display);font-weight:600;font-size:clamp(26px,3.4vw,36px);margin:0 0 6px;color:var(--charcoal);}
+  .tool-head p{margin:0;max-width:56ch;color:var(--stone-700);font-size:14.5px;line-height:1.55;}
+  .badge{
+    font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--brass);border:1px solid var(--brass);padding:5px 10px;border-radius:2px;white-space:nowrap;
+  }
+
+  .panel{background:#fff;border:1px solid var(--line);border-radius:var(--radius);margin-bottom:20px;}
+  .panel-head{padding:14px 18px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;}
+  .panel-head h3{margin:0;font-size:12.5px;letter-spacing:.1em;text-transform:uppercase;font-family:var(--mono);color:var(--stone-700);font-weight:500;}
+  .panel-head .hint{font-family:var(--sans);font-size:11.5px;color:var(--stone-400);font-weight:400;}
+  .panel-body{padding:18px;}
+
+  .search-box{
+    font-family:var(--mono);font-size:12px;padding:7px 10px;border:1px solid var(--line);
+    border-radius:2px;background:var(--stone-50);color:var(--stone-700);width:180px;
+  }
+  .search-box:focus{outline:2px solid var(--brass);outline-offset:1px;}
+
+  /* ============ STAFF TABLE ============ */
+  table.staff{width:100%;border-collapse:collapse;font-size:13px;}
+  table.staff th{
+    text-align:left;font-weight:500;color:var(--stone-600);text-transform:uppercase;font-size:10.5px;
+    letter-spacing:.06em;padding:9px 10px;border-bottom:1px solid var(--line);font-family:var(--mono);
+  }
+  table.staff td{padding:11px 10px;border-bottom:1px solid var(--line);vertical-align:middle;}
+  table.staff tr:last-child td{border-bottom:none;}
+  .person{display:flex;align-items:center;gap:10px;}
+  .avatar{
+    width:32px;height:32px;border-radius:50%;flex:none;
+    display:flex;align-items:center;justify-content:center;
+    font-family:var(--display);font-weight:600;font-size:13px;color:#fff;
+  }
+  .person .nm{font-weight:600;color:var(--ink);}
+  .person .ph{font-size:11px;color:var(--stone-600);font-family:var(--mono);}
+
+  .role-tag{
+    display:inline-block;font-size:10px;padding:3px 9px;border-radius:9px;
+    font-family:var(--sans);font-weight:600;letter-spacing:.02em;
+  }
+  .role-owner{background:var(--charcoal);color:var(--stone-50);}
+  .role-manager{background:#FBF6EC;color:var(--brass);border:1px solid var(--brass);}
+  .role-staff{background:var(--stone-100);color:var(--stone-700);}
+
+  .access-dots{display:flex;gap:4px;}
+  .access-dots span{
+    width:7px;height:7px;border-radius:50%;background:var(--stone-200);
+  }
+  .access-dots span.on{background:var(--brass);}
+
+  .status-pill{
+    display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:11px;color:var(--stone-700);
+  }
+  .status-pill .dot{width:7px;height:7px;border-radius:50%;flex:none;}
+  .status-pill.active .dot{background:var(--sage);}
+  .status-pill.invited .dot{background:var(--brass);}
+  .status-pill.suspended .dot{background:var(--clay);}
+
+  .rowact{display:flex;gap:14px;}
+  .rowact a{
+    font-family:var(--mono);font-size:11px;color:var(--stone-600);text-decoration:none;cursor:pointer;
+  }
+  .rowact a:hover{color:var(--brass);}
+  .rowact a.danger:hover{color:var(--clay);}
+
+  /* ============ TWO COLUMN: ADD STAFF / PERMISSIONS ============ */
+  .split-grid{display:grid;grid-template-columns:1fr 1.2fr;gap:20px;align-items:start;}
+  @media (max-width:900px){.split-grid{grid-template-columns:1fr;}}
+
+  .field{margin-bottom:14px;}
+  .field:last-child{margin-bottom:0;}
+  .field label{display:block;font-size:12px;color:var(--stone-600);margin-bottom:6px;font-family:var(--mono);letter-spacing:.03em;}
+  .field input, .field select{
+    width:100%;font-family:var(--mono);font-size:13px;padding:10px 11px;
+    border:1px solid var(--line);border-radius:2px;background:var(--stone-50);color:var(--ink);
+  }
+  .field input:focus, .field select:focus{outline:2px solid var(--brass);outline-offset:1px;}
+
+  .checkfield{display:flex;align-items:center;gap:9px;padding:7px 0;}
+  .checkfield input{width:auto;accent-color:var(--brass);}
+  .checkfield label{margin:0;font-family:var(--sans);font-size:13px;color:var(--ink);font-weight:500;}
+
+  button.primary{
+    font-family:var(--sans);font-weight:600;font-size:13.5px;background:var(--charcoal);color:var(--stone-50);
+    border:none;padding:12px 22px;border-radius:2px;cursor:pointer;letter-spacing:.01em;transition:background .15s ease;
+  }
+  button.primary:hover{background:#000;}
+  button.ghost{
+    font-family:var(--sans);font-weight:600;font-size:13px;background:none;color:var(--stone-700);
+    border:1px solid var(--line);padding:10px 16px;border-radius:2px;cursor:pointer;
+  }
+  button.ghost:hover{border-color:var(--brass);color:var(--brass);}
+
+  /* permissions matrix */
+  table.matrix{width:100%;border-collapse:collapse;font-size:12.5px;}
+  table.matrix th{
+    text-align:left;font-weight:500;color:var(--stone-600);font-family:var(--mono);font-size:10.5px;
+    letter-spacing:.04em;padding:8px 8px;border-bottom:1px solid var(--line);
+  }
+  table.matrix th.center, table.matrix td.center{text-align:center;}
+  table.matrix td{padding:9px 8px;border-bottom:1px solid var(--line);}
+  table.matrix tr:last-child td{border-bottom:none;}
+  table.matrix .toolname{font-weight:600;color:var(--ink);font-size:12.5px;}
+  .check{
+    width:16px;height:16px;border-radius:3px;border:1px solid var(--line);
+    display:inline-block;position:relative;cursor:pointer;background:var(--stone-50);
+  }
+  .check.on{background:var(--brass);border-color:var(--brass);}
+  .check.on::after{
+    content:"";position:absolute;left:4px;top:1px;width:4px;height:8px;
+    border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg);
+  }
+  .check.locked{background:var(--stone-200);border-color:var(--stone-200);cursor:not-allowed;}
+  .check.locked.on{background:var(--stone-600);border-color:var(--stone-600);}
+
+  .matrix-note{
+    font-size:11.5px;color:var(--stone-600);margin-top:12px;line-height:1.5;
+    padding-top:12px;border-top:1px dashed var(--line);
+  }
+
+  /* ============ SHARED DEVICES ============ */
+  table.devices{width:100%;border-collapse:collapse;font-size:13px;}
+  table.devices th{
+    text-align:left;font-weight:500;color:var(--stone-600);text-transform:uppercase;font-size:10.5px;
+    letter-spacing:.06em;padding:9px 10px;border-bottom:1px solid var(--line);font-family:var(--mono);
+  }
+  table.devices td{padding:11px 10px;border-bottom:1px solid var(--line);vertical-align:middle;font-family:var(--mono);font-size:12.5px;}
+  table.devices tr:last-child td{border-bottom:none;}
+  .devname{font-family:var(--sans);font-weight:600;font-size:13px;color:var(--ink);}
+
+  footer.note{
+    max-width:1180px;margin:0 auto;padding:0 clamp(18px,4vw,56px) 50px;
+    font-family:var(--mono);font-size:11px;color:var(--stone-400);text-align:center;
+  }
+</style>
+</head>
+<body>
+<div class="grain"></div>
+
+<header class="top">
+  <div class="brandrow">
+    <div class="wordmark">
+      <div class="name">CASA DE A<em>U</em>RUM</div>
+      <div class="sub">Internal Studio Tools · Not for external distribution</div>
+    </div>
+    <div class="flowchip" style="display:flex;align-items:center;gap:16px;">
+      <span>① EXTRACT → ② RULES → ③ DEPLOY → ④ BRIEF → ⑤ PRINT → ⑥ SEND</span>
+      <span id="whoami" style="color:var(--stone-600);"></span>
+      <a href="#" id="logoutLink" style="color:var(--clay);">Sign out</a>
+    </div>
+  </div>
+  <div class="swatch-rail">
+    <div class="sw1"></div><div class="sw2"></div><div class="sw3"></div><div class="sw4"></div>
+    <div class="sw5"></div><div class="sw6"></div><div class="sw7"></div><div class="sw8"></div>
+  </div>
+</header>
+
+<div class="crumb">
+  <a href="#">Admin Dashboard</a><span class="sep">/</span>
+  <span class="now">User &amp; Staff Management</span>
+</div>
+
+<main>
+  <div class="tool-head">
+    <div>
+      <h1>User &amp; Staff Management</h1>
+      <p>Who can open which tool, on which device. Sales staff need the Mood Board Generator and Print Board Designer on the floor — they don't need the Catalog Extractor or your API keys.</p>
+    </div>
+    <span class="badge" id="summaryBadge">Loading…</span>
+  </div>
+
+  <!-- ============ STAFF TABLE ============ -->
+  <div class="panel">
+    <div class="panel-head">
+      <h3>Staff</h3>
+      <input class="search-box" type="text" id="searchBox" placeholder="Search staff…">
+    </div>
+    <div class="panel-body" style="padding:8px 0;overflow-x:auto;">
+      <table class="staff">
+        <thead>
+          <tr><th>Name</th><th>Role</th><th>Tool access</th><th>Last active</th><th>Status</th><th></th></tr>
+        </thead>
+        <tbody id="staffTbody">
+          <tr><td colspan="6" style="padding:20px 18px;color:var(--stone-600);font-family:var(--mono);font-size:12.5px;">Loading staff…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ============ ADD STAFF + PERMISSIONS ============ -->
+  <div class="split-grid">
+    <div class="panel" style="margin-bottom:0;">
+      <div class="panel-head"><h3>Add Staff</h3></div>
+      <div class="panel-body">
+        <div class="error-box" id="createError" style="background:#FBEEEA;border:1px solid var(--clay);color:var(--clay);font-size:12px;padding:9px 11px;border-radius:2px;margin-bottom:14px;display:none;"></div>
+        <div class="field">
+          <label>Full name</label>
+          <input type="text" id="newName" placeholder="e.g. Kavita Rao">
+        </div>
+        <div class="field">
+          <label>Email</label>
+          <input type="email" id="newEmail" placeholder="name@casadeaurum.com">
+        </div>
+        <div class="field">
+          <label>Temporary password</label>
+          <input type="text" id="newPassword" placeholder="At least 8 characters, mixed case + number">
+        </div>
+        <div class="field">
+          <label>Role</label>
+          <select id="newRole"><option value="">Loading roles…</option></select>
+        </div>
+        <button class="primary" id="createBtn" style="width:100%;margin-top:6px;">Create staff account</button>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-bottom:0;">
+      <div class="panel-head"><h3>Roles &amp; Permissions</h3></div>
+      <div class="panel-body">
+        <table class="matrix">
+          <thead>
+            <tr>
+              <th>Tool</th>
+              <th class="center">Owner</th>
+              <th class="center">Manager</th>
+              <th class="center">Sales Staff</th>
+            </tr>
+          </thead>
+          <tbody id="matrixBody">
+            <tr><td colspan="4" style="text-align:center;color:var(--stone-500);padding:16px;">Loading...</td></tr>
+          </tbody>
+        </table>
+        <div class="matrix-note">Owner access can't be edited — it always has full access by design. Toggling a checkbox here updates that role's real permissions immediately and affects everyone currently assigned to it. Rows marked "Owner only" are hard-coded to the Owner role in the backend and can't be delegated to Manager or Staff at all, regardless of what's checked here.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ SHARED DEVICES ============ -->
+  <div class="panel" style="margin-top:20px;">
+    <div class="panel-head">
+      <h3>Shared Devices<span class="hint">Store-floor tablets and phones — preview only, not yet backend-wired</span></h3>
+      <button class="ghost">Pair new device</button>
+    </div>
+    <div class="panel-body" style="padding:8px 0;overflow-x:auto;">
+      <table class="devices">
+        <thead>
+          <tr><th>Device</th><th>Paired tools</th><th>Last synced</th><th>Status</th><th></th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="devname">Front Counter iPad</td>
+            <td>Mood Board Generator, Print Board Designer</td>
+            <td>4 min ago</td>
+            <td><span class="status-pill active"><span class="dot"></span>Online</span></td>
+            <td><div class="rowact"><a class="danger">Unpair</a></div></td>
+          </tr>
+          <tr>
+            <td class="devname">Bathroom Section Tablet</td>
+            <td>Mood Board Generator</td>
+            <td>26 min ago</td>
+            <td><span class="status-pill active"><span class="dot"></span>Online</span></td>
+            <td><div class="rowact"><a class="danger">Unpair</a></div></td>
+          </tr>
+          <tr>
+            <td class="devname">Shop Laptop — extract.py</td>
+            <td>Catalog Extractor</td>
+            <td>Last night, 11:40 PM</td>
+            <td><span class="status-pill suspended"><span class="dot"></span>Offline</span></td>
+            <td><div class="rowact"><a class="danger">Unpair</a></div></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</main>
+
+<!-- ============ EDIT USER MODAL ============ -->
+<div id="editModal" style="display:none;position:fixed;inset:0;background:rgba(26,22,17,0.5);z-index:50;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:3px;width:100%;max-width:420px;max-height:90vh;overflow-y:auto;box-shadow:0 12px 30px rgba(26,22,17,0.24);">
+    <div class="panel-head" style="border-bottom:1px solid var(--line);">
+      <h3 style="margin:0;">Edit Staff</h3>
+      <a href="#" id="closeModal" style="font-family:var(--mono);font-size:12px;color:var(--stone-600);">Close</a>
+    </div>
+    <div class="panel-body">
+      <div class="error-box" id="editError" style="background:#FBEEEA;border:1px solid var(--clay);color:var(--clay);font-size:12px;padding:9px 11px;border-radius:2px;margin-bottom:14px;display:none;"></div>
+      <div class="field">
+        <label>Full name</label>
+        <input type="text" id="editName">
+      </div>
+      <div class="field">
+        <label>Email</label>
+        <input type="email" id="editEmail">
+      </div>
+      <div class="field" id="editRoleField">
+        <label>Role</label>
+        <select id="editRole"></select>
+      </div>
+      <div class="checkfield" style="margin-bottom:16px;">
+        <input type="checkbox" id="editActive">
+        <label for="editActive">Account active</label>
+      </div>
+      <button class="primary" id="saveEditBtn" style="width:100%;">Save changes</button>
+      <button class="ghost" id="deleteBtn" style="width:100%;margin-top:10px;border-color:var(--clay);color:var(--clay);">Delete account</button>
+    </div>
+  </div>
+</div>
+
+<footer class="note">CASA DE AURUM — INTERNAL OPERATIONS TOOL · BUILT FOR STORE USE ONLY · NOT FOR RESALE OR DISTRIBUTION</footer>
+
+<script src="assets/api-client.js"></script>
+<script src="assets/notifications.js"></script>
+<script>
+  // Maps each row's friendly "tool" label to the real permission string(s)
+  // that actually gate it in the backend (see the requirePermission calls
+  // across src/routes/*.ts). A row is "on" for a role when that role's
+  // permissions array contains every string listed here.
+  const MATRIX_ROWS = [
+    { tool: 'Catalog Extractor', perms: ['catalogs:read', 'catalogs:write'] },
+    { tool: 'Design Rules Setup', perms: ['design_rules:read', 'design_rules:write'] },
+    { tool: 'Mood Board Generator', perms: ['mood_boards:read', 'mood_boards:write'] },
+    { tool: 'Print Board Designer', perms: ['print_boards:read', 'print_boards:write'] },
+    { tool: 'Reference Image Library', perms: ['reference_images:read', 'reference_images:write'] },
+    { tool: 'Tile Recommendations', perms: ['tiles:read', 'tiles:write'] },
+    { tool: 'Customer Management', perms: ['customers:read', 'customers:write'] },
+    { tool: 'Staff Management', perms: ['users:read', 'users:write'] },
+    { tool: 'Dashboard Analytics', perms: ['analytics:read'] },
+    { tool: 'Activity Feed', perms: ['logs:read'] },
+  ];
+  // These routes check `authorize('OWNER')` directly, not a permission
+  // string — no permission combination could ever grant Manager or Staff
+  // access to them, so the matrix shows them as permanently locked rather
+  // than offering checkboxes that would silently do nothing.
+  const OWNER_ONLY_ROWS = ['API Keys & Integrations', 'System Logs, Analytics & Job Queues'];
+
+  function hasAllPerms(role, perms) {
+    return role.permissions.includes('*') || perms.every((p) => role.permissions.includes(p));
+  }
+
+  function renderMatrix() {
+    const tbody = document.getElementById('matrixBody');
+    const adminRole = allRoles.find((r) => r.name === 'ADMIN');
+    const staffRole = allRoles.find((r) => r.name === 'STAFF');
+    if (!adminRole || !staffRole) {
+      tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--clay);padding:16px;">Could not find the Manager/Staff roles.</td></tr>';
+      return;
+    }
+
+    const editableRows = MATRIX_ROWS.map((row) => `
+      <tr>
+        <td class="toolname">${row.tool}</td>
+        <td class="center"><span class="check locked on"></span></td>
+        <td class="center"><span class="check ${hasAllPerms(adminRole, row.perms) ? 'on' : ''}" data-role-id="${adminRole.id}" data-perms="${row.perms.join(',')}"></span></td>
+        <td class="center"><span class="check ${hasAllPerms(staffRole, row.perms) ? 'on' : ''}" data-role-id="${staffRole.id}" data-perms="${row.perms.join(',')}"></span></td>
+      </tr>`).join('');
+
+    const lockedRows = OWNER_ONLY_ROWS.map((tool) => `
+      <tr>
+        <td class="toolname">${tool}<span class="sub" style="display:block;font-size:11px;color:var(--stone-500);">Owner only — can't be delegated</span></td>
+        <td class="center"><span class="check locked on"></span></td>
+        <td class="center"><span class="check locked"></span></td>
+        <td class="center"><span class="check locked"></span></td>
+      </tr>`).join('');
+
+    tbody.innerHTML = editableRows + lockedRows;
+
+    const isOwner = currentUser?.role?.name === 'OWNER';
+    tbody.querySelectorAll('[data-role-id]').forEach((el) => {
+      if (isOwner) {
+        el.addEventListener('click', () => toggleMatrixCell(el));
+      } else {
+        el.classList.add('locked');
+        el.title = 'Only an Owner can change permissions';
+      }
+    });
+  }
+
+  async function toggleMatrixCell(el) {
+    const roleId = el.dataset.roleId;
+    const perms = el.dataset.perms.split(',');
+    const role = allRoles.find((r) => r.id === roleId);
+    if (!role) return;
+
+    const turningOn = !el.classList.contains('on');
+    const newPermissions = turningOn
+      ? [...new Set([...role.permissions, ...perms])]
+      : role.permissions.filter((p) => !perms.includes(p));
+
+    el.classList.toggle('on');
+    el.style.opacity = '0.5';
+
+    try {
+      const updated = await CasaApi.roles.update(roleId, { permissions: newPermissions });
+      role.permissions = updated.permissions;
+      CasaNotify.success('Permissions updated.');
+    } catch (err) {
+      el.classList.toggle('on'); // revert on failure
+      CasaNotify.error('Could not update permissions: ' + err.message);
+    } finally {
+      el.style.opacity = '';
+    }
+  }
+
+  // Display labels for backend role names — matches the visual language
+  // this page already used (Owner / Manager / Sales Staff) even though
+  // the backend's role names are OWNER / ADMIN / STAFF.
+  const ROLE_LABEL = { OWNER: 'Owner', ADMIN: 'Manager', STAFF: 'Sales Staff' };
+  const ROLE_TAG_CLASS = { OWNER: 'role-owner', ADMIN: 'role-manager', STAFF: 'role-staff' };
+  const AVATAR_COLORS = ['#AD8348', '#8F8062', '#7C8577', '#9C4B2C', '#78705F', '#1A1611'];
+
+  let currentUser = null;
+  let allRoles = [];
+  let editingUserId = null;
+  let searchDebounce = null;
+
+  function avatarColor(id) {
+    let hash = 0;
+    for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) >>> 0;
+    return AVATAR_COLORS[hash % AVATAR_COLORS.length];
+  }
+
+  function renderRow(u) {
+    const roleLabel = ROLE_LABEL[u.role.name] || u.role.name;
+    const roleClass = ROLE_TAG_CLASS[u.role.name] || 'role-staff';
+    const dotsOn = u.role.permissions.includes('*') ? 5 : Math.min(5, Math.max(1, u.role.permissions.length));
+    const dots = Array.from({ length: 5 }, (_, i) => `<span class="${i < dotsOn ? 'on' : ''}"></span>`).join('');
+    const statusClass = u.isActive ? 'active' : 'suspended';
+    const statusLabel = u.isActive ? 'Active' : 'Inactive';
+
+    return `
+      <tr data-id="${u.id}">
+        <td><div class="person"><div class="avatar" style="background:${avatarColor(u.id)};">${CasaApi.initials(u.name)}</div><div><div class="nm">${escapeHtml(u.name)}</div><div class="ph">${escapeHtml(u.email)}</div></div></div></td>
+        <td><span class="role-tag ${roleClass}">${roleLabel}</span></td>
+        <td><div class="access-dots">${dots}</div></td>
+        <td style="font-family:var(--mono);font-size:12px;color:var(--stone-600);">${CasaApi.relativeTime(u.lastLoginAt)}</td>
+        <td><span class="status-pill ${statusClass}"><span class="dot"></span>${statusLabel}</span></td>
+        <td><div class="rowact">
+          <a data-action="edit" data-id="${u.id}">Edit</a>
+          ${u.id !== currentUser.id ? `<a class="danger" data-action="remove" data-id="${u.id}" data-name="${escapeHtml(u.name)}">Remove</a>` : ''}
+        </div></td>
+      </tr>`;
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  async function loadStaff(search) {
+    const tbody = document.getElementById('staffTbody');
+    try {
+      const { users, meta } = await CasaApi.users.list({ search, limit: 100 });
+      tbody.innerHTML = users.length
+        ? users.map(renderRow).join('')
+        : `<tr><td colspan="6" style="padding:20px 18px;color:var(--stone-600);font-family:var(--mono);font-size:12.5px;">No staff found.</td></tr>`;
+
+      const activeCount = users.filter((u) => u.isActive).length;
+      document.getElementById('summaryBadge').textContent = `${activeCount} active · ${meta.total} total`;
+
+      tbody.querySelectorAll('[data-action="edit"]').forEach((el) => el.addEventListener('click', () => openEditModal(el.dataset.id)));
+      tbody.querySelectorAll('[data-action="remove"]').forEach((el) => el.addEventListener('click', () => removeUser(el.dataset.id, el.dataset.name)));
+    } catch (err) {
+      tbody.innerHTML = `<tr><td colspan="6" style="padding:20px 18px;color:var(--clay);font-family:var(--mono);font-size:12.5px;">Failed to load staff: ${escapeHtml(err.message)}</td></tr>`;
+    }
+  }
+
+  async function loadRoleOptions(selectEl, selectedRoleId) {
+    selectEl.innerHTML = allRoles
+      .map((r) => `<option value="${r.id}" ${r.id === selectedRoleId ? 'selected' : ''}>${ROLE_LABEL[r.name] || r.name}</option>`)
+      .join('');
+  }
+
+  // ---- Add Staff ----
+  document.getElementById('createBtn').addEventListener('click', async () => {
+    const errorBox = document.getElementById('createError');
+    errorBox.style.display = 'none';
+
+    const name = document.getElementById('newName').value.trim();
+    const email = document.getElementById('newEmail').value.trim();
+    const password = document.getElementById('newPassword').value;
+    const roleId = document.getElementById('newRole').value;
+
+    if (!name || !email || !password || !roleId) {
+      errorBox.textContent = 'Fill in name, email, temporary password, and role.';
+      errorBox.style.display = 'block';
+      return;
+    }
+
+    const btn = document.getElementById('createBtn');
+    btn.disabled = true;
+    btn.textContent = 'Creating…';
+
+    try {
+      await CasaApi.users.create({ name, email, password, roleId });
+      document.getElementById('newName').value = '';
+      document.getElementById('newEmail').value = '';
+      document.getElementById('newPassword').value = '';
+      await loadStaff(document.getElementById('searchBox').value.trim());
+    } catch (err) {
+      errorBox.textContent = err.message || 'Could not create staff account.';
+      errorBox.style.display = 'block';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Create staff account';
+    }
+  });
+
+  // ---- Search ----
+  document.getElementById('searchBox').addEventListener('input', (e) => {
+    clearTimeout(searchDebounce);
+    const val = e.target.value.trim();
+    searchDebounce = setTimeout(() => loadStaff(val), 300);
+  });
+
+  // ---- Edit modal ----
+  async function openEditModal(userId) {
+    const errorBox = document.getElementById('editError');
+    errorBox.style.display = 'none';
+    try {
+      const u = await CasaApi.users.get(userId);
+      editingUserId = u.id;
+      document.getElementById('editName').value = u.name;
+      document.getElementById('editEmail').value = u.email;
+      document.getElementById('editActive').checked = u.isActive;
+
+      const canEditRole = currentUser.role.name === 'OWNER';
+      document.getElementById('editRoleField').style.display = canEditRole ? 'block' : 'none';
+      if (canEditRole) await loadRoleOptions(document.getElementById('editRole'), u.role.id);
+
+      document.getElementById('editModal').style.display = 'flex';
+    } catch (err) {
+      CasaNotify.error('Could not load user: ' + err.message);
+    }
+  }
+
+  document.getElementById('closeModal').addEventListener('click', (e) => {
+    e.preventDefault();
+    document.getElementById('editModal').style.display = 'none';
+  });
+
+  document.getElementById('saveEditBtn').addEventListener('click', async () => {
+    const errorBox = document.getElementById('editError');
+    errorBox.style.display = 'none';
+    const btn = document.getElementById('saveEditBtn');
+    btn.disabled = true;
+    btn.textContent = 'Saving…';
+
+    try {
+      await CasaApi.users.update(editingUserId, {
+        name: document.getElementById('editName').value.trim(),
+        email: document.getElementById('editEmail').value.trim(),
+        isActive: document.getElementById('editActive').checked,
+      });
+
+      if (currentUser.role.name === 'OWNER') {
+        const newRoleId = document.getElementById('editRole').value;
+        await CasaApi.users.assignRole(editingUserId, newRoleId);
+      }
+
+      document.getElementById('editModal').style.display = 'none';
+      await loadStaff(document.getElementById('searchBox').value.trim());
+      CasaNotify.success('Changes saved.');
+    } catch (err) {
+      errorBox.textContent = err.message || 'Could not save changes.';
+      errorBox.style.display = 'block';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Save changes';
+    }
+  });
+
+  document.getElementById('deleteBtn').addEventListener('click', async () => {
+    if (!confirm('Delete this staff account? This cannot be undone.')) return;
+    try {
+      await CasaApi.users.remove(editingUserId);
+      document.getElementById('editModal').style.display = 'none';
+      await loadStaff(document.getElementById('searchBox').value.trim());
+      CasaNotify.success('Staff account removed.');
+    } catch (err) {
+      CasaNotify.error('Could not delete: ' + err.message);
+    }
+  });
+
+  async function removeUser(id, name) {
+    if (!confirm(`Remove ${name}? This cannot be undone.`)) return;
+    try {
+      await CasaApi.users.remove(id);
+      await loadStaff(document.getElementById('searchBox').value.trim());
+      CasaNotify.success(`${name} removed.`);
+    } catch (err) {
+      CasaNotify.error('Could not remove: ' + err.message);
+    }
+  }
+
+  // ---- Boot ----
+  (async () => {
+    currentUser = await CasaApi.requireAuth();
+    document.getElementById('whoami').textContent = `Signed in as ${currentUser.name} (${ROLE_LABEL[currentUser.role.name] || currentUser.role.name})`;
+
+    document.getElementById('logoutLink').addEventListener('click', (e) => {
+      e.preventDefault();
+      CasaApi.auth.logout();
+    });
+
+    allRoles = await CasaApi.roles.list();
+    renderMatrix();
+    await loadRoleOptions(document.getElementById('newRole'), null);
+    await loadStaff('');
+  })();
+</script>
+</body>
+</html>

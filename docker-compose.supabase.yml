@@ -1,0 +1,15 @@
+# Use alongside docker-compose.yml when the database is Supabase (or any
+# other externally-hosted Postgres) instead of the bundled container:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.supabase.yml up -d --build backend nginx
+#
+# This only removes backend's dependency on the local "postgres" service
+# — it doesn't touch DATABASE_URL/DIRECT_URL at all, since those already
+# come entirely from backend/.env (see .env.production.example's
+# Supabase section for the two connection strings to use there). With
+# this override in place, the "postgres" service defined in the base
+# file is simply never started: nothing depends on it, and it's not
+# listed in the `up` command above.
+services:
+  backend:
+    depends_on: {}

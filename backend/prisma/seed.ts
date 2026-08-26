@@ -1,0 +1,479 @@
+/* eslint-disable no-console */
+import { PrismaClient, RuleSection, TileType, CatalogStatus, MoodBoardStatus, PrintFormat, PrintLayout, DimensionUnit, PrintFileFormat, Tile } from '@prisma/client';
+import bcrypt from 'bcryptjs';
+
+const prisma = new PrismaClient();
+
+// Default password for all seeded users. Change on first login in a real
+// deployment — this is only for local/dev bootstrapping.
+const SEED_PASSWORD = 'ChangeMe123!';
+
+async function seedRoles() {
+  const roles = [
+    {
+      name: 'OWNER',
+      description: 'Store owner. Full access, including design rules and settings.',
+      permissions: ['*'],
+    },
+    {
+      name: 'ADMIN',
+      description: 'Manages catalog, users, and day-to-day admin tasks.',
+      permissions: [
+        'tiles:read', 'tiles:write',
+        'catalogs:read', 'catalogs:write',
+        'design_rules:read', 'design_rules:write',
+        'reference_images:read', 'reference_images:write',
+        'mood_boards:read', 'mood_boards:write',
+        'print_boards:read', 'print_boards:write',
+        'customers:read', 'customers:write',
+        'users:read', 'users:write',
+        'logs:read', 'analytics:read',
+      ],
+    },
+    {
+      name: 'STAFF',
+      description: 'Store floor staff. Generates mood boards and print boards for customers.',
+      permissions: [
+        'tiles:read',
+        'mood_boards:read', 'mood_boards:write',
+        'print_boards:read', 'print_boards:write',
+        'customers:read', 'customers:write',
+      ],
+    },
+  ];
+
+  const created: Record<string, string> = {};
+  for (const role of roles) {
+    const r = await prisma.role.upsert({
+      where: { name: role.name },
+      update: { description: role.description, permissions: role.permissions },
+      create: role,
+    });
+    created[role.name] = r.id;
+  }
+  console.log(`✅ Roles seeded (${roles.length})`);
+  return created;
+}
+
+async function seedUsers(roleIds: Record<string, string>) {
+  const passwordHash = await bcrypt.hash(SEED_PASSWORD, 12);
+
+  const users = [
+    { name: 'Store Owner', email: 'owner@casadeaurum.com', roleId: roleIds.OWNER },
+    { name: 'Shop Admin', email: 'admin@casadeaurum.com', roleId: roleIds.ADMIN },
+    { name: 'Staff — Priya', email: 'priya@casadeaurum.com', roleId: roleIds.STAFF },
+    { name: 'Staff — Rahul', email: 'rahul@casadeaurum.com', roleId: roleIds.STAFF },
+  ];
+
+  const created: Record<string, string> = {};
+  for (const u of users) {
+    const user = await prisma.user.upsert({
+      where: { email: u.email },
+      update: { name: u.name, roleId: u.roleId },
+      create: { ...u, passwordHash },
+    });
+    created[u.email] = user.id;
+  }
+  console.log(`✅ Users seeded (${users.length}) — default password: "${SEED_PASSWORD}"`);
+  return created;
+}
+
+async function seedBrands() {
+  const brands = [
+    { name: 'Somany', slug: 'somany' },
+    { name: 'RAK', slug: 'rak' },
+    { name: 'Johnson', slug: 'johnson' },
+    { name: 'Kajaria', slug: 'kajaria' },
+  ];
+
+  const created: Record<string, string> = {};
+  for (const b of brands) {
+    const brand = await prisma.brand.upsert({ where: { slug: b.slug }, update: {}, create: b });
+    created[b.slug] = brand.id;
+  }
+  console.log(`✅ Brands seeded (${brands.length})`);
+  return created;
+}
+
+async function seedCatalogsAndTiles(brandIds: Record<string, string>, uploadedById: string) {
+  // One completed catalog per brand, matching the extractor's output shape
+  const catalogDefs = [
+    { brandSlug: 'somany', fileName: 'Somany_FloorCollection_2024.pdf', pages: 142 },
+    { brandSlug: 'rak', fileName: 'RAK_Bathroom_Series.pdf', pages: 98 },
+    { brandSlug: 'johnson', fileName: 'Johnson_WallTiles_v2.pdf', pages: 76 },
+    { brandSlug: 'kajaria', fileName: 'Kajaria_LivingCollection.pdf', pages: 110 },
+  ];
+
+  const catalogIds: Record<string, string> = {};
+  for (const c of catalogDefs) {
+    const catalog = await prisma.catalog.create({
+      data: {
+        brandId: brandIds[c.brandSlug],
+        fileName: c.fileName,
+        status: CatalogStatus.COMPLETED,
+        totalPages: c.pages,
+        tilesExtracted: 6,
+        uploadedById,
+        startedAt: new Date(Date.now() - 5 * 60 * 60 * 1000),
+        completedAt: new Date(Date.now() - 4 * 60 * 60 * 1000),
+      },
+    });
+    catalogIds[c.brandSlug] = catalog.id;
+  }
+
+  // A representative spread of tiles per brand, covering the types/rooms
+  // the design rules and mood board generator reference.
+  const tileDefs = [
+    // Somany — luxury living room base + metallic highlight
+    { brandSlug: 'somany', name: 'Somany Calacatta Gold 600x600', size: '600x600mm', finish: 'Polished', type: TileType.LARGE_FORMAT_BASE, colorTone: 'Warm White', bestRoom: 'Living Room', collection: 'Marbleto' },
+    { brandSlug: 'somany', name: 'Somany Bronze Listello Strip', size: '100x600mm', finish: 'Metallic', type: TileType.HIGHLIGHTER, colorTone: 'Bronze', bestRoom: 'Living Room', collection: 'Marbleto' },
+    // RAK — bathroom anti-slip base + border
+    { brandSlug: 'rak', name: 'RAK Anti-Slip Grey 300x300', size: '300x300mm', finish: 'Anti-Slip', type: TileType.BASE, colorTone: 'Cool Grey', bestRoom: 'Bathroom', collection: 'AquaStep' },
+    { brandSlug: 'rak', name: 'RAK Waist Border Strip', size: '100x300mm', finish: 'Gloss', type: TileType.BORDER, colorTone: 'Deep Blue', bestRoom: 'Bathroom', collection: 'AquaStep' },
+    // Johnson — kitchen sugar-finish base + accent
+    { brandSlug: 'johnson', name: 'Johnson Sugar Beige 600x600', size: '600x600mm', finish: 'Sugar', type: TileType.BASE, colorTone: 'Warm Beige', bestRoom: 'Kitchen', collection: 'EndurA' },
+    { brandSlug: 'johnson', name: 'Johnson Terracotta Backsplash Accent', size: '100x300mm', finish: 'Matt', type: TileType.ACCENT, colorTone: 'Terracotta', bestRoom: 'Kitchen', collection: 'EndurA' },
+  ];
+
+  let count = 0;
+  for (const t of tileDefs) {
+    await prisma.tile.create({
+      data: {
+        name: t.name,
+        brandId: brandIds[t.brandSlug],
+        catalogId: catalogIds[t.brandSlug],
+        size: t.size,
+        finish: t.finish,
+        type: t.type,
+        colorTone: t.colorTone,
+        bestRoom: t.bestRoom,
+        collection: t.collection,
+        imageUrl: `https://drive.google.com/uc?id=SEED_${t.name.replace(/\s+/g, '_')}`,
+        productCode: `${t.brandSlug.toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`,
+      },
+    });
+    count += 1;
+  }
+  console.log(`✅ Catalogs (${catalogDefs.length}) and tiles (${count}) seeded`);
+  return { catalogIds };
+}
+
+async function seedDesignRules(ownerId: string) {
+  // Content matches design_rules.txt from the build guide exactly, split
+  // into individually editable rows (one per section+key) so Admin Design
+  // Rules can edit each block on its own.
+  const rules: { section: RuleSection; key: string | null; title: string; content: string; sortOrder: number }[] = [
+    {
+      section: RuleSection.GENERAL,
+      key: null,
+      title: 'General Rules',
+      content:
+        '- Every combination must have: 1 base tile + 1 highlighter + 1 border or accent\n' +
+        '- Never use more than 2 strong colors in one combination\n' +
+        '- Always recommend a grout color\n' +
+        '- Prefer warmer tones for Indian homes unless client specifies otherwise',
+      sortOrder: 0,
+    },
+    {
+      section: RuleSection.STYLE,
+      key: 'LUXURY',
+      title: 'Style: Luxury',
+      content:
+        '- Base: Large format (600x600 or bigger), marble-look or stone-look\n' +
+        '- Highlight: Metallic finish (gold, bronze, silver), slim listello format\n' +
+        '- Grout: Matching tone, epoxy type recommended',
+      sortOrder: 1,
+    },
+    {
+      section: RuleSection.STYLE,
+      key: 'SUBTLE',
+      title: 'Style: Subtle',
+      content:
+        '- Base: Neutral tones, matte finish only\n' +
+        '- Highlight: Same tone family, different texture, very slim border\n' +
+        '- Grout: White or matching — nearly invisible',
+      sortOrder: 2,
+    },
+    {
+      section: RuleSection.STYLE,
+      key: 'BOLD',
+      title: 'Style: Bold',
+      content:
+        '- Base: Solid neutral so the highlight stands out\n' +
+        '- Highlight: Strong color — navy, emerald, terracotta\n' +
+        '- Grout: Dark, contrasting',
+      sortOrder: 3,
+    },
+    {
+      section: RuleSection.ROOM,
+      key: 'BATHROOM',
+      title: 'Room: Bathroom',
+      content:
+        '- Floor: Anti-slip finish, 300x300 or 300x600 preferred\n' +
+        '- Wall: Vertical stack pattern looks premium\n' +
+        '- Highlight: Wall niche or waist-height border strip',
+      sortOrder: 4,
+    },
+    {
+      section: RuleSection.ROOM,
+      key: 'KITCHEN',
+      title: 'Room: Kitchen',
+      content:
+        '- Floor: Matte or sugar finish, 600x600\n' +
+        '- Highlight: Above counter as decorative strip or full backsplash',
+      sortOrder: 5,
+    },
+    {
+      section: RuleSection.ROOM,
+      key: 'LIVING_ROOM',
+      title: 'Room: Living Room',
+      content:
+        '- Floor only: Large format (800x800 or 600x1200)\n' +
+        '- Feature wall: Stone-look or wood-look panel tiles if client wants',
+      sortOrder: 6,
+    },
+    {
+      section: RuleSection.CLIENT,
+      key: 'FEMININE',
+      title: 'Client: Feminine / Female',
+      content:
+        '- Prefer: Soft pinks, dusty rose, warm whites, soft terracotta\n' +
+        '- Highlight: Rose gold or champagne metallic\n' +
+        '- Avoid: Cold greys, dark heavy tones',
+      sortOrder: 7,
+    },
+    {
+      section: RuleSection.CLIENT,
+      key: 'TRADITIONAL',
+      title: 'Client: Traditional',
+      content:
+        '- Prefer: Cream, ivory, warm beige base with decorative border\n' +
+        '- Pattern tiles acceptable for pooja room or entrance',
+      sortOrder: 8,
+    },
+  ];
+
+  for (const r of rules) {
+    if (r.key === null) {
+      // Prisma's generated where-unique input for a compound index
+      // (section_key) requires a concrete, non-null key — NULL doesn't
+      // behave as a normal value in a unique-constraint lookup, so
+      // upsert() can't target it that way. This only ever applies to
+      // the single GENERAL-section rule above, which has no key by
+      // design (schema comment: "null for GENERAL").
+      const existing = await prisma.designRule.findFirst({ where: { section: r.section, key: null } });
+      if (existing) {
+        await prisma.designRule.update({
+          where: { id: existing.id },
+          data: { title: r.title, content: r.content, sortOrder: r.sortOrder, updatedById: ownerId },
+        });
+      } else {
+        await prisma.designRule.create({ data: { ...r, updatedById: ownerId } });
+      }
+      continue;
+    }
+
+    await prisma.designRule.upsert({
+      where: { section_key: { section: r.section, key: r.key } },
+      update: { title: r.title, content: r.content, sortOrder: r.sortOrder, updatedById: ownerId },
+      create: { ...r, key: r.key, updatedById: ownerId },
+    });
+  }
+
+  // Full-document snapshot for version 1, matching design_rules.txt
+  const fullContent = [
+    '# CASA DE AURUM — INTERNAL DESIGN RULES',
+    '# Written by store owner. Loaded into AI system prompt automatically.',
+    '# Edit this file any time to update how mood boards are generated.',
+    '',
+    ...rules.flatMap((r) => [`## ${r.title.toUpperCase()}`, r.content, '']),
+  ].join('\n');
+
+  // Structured snapshot of every rule row at publish time — what
+  // "Restore" replays back into the draft table. fullContent alone is
+  // just the compiled text and would be lossy to parse back into
+  // individual section/key/title/content/sortOrder rows.
+  const rulesSnapshot = rules.map((r) => ({
+    section: r.section,
+    key: r.key,
+    title: r.title,
+    content: r.content,
+    sortOrder: r.sortOrder,
+    isActive: true,
+  }));
+
+  await prisma.ruleVersion.upsert({
+    where: { versionNumber: 1 },
+    update: {},
+    create: {
+      versionNumber: 1,
+      fullContent,
+      rulesSnapshot,
+      changeSummary: 'Initial import from design_rules.txt',
+      createdById: ownerId,
+    },
+  });
+
+  console.log(`✅ Design rules seeded (${rules.length} entries) + version 1 snapshot`);
+}
+
+async function seedReferenceImages(ownerId: string) {
+  const images = [
+    { styleTag: 'luxury_bathroom_01', style: 'LUXURY', room: 'BATHROOM', description: 'A bathroom combination the owner considers luxury' },
+    { styleTag: 'luxury_living_01', style: 'LUXURY', room: 'LIVING_ROOM', description: 'A living room combination the owner considers luxury' },
+    { styleTag: 'subtle_minimal_01', style: 'SUBTLE', room: null, description: 'A clean, minimal look the owner approves of' },
+    { styleTag: 'bold_kitchen_01', style: 'BOLD', room: 'KITCHEN', description: 'A bold kitchen statement the owner likes' },
+    { styleTag: 'feminine_01', style: 'FEMININE', room: 'BATHROOM', description: 'A soft feminine bathroom reference' },
+    { styleTag: 'traditional_01', style: 'TRADITIONAL', room: null, description: 'A traditional look reference' },
+  ];
+
+  for (const img of images) {
+    const existing = await prisma.referenceImage.findFirst({ where: { styleTag: img.styleTag } });
+    if (!existing) {
+      await prisma.referenceImage.create({
+        data: {
+          styleTag: img.styleTag,
+          style: img.style,
+          room: img.room,
+          description: img.description,
+          imageUrl: `https://drive.google.com/uc?id=SEED_${img.styleTag}`,
+          uploadedById: ownerId,
+        },
+      });
+    }
+  }
+  console.log(`✅ Reference images seeded (${images.length})`);
+}
+
+async function seedCustomerMoodBoardAndPrintBoard(staffId: string) {
+  const customer = await prisma.customer.create({
+    data: {
+      name: 'Anjali Mehta',
+      phone: '+91 98765 43210',
+      preferredStyle: 'SUBTLE',
+      preferredRoom: 'BATHROOM',
+      budget: 'Mid',
+      notes: 'Pink washroom, female client, subtle style, mid budget',
+      createdById: staffId,
+    },
+  });
+
+  const tiles = await prisma.tile.findMany({ where: { bestRoom: 'Bathroom' } });
+  const base = tiles.find((t: Tile) => t.type === TileType.BASE);
+  const border = tiles.find((t: Tile) => t.type === TileType.BORDER);
+
+  const combinations = [
+    {
+      board_name: 'Subtle Rose Bath',
+      tiles: { base: base?.name, highlight: null, border: border?.name },
+      grout_recommendation: 'White, nearly invisible',
+      rooms_suitable: ['Bathroom'],
+      reason_for_selection: 'Neutral matte base keeps the look calm; slim border adds definition without breaking the subtle style rule.',
+    },
+  ];
+
+  const moodBoard = await prisma.moodBoard.create({
+    data: {
+      customerId: customer.id,
+      createdById: staffId,
+      clientBrief: 'Pink washroom, female client, subtle style, mid budget',
+      style: 'SUBTLE',
+      room: 'BATHROOM',
+      combinations,
+      status: MoodBoardStatus.APPROVED,
+      selectedIndex: 0,
+    },
+  });
+
+  if (base) {
+    await prisma.moodBoardTile.create({
+      data: { moodBoardId: moodBoard.id, tileId: base.id, combinationIndex: 0, role: 'base' },
+    });
+  }
+  if (border) {
+    await prisma.moodBoardTile.create({
+      data: { moodBoardId: moodBoard.id, tileId: border.id, combinationIndex: 0, role: 'border' },
+    });
+  }
+
+  await prisma.printBoard.create({
+    data: {
+      moodBoardId: moodBoard.id,
+      createdById: staffId,
+      format: PrintFormat.CASSETTE_PANEL,
+      layout: PrintLayout.CASSETTE_STYLE,
+      widthValue: 4,
+      heightValue: 8,
+      unit: DimensionUnit.FT,
+      dpi: 300,
+      fileFormat: PrintFileFormat.PDF,
+      fileUrl: null,
+      tilesSnapshot: combinations[0],
+    },
+  });
+
+  console.log('✅ Sample customer, mood board, and print board seeded');
+  return { customerId: customer.id, moodBoardId: moodBoard.id };
+}
+
+async function seedActivityLogs(userId: string) {
+  const actions = [
+    { action: 'user.login', entityType: 'User', entityId: userId },
+    { action: 'catalog.extraction_completed', entityType: 'Catalog', entityId: null, metadata: { tiles: 6 } },
+    { action: 'design_rules.updated', entityType: 'DesignRule', entityId: null },
+    { action: 'mood_board.generated', entityType: 'MoodBoard', entityId: null },
+    { action: 'print_board.exported', entityType: 'PrintBoard', entityId: null, metadata: { format: 'PDF', dpi: 300 } },
+  ];
+
+  for (const a of actions) {
+    await prisma.activityLog.create({
+      data: { userId, action: a.action, entityType: a.entityType, entityId: a.entityId ?? undefined, metadata: a.metadata },
+    });
+  }
+  console.log(`✅ Activity logs seeded (${actions.length})`);
+}
+
+async function seedSettings(ownerId: string) {
+  const settings = [
+    { key: 'google.sheet_name', value: 'CasaDeAurum Tiles', category: 'google', description: 'Name of the Google Sheet used as the tile database' },
+    { key: 'google.drive_root_folder', value: 'CasaDeAurum', category: 'google', description: 'Root Drive folder for uploaded tile images' },
+    { key: 'gemini.model', value: 'gemini-2.5-flash', category: 'gemini', description: 'Model used for mood board generation' },
+    { key: 'print.default_dpi', value: 300, category: 'print', description: 'Default export DPI for print boards' },
+    { key: 'general.combinations_per_request', value: 4, category: 'general', description: 'Number of mood board combinations returned per generation' },
+  ];
+
+  for (const s of settings) {
+    await prisma.setting.upsert({
+      where: { key: s.key },
+      update: { value: s.value, updatedById: ownerId },
+      create: { ...s, updatedById: ownerId },
+    });
+  }
+  console.log(`✅ Settings seeded (${settings.length})`);
+}
+
+async function main() {
+  console.log('🌱 Seeding Casa de Aurum database...\n');
+
+  const roleIds = await seedRoles();
+  const userIds = await seedUsers(roleIds);
+  const brandIds = await seedBrands();
+  await seedCatalogsAndTiles(brandIds, userIds['admin@casadeaurum.com']);
+  await seedDesignRules(userIds['owner@casadeaurum.com']);
+  await seedReferenceImages(userIds['owner@casadeaurum.com']);
+  await seedCustomerMoodBoardAndPrintBoard(userIds['priya@casadeaurum.com']);
+  await seedActivityLogs(userIds['owner@casadeaurum.com']);
+  await seedSettings(userIds['owner@casadeaurum.com']);
+
+  console.log('\n✅ Seed complete.');
+  console.log(`   Login with any seeded email above and password "${SEED_PASSWORD}"`);
+}
+
+main()
+  .catch((err) => {
+    console.error('❌ Seed failed:', err);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });

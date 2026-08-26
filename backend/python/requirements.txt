@@ -1,0 +1,11 @@
+# Casa de Aurum — Python dependencies
+# Used by scripts invoked from the Node backend via src/utils/pythonRunner.ts
+# Part 1 (Catalog Extractor) is the first consumer — see build guide.
+
+PyMuPDF>=1.24.0
+gspread>=6.1.0
+google-auth>=2.32.0
+google-api-python-client>=2.140.0
+pandas>=2.2.0
+pillow>=10.4.0
+tqdm>=4.66.0

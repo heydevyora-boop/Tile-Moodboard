@@ -1,0 +1,164 @@
+{"error":"Error querying the database: FATAL: (ENOTFOUND) tenant/user postgres.mlhbxrfqgrpelejkfehp not found","level":"error","message":"❌ Database connection failed","timestamp":"2026-08-25T06:19:32.772Z"}
+{"error":"Error querying the database: FATAL: (ENOTFOUND) tenant/user postgres.mlhbxrfqgrpelejkfehp not found","level":"error","message":"❌ Database connection failed","timestamp":"2026-08-25T06:23:24.938Z"}
+{"level":"info","message":"✅ Database connected","timestamp":"2026-08-25T06:31:28.079Z"}
+{"level":"info","message":"Image Processing Queue worker registered","timestamp":"2026-08-25T06:31:28.083Z"}
+{"level":"info","message":"Export Queue worker registered","timestamp":"2026-08-25T06:31:28.084Z"}
+{"level":"info","message":"🚀 Casa de Aurum Internal Tool running in development mode on port 5000","timestamp":"2026-08-25T06:31:28.105Z"}
+{"level":"info","message":"   API base: http://localhost:5000/api/v1","timestamp":"2026-08-25T06:31:28.106Z"}
+{"level":"info","message":"   Health:   http://localhost:5000/api/v1/health","timestamp":"2026-08-25T06:31:28.106Z"}
+{"ip":"::1","level":"warn","message":"Invalid email or password","method":"POST","path":"/api/v1/auth/login","statusCode":401,"timestamp":"2026-08-25T06:31:47.986Z"}
+{"level":"error","message":"Prisma error: \nInvalid `prisma.job.findFirst()` invocation in\nC:\\Users\\Aryan\\Downloads\\Casa De Aurum\\backend\\src\\services\\jobQueue.service.ts:81:34\n\n  78 \n  79 while (runtime.running.size < runtime.concurrency) {\n  80   const now = new Date();\n→ 81   const due = await prisma.job.findFirst(\nCan't reach database server at `aws-0-ap-south-1.pooler.supabase.com:6543`\n\nPlease make sure your database server is running at `aws-0-ap-south-1.pooler.supabase.com:6543`.","timestamp":"2026-08-25T06:37:30.764Z"}
+{"level":"info","message":"✅ Database connected","timestamp":"2026-08-25T06:53:24.358Z"}
+{"level":"info","message":"Image Processing Queue worker registered","timestamp":"2026-08-25T06:53:24.365Z"}
+{"level":"info","message":"Export Queue worker registered","timestamp":"2026-08-25T06:53:24.367Z"}
+{"level":"info","message":"🚀 Casa de Aurum Internal Tool running in development mode on port 5000","timestamp":"2026-08-25T06:53:24.417Z"}
+{"level":"info","message":"   API base: http://localhost:5000/api/v1","timestamp":"2026-08-25T06:53:24.418Z"}
+{"level":"info","message":"   Health:   http://localhost:5000/api/v1/health","timestamp":"2026-08-25T06:53:24.419Z"}
+{"level":"error","message":"Prisma error: Error in PostgreSQL connection: Error { kind: Io, cause: Some(Os { code: 10054, kind: ConnectionReset, message: \"An existing connection was forcibly closed by the remote host.\" }) }","timestamp":"2026-08-25T06:55:27.264Z"}
+{"level":"info","message":"✅ Database connected","timestamp":"2026-08-25T07:27:06.299Z"}
+{"level":"info","message":"Image Processing Queue worker registered","timestamp":"2026-08-25T07:27:06.310Z"}
+{"level":"info","message":"Export Queue worker registered","timestamp":"2026-08-25T07:27:06.311Z"}
+{"level":"info","message":"🚀 Casa de Aurum Internal Tool running in development mode on port 5000","timestamp":"2026-08-25T07:27:06.339Z"}
+{"level":"info","message":"   API base: http://localhost:5000/api/v1","timestamp":"2026-08-25T07:27:06.340Z"}
+{"level":"info","message":"   Health:   http://localhost:5000/api/v1/health","timestamp":"2026-08-25T07:27:06.341Z"}
+{"level":"info","message":"SIGINT received. Shutting down gracefully...","timestamp":"2026-08-25T07:27:52.077Z"}
+{"level":"info","message":"Database disconnected","timestamp":"2026-08-25T07:27:52.084Z"}
+{"level":"info","message":"✅ Database connected","timestamp":"2026-08-25T07:28:50.492Z"}
+{"level":"info","message":"Image Processing Queue worker registered","timestamp":"2026-08-25T07:28:50.498Z"}
+{"level":"info","message":"Export Queue worker registered","timestamp":"2026-08-25T07:28:50.499Z"}
+{"level":"info","message":"🚀 Casa de Aurum Internal Tool running in development mode on port 5000","timestamp":"2026-08-25T07:28:50.535Z"}
+{"level":"info","message":"   API base: http://localhost:5000/api/v1","timestamp":"2026-08-25T07:28:50.536Z"}
+{"level":"info","message":"   Health:   http://localhost:5000/api/v1/health","timestamp":"2026-08-25T07:28:50.538Z"}
+{"level":"info","message":"SIGINT received. Shutting down gracefully...","timestamp":"2026-08-25T07:31:46.846Z"}
+{"level":"info","message":"Database disconnected","timestamp":"2026-08-25T07:31:46.857Z"}
+{"level":"info","message":"✅ Database connected","timestamp":"2026-08-25T07:46:19.433Z"}
+{"level":"info","message":"Image Processing Queue worker registered","timestamp":"2026-08-25T07:46:19.440Z"}
+{"level":"info","message":"Export Queue worker registered","timestamp":"2026-08-25T07:46:19.441Z"}
+{"level":"info","message":"🚀 Casa de Aurum Internal Tool running in development mode on port 5000","timestamp":"2026-08-25T07:46:19.482Z"}
+{"level":"info","message":"   API base: http://localhost:5000/api/v1","timestamp":"2026-08-25T07:46:19.484Z"}
+{"level":"info","message":"   Health:   http://localhost:5000/api/v1/health","timestamp":"2026-08-25T07:46:19.485Z"}
+{"ip":"::1","level":"warn","message":"Refresh token has already been used. All sessions have been revoked for safety — please log in again.","method":"POST","path":"/api/v1/auth/refresh","statusCode":401,"timestamp":"2026-08-25T07:55:42.119Z"}
+{"level":"info","message":"SIGINT received. Shutting down gracefully...","timestamp":"2026-08-25T07:57:12.998Z"}
+{"level":"info","message":"Database disconnected","timestamp":"2026-08-25T07:57:13.593Z"}
+{"level":"info","message":"✅ Database connected","timestamp":"2026-08-25T07:58:28.777Z"}
+{"level":"info","message":"Image Processing Queue worker registered","timestamp":"2026-08-25T07:58:28.783Z"}
+{"level":"info","message":"Export Queue worker registered","timestamp":"2026-08-25T07:58:28.784Z"}
+{"level":"info","message":"🚀 Casa de Aurum Internal Tool running in development mode on port 5000","timestamp":"2026-08-25T07:58:28.815Z"}
+{"level":"info","message":"   API base: http://localhost:5000/api/v1","timestamp":"2026-08-25T07:58:28.816Z"}
+{"level":"info","message":"   Health:   http://localhost:5000/api/v1/health","timestamp":"2026-08-25T07:58:28.817Z"}
+{"ip":"::1","level":"warn","message":"Invalid email or password","method":"POST","path":"/api/v1/auth/login","statusCode":401,"timestamp":"2026-08-25T07:59:50.135Z"}
+{"level":"error","message":"Prisma error: \nInvalid `prisma.job.findFirst()` invocation in\nC:\\Users\\Aryan\\Downloads\\Casa De Aurum\\backend\\src\\services\\jobQueue.service.ts:81:34\n\n  78 \n  79 while (runtime.running.size < runtime.concurrency) {\n  80   const now = new Date();\n→ 81   const due = await prisma.job.findFirst(\nCan't reach database server at `aws-0-ap-south-1.pooler.supabase.com:6543`\n\nPlease make sure your database server is running at `aws-0-ap-south-1.pooler.supabase.com:6543`.","timestamp":"2026-08-25T08:05:50.762Z"}
+{"level":"info","message":"✅ Database connected","timestamp":"2026-08-25T08:07:28.864Z"}
+{"level":"info","message":"Image Processing Queue worker registered","timestamp":"2026-08-25T08:07:28.868Z"}
+{"level":"info","message":"Export Queue worker registered","timestamp":"2026-08-25T08:07:28.869Z"}
+{"level":"info","message":"🚀 Casa de Aurum Internal Tool running in development mode on port 5000","timestamp":"2026-08-25T08:07:28.899Z"}
+{"level":"info","message":"   API base: http://localhost:5000/api/v1","timestamp":"2026-08-25T08:07:28.900Z"}
+{"level":"info","message":"   Health:   http://localhost:5000/api/v1/health","timestamp":"2026-08-25T08:07:28.901Z"}
+{"ip":"::1","level":"warn","message":"Origin http://localhost:5000 is not allowed by CORS","method":"POST","path":"/api/v1/auth/login","statusCode":403,"timestamp":"2026-08-25T08:14:45.741Z"}
+{"level":"error","message":"Prisma error: Error in PostgreSQL connection: Error { kind: Io, cause: Some(Os { code: 10054, kind: ConnectionReset, message: \"An existing connection was forcibly closed by the remote host.\" }) }","timestamp":"2026-08-25T08:59:30.734Z"}
+{"error":"Can't reach database server at `aws-0-ap-south-1.pooler.supabase.com:6543`\n\nPlease make sure your database server is running at `aws-0-ap-south-1.pooler.supabase.com:6543`.","level":"error","message":"❌ Database connection failed","timestamp":"2026-08-25T09:14:05.726Z"}
+{"error":"Can't reach database server at `aws-0-ap-south-1.pooler.supabase.com:6543`\n\nPlease make sure your database server is running at `aws-0-ap-south-1.pooler.supabase.com:6543`.","level":"error","message":"❌ Database connection failed","timestamp":"2026-08-25T09:19:13.159Z"}
+{"level":"info","message":"✅ Database connected","timestamp":"2026-08-25T09:59:18.900Z"}
+{"level":"info","message":"Image Processing Queue worker registered","timestamp":"2026-08-25T09:59:18.903Z"}
+{"level":"info","message":"Export Queue worker registered","timestamp":"2026-08-25T09:59:18.904Z"}
+{"level":"info","message":"🚀 Casa de Aurum Internal Tool running in development mode on port 5000","timestamp":"2026-08-25T09:59:18.934Z"}
+{"level":"info","message":"   API base: http://localhost:5000/api/v1","timestamp":"2026-08-25T09:59:18.935Z"}
+{"level":"info","message":"   Health:   http://localhost:5000/api/v1/health","timestamp":"2026-08-25T09:59:18.936Z"}
+{"level":"info","message":"SIGINT received. Shutting down gracefully...","timestamp":"2026-08-25T10:00:40.044Z"}
+{"level":"info","message":"✅ Database connected","timestamp":"2026-08-25T10:01:44.323Z"}
+{"level":"info","message":"Image Processing Queue worker registered","timestamp":"2026-08-25T10:01:44.326Z"}
+{"level":"info","message":"Export Queue worker registered","timestamp":"2026-08-25T10:01:44.328Z"}
+{"level":"info","message":"🚀 Casa de Aurum Internal Tool running in development mode on port 5000","timestamp":"2026-08-25T10:01:44.382Z"}
+{"level":"info","message":"   API base: http://localhost:5000/api/v1","timestamp":"2026-08-25T10:01:44.384Z"}
+{"level":"info","message":"   Health:   http://localhost:5000/api/v1/health","timestamp":"2026-08-25T10:01:44.385Z"}
+{"ip":"::1","level":"warn","message":"Origin http://localhost:5000 is not allowed by CORS","method":"POST","path":"/api/v1/auth/login","statusCode":403,"timestamp":"2026-08-25T10:03:41.608Z"}
+{"level":"error","message":"Prisma error: \nInvalid `prisma.job.findFirst()` invocation in\nC:\\Users\\Aryan\\Downloads\\Casa De Aurum\\backend\\src\\services\\jobQueue.service.ts:81:34\n\n  78 \n  79 while (runtime.running.size < runtime.concurrency) {\n  80   const now = new Date();\n→ 81   const due = await prisma.job.findFirst(\nCan't reach database server at aws-0-ap-south-1.pooler.supabase.com","timestamp":"2026-08-25T10:20:34.805Z"}
+{"level":"info","message":"✅ Database connected","timestamp":"2026-08-25T10:36:17.756Z"}
+{"level":"info","message":"Image Processing Queue worker registered","timestamp":"2026-08-25T10:36:17.766Z"}
+{"level":"info","message":"Export Queue worker registered","timestamp":"2026-08-25T10:36:17.768Z"}
+{"level":"info","message":"🚀 Casa de Aurum Internal Tool running in development mode on port 5000","timestamp":"2026-08-25T10:36:17.857Z"}
+{"level":"info","message":"   API base: http://localhost:5000/api/v1","timestamp":"2026-08-25T10:36:17.858Z"}
+{"level":"info","message":"   Health:   http://localhost:5000/api/v1/health","timestamp":"2026-08-25T10:36:17.864Z"}
+{"ip":"::1","level":"warn","message":"Invalid email or password","method":"POST","path":"/api/v1/auth/login","statusCode":401,"timestamp":"2026-08-25T10:36:39.236Z"}
+{"ip":"::1","level":"error","message":"Gemini API key is not configured (set GEMINI_API_KEY or add one in Admin > API Keys)","method":"POST","path":"/api/v1/mood-boards/generate","stack":"Error: Gemini API key is not configured (set GEMINI_API_KEY or add one in Admin > API Keys)\n    at AppError.internal (C:\\Users\\Aryan\\Downloads\\Casa De Aurum\\backend\\src\\utils\\AppError.ts:49:12)\n    at GeminiClient.generateContent (C:\\Users\\Aryan\\Downloads\\Casa De Aurum\\backend\\src\\services\\gemini.service.ts:177:22)\n    at processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at async GeminiClient.generateJSON (C:\\Users\\Aryan\\Downloads\\Casa De Aurum\\backend\\src\\services\\gemini.service.ts:194:20)\n    at async Object.generateCombinations (C:\\Users\\Aryan\\Downloads\\Casa De Aurum\\backend\\src\\services\\promptBuilder.service.ts:315:15)\n    at async C:\\Users\\Aryan\\Downloads\\Casa De Aurum\\backend\\src\\controllers\\moodBoard.controller.ts:21:18","statusCode":500,"timestamp":"2026-08-25T10:44:23.087Z","userId":"cmspwgl890006veiceardy5p2"}
+{"ip":"::1","level":"error","message":"Gemini API key is not configured (set GEMINI_API_KEY or add one in Admin > API Keys)","method":"POST","path":"/api/v1/mood-boards/generate","stack":"Error: Gemini API key is not configured (set GEMINI_API_KEY or add one in Admin > API Keys)\n    at AppError.internal (C:\\Users\\Aryan\\Downloads\\Casa De Aurum\\backend\\src\\utils\\AppError.ts:49:12)\n    at GeminiClient.generateContent (C:\\Users\\Aryan\\Downloads\\Casa De Aurum\\backend\\src\\services\\gemini.service.ts:177:22)\n    at processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at async GeminiClient.generateJSON (C:\\Users\\Aryan\\Downloads\\Casa De Aurum\\backend\\src\\services\\gemini.service.ts:194:20)\n    at async Object.generateCombinations (C:\\Users\\Aryan\\Downloads\\Casa De Aurum\\backend\\src\\services\\promptBuilder.service.ts:315:15)\n    at async C:\\Users\\Aryan\\Downloads\\Casa De Aurum\\backend\\src\\controllers\\moodBoard.controller.ts:21:18","statusCode":500,"timestamp":"2026-08-25T10:50:44.281Z","userId":"cmspwgl890006veiceardy5p2"}
+{"ip":"::1","level":"warn","message":"Refresh token has already been used. All sessions have been revoked for safety — please log in again.","method":"POST","path":"/api/v1/auth/refresh","statusCode":401,"timestamp":"2026-08-25T10:51:11.885Z"}
+{"ip":"::1","level":"warn","message":"Refresh token has already been used. All sessions have been revoked for safety — please log in again.","method":"POST","path":"/api/v1/auth/refresh","statusCode":401,"timestamp":"2026-08-25T10:51:12.294Z"}
+{"ip":"::1","level":"warn","message":"Refresh token has already been used. All sessions have been revoked for safety — please log in again.","method":"POST","path":"/api/v1/auth/refresh","statusCode":401,"timestamp":"2026-08-25T10:51:35.536Z"}
+{"ip":"::1","level":"warn","message":"Refresh token has already been used. All sessions have been revoked for safety — please log in again.","method":"POST","path":"/api/v1/auth/refresh","statusCode":401,"timestamp":"2026-08-25T10:51:36.040Z"}
+{"ip":"::1","level":"warn","message":"Authentication required","method":"POST","path":"/api/v1/integrations/gemini/test","statusCode":401,"timestamp":"2026-08-25T10:51:52.043Z"}
+{"ip":"::1","level":"warn","message":"Refresh token has already been used. All sessions have been revoked for safety — please log in again.","method":"POST","path":"/api/v1/auth/refresh","statusCode":401,"timestamp":"2026-08-25T10:51:53.431Z"}
+{"ip":"::1","level":"warn","message":"Refresh token has already been used. All sessions have been revoked for safety — please log in again.","method":"POST","path":"/api/v1/auth/refresh","statusCode":401,"timestamp":"2026-08-25T10:51:55.381Z"}
+{"ip":"::1","level":"warn","message":"You do not have permission to perform this action","method":"POST","path":"/api/v1/integrations/gemini/test","statusCode":403,"timestamp":"2026-08-25T10:52:20.264Z","userId":"cmspwgl890006veiceardy5p2"}
+{"level":"info","message":"SIGINT received. Shutting down gracefully...","timestamp":"2026-08-25T10:52:44.491Z"}
+{"level":"info","message":"✅ Database connected","timestamp":"2026-08-25T10:53:41.291Z"}
+{"level":"info","message":"Image Processing Queue worker registered","timestamp":"2026-08-25T10:53:41.293Z"}
+{"level":"info","message":"Export Queue worker registered","timestamp":"2026-08-25T10:53:41.294Z"}
+{"level":"info","message":"🚀 Casa de Aurum Internal Tool running in development mode on port 5000","timestamp":"2026-08-25T10:53:41.321Z"}
+{"level":"info","message":"   API base: http://localhost:5000/api/v1","timestamp":"2026-08-25T10:53:41.322Z"}
+{"level":"info","message":"   Health:   http://localhost:5000/api/v1/health","timestamp":"2026-08-25T10:53:41.323Z"}
+{"level":"info","message":"SIGINT received. Shutting down gracefully...","timestamp":"2026-08-25T10:55:34.013Z"}
+{"level":"info","message":"Database disconnected","timestamp":"2026-08-25T10:55:34.476Z"}
+{"level":"info","message":"✅ Database connected","timestamp":"2026-08-25T10:56:35.334Z"}
+{"level":"info","message":"Image Processing Queue worker registered","timestamp":"2026-08-25T10:56:35.338Z"}
+{"level":"info","message":"Export Queue worker registered","timestamp":"2026-08-25T10:56:35.340Z"}
+{"level":"info","message":"🚀 Casa de Aurum Internal Tool running in development mode on port 5000","timestamp":"2026-08-25T10:56:35.383Z"}
+{"level":"info","message":"   API base: http://localhost:5000/api/v1","timestamp":"2026-08-25T10:56:35.383Z"}
+{"level":"info","message":"   Health:   http://localhost:5000/api/v1/health","timestamp":"2026-08-25T10:56:35.384Z"}
+{"level":"error","message":"Prisma error: \nInvalid `prisma.job.findFirst()` invocation in\nC:\\Users\\Aryan\\Downloads\\Casa De Aurum\\backend\\src\\services\\jobQueue.service.ts:81:34\n\n  78 \n  79 while (runtime.running.size < runtime.concurrency) {\n  80   const now = new Date();\n→ 81   const due = await prisma.job.findFirst(\nCan't reach database server at aws-0-ap-south-1.pooler.supabase.com","timestamp":"2026-08-25T11:07:40.197Z"}
+{"level":"info","message":"✅ Database connected","timestamp":"2026-08-25T11:13:24.649Z"}
+{"level":"info","message":"Image Processing Queue worker registered","timestamp":"2026-08-25T11:13:24.651Z"}
+{"level":"info","message":"Export Queue worker registered","timestamp":"2026-08-25T11:13:24.652Z"}
+{"level":"info","message":"🚀 Casa de Aurum Internal Tool running in development mode on port 5000","timestamp":"2026-08-25T11:13:24.676Z"}
+{"level":"info","message":"   API base: http://localhost:5000/api/v1","timestamp":"2026-08-25T11:13:24.677Z"}
+{"level":"info","message":"   Health:   http://localhost:5000/api/v1/health","timestamp":"2026-08-25T11:13:24.678Z"}
+{"ip":"::1","level":"warn","message":"Refresh token has already been used. All sessions have been revoked for safety — please log in again.","method":"POST","path":"/api/v1/auth/refresh","statusCode":401,"timestamp":"2026-08-25T11:15:26.628Z"}
+{"ip":"::1","level":"warn","message":"Refresh token has already been used. All sessions have been revoked for safety — please log in again.","method":"POST","path":"/api/v1/auth/refresh","statusCode":401,"timestamp":"2026-08-25T11:15:42.646Z"}
+{"ip":"::1","level":"warn","message":"Refresh token has already been used. All sessions have been revoked for safety — please log in again.","method":"POST","path":"/api/v1/auth/refresh","statusCode":401,"timestamp":"2026-08-25T11:15:44.515Z"}
+{"level":"info","message":"✅ Database connected","timestamp":"2026-08-25T11:40:01.377Z"}
+{"level":"info","message":"Image Processing Queue worker registered","timestamp":"2026-08-25T11:40:01.386Z"}
+{"level":"info","message":"Export Queue worker registered","timestamp":"2026-08-25T11:40:01.388Z"}
+{"level":"info","message":"🚀 Casa de Aurum Internal Tool running in development mode on port 5000","timestamp":"2026-08-25T11:40:01.425Z"}
+{"level":"info","message":"   API base: http://localhost:5000/api/v1","timestamp":"2026-08-25T11:40:01.426Z"}
+{"level":"info","message":"   Health:   http://localhost:5000/api/v1/health","timestamp":"2026-08-25T11:40:01.427Z"}
+{"level":"info","message":"✅ Database connected","timestamp":"2026-08-25T11:42:43.811Z"}
+{"level":"info","message":"Image Processing Queue worker registered","timestamp":"2026-08-25T11:42:43.823Z"}
+{"level":"info","message":"Export Queue worker registered","timestamp":"2026-08-25T11:42:43.824Z"}
+{"level":"info","message":"🚀 Casa de Aurum Internal Tool running in development mode on port 5000","timestamp":"2026-08-25T11:42:43.875Z"}
+{"level":"info","message":"   API base: http://localhost:5000/api/v1","timestamp":"2026-08-25T11:42:43.876Z"}
+{"level":"info","message":"   Health:   http://localhost:5000/api/v1/health","timestamp":"2026-08-25T11:42:43.877Z"}
+{"level":"info","message":"✅ Database connected","timestamp":"2026-08-25T11:59:31.979Z"}
+{"level":"info","message":"Image Processing Queue worker registered","timestamp":"2026-08-25T11:59:31.982Z"}
+{"level":"info","message":"Export Queue worker registered","timestamp":"2026-08-25T11:59:31.983Z"}
+{"level":"info","message":"🚀 Casa de Aurum Internal Tool running in development mode on port 5000","timestamp":"2026-08-25T11:59:32.021Z"}
+{"level":"info","message":"   API base: http://localhost:5000/api/v1","timestamp":"2026-08-25T11:59:32.022Z"}
+{"level":"info","message":"   Health:   http://localhost:5000/api/v1/health","timestamp":"2026-08-25T11:59:32.023Z"}
+{"level":"error","message":"Prisma error: Connection terminated unexpectedly","timestamp":"2026-08-25T12:29:28.950Z"}
+{"level":"info","message":"✅ Database connected","timestamp":"2026-08-25T13:24:24.106Z"}
+{"level":"info","message":"Image Processing Queue worker registered","timestamp":"2026-08-25T13:24:24.108Z"}
+{"level":"info","message":"Export Queue worker registered","timestamp":"2026-08-25T13:24:24.109Z"}
+{"level":"info","message":"🚀 Casa de Aurum Internal Tool running in development mode on port 5000","timestamp":"2026-08-25T13:24:24.143Z"}
+{"level":"info","message":"   API base: http://localhost:5000/api/v1","timestamp":"2026-08-25T13:24:24.144Z"}
+{"level":"info","message":"   Health:   http://localhost:5000/api/v1/health","timestamp":"2026-08-25T13:24:24.146Z"}
+{"level":"info","message":"✅ Database connected","timestamp":"2026-08-25T13:32:42.414Z"}
+{"level":"info","message":"Image Processing Queue worker registered","timestamp":"2026-08-25T13:32:42.420Z"}
+{"level":"info","message":"Export Queue worker registered","timestamp":"2026-08-25T13:32:42.421Z"}
+{"level":"info","message":"🚀 Casa de Aurum Internal Tool running in development mode on port 5000","timestamp":"2026-08-25T13:32:42.456Z"}
+{"level":"info","message":"   API base: http://localhost:5000/api/v1","timestamp":"2026-08-25T13:32:42.457Z"}
+{"level":"info","message":"   Health:   http://localhost:5000/api/v1/health","timestamp":"2026-08-25T13:32:42.458Z"}
+{"level":"info","message":"✅ Database connected","timestamp":"2026-08-25T13:41:35.632Z"}
+{"level":"info","message":"✅ Database connected","timestamp":"2026-08-25T13:43:35.052Z"}
+{"level":"info","message":"✅ Database connected","timestamp":"2026-08-25T13:48:02.418Z"}
+{"level":"info","message":"Image Processing Queue worker registered","timestamp":"2026-08-25T13:48:02.421Z"}
+{"level":"info","message":"Export Queue worker registered","timestamp":"2026-08-25T13:48:02.422Z"}
+{"level":"info","message":"🚀 Casa de Aurum Internal Tool running in development mode on port 5000","timestamp":"2026-08-25T13:48:02.445Z"}
+{"level":"info","message":"   API base: http://localhost:5000/api/v1","timestamp":"2026-08-25T13:48:02.446Z"}
+{"level":"info","message":"   Health:   http://localhost:5000/api/v1/health","timestamp":"2026-08-25T13:48:02.447Z"}
+{"ip":"::1","level":"warn","message":"No refresh token provided","method":"POST","path":"/api/v1/auth/refresh","statusCode":401,"timestamp":"2026-08-25T13:49:11.870Z"}
+{"level":"info","message":"SIGINT received. Shutting down gracefully...","timestamp":"2026-08-25T13:57:12.400Z"}
+{"level":"info","message":"✅ Database connected","timestamp":"2026-08-25T13:58:03.752Z"}
+{"level":"info","message":"Image Processing Queue worker registered","timestamp":"2026-08-25T13:58:03.754Z"}
+{"level":"info","message":"Export Queue worker registered","timestamp":"2026-08-25T13:58:03.756Z"}
+{"level":"info","message":"🚀 Casa de Aurum Internal Tool running in development mode on port 5000","timestamp":"2026-08-25T13:58:03.778Z"}
+{"level":"info","message":"   API base: http://localhost:5000/api/v1","timestamp":"2026-08-25T13:58:03.779Z"}
+{"level":"info","message":"   Health:   http://localhost:5000/api/v1/health","timestamp":"2026-08-25T13:58:03.780Z"}

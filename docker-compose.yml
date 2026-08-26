@@ -1,0 +1,78 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-casa_de_aurum}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set — see .env.example}
+      POSTGRES_DB: ${POSTGRES_DB:-casa_de_aurum}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-casa_de_aurum}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - casa-internal
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - ./backend/.env
+    # DATABASE_URL/DIRECT_URL come entirely from backend/.env (see
+    # .env.production.example for the two supported paths: the bundled
+    # "postgres" service below, or Supabase). Deliberately not overridden
+    # here — an override would silently force the connection back to this
+    # container even when Supabase is genuinely configured, which is
+    # exactly the wrong behavior for that path. If you're using the
+    # bundled Postgres, just make sure backend/.env's host is "postgres"
+    # (the service name below), not "localhost".
+    volumes:
+      - backend_uploads:/app/uploads
+      - backend_logs:/app/logs
+      - ./secrets:/app/secrets:ro
+    healthcheck:
+      test: ['CMD', 'node', '-e', "require('http').get('http://localhost:5000/api/v1/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    networks:
+      - casa-internal
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - '${HTTP_PORT:-80}:80'
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./frontend:/usr/share/nginx/html:ro
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://localhost/health']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - casa-internal
+
+networks:
+  casa-internal:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  backend_uploads:
+  backend_logs:
