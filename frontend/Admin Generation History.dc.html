@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+@keyframes fade{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
+html,body{margin:0;padding:0;height:100%;}
+body{background:#F1ECE1;color:#221D18;font-family:'Inter',sans-serif;-webkit-font-smoothing:antialiased;}
+a{color:#AD8348;text-decoration:none;}a:hover{color:#7A5B2C;}
+</style>
+</helmet>
+
+<div style="display:flex;min-height:100vh;">
+  <aside style="width:260px;background:#1A1611;color:#E9E2D3;display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:20;">
+    <div style="padding:24px 22px 20px;border-bottom:1px solid rgba(255,255,255,0.08);">
+      <div style="font-family:'Fraunces',serif;font-weight:600;font-size:18px;letter-spacing:.04em;color:#E9E2D3;">CASA DE A<span style="color:#D8B677;">U</span>RUM</div>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:#78705F;margin-top:3px;">Admin Panel</div>
+    </div>
+    <nav style="flex:1;padding:10px 10px 20px;display:flex;flex-direction:column;gap:2px;overflow-y:auto;">
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:#78705F;padding:16px 12px 6px;">Overview</div>
+      <a href="Admin Dashboard.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;color:#B7AB94;font-size:13px;font-weight:500;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">Dashboard</a>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:#78705F;padding:16px 12px 6px;">Catalog Pipeline</div>
+      <a href="Admin Extraction Status.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;color:#B7AB94;font-size:13px;font-weight:500;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">Extraction Status</a>
+      <a href="Admin Catalog Detail.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;color:#B7AB94;font-size:13px;font-weight:500;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">Catalog Detail</a>
+      <a href="Admin Product Data.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;color:#B7AB94;font-size:13px;font-weight:500;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">Product Data</a>
+      <a href="Admin Catalog Extractor.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;color:#B7AB94;font-size:13px;font-weight:500;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">Extractor Settings</a>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:#78705F;padding:16px 12px 6px;">Generations</div>
+      <a href="Admin Generation History.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;background:rgba(173,131,72,0.12);color:#D8B677;font-size:13px;font-weight:600;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">Generation History</a>
+      <a href="Admin Generated Scenes.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;color:#B7AB94;font-size:13px;font-weight:500;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">Generated Scenes</a>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:#78705F;padding:16px 12px 6px;">Tool Config</div>
+      <a href="Admin Mood Board.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;color:#B7AB94;font-size:13px;font-weight:500;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">Mood Board Config</a>
+      <a href="Admin Print Board.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;color:#B7AB94;font-size:13px;font-weight:500;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">Print Board Config</a>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:#78705F;padding:16px 12px 6px;">Monitoring</div>
+      <a href="Admin Logs.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;color:#B7AB94;font-size:13px;font-weight:500;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">System Logs</a>
+      <a href="Admin Analytics.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;color:#B7AB94;font-size:13px;font-weight:500;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">Analytics</a>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:#78705F;padding:16px 12px 6px;">Account</div>
+      <a href="Login.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;color:#8F8578;font-size:13px;font-weight:500;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">Sign out</a>
+    </nav>
+    <div style="padding:16px 22px;border-top:1px solid rgba(255,255,255,0.08);display:flex;align-items:center;gap:10px;">
+      <div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#AD8348,#D8B677);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;color:#fff;flex:none;">AK</div>
+      <div style="min-width:0;"><div style="font-size:12.5px;font-weight:600;color:#E9E2D3;">Anita K.</div><div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#78705F;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Admin · Operations</div></div>
+    </div>
+  </aside>
+
+  <div style="flex:1;margin-left:260px;min-width:0;">
+    <main style="max-width:1180px;margin:0 auto;padding:34px 40px 60px;animation:fade .35s ease;">
+
+      <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-bottom:22px;">
+        <div>
+          <h1 style="font-family:'Fraunces',serif;font-weight:600;font-size:28px;margin:0 0 4px;color:#1A1611;">Generation History</h1>
+          <p style="margin:0;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#78705F;">Every request, with the exact prompt version, references, and products behind it.</p>
+        </div>
+        <div style="display:flex;gap:9px;">
+          <button style="font-weight:600;font-size:13px;background:none;color:#4B443A;border:1px solid rgba(34,29,24,0.14);padding:9px 15px;border-radius:2px;cursor:pointer;white-space:nowrap;" style-hover="border-color:#AD8348;color:#AD8348">Export log</button>
+        </div>
+      </div>
+
+      <!-- COUNTS -->
+      <div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-bottom:18px;">
+        <sc-for list="{{ counts }}" as="ct" hint-placeholder-count="5">
+          <div style="background:#fff;border:1px solid rgba(34,29,24,0.14);border-radius:3px;padding:16px;">
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:#78705F;margin-bottom:6px;">{{ ct.label }}</div>
+            <div style="font-family:'Fraunces',serif;font-weight:600;font-size:21px;color:#1A1611;">{{ ct.value }}</div>
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:{{ ct.subColor }};margin-top:2px;">{{ ct.sub }}</div>
+          </div>
+        </sc-for>
+      </div>
+
+      <!-- FILTERS -->
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px;">
+        <input type="text" placeholder="Search generation or scene ID…" style="font-family:'IBM Plex Mono',monospace;font-size:12px;padding:8px 11px;border:1px solid rgba(34,29,24,0.14);border-radius:2px;background:#fff;color:#4B443A;width:240px;" style-focus="outline:2px solid #AD8348;outline-offset:1px">
+        <sc-for list="{{ filters }}" as="fl" hint-placeholder-count="5">
+          <button style="font-size:11.5px;font-weight:600;padding:7px 12px;border-radius:12px;border:1px solid {{ fl.border }};background:{{ fl.bg }};color:{{ fl.color }};cursor:pointer;white-space:nowrap;" onClick="{{ fl.onClick }}" style-hover="border-color:#AD8348">{{ fl.label }}</button>
+        </sc-for>
+      </div>
+
+      <!-- TABLE -->
+      <div style="background:#fff;border:1px solid rgba(34,29,24,0.14);border-radius:3px;">
+        <div style="padding:11px 18px;border-bottom:1px solid rgba(34,29,24,0.14);display:grid;grid-template-columns:150px 1fr 90px 84px 74px 96px 26px;gap:12px;align-items:center;">
+          <sc-for list="{{ headers }}" as="hd" hint-placeholder-count="6">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:#78705F;text-align:{{ hd.align }};">{{ hd.label }}</span>
+          </sc-for>
+          <span></span>
+        </div>
+
+        <sc-for list="{{ rows }}" as="rw" hint-placeholder-count="6">
+          <div style="border-bottom:1px solid rgba(34,29,24,0.08);">
+            <div style="padding:12px 18px;display:grid;grid-template-columns:150px 1fr 90px 84px 74px 96px 26px;gap:12px;align-items:center;cursor:pointer;background:{{ rw.rowBg }};" onClick="{{ rw.onToggle }}">
+              <div style="min-width:0;">
+                <div style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#221D18;font-weight:500;">{{ rw.id }}</div>
+                <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#B7AB94;">{{ rw.when }}</div>
+              </div>
+              <div style="min-width:0;">
+                <div style="font-size:12.5px;color:#221D18;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ rw.brief }}</div>
+                <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#78705F;">{{ rw.user }}</div>
+              </div>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#4B443A;text-align:center;">{{ rw.scene }}</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#4B443A;text-align:center;">{{ rw.prompt }}</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#78705F;text-align:center;">{{ rw.time }}</span>
+              <span style="display:inline-block;font-size:10px;padding:2px 8px;border-radius:8px;background:{{ rw.statusBg }};color:{{ rw.statusColor }};font-weight:600;text-align:center;">{{ rw.status }}</span>
+              <span style="font-size:10px;color:#B7AB94;transition:transform .2s ease;transform:{{ rw.chevron }};text-align:center;">▾</span>
+            </div>
+
+            <!-- EXPANDED -->
+            <sc-if value="{{ rw.open }}" hint-placeholder-val="{{ false }}">
+              <div style="background:#FAF7F0;border-top:1px solid rgba(34,29,24,0.08);padding:18px;">
+                <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-bottom:16px;">
+                  <sc-for list="{{ rw.blocks }}" as="bl" hint-placeholder-count="4">
+                    <div style="background:#fff;border:1px solid rgba(34,29,24,0.14);border-radius:3px;">
+                      <div style="padding:11px 14px;border-bottom:1px solid rgba(34,29,24,0.10);font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:#78705F;">{{ bl.title }}</div>
+                      <div style="padding:12px 14px;">
+                        <sc-for list="{{ bl.lines }}" as="ln" hint-placeholder-count="4">
+                          <div style="display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:1px dashed rgba(34,29,24,0.10);">
+                            <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#78705F;">{{ ln.k }}</span>
+                            <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:{{ ln.color }};text-align:right;">{{ ln.v }}</span>
+                          </div>
+                        </sc-for>
+                      </div>
+                    </div>
+                  </sc-for>
+                </div>
+
+                <!-- error -->
+                <sc-if value="{{ rw.error }}" hint-placeholder-val="{{ false }}">
+                  <div style="background:#fff;border:1px solid rgba(156,75,44,0.35);border-left:3px solid #9C4B2C;border-radius:3px;padding:14px 16px;margin-bottom:16px;">
+                    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+                      <div style="min-width:0;">
+                        <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#9C4B2C;margin-bottom:5px;">{{ rw.errorCode }}</div>
+                        <div style="font-size:13px;font-weight:600;color:#221D18;margin-bottom:3px;">{{ rw.errorTitle }}</div>
+                        <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#4B443A;line-height:1.55;">{{ rw.errorDetail }}</div>
+                      </div>
+                      <button style="font-weight:600;font-size:12.5px;color:#9C4B2C;border:1px dashed #9C4B2C;background:none;padding:9px 15px;border-radius:2px;cursor:pointer;white-space:nowrap;" style-hover="background:#FBF3EE">Retry</button>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                  <sc-for list="{{ rw.actions }}" as="ac" hint-placeholder-count="4">
+                    <button style="font-weight:600;font-size:12px;background:none;color:#4B443A;border:1px solid rgba(34,29,24,0.14);padding:8px 14px;border-radius:2px;cursor:pointer;white-space:nowrap;" style-hover="border-color:#AD8348;color:#AD8348">{{ ac }}</button>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-if>
+          </div>
+        </sc-for>
+
+        <div style="padding:14px 18px;display:flex;align-items:center;justify-content:space-between;">
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#78705F;">Showing 6 of 412 generations</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#AD8348;cursor:pointer;" style-hover="text-decoration:underline">Load more</span>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { open: {}, filter: 'All' };
+
+  data = [
+    { id: 'GEN-004871', when: 'Today 09:42', brief: 'Bathroom · Medium · Corner · Separate shower · Modern', user: 'Rohit S.',
+      scene: '000124', prompt: 'v3.2', time: '8.4 s', status: 'SUCCESS',
+      products: '142 considered · 24 selected', refs: '4 of 12', model: 'gemini-1.5-pro', tokens: '1,412 in / 986 out',
+      pending: '35 catalogs pending', catalogs: '312 of 347' },
+    { id: 'GEN-004870', when: 'Today 09:24', brief: 'Bathroom · Large · Open · Luxury', user: 'Rohit S.',
+      scene: '—', prompt: 'v3.2', time: '9.1 s', status: 'SUCCESS',
+      products: '388 considered · 24 selected', refs: '3 of 12', model: 'gemini-1.5-pro', tokens: '1,390 in / 1,024 out',
+      pending: '35 catalogs pending', catalogs: '312 of 347' },
+    { id: 'GEN-004869', when: 'Today 08:30', brief: 'Powder room · Compact · Straight · Minimal', user: 'Sameer V.',
+      scene: '000123', prompt: 'v3.2', time: '7.2 s', status: 'SUCCESS',
+      products: '96 considered · 18 selected', refs: '3 of 12', model: 'gemini-1.5-pro', tokens: '1,288 in / 902 out',
+      pending: '35 catalogs pending', catalogs: '312 of 347' },
+    { id: 'GEN-004868', when: 'Today 08:04', brief: 'Bathroom · Small · Corner · Kitchen-adjacent · Natural', user: 'Priya D.',
+      scene: '—', prompt: 'v3.2', time: '2.1 s', status: 'FAILED',
+      products: '0 considered', refs: '2 of 12', model: 'gemini-1.5-pro', tokens: '1,204 in / 0 out',
+      pending: '35 catalogs pending', catalogs: '312 of 347',
+      error: true, errorCode: 'PRODUCT NOT FOUND',
+      errorTitle: 'No product passed the hard filters',
+      errorDetail: 'Anti-slip + High range + green palette returned an empty set. 35 pending catalogs may contain matches — the AI was not allowed to substitute.' },
+    { id: 'GEN-004867', when: 'Yesterday 17:12', brief: 'Bathroom · Medium · L-shaped · Traditional', user: 'Neha J.',
+      scene: '000122', prompt: 'v3.1', time: '8.8 s', status: 'SUCCESS',
+      products: '210 considered · 24 selected', refs: '4 of 12', model: 'gemini-1.5-pro', tokens: '1,356 in / 1,002 out',
+      pending: '41 catalogs pending', catalogs: '306 of 347' },
+    { id: 'GEN-004866', when: 'Yesterday 16:40', brief: 'Bathroom · Large · Open · Bold', user: 'Priya D.',
+      scene: '—', prompt: 'v3.1', time: '30.0 s', status: 'TIMEOUT',
+      products: '402 considered', refs: '4 of 12', model: 'gemini-1.5-pro', tokens: '1,402 in / partial',
+      pending: '41 catalogs pending', catalogs: '306 of 347',
+      error: true, errorCode: 'TIMEOUT',
+      errorTitle: 'Gemini did not respond within 30 s',
+      errorDetail: 'Request abandoned. No scene was created and nothing was shown to the client.' },
+  ];
+
+  chip = {
+    SUCCESS: { bg: '#E8F5E0', color: '#4A7A2E' },
+    FAILED:  { bg: '#FBF3EE', color: '#9C4B2C' },
+    TIMEOUT: { bg: '#FBF3EE', color: '#9C4B2C' },
+  };
+
+  renderVals() {
+    const s = this.state;
+    const filters = ['All', 'Success', 'Failed', 'Timeout', 'Scene locked'];
+
+    return {
+      counts: [
+        { label: 'Generations', value: '412', sub: 'lifetime', subColor: '#78705F' },
+        { label: 'Success rate', value: '94%', sub: '388 of 412', subColor: '#4A7A2E' },
+        { label: 'Failed', value: '18', sub: 'filter or product gaps', subColor: '#9C4B2C' },
+        { label: 'Timeouts', value: '6', sub: 'all on v3.1', subColor: '#AD8348' },
+        { label: 'Avg. time', value: '8.4 s', sub: 'last 50 runs', subColor: '#78705F' },
+      ],
+      filters: filters.map(f => ({
+        label: f, onClick: () => this.setState({ filter: f }),
+        bg: s.filter === f ? '#1A1611' : '#fff',
+        color: s.filter === f ? '#F1ECE1' : '#4B443A',
+        border: s.filter === f ? '#1A1611' : 'rgba(34,29,24,0.14)',
+      })),
+      headers: [
+        { label: 'Generation', align: 'left' },
+        { label: 'Brief / User', align: 'left' },
+        { label: 'Scene', align: 'center' },
+        { label: 'Prompt', align: 'center' },
+        { label: 'Time', align: 'center' },
+        { label: 'Status', align: 'center' },
+      ],
+      rows: this.data.map(d => {
+        const open = !!s.open[d.id];
+        const c = this.chip[d.status] || this.chip.SUCCESS;
+        return {
+          ...d,
+          open,
+          chevron: open ? 'rotate(0deg)' : 'rotate(-90deg)',
+          rowBg: open ? '#FBF6EC' : '#fff',
+          statusBg: c.bg, statusColor: c.color,
+          onToggle: () => this.setState(p => ({ open: { ...p.open, [d.id]: !p.open[d.id] } })),
+          blocks: [
+            { title: 'Request', lines: [
+              { k: 'Brief', v: d.brief, color: '#221D18' },
+              { k: 'Staff', v: d.user, color: '#221D18' },
+              { k: 'Scene created', v: d.scene === '—' ? 'none' : 'SCENE_' + d.scene, color: d.scene === '—' ? '#B7AB94' : '#221D18' },
+            ]},
+            { title: 'AI call', lines: [
+              { k: 'Model', v: d.model, color: '#221D18' },
+              { k: 'Prompt version', v: d.prompt, color: '#221D18' },
+              { k: 'Tokens', v: d.tokens, color: '#221D18' },
+              { k: 'Duration', v: d.time, color: '#221D18' },
+            ]},
+            { title: 'Products & references', lines: [
+              { k: 'Products', v: d.products, color: '#221D18' },
+              { k: 'References', v: d.refs, color: '#221D18' },
+            ]},
+            { title: 'Library state at run time', lines: [
+              { k: 'Catalogs ready', v: d.catalogs, color: '#221D18' },
+              { k: 'Excluded', v: d.pending, color: '#AD8348' },
+            ]},
+          ],
+          actions: ['View full request', 'View full response', 'View prompt sent', 'Copy as JSON'],
+        };
+      }),
+    };
+  }
+}
+</script>
+</body>
+</html>

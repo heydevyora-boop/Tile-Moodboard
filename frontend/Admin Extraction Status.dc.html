@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+@keyframes fade{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
+html,body{margin:0;padding:0;height:100%;}
+body{background:#F1ECE1;color:#221D18;font-family:'Inter',sans-serif;-webkit-font-smoothing:antialiased;}
+a{color:#AD8348;text-decoration:none;}a:hover{color:#7A5B2C;}
+</style>
+</helmet>
+
+<div style="display:flex;min-height:100vh;">
+  <aside style="width:260px;background:#1A1611;color:#E9E2D3;display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:20;">
+    <div style="padding:24px 22px 20px;border-bottom:1px solid rgba(255,255,255,0.08);">
+      <div style="font-family:'Fraunces',serif;font-weight:600;font-size:18px;letter-spacing:.04em;color:#E9E2D3;">CASA DE A<span style="color:#D8B677;">U</span>RUM</div>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:#78705F;margin-top:3px;">Admin Panel</div>
+    </div>
+    <nav style="flex:1;padding:10px 10px 20px;display:flex;flex-direction:column;gap:2px;overflow-y:auto;">
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:#78705F;padding:16px 12px 6px;">Overview</div>
+      <a href="Admin Dashboard.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;color:#B7AB94;font-size:13px;font-weight:500;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">Dashboard</a>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:#78705F;padding:16px 12px 6px;">Catalog Pipeline</div>
+      <a href="Admin Extraction Status.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;background:rgba(173,131,72,0.12);color:#D8B677;font-size:13px;font-weight:600;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">Extraction Status</a>
+      <a href="Admin Catalog Detail.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;color:#B7AB94;font-size:13px;font-weight:500;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">Catalog Detail</a>
+      <a href="Admin Product Data.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;color:#B7AB94;font-size:13px;font-weight:500;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">Product Data</a>
+      <a href="Admin Catalog Extractor.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;color:#B7AB94;font-size:13px;font-weight:500;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">Extractor Settings</a>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:#78705F;padding:16px 12px 6px;">Generations</div>
+      <a href="Admin Generation History.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;color:#B7AB94;font-size:13px;font-weight:500;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">Generation History</a>
+      <a href="Admin Generated Scenes.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;color:#B7AB94;font-size:13px;font-weight:500;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">Generated Scenes</a>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:#78705F;padding:16px 12px 6px;">Tool Config</div>
+      <a href="Admin Mood Board.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;color:#B7AB94;font-size:13px;font-weight:500;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">Mood Board Config</a>
+      <a href="Admin Print Board.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;color:#B7AB94;font-size:13px;font-weight:500;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">Print Board Config</a>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:#78705F;padding:16px 12px 6px;">Monitoring</div>
+      <a href="Admin Logs.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;color:#B7AB94;font-size:13px;font-weight:500;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">System Logs</a>
+      <a href="Admin Analytics.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;color:#B7AB94;font-size:13px;font-weight:500;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">Analytics</a>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:#78705F;padding:16px 12px 6px;">Account</div>
+      <a href="Login.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;color:#8F8578;font-size:13px;font-weight:500;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">Sign out</a>
+    </nav>
+    <div style="padding:16px 22px;border-top:1px solid rgba(255,255,255,0.08);display:flex;align-items:center;gap:10px;">
+      <div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#AD8348,#D8B677);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;color:#fff;flex:none;">AK</div>
+      <div style="min-width:0;"><div style="font-size:12.5px;font-weight:600;color:#E9E2D3;">Anita K.</div><div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#78705F;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Admin · Operations</div></div>
+    </div>
+  </aside>
+
+  <div style="flex:1;margin-left:260px;min-width:0;">
+    <main style="max-width:1180px;margin:0 auto;padding:34px 40px 60px;animation:fade .35s ease;">
+
+      <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-bottom:26px;">
+        <div>
+          <h1 style="font-family:'Fraunces',serif;font-weight:600;font-size:28px;margin:0 0 4px;color:#1A1611;">Extraction Status</h1>
+          <p style="margin:0;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#78705F;">Brand → Catalog → PDF → Extraction. No generation runs on a catalog that isn't complete.</p>
+        </div>
+        <div style="display:flex;gap:10px;">
+          <button style="font-weight:600;font-size:13px;background:none;color:#4B443A;border:1px solid rgba(34,29,24,0.14);padding:9px 15px;border-radius:2px;cursor:pointer;" style-hover="border-color:#AD8348;color:#AD8348">Refresh</button>
+          <button style="font-weight:600;font-size:13px;background:#1A1611;color:#F1ECE1;border:none;padding:9px 15px;border-radius:2px;cursor:pointer;" style-hover="background:#000">Queue Pending</button>
+        </div>
+      </div>
+
+      <!-- PROGRESS SUMMARY -->
+      <div style="background:#fff;border:1px solid rgba(34,29,24,0.14);border-radius:3px;padding:20px;margin-bottom:18px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#78705F;">Overall Progress</span>
+          <span style="font-family:'Fraunces',serif;font-weight:600;font-size:20px;color:#1A1611;">90% Complete</span>
+        </div>
+        <div style="background:#E9E2D3;border-radius:2px;overflow:hidden;height:10px;display:flex;margin-bottom:14px;">
+          <div style="width:89.9%;background:linear-gradient(90deg,#AD8348,#D8B677);"></div>
+          <div style="width:2.9%;background:#D8B677;"></div>
+          <div style="width:5.8%;background:#DFD5BF;"></div>
+          <div style="width:1.4%;background:#9C4B2C;"></div>
+        </div>
+        <div style="display:flex;gap:22px;flex-wrap:wrap;">
+          <sc-for list="{{ legend }}" as="lg" hint-placeholder-count="5">
+            <div style="display:flex;align-items:center;gap:7px;">
+              <span style="width:9px;height:9px;border-radius:2px;background:{{ lg.color }};"></span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:#4B443A;">{{ lg.label }}</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:#221D18;font-weight:500;">{{ lg.count }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <!-- FILTERS -->
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;align-items:center;">
+        <input type="text" placeholder="Search brand or catalog…" style="font-family:'IBM Plex Mono',monospace;font-size:12px;padding:8px 11px;border:1px solid rgba(34,29,24,0.14);border-radius:2px;background:#fff;color:#4B443A;width:230px;" style-focus="outline:2px solid #AD8348;outline-offset:1px">
+        <sc-for list="{{ statusFilters }}" as="sf" hint-placeholder-count="7">
+          <button style="font-size:11.5px;font-weight:600;padding:7px 12px;border-radius:12px;border:1px solid {{ sf.border }};background:{{ sf.bg }};color:{{ sf.color }};cursor:pointer;white-space:nowrap;" onClick="{{ sf.onClick }}" style-hover="border-color:#AD8348">{{ sf.label }}</button>
+        </sc-for>
+      </div>
+
+      <!-- TREE TABLE -->
+      <div style="background:#fff;border:1px solid rgba(34,29,24,0.14);border-radius:3px;">
+        <div style="padding:12px 18px;border-bottom:1px solid rgba(34,29,24,0.14);display:grid;grid-template-columns:1fr 130px 90px 100px 120px;gap:12px;">
+          <sc-for list="{{ headers }}" as="hd" hint-placeholder-count="5">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:#78705F;text-align:{{ hd.align }};">{{ hd.label }}</span>
+          </sc-for>
+        </div>
+
+        <sc-for list="{{ brands }}" as="br" hint-placeholder-count="4">
+          <div style="border-bottom:1px solid rgba(34,29,24,0.10);">
+            <!-- brand row -->
+            <div style="padding:12px 18px;display:grid;grid-template-columns:1fr 130px 90px 100px 120px;gap:12px;align-items:center;cursor:pointer;background:#FAF7F0;" onClick="{{ br.onToggle }}">
+              <div style="display:flex;align-items:center;gap:9px;min-width:0;">
+                <span style="font-size:10px;color:#B7AB94;transition:transform .2s ease;transform:{{ br.chevron }};">▾</span>
+                <span style="font-family:'Fraunces',serif;font-weight:600;font-size:15px;color:#1A1611;">{{ br.name }}</span>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#B7AB94;">{{ br.catalogCount }} catalogs</span>
+              </div>
+              <span style="display:inline-block;font-size:10px;padding:2px 8px;border-radius:8px;background:{{ br.statusBg }};color:{{ br.statusColor }};font-weight:600;text-align:center;">{{ br.status }}</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#4B443A;text-align:right;">{{ br.pct }}</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#4B443A;text-align:right;">{{ br.products }}</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#B7AB94;text-align:right;">{{ br.updated }}</span>
+            </div>
+
+            <!-- catalog rows -->
+            <sc-if value="{{ br.open }}" hint-placeholder-val="{{ false }}">
+              <div>
+                <sc-for list="{{ br.catalogs }}" as="cat" hint-placeholder-count="2">
+                  <a href="Admin Catalog Detail.dc.html" style="padding:11px 18px 11px 44px;display:grid;grid-template-columns:1fr 130px 90px 100px 120px;gap:12px;align-items:center;border-top:1px solid rgba(34,29,24,0.06);text-decoration:none;" style-hover="background:#FBF6EC">
+                    <div style="min-width:0;">
+                      <div style="font-size:13px;font-weight:600;color:#221D18;">{{ cat.name }}</div>
+                      <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#78705F;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ cat.pdf }}</div>
+                    </div>
+                    <span style="display:inline-block;font-size:10px;padding:2px 8px;border-radius:8px;background:{{ cat.statusBg }};color:{{ cat.statusColor }};font-weight:600;text-align:center;">{{ cat.status }}</span>
+                    <div style="text-align:right;">
+                      <div style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#4B443A;">{{ cat.pct }}</div>
+                      <div style="background:#E9E2D3;border-radius:2px;overflow:hidden;height:3px;margin-top:3px;">
+                        <div style="height:100%;background:{{ cat.barColor }};width:{{ cat.barWidth }};"></div>
+                      </div>
+                    </div>
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#4B443A;text-align:right;">{{ cat.products }}</span>
+                    <div style="text-align:right;display:flex;align-items:center;justify-content:flex-end;gap:8px;">
+                      <span style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;padding:2px 6px;border-radius:7px;border:1px solid {{ cat.aiBorder }};color:{{ cat.aiColor }};white-space:nowrap;">AI {{ cat.aiReady }}</span>
+                    </div>
+                  </a>
+                </sc-for>
+              </div>
+            </sc-if>
+          </div>
+        </sc-for>
+      </div>
+
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#B7AB94;margin-top:14px;">Showing 4 of 108 brands · click a catalog for the full extraction record</div>
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { open: { ArchRock: true }, filter: 'All' };
+
+  data = [
+    { name: 'ArchRock', catalogCount: 12, status: 'COMPLETED', pct: '100%', products: '412', updated: '6h ago', catalogs: [
+      { name: 'Adobe Collection', pdf: 'ArchRock_AdobeCollection_2026.pdf · 84 pages', status: 'COMPLETED', pct: '100%', products: '38', aiReady: 'READY' },
+      { name: 'Terra Series', pdf: 'ArchRock_TerraSeries_2025.pdf · 62 pages', status: 'COMPLETED', pct: '100%', products: '44', aiReady: 'READY' },
+      { name: 'Slate Works', pdf: 'ArchRock_SlateWorks_2026.pdf · 41 pages', status: 'PARTIAL', pct: '78%', products: '19', aiReady: 'NO' },
+    ]},
+    { name: 'Kajaria', catalogCount: 24, status: 'PROCESSING', pct: '62%', products: '1,840', updated: 'live', catalogs: [
+      { name: 'Marble Collection', pdf: 'Kajaria_MarbleCollection_2026.pdf · 120 pages', status: 'PROCESSING', pct: '62%', products: '74', aiReady: 'NO' },
+      { name: 'Eternity Range', pdf: 'Kajaria_Eternity_2025.pdf · 96 pages', status: 'QUEUED', pct: '0%', products: '—', aiReady: 'NO' },
+    ]},
+    { name: 'Somany', catalogCount: 31, status: 'COMPLETED', pct: '100%', products: '2,206', updated: '2d ago', catalogs: [
+      { name: 'Grandura Series', pdf: 'Somany_Grandura_2026.pdf · 108 pages', status: 'COMPLETED', pct: '100%', products: '88', aiReady: 'READY' },
+      { name: 'Duragres', pdf: 'Somany_Duragres_2025.pdf · 74 pages', status: 'REQUIRES_REVIEW', pct: '100%', products: '52', aiReady: 'NO' },
+    ]},
+    { name: 'RAK Ceramics', catalogCount: 18, status: 'FAILED', pct: '—', products: '0', updated: '3d ago', catalogs: [
+      { name: 'Maximus Mega Slab', pdf: 'RAK_MaximusMega_2026.pdf · 52 pages', status: 'FAILED', pct: '—', products: '—', aiReady: 'NO' },
+    ]},
+  ];
+
+  chip = {
+    COMPLETED:        { bg: '#E8F5E0', color: '#4A7A2E' },
+    PROCESSING:       { bg: '#FBF6EC', color: '#AD8348' },
+    QUEUED:           { bg: '#F1ECE1', color: '#78705F' },
+    PARTIAL:          { bg: '#FBF6EC', color: '#AD8348' },
+    REQUIRES_REVIEW:  { bg: '#F3EDE4', color: '#8F6B34' },
+    FAILED:           { bg: '#FBF3EE', color: '#9C4B2C' },
+    NOT_STARTED:      { bg: '#F1ECE1', color: '#B7AB94' },
+  };
+
+  renderVals() {
+    const s = this.state;
+    const filters = ['All', 'Processing', 'Partial', 'Requires review', 'Failed'];
+    const barColor = (st) => st === 'FAILED' ? '#9C4B2C'
+      : st === 'COMPLETED' ? 'linear-gradient(90deg,#7A9165,#9CA793)'
+      : 'linear-gradient(90deg,#AD8348,#D8B677)';
+
+    return {
+      legend: [
+        { label: 'Completed', count: '312', color: '#AD8348' },
+        { label: 'Processing', count: '10', color: '#D8B677' },
+        { label: 'Pending', count: '20', color: '#DFD5BF' },
+        { label: 'Failed', count: '5', color: '#9C4B2C' },
+        { label: 'Total', count: '347', color: '#E9E2D3' },
+      ],
+      headers: [
+        { label: 'Brand / Catalog', align: 'left' },
+        { label: 'Status', align: 'center' },
+        { label: 'Progress', align: 'right' },
+        { label: 'Products', align: 'right' },
+        { label: 'AI Ready', align: 'right' },
+      ],
+      statusFilters: filters.map(f => ({
+        label: f, onClick: () => this.setState({ filter: f }),
+        bg: s.filter === f ? '#1A1611' : '#fff',
+        color: s.filter === f ? '#F1ECE1' : '#4B443A',
+        border: s.filter === f ? '#1A1611' : 'rgba(34,29,24,0.14)',
+      })),
+      brands: this.data.map(b => {
+        const isOpen = !!s.open[b.name];
+        const c = this.chip[b.status] || this.chip.NOT_STARTED;
+        return {
+          ...b,
+          open: isOpen,
+          chevron: isOpen ? 'rotate(0deg)' : 'rotate(-90deg)',
+          statusBg: c.bg, statusColor: c.color,
+          onToggle: () => this.setState(p => ({ open: { ...p.open, [b.name]: !p.open[b.name] } })),
+          catalogs: b.catalogs.map(cat => {
+            const cc = this.chip[cat.status] || this.chip.NOT_STARTED;
+            const ready = cat.aiReady === 'READY';
+            return {
+              ...cat,
+              statusBg: cc.bg, statusColor: cc.color,
+              barColor: barColor(cat.status),
+              barWidth: cat.pct === '—' ? '0%' : cat.pct,
+              aiBorder: ready ? '#7A9165' : 'rgba(34,29,24,0.20)',
+              aiColor: ready ? '#4A7A2E' : '#B7AB94',
+            };
+          }),
+        };
+      }),
+    };
+  }
+}
+</script>
+</body>
+</html>

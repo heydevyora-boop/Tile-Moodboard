@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+@keyframes fade{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:none;}}
+html,body{margin:0;padding:0;height:100%;}
+body{background:#F1ECE1;color:#221D18;font-family:'Inter',sans-serif;-webkit-font-smoothing:antialiased;}
+a{color:#AD8348;text-decoration:none;}a:hover{color:#7A5B2C;}
+</style>
+</helmet>
+
+<div style="display:flex;min-height:100vh;">
+  <aside style="width:260px;background:#1A1611;color:#E9E2D3;display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:20;">
+    <div style="padding:24px 22px 20px;border-bottom:1px solid rgba(255,255,255,0.08);">
+      <div style="font-family:'Fraunces',serif;font-weight:600;font-size:18px;letter-spacing:.04em;color:#E9E2D3;">CASA DE A<span style="color:#D8B677;">U</span>RUM</div>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:#78705F;margin-top:3px;">User Panel</div>
+    </div>
+    <nav style="flex:1;padding:10px 10px 20px;display:flex;flex-direction:column;gap:2px;overflow-y:auto;">
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:#78705F;padding:16px 12px 6px;">Moodboard</div>
+      <a href="Tool Dashboard.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;color:#B7AB94;font-size:13px;font-weight:500;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">Dashboard</a>
+      <a href="Moodboard Wizard.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;color:#B7AB94;font-size:13px;font-weight:500;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">New Moodboard</a>
+      <a href="AI Loading Screen.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;color:#B7AB94;font-size:13px;font-weight:500;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">Generating</a>
+      <a href="Moodboard Results.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;background:rgba(173,131,72,0.12);color:#D8B677;font-size:13px;font-weight:600;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">Results</a>
+      <a href="Scene Angles.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;color:#B7AB94;font-size:13px;font-weight:500;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">Scene & Angles</a>
+      <a href="Print Board Designer.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;color:#B7AB94;font-size:13px;font-weight:500;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">Print Board</a>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:#78705F;padding:16px 12px 6px;">Account</div>
+      <a href="Login.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;color:#8F8578;font-size:13px;font-weight:500;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">Sign out</a>
+    </nav>
+    <div style="padding:16px 22px;border-top:1px solid rgba(255,255,255,0.08);display:flex;align-items:center;gap:10px;">
+      <div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#AD8348,#D8B677);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;color:#fff;flex:none;">RS</div>
+      <div style="min-width:0;"><div style="font-size:12.5px;font-weight:600;color:#E9E2D3;">Rohit S.</div><div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#78705F;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Sales Staff</div></div>
+    </div>
+  </aside>
+
+  <div style="flex:1;margin-left:260px;min-width:0;">
+    <main style="max-width:1180px;margin:0 auto;padding:34px 40px 60px;animation:fade .35s ease;">
+
+      <!-- HEAD -->
+      <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-bottom:16px;">
+        <div>
+          <h1 style="font-family:'Fraunces',serif;font-weight:600;font-size:28px;margin:0 0 5px;color:#1A1611;">Four options</h1>
+          <p style="margin:0;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#78705F;">GEN-004871 · 8.4 s · prompt v3.2 · every product below exists in stock</p>
+        </div>
+        <div style="display:flex;gap:9px;">
+          <a href="Moodboard Wizard.dc.html" style="font-weight:600;font-size:13px;color:#4B443A;border:1px solid rgba(34,29,24,0.14);padding:9px 15px;border-radius:2px;" style-hover="border-color:#AD8348;color:#AD8348">Edit brief</a>
+          <button style="font-weight:600;font-size:13px;background:none;color:#4B443A;border:1px solid rgba(34,29,24,0.14);padding:9px 15px;border-radius:2px;cursor:pointer;" style-hover="border-color:#AD8348;color:#AD8348">Regenerate all</button>
+        </div>
+      </div>
+
+      <!-- BRIEF RECAP -->
+      <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:24px;">
+        <sc-for list="{{ briefChips }}" as="bc" hint-placeholder-count="8">
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;padding:5px 11px;border-radius:12px;background:#fff;border:1px solid rgba(34,29,24,0.14);color:#4B443A;">{{ bc }}</span>
+        </sc-for>
+      </div>
+
+      <!-- SCENE LOCKED BANNER -->
+      <sc-if value="{{ locked }}" hint-placeholder-val="{{ false }}">
+        <div style="background:#1A1611;border:1px solid rgba(216,182,119,0.3);border-radius:4px;padding:20px 22px;margin-bottom:24px;">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:20px;flex-wrap:wrap;">
+            <div>
+              <div style="display:flex;align-items:center;gap:9px;margin-bottom:8px;">
+                <span style="color:#7A9165;font-size:14px;">✓</span>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:#D8B677;">Scene locked</span>
+              </div>
+              <div style="font-family:'Fraunces',serif;font-weight:600;font-size:22px;color:#E9E2D3;margin-bottom:6px;">{{ sceneId }}</div>
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:#B7AB94;line-height:1.6;max-width:60ch;">Products and configuration are now immutable. Angle generation changes only the camera — it cannot swap, redesign, or invent a product.</div>
+            </div>
+            <div style="display:flex;gap:9px;">
+              <button style="font-weight:600;font-size:13px;background:none;color:#E9E2D3;border:1px solid rgba(233,226,211,0.25);padding:10px 16px;border-radius:2px;cursor:pointer;" onClick="{{ onUnlock }}" style-hover="border-color:#D8B677;color:#D8B677">Unlock</button>
+              <a href="Scene Angles.dc.html" style="font-weight:600;font-size:13px;background:#AD8348;color:#fff;border:none;padding:11px 20px;border-radius:2px;white-space:nowrap;" style-hover="background:#96703A">Generate angles →</a>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:18px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.08);">
+            <sc-for list="{{ lockedFields }}" as="lf" hint-placeholder-count="8">
+              <div style="display:flex;align-items:center;gap:7px;">
+                <span style="color:#7A9165;font-size:11px;flex:none;">✓</span>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#B7AB94;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ lf }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- OPTION GRID -->
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:18px;">
+        <sc-for list="{{ boards }}" as="bd" hint-placeholder-count="4">
+          <div style="background:#fff;border:1px solid {{ bd.border }};border-radius:4px;overflow:hidden;opacity:{{ bd.opacity }};transition:all .15s ease;">
+            <!-- header -->
+            <div style="padding:13px 18px;border-bottom:1px solid rgba(34,29,24,0.14);display:flex;align-items:center;justify-content:space-between;background:{{ bd.headBg }};">
+              <div style="display:flex;align-items:center;gap:10px;">
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:{{ bd.numColor }};">{{ bd.num }}</span>
+                <span style="font-family:'Fraunces',serif;font-weight:600;font-size:16px;color:#1A1611;">{{ bd.name }}</span>
+              </div>
+              <sc-if value="{{ bd.isSelected }}" hint-placeholder-val="{{ false }}">
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;padding:3px 9px;border-radius:8px;background:#1A1611;color:#D8B677;white-space:nowrap;">SELECTED</span>
+              </sc-if>
+            </div>
+
+            <!-- render -->
+            <div style="aspect-ratio:4/3;background:{{ bd.sceneBg }};position:relative;display:flex;align-items:flex-end;padding:14px;">
+              <div style="position:absolute;inset:0;display:flex;">
+                <div style="flex:1.6;background:{{ bd.wallTone }};"></div>
+                <div style="flex:1;background:{{ bd.highlightTone }};"></div>
+              </div>
+              <div style="position:absolute;left:0;right:0;bottom:0;height:34%;background:{{ bd.floorTone }};"></div>
+              <div style="position:relative;z-index:2;display:flex;gap:6px;">
+                <sc-for list="{{ bd.swatches }}" as="sw" hint-placeholder-count="3">
+                  <div style="width:34px;height:34px;border-radius:2px;background:{{ sw }};border:1px solid rgba(255,255,255,0.45);box-shadow:0 2px 6px rgba(0,0,0,0.18);"></div>
+                </sc-for>
+              </div>
+              <span style="position:absolute;top:12px;right:14px;font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,0.75);">Front view</span>
+            </div>
+
+            <!-- product list -->
+            <div style="padding:4px 0;">
+              <sc-for list="{{ bd.products }}" as="pd" hint-placeholder-count="6">
+                <div style="padding:9px 18px;display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:1px solid rgba(34,29,24,0.06);">
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#78705F;flex:none;width:74px;">{{ pd.slot }}</span>
+                  <div style="flex:1;min-width:0;text-align:right;">
+                    <div style="font-size:12.5px;font-weight:600;color:#221D18;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ pd.name }}</div>
+                    <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#B7AB94;">{{ pd.meta }}</div>
+                  </div>
+                </div>
+              </sc-for>
+              <div style="padding:10px 18px;display:flex;align-items:center;justify-content:space-between;">
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#78705F;">Grout</span>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:#AD8348;font-weight:500;">{{ bd.grout }}</span>
+              </div>
+            </div>
+
+            <!-- reasoning -->
+            <div style="padding:13px 18px;background:#FAF7F0;border-top:1px solid rgba(34,29,24,0.08);font-size:12.5px;color:#4B443A;line-height:1.55;">{{ bd.reason }}</div>
+
+            <!-- actions -->
+            <div style="padding:13px 18px;border-top:1px solid rgba(34,29,24,0.14);display:flex;gap:8px;">
+              <button style="flex:1;font-weight:600;font-size:12.5px;background:none;color:#4B443A;border:1px solid rgba(34,29,24,0.14);padding:9px 0;border-radius:2px;cursor:pointer;" style-hover="border-color:#AD8348;color:#AD8348">View</button>
+              <button style="flex:1;font-weight:600;font-size:12.5px;background:none;color:#4B443A;border:1px solid rgba(34,29,24,0.14);padding:9px 0;border-radius:2px;cursor:pointer;" style-hover="border-color:#AD8348;color:#AD8348">Regenerate</button>
+              <button style="flex:1.3;font-weight:600;font-size:12.5px;background:{{ bd.ctaBg }};color:{{ bd.ctaColor }};border:1px solid {{ bd.ctaBorder }};padding:9px 0;border-radius:2px;cursor:pointer;" onClick="{{ bd.onSelect }}" style-hover="opacity:.9">{{ bd.ctaLabel }}</button>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+
+      <!-- FOOTNOTE -->
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#78705F;line-height:1.6;background:#FAF7F0;border:1px solid rgba(34,29,24,0.10);border-radius:3px;padding:14px 16px;margin-top:20px;">
+        Generated from 142 of 18,420 products that matched the brief. 35 catalogs were still pending at generation time — <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#B7AB94;">see what was excluded — ask an admin</span>.
+      </div>
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { selected: null };
+
+  data = [
+    { num: 'Option 1', name: 'Quiet Ivory Wash', grout: 'Warm ivory, matched',
+      wallTone: 'linear-gradient(160deg,#EDE4D2,#D9C8A6)', highlightTone: 'linear-gradient(160deg,#D8B677,#B8934E)', floorTone: 'linear-gradient(180deg,#C4B392,#A8906B)',
+      sceneBg: '#D9C8A6', swatches: ['linear-gradient(135deg,#D9C8A6,#B79A6D)','linear-gradient(135deg,#D8B677,#AD8348)','linear-gradient(135deg,#E8E0CE,#CFC3A8)'],
+      reason: 'One warm tone family with a single metallic strip — reads calm in a compact corner layout and keeps the glass partition visually light.',
+      products: [
+        { slot: 'Floor', name: 'Ivory Stone Base', meta: 'Somany · 600×1200 · Matt' },
+        { slot: 'Wall', name: 'Nordic Ivory Wall', meta: 'Johnson · 300×600 · Matt' },
+        { slot: 'Highlight', name: 'Champagne Metallic Strip', meta: 'RAK · 75×300 · Gloss' },
+        { slot: 'Basin', name: 'Sereno Countertop Basin', meta: 'Jaquar · white gloss' },
+        { slot: 'Faucet', name: 'Lyra Tall Mixer', meta: 'Jaquar · brushed brass' },
+        { slot: 'WC', name: 'Vela Wall-Hung WC', meta: 'Jaquar · white gloss' },
+      ] },
+    { num: 'Option 2', name: 'Soft Rose Corner', grout: 'Pale rose, near-invisible',
+      wallTone: 'linear-gradient(160deg,#F2E2DE,#E8C8C0)', highlightTone: 'linear-gradient(160deg,#D4A49A,#B98276)', floorTone: 'linear-gradient(180deg,#CFC0BA,#B09E97)',
+      sceneBg: '#E8C8C0', swatches: ['linear-gradient(135deg,#E8C8C0,#D4A49A)','linear-gradient(135deg,#EFE7DC,#D6CABA)','linear-gradient(135deg,#D8B677,#AD8348)'],
+      reason: 'Dusty rose base with a thin listello at waist height. Soft matt finishes throughout, champagne accent instead of yellow gold.',
+      products: [
+        { slot: 'Floor', name: 'Rose Mist Floor', meta: 'RAK · 600×600 · Anti-slip' },
+        { slot: 'Wall', name: 'Blush Ivory Wall', meta: 'RAK · 300×600 · Matt' },
+        { slot: 'Highlight', name: 'Rose Quartz Listello', meta: 'RAK · 100×300 · Gloss' },
+        { slot: 'Basin', name: 'Aura Under-Counter Basin', meta: 'Kohler · white' },
+        { slot: 'Faucet', name: 'Pirouette Mixer', meta: 'Kohler · champagne' },
+        { slot: 'WC', name: 'Reach Wall-Hung WC', meta: 'Kohler · white' },
+      ] },
+    { num: 'Option 3', name: 'Grey Stone Calm', grout: 'Mid grey, matched',
+      wallTone: 'linear-gradient(160deg,#DCDEDA,#C7CBC6)', highlightTone: 'linear-gradient(160deg,#9AA098,#7C8577)', floorTone: 'linear-gradient(180deg,#AFB3AE,#8E938C)',
+      sceneBg: '#C7CBC6', swatches: ['linear-gradient(135deg,#C7CBC6,#9AA098)','linear-gradient(135deg,#E4E2DC,#C8C5BC)','linear-gradient(135deg,#7C8577,#5D6458)'],
+      reason: 'Cool grey marble-look with a deeper stone band. Reads modern and slightly larger than the room actually is.',
+      products: [
+        { slot: 'Floor', name: 'Marbella Grey Large', meta: 'Somany · 600×600 · Polished' },
+        { slot: 'Wall', name: 'Marbella Grey Wall', meta: 'Somany · 300×600 · Matt' },
+        { slot: 'Highlight', name: 'Sage Stone Band', meta: 'Somany · 100×600 · Matt' },
+        { slot: 'Basin', name: 'Linea Vessel Basin', meta: 'Hindware · matte grey' },
+        { slot: 'Faucet', name: 'Axor Single Lever', meta: 'Hindware · chrome' },
+        { slot: 'WC', name: 'Element Wall-Hung WC', meta: 'Hindware · white' },
+      ] },
+    { num: 'Option 4', name: 'Warm Sand Minimal', grout: 'Sand, matched',
+      wallTone: 'linear-gradient(160deg,#EFE6D4,#E3D3B4)', highlightTone: 'linear-gradient(160deg,#C9B187,#A8906B)', floorTone: 'linear-gradient(180deg,#C9B893,#AB9871)',
+      sceneBg: '#E3D3B4', swatches: ['linear-gradient(135deg,#E3D3B4,#C9B187)','linear-gradient(135deg,#F1EADC,#DCD2BC)','linear-gradient(135deg,#B79A6D,#8F7647)'],
+      reason: 'Minimal single-family scheme with no metallic. Cheapest of the four and the fastest to install — good fallback if budget tightens.',
+      products: [
+        { slot: 'Floor', name: 'Adobe Sand Floor', meta: 'ArchRock · 600×600 · Matt' },
+        { slot: 'Wall', name: 'Adobe Sand Wall', meta: 'ArchRock · 300×600 · Matt' },
+        { slot: 'Highlight', name: 'None — flat scheme', meta: 'per Single-highlight rule' },
+        { slot: 'Basin', name: 'Cera Wall-Mount Basin', meta: 'Cera · white' },
+        { slot: 'Faucet', name: 'Cera Pillar Cock', meta: 'Cera · chrome' },
+        { slot: 'WC', name: 'Cera Floor-Mount WC', meta: 'Cera · white' },
+      ] },
+  ];
+
+  renderVals() {
+    const sel = this.state.selected;
+    return {
+      briefChips: ['Bathroom', 'Medium', 'Corner', 'Separate shower', 'Full glass', 'Feature wall', '6x4 · Matte', 'Mid range', 'Modern', 'Beige'],
+      locked: sel !== null,
+      sceneId: 'SCENE_000124',
+      lockedFields: ['Floor product', 'Wall product', 'Highlight', 'Basin', 'Faucet', 'WC', 'Layout & shower', 'Colour & style'],
+      onUnlock: () => this.setState({ selected: null }),
+      boards: this.data.map((b, i) => {
+        const isSel = sel === i;
+        const dimmed = sel !== null && !isSel;
+        return {
+          ...b,
+          isSelected: isSel,
+          border: isSel ? '#AD8348' : 'rgba(34,29,24,0.14)',
+          headBg: isSel ? '#FBF6EC' : '#fff',
+          numColor: isSel ? '#AD8348' : '#B7AB94',
+          opacity: dimmed ? '0.55' : '1',
+          ctaLabel: isSel ? 'Selected' : 'Select',
+          ctaBg: isSel ? '#1A1611' : '#AD8348',
+          ctaColor: '#fff',
+          ctaBorder: isSel ? '#1A1611' : '#AD8348',
+          onSelect: () => this.setState({ selected: isSel ? null : i }),
+        };
+      }),
+    };
+  }
+}
+</script>
+</body>
+</html>

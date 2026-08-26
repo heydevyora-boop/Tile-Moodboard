@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+@keyframes fade{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
+html,body{margin:0;padding:0;}
+body{background:#F1ECE1;color:#221D18;font-family:'Inter',sans-serif;-webkit-font-smoothing:antialiased;}
+a{color:#AD8348;}a:hover{color:#7A5B2C;}
+</style>
+</helmet>
+
+<!-- GRAIN -->
+<div style="position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.05;background-image:radial-gradient(circle at 1px 1px, #000 1px, transparent 0);background-size:3px 3px;"></div>
+
+<div style="display:flex;min-height:100vh;">
+  <aside style="width:260px;background:#1A1611;color:#E9E2D3;display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:20;">
+    <div style="padding:24px 22px 20px;border-bottom:1px solid rgba(255,255,255,0.08);">
+      <div style="font-family:'Fraunces',serif;font-weight:600;font-size:18px;letter-spacing:.04em;color:#E9E2D3;">CASA DE A<span style="color:#D8B677;">U</span>RUM</div>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:#78705F;margin-top:3px;">Owner Panel</div>
+    </div>
+    <nav style="flex:1;padding:10px 10px 20px;display:flex;flex-direction:column;gap:2px;overflow-y:auto;">
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:#78705F;padding:16px 12px 6px;">Overview</div>
+      <a href="Owner Dashboard.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;color:#B7AB94;font-size:13px;font-weight:500;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">Dashboard</a>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:#78705F;padding:16px 12px 6px;">AI Control</div>
+      <a href="Design Rules Setup.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;color:#B7AB94;font-size:13px;font-weight:500;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">System Instructions</a>
+      <a href="Reference Image Library.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;color:#B7AB94;font-size:13px;font-weight:500;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">Reference Library</a>
+      <a href="Version History.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;background:rgba(173,131,72,0.12);color:#D8B677;font-size:13px;font-weight:600;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">Prompt Versions</a>
+      <a href="Admin Design Rules.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;color:#B7AB94;font-size:13px;font-weight:500;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">Rules & Filters</a>
+      <a href="Owner AI Test.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;color:#B7AB94;font-size:13px;font-weight:500;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">AI Test Mode</a>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:#78705F;padding:16px 12px 6px;">Governance</div>
+      <a href="Admin Users.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;color:#B7AB94;font-size:13px;font-weight:500;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">Users & Staff</a>
+      <a href="Admin API Keys.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;color:#B7AB94;font-size:13px;font-weight:500;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">API & Integrations</a>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:#78705F;padding:16px 12px 6px;">Account</div>
+      <a href="Login.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;color:#8F8578;font-size:13px;font-weight:500;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">Sign out</a>
+    </nav>
+    <div style="padding:16px 22px;border-top:1px solid rgba(255,255,255,0.08);display:flex;align-items:center;gap:10px;">
+      <div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#AD8348,#D8B677);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;color:#fff;flex:none;">AM</div>
+      <div style="min-width:0;"><div style="font-size:12.5px;font-weight:600;color:#E9E2D3;">Arjun M.</div><div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#78705F;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Owner · Full control</div></div>
+    </div>
+  </aside>
+  <div style="flex:1;margin-left:260px;min-width:0;">
+
+<!-- MAIN -->
+<main style="position:relative;z-index:1;max-width:1180px;margin:0 auto;padding:34px clamp(18px,4vw,56px) 90px;animation:fade .35s ease;">
+
+  <!-- TOOL HEAD -->
+  <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:20px;flex-wrap:wrap;margin-bottom:28px;border-bottom:1px solid rgba(34,29,24,0.14);padding-bottom:18px;">
+    <div>
+      <h1 style="font-family:'Fraunces',serif;font-weight:600;font-size:clamp(26px,3.4vw,36px);margin:0 0 6px;color:#1A1611;">Version History</h1>
+      <p style="margin:0;max-width:52ch;color:#4B443A;font-size:14.5px;line-height:1.55;">Review, compare, and restore previous versions of your design rules. Every publish creates a snapshot you can revert to.</p>
+    </div>
+    <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#AD8348;border:1px solid #AD8348;padding:5px 10px;border-radius:2px;white-space:nowrap;">{{ versionCount }} versions</span>
+  </div>
+
+  <!-- SUB-NAV TABS -->
+  <div style="display:flex;gap:0;margin-bottom:24px;border-bottom:1px solid rgba(34,29,24,0.14);">
+    <button style="font-family:'Inter',sans-serif;font-weight:600;font-size:13px;background:none;border:none;padding:10px 18px;color:#78705F;cursor:pointer;position:relative;" style-hover="color:#1A1611">
+      Design Rules
+    </button>
+    <button style="font-family:'Inter',sans-serif;font-weight:600;font-size:13px;background:none;border:none;padding:10px 18px;color:#78705F;cursor:pointer;position:relative;" style-hover="color:#1A1611">
+      Reference Images
+    </button>
+    <button style="font-family:'Inter',sans-serif;font-weight:600;font-size:13px;background:none;border:none;padding:10px 18px;color:#1A1611;cursor:pointer;position:relative;">
+      Version History
+      <div style="position:absolute;left:18px;right:18px;bottom:0;height:2px;background:#AD8348;"></div>
+    </button>
+  </div>
+
+  <!-- TWO-COLUMN LAYOUT -->
+  <div style="display:grid;grid-template-columns:1fr 400px;gap:22px;align-items:start;">
+
+    <!-- LEFT: VERSION LIST -->
+    <div style="background:#fff;border:1px solid rgba(34,29,24,0.14);border-radius:3px;">
+      <div style="padding:14px 18px;border-bottom:1px solid rgba(34,29,24,0.14);display:flex;align-items:center;justify-content:space-between;">
+        <h3 style="margin:0;font-size:12.5px;letter-spacing:.1em;text-transform:uppercase;font-family:'IBM Plex Mono',monospace;color:#4B443A;font-weight:500;">All Versions</h3>
+        <button style="font-family:'Inter',sans-serif;font-weight:600;font-size:12px;background:none;color:#AD8348;border:none;cursor:pointer;padding:0;" style-hover="text-decoration:underline" onClick="{{ toggleCompare }}">{{ compareLabel }}</button>
+      </div>
+
+      <sc-for list="{{ versions }}" as="v" hint-placeholder-count="6">
+        <div style="padding:14px 18px;border-bottom:1px solid rgba(34,29,24,0.14);display:flex;align-items:center;gap:14px;cursor:pointer;transition:background .1s ease;background:{{ v.rowBg }};" style-hover="background:#FBF6EC" onClick="{{ v.onSelect }}">
+
+          <!-- Compare checkbox -->
+          <sc-if value="{{ compareMode }}" hint-placeholder-val="{{ false }}">
+            <div style="width:18px;height:18px;border:1px solid rgba(34,29,24,0.2);border-radius:2px;flex:none;display:flex;align-items:center;justify-content:center;background:{{ v.checkBg }};" onClick="{{ v.onCompareToggle }}">
+              <sc-if value="{{ v.checked }}" hint-placeholder-val="{{ false }}">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              </sc-if>
+            </div>
+          </sc-if>
+
+          <!-- Version info -->
+          <div style="flex:1;min-width:0;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:500;color:#1A1611;">{{ v.version }}</span>
+              <sc-if value="{{ v.isCurrent }}" hint-placeholder-val="{{ false }}">
+                <span style="display:inline-block;font-size:9px;padding:2px 6px;border-radius:8px;background:#AD8348;color:#fff;font-family:'Inter',sans-serif;font-weight:700;letter-spacing:.04em;text-transform:uppercase;">Current</span>
+              </sc-if>
+              <sc-if value="{{ v.isDraft }}" hint-placeholder-val="{{ false }}">
+                <span style="display:inline-block;font-size:9px;padding:2px 6px;border-radius:8px;background:#E9E2D3;color:#78705F;font-family:'Inter',sans-serif;font-weight:700;letter-spacing:.04em;text-transform:uppercase;">Draft</span>
+              </sc-if>
+            </div>
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#78705F;">{{ v.date }} · {{ v.author }}</div>
+          </div>
+
+          <!-- Status indicator -->
+          <div style="display:flex;align-items:center;gap:6px;">
+            <div style="width:7px;height:7px;border-radius:50%;background:{{ v.statusColor }};"></div>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#78705F;">{{ v.status }}</span>
+          </div>
+
+          <!-- Word count -->
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#B7AB94;white-space:nowrap;">{{ v.wordCount }} words</span>
+        </div>
+      </sc-for>
+    </div>
+
+    <!-- RIGHT: PREVIEW / DETAIL -->
+    <div style="position:sticky;top:20px;display:flex;flex-direction:column;gap:16px;">
+
+      <!-- Selected version detail -->
+      <div style="background:#fff;border:1px solid rgba(34,29,24,0.14);border-radius:3px;">
+        <div style="padding:14px 18px;border-bottom:1px solid rgba(34,29,24,0.14);display:flex;align-items:center;justify-content:space-between;">
+          <h3 style="margin:0;font-size:12.5px;letter-spacing:.1em;text-transform:uppercase;font-family:'IBM Plex Mono',monospace;color:#4B443A;font-weight:500;">Version Preview</h3>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#AD8348;font-weight:500;">{{ selectedVersion }}</span>
+        </div>
+        <div style="padding:14px 18px;display:flex;flex-direction:column;gap:10px;">
+          <div style="display:flex;justify-content:space-between;">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#78705F;">Created</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#221D18;">{{ selectedDate }}</span>
+          </div>
+          <div style="width:100%;height:1px;background:rgba(34,29,24,0.08);"></div>
+          <div style="display:flex;justify-content:space-between;">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#78705F;">Author</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#221D18;">{{ selectedAuthor }}</span>
+          </div>
+          <div style="width:100%;height:1px;background:rgba(34,29,24,0.08);"></div>
+          <div style="display:flex;justify-content:space-between;">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#78705F;">Status</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#221D18;">{{ selectedStatus }}</span>
+          </div>
+          <div style="width:100%;height:1px;background:rgba(34,29,24,0.08);"></div>
+          <div style="display:flex;justify-content:space-between;">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#78705F;">Sections</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#221D18;">{{ selectedSections }}</span>
+          </div>
+          <div style="width:100%;height:1px;background:rgba(34,29,24,0.08);"></div>
+          <div style="display:flex;justify-content:space-between;">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#78705F;">Word count</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#221D18;">{{ selectedWordCount }}</span>
+          </div>
+          <div style="width:100%;height:1px;background:rgba(34,29,24,0.08);"></div>
+          <div style="display:flex;justify-content:space-between;">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#78705F;">Est. tokens</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#221D18;">{{ selectedTokens }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Changes summary -->
+      <div style="background:#fff;border:1px solid rgba(34,29,24,0.14);border-radius:3px;">
+        <div style="padding:14px 18px;border-bottom:1px solid rgba(34,29,24,0.14);">
+          <h3 style="margin:0;font-size:12.5px;letter-spacing:.1em;text-transform:uppercase;font-family:'IBM Plex Mono',monospace;color:#4B443A;font-weight:500;">Changes</h3>
+        </div>
+        <div style="padding:14px 18px;">
+          <sc-for list="{{ selectedChanges }}" as="change" hint-placeholder-count="3">
+            <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:8px;">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:{{ change.color }};flex:none;margin-top:1px;">{{ change.icon }}</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#4B443A;line-height:1.45;">{{ change.text }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div style="display:flex;gap:10px;">
+        <button style="flex:1;font-family:'Inter',sans-serif;font-weight:600;font-size:13px;background:none;color:#4B443A;border:1px solid rgba(34,29,24,0.14);padding:10px 16px;border-radius:2px;cursor:pointer;" style-hover="border-color:#AD8348;color:#AD8348">
+          Preview Full
+        </button>
+        <sc-if value="{{ canRestore }}" hint-placeholder-val="{{ true }}">
+          <button style="flex:1;font-family:'Inter',sans-serif;font-weight:600;font-size:13.5px;background:#1A1611;color:#F1ECE1;border:none;padding:10px 16px;border-radius:2px;cursor:pointer;letter-spacing:.01em;" style-hover="background:#000">
+            Restore This Version
+          </button>
+        </sc-if>
+        <sc-if value="{{ canDelete }}" hint-placeholder-val="{{ true }}">
+          <button style="font-family:'Inter',sans-serif;font-weight:600;font-size:13px;background:none;color:#9C4B2C;border:1px solid rgba(34,29,24,0.14);padding:10px 14px;border-radius:2px;cursor:pointer;" style-hover="border-color:#9C4B2C">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+          </button>
+        </sc-if>
+      </div>
+
+      <!-- Compare panel -->
+      <sc-if value="{{ showComparePanel }}" hint-placeholder-val="{{ false }}">
+        <div style="background:#fff;border:1px solid #AD8348;border-radius:3px;">
+          <div style="padding:14px 18px;border-bottom:1px solid rgba(34,29,24,0.14);display:flex;align-items:center;justify-content:space-between;">
+            <h3 style="margin:0;font-size:12.5px;letter-spacing:.1em;text-transform:uppercase;font-family:'IBM Plex Mono',monospace;color:#AD8348;font-weight:500;">Compare Versions</h3>
+          </div>
+          <div style="padding:14px 18px;">
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#4B443A;margin-bottom:10px;">{{ compareLabel1 }} → {{ compareLabel2 }}</div>
+            <sc-for list="{{ compareDiffs }}" as="diff" hint-placeholder-count="3">
+              <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:6px;">
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:{{ diff.color }};flex:none;">{{ diff.icon }}</span>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:#4B443A;">{{ diff.text }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+    </div>
+
+  </div>
+</main>
+
+<!-- FOOTER -->
+<footer style="max-width:1180px;margin:0 auto;padding:0 clamp(18px,4vw,56px) 50px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#B7AB94;text-align:center;">CASA DE AURUM — INTERNAL OPERATIONS TOOL · BUILT FOR STORE USE ONLY · NOT FOR RESALE OR DISTRIBUTION</footer>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = {
+    selectedIdx: 0,
+    compareMode: false,
+    compareChecked: [],
+  };
+
+  versions = [
+    { version: 'v3.2', date: 'Aug 6, 2026 · 14:32', author: 'Arjun M.', status: 'Published', statusColor: '#B9CBA6', isCurrent: true, isDraft: false, wordCount: 842, sections: '9 / 10', tokens: 1137, changes: [
+      { icon: '~', color: '#AD8348', text: 'Updated Female Client section — added champagne accent rule' },
+      { icon: '~', color: '#AD8348', text: 'Refined Bathroom floor tile size preference' },
+      { icon: '+', color: '#B9CBA6', text: 'Added grout recommendation to General Rules' },
+    ]},
+    { version: 'v3.1', date: 'Aug 2, 2026 · 09:15', author: 'Arjun M.', status: 'Superseded', statusColor: '#B7AB94', isCurrent: false, isDraft: false, wordCount: 798, sections: '8 / 10', tokens: 1077, changes: [
+      { icon: '+', color: '#B9CBA6', text: 'Added Kitchen section with backsplash rules' },
+      { icon: '~', color: '#AD8348', text: 'Expanded Luxury style — book-matched slabs' },
+    ]},
+    { version: 'v3.0', date: 'Jul 28, 2026 · 16:48', author: 'Arjun M.', status: 'Superseded', statusColor: '#B7AB94', isCurrent: false, isDraft: false, wordCount: 710, sections: '7 / 10', tokens: 959, changes: [
+      { icon: '+', color: '#B9CBA6', text: 'Major rewrite — separated style and room rules' },
+      { icon: '-', color: '#9C4B2C', text: 'Removed legacy "mixed" category' },
+      { icon: '~', color: '#AD8348', text: 'Rewrote General Rules from scratch' },
+    ]},
+    { version: 'v2.4', date: 'Jul 15, 2026 · 11:20', author: 'Priya S.', status: 'Superseded', statusColor: '#B7AB94', isCurrent: false, isDraft: false, wordCount: 624, sections: '6 / 10', tokens: 842, changes: [
+      { icon: '+', color: '#B9CBA6', text: 'Added Traditional client type' },
+      { icon: '~', color: '#AD8348', text: 'Tweaked Bold style — geometric patterns' },
+    ]},
+    { version: 'v2.3', date: 'Jul 8, 2026 · 14:55', author: 'Arjun M.', status: 'Superseded', statusColor: '#B7AB94', isCurrent: false, isDraft: false, wordCount: 580, sections: '5 / 10', tokens: 783, changes: [
+      { icon: '~', color: '#AD8348', text: 'Refined Subtle style — single accent texture rule' },
+      { icon: '~', color: '#AD8348', text: 'Updated Living Room large format preference' },
+    ]},
+    { version: 'v2.2', date: 'Jun 30, 2026 · 10:05', author: 'Priya S.', status: 'Superseded', statusColor: '#B7AB94', isCurrent: false, isDraft: false, wordCount: 530, sections: '5 / 10', tokens: 716, changes: [
+      { icon: '+', color: '#B9CBA6', text: 'Added Female Client section' },
+      { icon: '+', color: '#B9CBA6', text: 'Added Bathroom anti-slip requirement' },
+    ]},
+    { version: 'v2.1', date: 'Jun 22, 2026 · 17:30', author: 'Arjun M.', status: 'Superseded', statusColor: '#B7AB94', isCurrent: false, isDraft: false, wordCount: 440, sections: '4 / 10', tokens: 594, changes: [
+      { icon: '+', color: '#B9CBA6', text: 'Initial Luxury, Subtle, Bold style rules' },
+      { icon: '~', color: '#AD8348', text: 'Expanded general prompt instructions' },
+    ]},
+    { version: 'v1.0', date: 'Jun 10, 2026 · 09:00', author: 'Arjun M.', status: 'Archived', statusColor: '#78705F', isCurrent: false, isDraft: false, wordCount: 285, sections: '2 / 10', tokens: 385, changes: [
+      { icon: '+', color: '#B9CBA6', text: 'Initial version — General Rules and Bathroom only' },
+    ]},
+  ];
+
+  renderVals() {
+    const s = this.state;
+    const sel = this.versions[s.selectedIdx] || this.versions[0];
+
+    const compareChecked = s.compareChecked || [];
+    const showComparePanel = s.compareMode && compareChecked.length === 2;
+
+    let compareLabel1 = '', compareLabel2 = '', compareDiffs = [];
+    if (showComparePanel) {
+      const a = this.versions[compareChecked[0]];
+      const b = this.versions[compareChecked[1]];
+      compareLabel1 = a.version;
+      compareLabel2 = b.version;
+      const wordDiff = a.wordCount - b.wordCount;
+      const sectionDiffA = parseInt(a.sections);
+      const sectionDiffB = parseInt(b.sections);
+      compareDiffs = [
+        { icon: wordDiff >= 0 ? '+' : '-', color: wordDiff >= 0 ? '#B9CBA6' : '#9C4B2C', text: Math.abs(wordDiff) + ' words ' + (wordDiff >= 0 ? 'added' : 'removed') },
+        { icon: '~', color: '#AD8348', text: 'Sections: ' + sectionDiffA + ' → ' + sectionDiffB },
+        { icon: '~', color: '#AD8348', text: 'Tokens: ' + a.tokens + ' → ' + b.tokens },
+      ];
+    }
+
+    return {
+      versionCount: this.versions.length,
+      compareMode: s.compareMode,
+      compareLabel: s.compareMode ? 'Exit Compare' : 'Compare Versions',
+      toggleCompare: () => this.setState(prev => ({ compareMode: !prev.compareMode, compareChecked: [] })),
+      selectedVersion: sel.version,
+      selectedDate: sel.date,
+      selectedAuthor: sel.author,
+      selectedStatus: sel.status,
+      selectedSections: sel.sections,
+      selectedWordCount: sel.wordCount + ' words',
+      selectedTokens: sel.tokens,
+      selectedChanges: sel.changes,
+      canRestore: !sel.isCurrent,
+      canDelete: !sel.isCurrent,
+      showComparePanel,
+      compareLabel1,
+      compareLabel2,
+      compareDiffs,
+      versions: this.versions.map((v, i) => ({
+        ...v,
+        rowBg: i === s.selectedIdx ? '#FBF6EC' : '#fff',
+        checkBg: compareChecked.includes(i) ? '#1A1611' : '#fff',
+        checked: compareChecked.includes(i),
+        onSelect: () => this.setState({ selectedIdx: i }),
+        onCompareToggle: (e) => {
+          e.stopPropagation();
+          this.setState(prev => {
+            const arr = [...(prev.compareChecked || [])];
+            const idx = arr.indexOf(i);
+            if (idx > -1) arr.splice(idx, 1);
+            else if (arr.length < 2) arr.push(i);
+            return { compareChecked: arr };
+          });
+        },
+      })),
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+@keyframes fade{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
+html,body{margin:0;padding:0;height:100%;}
+body{background:#F1ECE1;color:#221D18;font-family:'Inter',sans-serif;-webkit-font-smoothing:antialiased;}
+a{color:#AD8348;text-decoration:none;}a:hover{color:#7A5B2C;}
+</style>
+</helmet>
+
+<div style="display:flex;min-height:100vh;">
+  <!-- SIDEBAR -->
+  <aside style="width:260px;background:#1A1611;color:#E9E2D3;display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:20;">
+    <div style="padding:24px 22px 20px;border-bottom:1px solid rgba(255,255,255,0.08);">
+      <div style="font-family:'Fraunces',serif;font-weight:600;font-size:18px;letter-spacing:.04em;color:#E9E2D3;">CASA DE A<span style="color:#D8B677;">U</span>RUM</div>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:#78705F;margin-top:3px;">Owner Panel</div>
+    </div>
+    <nav style="flex:1;padding:10px 10px 20px;display:flex;flex-direction:column;gap:2px;overflow-y:auto;">
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:#78705F;padding:16px 12px 6px;">Overview</div>
+      <a href="Owner Dashboard.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;color:#B7AB94;font-size:13px;font-weight:500;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">Dashboard</a>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:#78705F;padding:16px 12px 6px;">AI Control</div>
+      <a href="Design Rules Setup.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;color:#B7AB94;font-size:13px;font-weight:500;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">System Instructions</a>
+      <a href="Reference Image Library.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;color:#B7AB94;font-size:13px;font-weight:500;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">Reference Library</a>
+      <a href="Version History.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;color:#B7AB94;font-size:13px;font-weight:500;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">Prompt Versions</a>
+      <a href="Admin Design Rules.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;color:#B7AB94;font-size:13px;font-weight:500;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">Rules & Filters</a>
+      <a href="Owner AI Test.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;color:#B7AB94;font-size:13px;font-weight:500;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">AI Test Mode</a>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:#78705F;padding:16px 12px 6px;">Governance</div>
+      <a href="Admin Users.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;background:rgba(173,131,72,0.12);color:#D8B677;font-size:13px;font-weight:600;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">Users & Staff</a>
+      <a href="Admin API Keys.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;color:#B7AB94;font-size:13px;font-weight:500;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">API & Integrations</a>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:#78705F;padding:16px 12px 6px;">Account</div>
+      <a href="Login.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;color:#8F8578;font-size:13px;font-weight:500;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">Sign out</a>
+    </nav>
+    <div style="padding:16px 22px;border-top:1px solid rgba(255,255,255,0.08);display:flex;align-items:center;gap:10px;">
+      <div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#AD8348,#D8B677);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;color:#fff;flex:none;">AM</div>
+      <div style="min-width:0;"><div style="font-size:12.5px;font-weight:600;color:#E9E2D3;">Arjun M.</div><div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#78705F;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Owner · Full control</div></div>
+    </div>
+  </aside>
+
+  <main style="flex:1;margin-left:260px;padding:32px 40px 60px;animation:fade .35s ease;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:32px;">
+      <div>
+        <h1 style="font-family:'Fraunces',serif;font-weight:600;font-size:28px;margin:0 0 4px;color:#1A1611;">User &amp; Staff Management</h1>
+        <p style="margin:0;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#78705F;">Who can open which tool, on which device.</p>
+      </div>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#AD8348;border:1px solid #AD8348;padding:5px 10px;border-radius:2px;">5 active · 1 invited</span>
+    </div>
+
+    <!-- STAFF TABLE -->
+    <div style="background:#fff;border:1px solid rgba(34,29,24,0.14);border-radius:3px;margin-bottom:20px;">
+      <div style="padding:14px 18px;border-bottom:1px solid rgba(34,29,24,0.14);display:flex;align-items:center;justify-content:space-between;">
+        <h3 style="margin:0;font-size:12.5px;letter-spacing:.1em;text-transform:uppercase;font-family:'IBM Plex Mono',monospace;color:#4B443A;font-weight:500;">Staff</h3>
+        <input type="text" placeholder="Search staff…" style="font-family:'IBM Plex Mono',monospace;font-size:12px;padding:7px 10px;border:1px solid rgba(34,29,24,0.14);border-radius:2px;background:#F1ECE1;color:#4B443A;width:180px;" style-focus="outline:2px solid #AD8348;outline-offset:1px">
+      </div>
+      <div style="padding:0;overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+          <thead>
+            <tr>
+              <th style="text-align:left;font-weight:500;color:#78705F;text-transform:uppercase;font-size:10.5px;letter-spacing:.06em;padding:9px 18px;border-bottom:1px solid rgba(34,29,24,0.14);font-family:'IBM Plex Mono',monospace;">Name</th>
+              <th style="text-align:left;font-weight:500;color:#78705F;text-transform:uppercase;font-size:10.5px;letter-spacing:.06em;padding:9px 10px;border-bottom:1px solid rgba(34,29,24,0.14);font-family:'IBM Plex Mono',monospace;">Role</th>
+              <th style="text-align:left;font-weight:500;color:#78705F;text-transform:uppercase;font-size:10.5px;letter-spacing:.06em;padding:9px 10px;border-bottom:1px solid rgba(34,29,24,0.14);font-family:'IBM Plex Mono',monospace;">Access</th>
+              <th style="text-align:left;font-weight:500;color:#78705F;text-transform:uppercase;font-size:10.5px;letter-spacing:.06em;padding:9px 10px;border-bottom:1px solid rgba(34,29,24,0.14);font-family:'IBM Plex Mono',monospace;">Last active</th>
+              <th style="text-align:left;font-weight:500;color:#78705F;text-transform:uppercase;font-size:10.5px;letter-spacing:.06em;padding:9px 10px;border-bottom:1px solid rgba(34,29,24,0.14);font-family:'IBM Plex Mono',monospace;">Status</th>
+              <th style="padding:9px 10px;border-bottom:1px solid rgba(34,29,24,0.14);"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <sc-for list="{{ staffRows }}" as="s" hint-placeholder-count="6">
+              <tr>
+                <td style="padding:11px 18px;border-bottom:1px solid rgba(34,29,24,0.06);">
+                  <div style="display:flex;align-items:center;gap:10px;">
+                    <div style="width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Fraunces',serif;font-weight:600;font-size:13px;color:#fff;background:{{ s.avatarBg }};">{{ s.initials }}</div>
+                    <div><div style="font-weight:600;color:#221D18;">{{ s.name }}</div><div style="font-size:11px;color:#78705F;font-family:'IBM Plex Mono',monospace;">{{ s.phone }}</div></div>
+                  </div>
+                </td>
+                <td style="padding:11px 10px;border-bottom:1px solid rgba(34,29,24,0.06);"><span style="display:inline-block;font-size:10px;padding:3px 9px;border-radius:9px;font-weight:600;letter-spacing:.02em;background:{{ s.roleBg }};color:{{ s.roleColor }};border:{{ s.roleBorder }};">{{ s.role }}</span></td>
+                <td style="padding:11px 10px;border-bottom:1px solid rgba(34,29,24,0.06);">
+                  <div style="display:flex;gap:4px;">
+                    <sc-for list="{{ s.dots }}" as="d" hint-placeholder-count="5">
+                      <span style="width:7px;height:7px;border-radius:50%;background:{{ d }};"></span>
+                    </sc-for>
+                  </div>
+                </td>
+                <td style="padding:11px 10px;border-bottom:1px solid rgba(34,29,24,0.06);font-family:'IBM Plex Mono',monospace;font-size:12px;color:#78705F;">{{ s.lastActive }}</td>
+                <td style="padding:11px 10px;border-bottom:1px solid rgba(34,29,24,0.06);">
+                  <span style="display:inline-flex;align-items:center;gap:5px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#4B443A;">
+                    <span style="width:7px;height:7px;border-radius:50%;background:{{ s.statusDot }};"></span>{{ s.status }}
+                  </span>
+                </td>
+                <td style="padding:11px 10px;border-bottom:1px solid rgba(34,29,24,0.06);">
+                  <div style="display:flex;gap:14px;">
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#78705F;cursor:pointer;" style-hover="color:#AD8348">{{ s.action1 }}</span>
+                    <sc-if value="{{ s.action2 }}" hint-placeholder-val="{{ true }}">
+                      <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#78705F;cursor:pointer;" style-hover="color:#9C4B2C">{{ s.action2 }}</span>
+                    </sc-if>
+                  </div>
+                </td>
+              </tr>
+            </sc-for>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ADD STAFF + PERMISSIONS -->
+    <div style="display:grid;grid-template-columns:1fr 1.2fr;gap:20px;align-items:start;">
+
+      <!-- Add Staff -->
+      <div style="background:#fff;border:1px solid rgba(34,29,24,0.14);border-radius:3px;">
+        <div style="padding:14px 18px;border-bottom:1px solid rgba(34,29,24,0.14);">
+          <h3 style="margin:0;font-size:12.5px;letter-spacing:.1em;text-transform:uppercase;font-family:'IBM Plex Mono',monospace;color:#4B443A;font-weight:500;">Add Staff</h3>
+        </div>
+        <div style="padding:18px;display:flex;flex-direction:column;gap:14px;">
+          <div>
+            <label style="display:block;font-size:12px;color:#78705F;margin-bottom:6px;font-family:'IBM Plex Mono',monospace;">Full name</label>
+            <input type="text" placeholder="e.g. Kavita Rao" style="width:100%;font-family:'IBM Plex Mono',monospace;font-size:13px;padding:10px 11px;border:1px solid rgba(34,29,24,0.14);border-radius:2px;background:#F1ECE1;color:#221D18;" style-focus="outline:2px solid #AD8348;outline-offset:1px">
+          </div>
+          <div>
+            <label style="display:block;font-size:12px;color:#78705F;margin-bottom:6px;font-family:'IBM Plex Mono',monospace;">Phone or email</label>
+            <input type="text" placeholder="+91 or name@example.com" style="width:100%;font-family:'IBM Plex Mono',monospace;font-size:13px;padding:10px 11px;border:1px solid rgba(34,29,24,0.14);border-radius:2px;background:#F1ECE1;color:#221D18;" style-focus="outline:2px solid #AD8348;outline-offset:1px">
+          </div>
+          <div>
+            <label style="display:block;font-size:12px;color:#78705F;margin-bottom:6px;font-family:'IBM Plex Mono',monospace;">Role</label>
+            <select style="width:100%;font-family:'IBM Plex Mono',monospace;font-size:13px;padding:10px 11px;border:1px solid rgba(34,29,24,0.14);border-radius:2px;background:#F1ECE1;color:#221D18;">
+              <option>Sales Staff</option><option>Manager</option><option>Owner</option>
+            </select>
+          </div>
+          <button style="width:100%;font-weight:600;font-size:13.5px;background:#1A1611;color:#F1ECE1;border:none;padding:12px 22px;border-radius:2px;cursor:pointer;margin-top:6px;" style-hover="background:#000">Send invite</button>
+        </div>
+      </div>
+
+      <!-- Permissions Matrix -->
+      <div style="background:#fff;border:1px solid rgba(34,29,24,0.14);border-radius:3px;">
+        <div style="padding:14px 18px;border-bottom:1px solid rgba(34,29,24,0.14);">
+          <h3 style="margin:0;font-size:12.5px;letter-spacing:.1em;text-transform:uppercase;font-family:'IBM Plex Mono',monospace;color:#4B443A;font-weight:500;">Roles &amp; Permissions</h3>
+        </div>
+        <div style="padding:18px;overflow-x:auto;">
+          <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
+            <thead>
+              <tr>
+                <th style="text-align:left;font-weight:500;color:#78705F;font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.04em;padding:8px 8px;border-bottom:1px solid rgba(34,29,24,0.14);">Tool</th>
+                <th style="text-align:center;font-weight:500;color:#78705F;font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.04em;padding:8px 8px;border-bottom:1px solid rgba(34,29,24,0.14);">Owner</th>
+                <th style="text-align:center;font-weight:500;color:#78705F;font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.04em;padding:8px 8px;border-bottom:1px solid rgba(34,29,24,0.14);">Manager</th>
+                <th style="text-align:center;font-weight:500;color:#78705F;font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.04em;padding:8px 8px;border-bottom:1px solid rgba(34,29,24,0.14);">Staff</th>
+              </tr>
+            </thead>
+            <tbody>
+              <sc-for list="{{ permRows }}" as="pr" hint-placeholder-count="6">
+                <tr>
+                  <td style="padding:9px 8px;border-bottom:1px solid rgba(34,29,24,0.06);font-weight:600;color:#221D18;">{{ pr.tool }}</td>
+                  <td style="padding:9px 8px;border-bottom:1px solid rgba(34,29,24,0.06);text-align:center;">
+                    <span style="width:16px;height:16px;border-radius:3px;display:inline-block;background:#78705F;border:1px solid #78705F;position:relative;">
+                      <span style="position:absolute;left:4px;top:1px;width:4px;height:8px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg);"></span>
+                    </span>
+                  </td>
+                  <td style="padding:9px 8px;border-bottom:1px solid rgba(34,29,24,0.06);text-align:center;">
+                    <span style="width:16px;height:16px;border-radius:3px;display:inline-block;background:{{ pr.managerBg }};border:1px solid {{ pr.managerBorder }};position:relative;cursor:pointer;">
+                      <sc-if value="{{ pr.managerOn }}" hint-placeholder-val="{{ true }}">
+                        <span style="position:absolute;left:4px;top:1px;width:4px;height:8px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg);"></span>
+                      </sc-if>
+                    </span>
+                  </td>
+                  <td style="padding:9px 8px;border-bottom:1px solid rgba(34,29,24,0.06);text-align:center;">
+                    <span style="width:16px;height:16px;border-radius:3px;display:inline-block;background:{{ pr.staffBg }};border:1px solid {{ pr.staffBorder }};position:relative;cursor:{{ pr.staffCursor }};">
+                      <sc-if value="{{ pr.staffOn }}" hint-placeholder-val="{{ false }}">
+                        <span style="position:absolute;left:4px;top:1px;width:4px;height:8px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg);"></span>
+                      </sc-if>
+                    </span>
+                  </td>
+                </tr>
+              </sc-for>
+            </tbody>
+          </table>
+          <div style="font-size:11.5px;color:#78705F;margin-top:12px;line-height:1.5;padding-top:12px;border-top:1px dashed rgba(34,29,24,0.14);">Owner access can't be edited. Changing a role's permissions here updates everyone currently assigned to it.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SHARED DEVICES -->
+    <div style="background:#fff;border:1px solid rgba(34,29,24,0.14);border-radius:3px;margin-top:20px;">
+      <div style="padding:14px 18px;border-bottom:1px solid rgba(34,29,24,0.14);display:flex;align-items:center;justify-content:space-between;">
+        <div>
+          <h3 style="margin:0;font-size:12.5px;letter-spacing:.1em;text-transform:uppercase;font-family:'IBM Plex Mono',monospace;color:#4B443A;font-weight:500;display:inline;">Shared Devices</h3>
+          <span style="font-size:11.5px;color:#B7AB94;margin-left:10px;">Store-floor tablets and phones — no per-visit login</span>
+        </div>
+        <button style="font-weight:600;font-size:13px;background:none;color:#4B443A;border:1px solid rgba(34,29,24,0.14);padding:8px 14px;border-radius:2px;cursor:pointer;" style-hover="border-color:#AD8348;color:#AD8348">Pair new device</button>
+      </div>
+      <div style="padding:0;overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+          <thead>
+            <tr>
+              <th style="text-align:left;font-weight:500;color:#78705F;text-transform:uppercase;font-size:10.5px;letter-spacing:.06em;padding:9px 18px;border-bottom:1px solid rgba(34,29,24,0.14);font-family:'IBM Plex Mono',monospace;">Device</th>
+              <th style="text-align:left;font-weight:500;color:#78705F;text-transform:uppercase;font-size:10.5px;letter-spacing:.06em;padding:9px 10px;border-bottom:1px solid rgba(34,29,24,0.14);font-family:'IBM Plex Mono',monospace;">Paired tools</th>
+              <th style="text-align:left;font-weight:500;color:#78705F;text-transform:uppercase;font-size:10.5px;letter-spacing:.06em;padding:9px 10px;border-bottom:1px solid rgba(34,29,24,0.14);font-family:'IBM Plex Mono',monospace;">Last synced</th>
+              <th style="text-align:left;font-weight:500;color:#78705F;text-transform:uppercase;font-size:10.5px;letter-spacing:.06em;padding:9px 10px;border-bottom:1px solid rgba(34,29,24,0.14);font-family:'IBM Plex Mono',monospace;">Status</th>
+              <th style="padding:9px 10px;border-bottom:1px solid rgba(34,29,24,0.14);"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <sc-for list="{{ devices }}" as="dev" hint-placeholder-count="3">
+              <tr>
+                <td style="padding:11px 18px;border-bottom:1px solid rgba(34,29,24,0.06);font-weight:600;color:#221D18;">{{ dev.name }}</td>
+                <td style="padding:11px 10px;border-bottom:1px solid rgba(34,29,24,0.06);font-family:'IBM Plex Mono',monospace;font-size:12.5px;">{{ dev.tools }}</td>
+                <td style="padding:11px 10px;border-bottom:1px solid rgba(34,29,24,0.06);font-family:'IBM Plex Mono',monospace;font-size:12.5px;">{{ dev.synced }}</td>
+                <td style="padding:11px 10px;border-bottom:1px solid rgba(34,29,24,0.06);">
+                  <span style="display:inline-flex;align-items:center;gap:5px;font-family:'IBM Plex Mono',monospace;font-size:11px;">
+                    <span style="width:7px;height:7px;border-radius:50%;background:{{ dev.statusDot }};"></span>{{ dev.status }}
+                  </span>
+                </td>
+                <td style="padding:11px 10px;border-bottom:1px solid rgba(34,29,24,0.06);">
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#78705F;cursor:pointer;" style-hover="color:#9C4B2C">Unpair</span>
+                </td>
+              </tr>
+            </sc-for>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const dot = (on) => on ? '#AD8348' : '#DFD5BF';
+    return {
+      staffRows: [
+        { name: 'Anita Kulkarni', phone: 'Owner', initials: 'AK', avatarBg: '#1A1611', role: 'Owner', roleBg: '#1A1611', roleColor: '#F1ECE1', roleBorder: 'none', dots: ['#AD8348','#AD8348','#AD8348','#AD8348','#AD8348'], lastActive: 'Just now', status: 'Active', statusDot: '#7A9165', action1: 'Edit', action2: '' },
+        { name: 'Rohit Sharma', phone: '+91 98xxxxx210', initials: 'RS', avatarBg: '#AD8348', role: 'Manager', roleBg: '#FBF6EC', roleColor: '#AD8348', roleBorder: '1px solid #AD8348', dots: ['#AD8348','#AD8348','#AD8348','#AD8348','#DFD5BF'], lastActive: '2 hours ago', status: 'Active', statusDot: '#7A9165', action1: 'Edit', action2: 'Remove' },
+        { name: 'Priya Deshmukh', phone: '+91 98xxxxx044', initials: 'PD', avatarBg: '#8F8062', role: 'Sales Staff', roleBg: '#E9E2D3', roleColor: '#4B443A', roleBorder: 'none', dots: ['#DFD5BF','#DFD5BF','#AD8348','#AD8348','#DFD5BF'], lastActive: 'Yesterday', status: 'Active', statusDot: '#7A9165', action1: 'Edit', action2: 'Remove' },
+        { name: 'Sameer Varma', phone: '+91 98xxxxx781', initials: 'SV', avatarBg: '#7C8577', role: 'Sales Staff', roleBg: '#E9E2D3', roleColor: '#4B443A', roleBorder: 'none', dots: ['#DFD5BF','#DFD5BF','#AD8348','#AD8348','#DFD5BF'], lastActive: '3 days ago', status: 'Active', statusDot: '#7A9165', action1: 'Edit', action2: 'Remove' },
+        { name: 'Neha Joshi', phone: '+91 98xxxxx322', initials: 'NJ', avatarBg: '#9C4B2C', role: 'Sales Staff', roleBg: '#E9E2D3', roleColor: '#4B443A', roleBorder: 'none', dots: ['#DFD5BF','#DFD5BF','#AD8348','#AD8348','#DFD5BF'], lastActive: '1 week ago', status: 'Active', statusDot: '#7A9165', action1: 'Edit', action2: 'Remove' },
+        { name: 'Farah Ali', phone: 'farah.ali@gmail.com', initials: '?', avatarBg: '#B7AB94', role: 'Sales Staff', roleBg: '#E9E2D3', roleColor: '#4B443A', roleBorder: 'none', dots: ['#DFD5BF','#DFD5BF','#AD8348','#AD8348','#DFD5BF'], lastActive: '—', status: 'Invited', statusDot: '#AD8348', action1: 'Resend', action2: 'Cancel' },
+      ],
+      permRows: [
+        { tool: 'Catalog Extractor', managerOn: true, managerBg: '#AD8348', managerBorder: '#AD8348', staffOn: false, staffBg: '#F1ECE1', staffBorder: 'rgba(34,29,24,0.14)', staffCursor: 'pointer' },
+        { tool: 'Design Rules Setup', managerOn: true, managerBg: '#AD8348', managerBorder: '#AD8348', staffOn: false, staffBg: '#F1ECE1', staffBorder: 'rgba(34,29,24,0.14)', staffCursor: 'pointer' },
+        { tool: 'Mood Board Generator', managerOn: true, managerBg: '#AD8348', managerBorder: '#AD8348', staffOn: true, staffBg: '#AD8348', staffBorder: '#AD8348', staffCursor: 'pointer' },
+        { tool: 'Print Board Designer', managerOn: true, managerBg: '#AD8348', managerBorder: '#AD8348', staffOn: true, staffBg: '#AD8348', staffBorder: '#AD8348', staffCursor: 'pointer' },
+        { tool: 'Reference Image Library', managerOn: true, managerBg: '#AD8348', managerBorder: '#AD8348', staffOn: false, staffBg: '#F1ECE1', staffBorder: 'rgba(34,29,24,0.14)', staffCursor: 'pointer' },
+        { tool: 'API Keys & Integrations', managerOn: false, managerBg: '#F1ECE1', managerBorder: 'rgba(34,29,24,0.14)', staffOn: false, staffBg: '#DFD5BF', staffBorder: '#DFD5BF', staffCursor: 'not-allowed' },
+      ],
+      devices: [
+        { name: 'Front Counter iPad', tools: 'Mood Board, Print Board', synced: '4 min ago', status: 'Online', statusDot: '#7A9165' },
+        { name: 'Bathroom Section Tablet', tools: 'Mood Board Generator', synced: '26 min ago', status: 'Online', statusDot: '#7A9165' },
+        { name: 'Shop Laptop — extract.py', tools: 'Catalog Extractor', synced: 'Last night, 11:40 PM', status: 'Offline', statusDot: '#9C4B2C' },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

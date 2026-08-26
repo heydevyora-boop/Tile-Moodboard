@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+@keyframes fade{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
+html,body{margin:0;padding:0;}
+body{background:#F1ECE1;color:#221D18;font-family:'Inter',sans-serif;-webkit-font-smoothing:antialiased;}
+a{color:#AD8348;text-decoration:none;}a:hover{color:#7A5B2C;}
+</style>
+</helmet>
+
+<div style="position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.05;background-image:radial-gradient(circle at 1px 1px, #000 1px, transparent 0);background-size:3px 3px;"></div>
+
+<!-- HEADER -->
+<header style="position:relative;z-index:2;padding:26px clamp(18px,4vw,56px) 0;background:#F1ECE1;border-bottom:1px solid rgba(34,29,24,0.14);">
+  <div style="display:flex;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;gap:14px;padding-bottom:20px;">
+    <div style="display:flex;flex-direction:column;gap:2px;">
+      <div style="font-family:'Fraunces',serif;font-weight:600;font-size:clamp(22px,3vw,30px);letter-spacing:.04em;color:#1A1611;">CASA DE A<span style="color:#AD8348;">U</span>RUM</div>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#78705F;">Internal Studio Tools · Not for external distribution</div>
+    </div>
+    <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#78705F;letter-spacing:.04em;">EXTRACT → CLASSIFY → RULES → BRIEF → GENERATE → SCENE LOCK → ANGLES</div>
+  </div>
+  <div style="display:flex;gap:0;border:1px solid rgba(34,29,24,0.14);border-bottom:none;overflow:hidden;">
+    <div style="flex:1;height:9px;background:linear-gradient(100deg,#C9BFA9,#DCD2BC);"></div>
+    <div style="flex:1;height:9px;background:linear-gradient(100deg,#3B342A,#5A4F40);"></div>
+    <div style="flex:1;height:9px;background:linear-gradient(100deg,#AD8348,#D8B677);"></div>
+    <div style="flex:1;height:9px;background:linear-gradient(100deg,#9C4B2C,#B96A45);"></div>
+    <div style="flex:1;height:9px;background:linear-gradient(100deg,#7C8577,#9CA793);"></div>
+    <div style="flex:1;height:9px;background:linear-gradient(100deg,#E9E2D3,#F6F1E6);"></div>
+    <div style="flex:1;height:9px;background:linear-gradient(100deg,#4B443A,#2A251E);"></div>
+    <div style="flex:1;height:9px;background:linear-gradient(100deg,#C7A25E,#8F6B34);"></div>
+  </div>
+</header>
+
+<main style="position:relative;z-index:1;max-width:1180px;margin:0 auto;padding:44px clamp(18px,4vw,56px) 90px;animation:fade .35s ease;">
+
+  <!-- INTRO -->
+  <div style="margin-bottom:32px;border-bottom:1px solid rgba(34,29,24,0.14);padding-bottom:22px;">
+    <h1 style="font-family:'Fraunces',serif;font-weight:600;font-size:clamp(28px,3.6vw,40px);margin:0 0 8px;color:#1A1611;">Bathroom Moodboard System</h1>
+    <p style="margin:0;max-width:62ch;color:#4B443A;font-size:15px;line-height:1.6;text-wrap:pretty;">Catalog extraction, AI design rules, and showroom moodboard generation — controlled entirely from the panel, no code editor required. Every generation is gated on catalog readiness so the AI never recommends a product that isn't in the library.</p>
+  </div>
+
+  <!-- SYSTEM READINESS BANNER -->
+  <div style="background:#fff;border:1px solid rgba(34,29,24,0.14);border-left:3px solid #AD8348;border-radius:3px;padding:18px 20px;margin-bottom:28px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;">
+    <div>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:#78705F;margin-bottom:6px;">Library Readiness</div>
+      <div style="font-family:'Fraunces',serif;font-weight:600;font-size:20px;color:#1A1611;">312 of 347 catalogs extracted — <span style="color:#AD8348;">90% ready</span></div>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:#78705F;margin-top:4px;">35 pending · 5 failed · generation runs on the extracted set only</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:16px;">
+      <div style="width:220px;">
+        <div style="background:#E9E2D3;border-radius:2px;overflow:hidden;height:8px;">
+          <div style="height:100%;width:90%;background:linear-gradient(90deg,#AD8348,#D8B677);border-radius:2px;"></div>
+        </div>
+      </div>
+      <a href="Login.dc.html" style="font-weight:600;font-size:12.5px;color:#4B443A;border:1px solid rgba(34,29,24,0.14);padding:9px 15px;border-radius:2px;white-space:nowrap;" style-hover="border-color:#AD8348;color:#AD8348">View pending</a>
+    </div>
+  </div>
+
+  <!-- TWO ENTRY POINTS -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:32px;">
+
+    <!-- USER PANEL -->
+    <a href="Login.dc.html" style="background:#fff;border:1px solid rgba(34,29,24,0.14);border-radius:3px;overflow:hidden;transition:box-shadow .15s ease;display:block;" style-hover="box-shadow:0 14px 34px rgba(26,22,17,0.14)">
+      <div style="height:9px;background:linear-gradient(90deg,#AD8348,#D8B677);"></div>
+      <div style="padding:28px 26px;">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#AD8348;margin-bottom:12px;">Showroom Floor</div>
+        <div style="font-family:'Fraunces',serif;font-weight:600;font-size:24px;color:#1A1611;margin-bottom:8px;">User Panel</div>
+        <p style="margin:0 0 20px;font-size:13.5px;color:#78705F;line-height:1.55;">Take a client brief — space, size, layout, shower, highlight, floor, wall, budget, style, colour, sanitary — and generate four moodboard options. Lock the chosen scene, then generate alternate camera angles.</p>
+        <div style="display:flex;flex-direction:column;gap:7px;">
+          <sc-for list="{{ userSteps }}" as="us" hint-placeholder-count="4">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#B7AB94;width:16px;">{{ us.n }}</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#4B443A;">{{ us.label }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="margin-top:20px;padding-top:16px;border-top:1px solid rgba(34,29,24,0.08);display:flex;align-items:center;justify-content:space-between;">
+          <div style="display:flex;align-items:center;gap:6px;">
+            <div style="width:7px;height:7px;border-radius:50%;background:#7A9165;"></div>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#78705F;">Ready · 18,420 products</span>
+          </div>
+          <span style="font-family:'Fraunces',serif;font-weight:600;font-size:18px;color:#AD8348;">→</span>
+        </div>
+      </div>
+    </a>
+
+    <!-- ADMIN PANEL -->
+    <a href="Login.dc.html" style="background:#fff;border:1px solid rgba(34,29,24,0.14);border-radius:3px;overflow:hidden;transition:box-shadow .15s ease;display:block;" style-hover="box-shadow:0 14px 34px rgba(26,22,17,0.14)">
+      <div style="height:9px;background:linear-gradient(90deg,#1A1611,#4B443A);"></div>
+      <div style="padding:28px 26px;">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#AD8348;margin-bottom:12px;">Owner / Admin · Protected</div>
+        <div style="font-family:'Fraunces',serif;font-weight:600;font-size:24px;color:#1A1611;margin-bottom:8px;">Admin Panel</div>
+        <p style="margin:0 0 20px;font-size:13.5px;color:#78705F;line-height:1.55;">Extraction status, catalog readiness, product data, AI system instructions with versioning and rollback, reference image library, generation history, and API status.</p>
+        <div style="display:flex;flex-direction:column;gap:7px;">
+          <sc-for list="{{ adminSteps }}" as="as" hint-placeholder-count="4">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#B7AB94;width:16px;">{{ as.n }}</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#4B443A;">{{ as.label }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="margin-top:20px;padding-top:16px;border-top:1px solid rgba(34,29,24,0.08);display:flex;align-items:center;justify-content:space-between;">
+          <div style="display:flex;align-items:center;gap:6px;">
+            <div style="width:7px;height:7px;border-radius:50%;background:#AD8348;"></div>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#78705F;">Prompt v3.2 active · 1 warning</span>
+          </div>
+          <span style="font-family:'Fraunces',serif;font-weight:600;font-size:18px;color:#AD8348;">→</span>
+        </div>
+      </div>
+    </a>
+  </div>
+
+  <!-- LIBRARY AT A GLANCE -->
+  <div style="background:#fff;border:1px solid rgba(34,29,24,0.14);border-radius:3px;margin-bottom:18px;">
+    <div style="padding:14px 18px;border-bottom:1px solid rgba(34,29,24,0.14);">
+      <h3 style="margin:0;font-size:12.5px;letter-spacing:.1em;text-transform:uppercase;font-family:'IBM Plex Mono',monospace;color:#4B443A;font-weight:500;">Library at a Glance</h3>
+    </div>
+    <div style="padding:20px 18px;display:grid;grid-template-columns:repeat(6,1fr);gap:18px;">
+      <sc-for list="{{ glanceStats }}" as="gs" hint-placeholder-count="6">
+        <div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:#78705F;margin-bottom:6px;">{{ gs.label }}</div>
+          <div style="font-family:'Fraunces',serif;font-weight:600;font-size:22px;color:#1A1611;">{{ gs.value }}</div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:{{ gs.subColor }};margin-top:2px;">{{ gs.sub }}</div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <!-- PIPELINE + STATUS -->
+  <div style="display:grid;grid-template-columns:1.3fr 1fr;gap:18px;">
+
+    <!-- Pipeline -->
+    <div style="background:#fff;border:1px solid rgba(34,29,24,0.14);border-radius:3px;">
+      <div style="padding:14px 18px;border-bottom:1px solid rgba(34,29,24,0.14);">
+        <h3 style="margin:0;font-size:12.5px;letter-spacing:.1em;text-transform:uppercase;font-family:'IBM Plex Mono',monospace;color:#4B443A;font-weight:500;">Pipeline Stages</h3>
+      </div>
+      <div style="padding:0;">
+        <sc-for list="{{ pipeline }}" as="pl" hint-placeholder-count="7">
+          <div style="padding:13px 18px;border-bottom:1px solid rgba(34,29,24,0.06);display:flex;align-items:center;gap:12px;">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#AD8348;font-weight:500;width:22px;flex:none;">{{ pl.num }}</span>
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:13px;font-weight:600;color:#221D18;">{{ pl.name }}</div>
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#78705F;">{{ pl.owner }}</div>
+            </div>
+            <span style="display:inline-block;font-size:10px;padding:2px 8px;border-radius:8px;background:{{ pl.statusBg }};color:{{ pl.statusColor }};font-weight:600;white-space:nowrap;">{{ pl.status }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <!-- Service Status -->
+    <div style="display:flex;flex-direction:column;gap:18px;">
+      <div style="background:#fff;border:1px solid rgba(34,29,24,0.14);border-radius:3px;">
+        <div style="padding:14px 18px;border-bottom:1px solid rgba(34,29,24,0.14);">
+          <h3 style="margin:0;font-size:12.5px;letter-spacing:.1em;text-transform:uppercase;font-family:'IBM Plex Mono',monospace;color:#4B443A;font-weight:500;">Service Status</h3>
+        </div>
+        <div style="padding:14px 18px;display:flex;flex-direction:column;gap:11px;">
+          <sc-for list="{{ services }}" as="sv" hint-placeholder-count="5">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+              <div style="display:flex;align-items:center;gap:8px;">
+                <div style="width:8px;height:8px;border-radius:50%;background:{{ sv.dot }};flex:none;"></div>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#4B443A;">{{ sv.name }}</span>
+              </div>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#78705F;white-space:nowrap;">{{ sv.detail }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <!-- Guardrails -->
+      <div style="background:#1A1611;border:1px solid rgba(216,182,119,0.25);border-radius:3px;padding:18px 20px;">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#D8B677;margin-bottom:12px;">System Guardrails</div>
+        <div style="display:flex;flex-direction:column;gap:9px;">
+          <sc-for list="{{ guardrails }}" as="gr" hint-placeholder-count="3">
+            <div style="display:flex;align-items:flex-start;gap:9px;">
+              <span style="color:#7A9165;font-size:12px;margin-top:1px;flex:none;">✓</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:#B7AB94;line-height:1.5;">{{ gr }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer style="max-width:1180px;margin:0 auto;padding:0 clamp(18px,4vw,56px) 50px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#B7AB94;text-align:center;">CASA DE AURUM — INTERNAL OPERATIONS TOOL · BUILT FOR STORE USE ONLY · NOT FOR RESALE OR DISTRIBUTION</footer>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      userSteps: [
+        { n: '01', label: 'Client brief — 11 steps' },
+        { n: '02', label: 'Generate 4 moodboard options' },
+        { n: '03', label: 'Scene lock — products fixed' },
+        { n: '04', label: 'Angle generation — same scene' },
+      ],
+      adminSteps: [
+        { n: '01', label: 'Extraction status & readiness' },
+        { n: '02', label: 'AI system instructions + versions' },
+        { n: '03', label: 'Reference image library' },
+        { n: '04', label: 'Generation history & test mode' },
+      ],
+      glanceStats: [
+        { label: 'Brands', value: '108', sub: 'all synced', subColor: '#78705F' },
+        { label: 'Catalogs', value: '347', sub: '312 extracted', subColor: '#4A7A2E' },
+        { label: 'Products', value: '18,420', sub: '17,900 classified', subColor: '#4A7A2E' },
+        { label: 'Pending', value: '35', sub: 'awaiting extract', subColor: '#AD8348' },
+        { label: 'Failed', value: '12', sub: 'needs review', subColor: '#9C4B2C' },
+        { label: 'Moodboards', value: '412', sub: 'lifetime', subColor: '#78705F' },
+      ],
+      pipeline: [
+        { num: '01', name: 'PDF Extraction', owner: 'Python · extract.py · pen drive or Drive', status: '90%', statusBg: '#FBF6EC', statusColor: '#AD8348' },
+        { num: '02', name: 'Duplicate Removal & Classification', owner: 'Finish, budget, room suitability', status: 'Active', statusBg: '#E8F5E0', statusColor: '#4A7A2E' },
+        { num: '03', name: 'Catalog Readiness Check', owner: 'AI Ready gate before any generation', status: 'Active', statusBg: '#E8F5E0', statusColor: '#4A7A2E' },
+        { num: '04', name: 'System Instructions', owner: 'v3.2 published · 8 modules', status: 'Live', statusBg: '#E8F5E0', statusColor: '#4A7A2E' },
+        { num: '05', name: 'Reference Library', owner: '12 images · Kitchen tag missing', status: 'Warning', statusBg: '#FBF6EC', statusColor: '#AD8348' },
+        { num: '06', name: 'Moodboard Generation', owner: 'Gemini · 4 options per brief', status: 'Ready', statusBg: '#E8F5E0', statusColor: '#4A7A2E' },
+        { num: '07', name: 'Scene Lock & Angles', owner: 'Front, left, right, wide, close-ups', status: 'Ready', statusBg: '#E8F5E0', statusColor: '#4A7A2E' },
+      ],
+      services: [
+        { name: 'Gemini API', dot: '#7A9165', detail: '340ms avg' },
+        { name: 'Google Sheets', dot: '#7A9165', detail: '18,420 rows' },
+        { name: 'Google Drive', dot: '#7A9165', detail: 'connected' },
+        { name: 'Extraction worker', dot: '#B7AB94', detail: 'idle · 6h ago' },
+        { name: 'Reference library', dot: '#AD8348', detail: '1 gap' },
+      ],
+      guardrails: [
+        'Generation is blocked when catalog data is incomplete — Generate Anyway requires an explicit admin override.',
+        'The AI may only recommend products that exist in the extracted database — no invented names or brands.',
+        'Angle generation preserves the locked scene exactly; only the camera changes.',
+        'The Gemini key lives on the server only — never in the frontend.',
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+@keyframes fade{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
+html,body{margin:0;padding:0;}
+body{background:#F1ECE1;color:#221D18;font-family:'Inter',sans-serif;-webkit-font-smoothing:antialiased;}
+a{color:#AD8348;}a:hover{color:#7A5B2C;}
+</style>
+</helmet>
+
+<!-- GRAIN -->
+<div style="position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.05;background-image:radial-gradient(circle at 1px 1px, #000 1px, transparent 0);background-size:3px 3px;"></div>
+
+<div style="display:flex;min-height:100vh;">
+  <aside style="width:260px;background:#1A1611;color:#E9E2D3;display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:20;">
+    <div style="padding:24px 22px 20px;border-bottom:1px solid rgba(255,255,255,0.08);">
+      <div style="font-family:'Fraunces',serif;font-weight:600;font-size:18px;letter-spacing:.04em;color:#E9E2D3;">CASA DE A<span style="color:#D8B677;">U</span>RUM</div>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:#78705F;margin-top:3px;">Owner Panel</div>
+    </div>
+    <nav style="flex:1;padding:10px 10px 20px;display:flex;flex-direction:column;gap:2px;overflow-y:auto;">
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:#78705F;padding:16px 12px 6px;">Overview</div>
+      <a href="Owner Dashboard.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;color:#B7AB94;font-size:13px;font-weight:500;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">Dashboard</a>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:#78705F;padding:16px 12px 6px;">AI Control</div>
+      <a href="Design Rules Setup.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;color:#B7AB94;font-size:13px;font-weight:500;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">System Instructions</a>
+      <a href="Reference Image Library.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;background:rgba(173,131,72,0.12);color:#D8B677;font-size:13px;font-weight:600;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">Reference Library</a>
+      <a href="Version History.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;color:#B7AB94;font-size:13px;font-weight:500;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">Prompt Versions</a>
+      <a href="Admin Design Rules.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;color:#B7AB94;font-size:13px;font-weight:500;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">Rules & Filters</a>
+      <a href="Owner AI Test.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;color:#B7AB94;font-size:13px;font-weight:500;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">AI Test Mode</a>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:#78705F;padding:16px 12px 6px;">Governance</div>
+      <a href="Admin Users.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;color:#B7AB94;font-size:13px;font-weight:500;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">Users & Staff</a>
+      <a href="Admin API Keys.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;color:#B7AB94;font-size:13px;font-weight:500;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">API & Integrations</a>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:#78705F;padding:16px 12px 6px;">Account</div>
+      <a href="Login.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;color:#8F8578;font-size:13px;font-weight:500;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">Sign out</a>
+    </nav>
+    <div style="padding:16px 22px;border-top:1px solid rgba(255,255,255,0.08);display:flex;align-items:center;gap:10px;">
+      <div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#AD8348,#D8B677);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;color:#fff;flex:none;">AM</div>
+      <div style="min-width:0;"><div style="font-size:12.5px;font-weight:600;color:#E9E2D3;">Arjun M.</div><div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#78705F;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Owner · Full control</div></div>
+    </div>
+  </aside>
+  <div style="flex:1;margin-left:260px;min-width:0;">
+
+<!-- MAIN -->
+<main style="position:relative;z-index:1;max-width:1180px;margin:0 auto;padding:34px clamp(18px,4vw,56px) 90px;animation:fade .35s ease;">
+
+  <!-- TOOL HEAD -->
+  <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:20px;flex-wrap:wrap;margin-bottom:28px;border-bottom:1px solid rgba(34,29,24,0.14);padding-bottom:18px;">
+    <div>
+      <h1 style="font-family:'Fraunces',serif;font-weight:600;font-size:clamp(26px,3.4vw,36px);margin:0 0 6px;color:#1A1611;">Reference Image Library</h1>
+      <p style="margin:0;max-width:52ch;color:#4B443A;font-size:14.5px;line-height:1.55;">Upload inspiration images so the AI understands your preferred design aesthetic. These references guide Gemini when generating mood board combinations.</p>
+    </div>
+    <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#AD8348;border:1px solid #AD8348;padding:5px 10px;border-radius:2px;white-space:nowrap;">{{ imageCountBadge }}</span>
+  </div>
+
+  <!-- SUB-NAV TABS -->
+  <div style="display:flex;gap:0;margin-bottom:24px;border-bottom:1px solid rgba(34,29,24,0.14);">
+    <button style="font-family:'Inter',sans-serif;font-weight:600;font-size:13px;background:none;border:none;padding:10px 18px;color:#78705F;cursor:pointer;position:relative;" style-hover="color:#1A1611" onClick="{{ goToRules }}">
+      Design Rules
+    </button>
+    <button style="font-family:'Inter',sans-serif;font-weight:600;font-size:13px;background:none;border:none;padding:10px 18px;color:#1A1611;cursor:pointer;position:relative;">
+      Reference Images
+      <div style="position:absolute;left:18px;right:18px;bottom:0;height:2px;background:#AD8348;"></div>
+    </button>
+  </div>
+
+  <!-- DRAG & DROP UPLOAD ZONE -->
+  <div style="border:2px dashed rgba(34,29,24,0.18);border-radius:3px;padding:40px 24px;text-align:center;margin-bottom:24px;background:rgba(255,255,255,0.4);cursor:pointer;transition:border-color .15s ease,background .15s ease;"
+    style-hover="border-color:#AD8348;background:rgba(255,255,255,0.7)">
+    <div style="margin-bottom:12px;">
+      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#B7AB94" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+    </div>
+    <div style="font-family:'Inter',sans-serif;font-size:14.5px;font-weight:600;color:#4B443A;margin-bottom:4px;">Drop images here or click to browse</div>
+    <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#B7AB94;">JPG, PNG, WebP · Max 10 MB each · Bulk upload supported</div>
+  </div>
+
+  <!-- TOOLBAR: SEARCH + FILTERS -->
+  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:20px;">
+    <!-- Search -->
+    <div style="flex:1;min-width:200px;position:relative;">
+      <input type="text" placeholder="Search images by name or tag…" style="width:100%;font-family:'IBM Plex Mono',monospace;font-size:13px;padding:10px 11px 10px 34px;border:1px solid rgba(34,29,24,0.14);border-radius:2px;background:#fff;color:#221D18;" style-focus="outline:2px solid #AD8348;outline-offset:1px" onInput="{{ onSearch }}">
+      <svg style="position:absolute;left:10px;top:50%;transform:translateY(-50%);pointer-events:none;" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#B7AB94" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+    </div>
+
+    <!-- Style filter chips -->
+    <div style="display:flex;align-items:center;gap:6px;">
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:#78705F;">Style</span>
+      <sc-for list="{{ styleFilters }}" as="sf" hint-placeholder-count="3">
+        <button style="font-family:'Inter',sans-serif;font-size:12px;font-weight:600;padding:6px 12px;border-radius:14px;border:1px solid rgba(34,29,24,0.14);cursor:pointer;transition:all .12s ease;background:{{ sf.bg }};color:{{ sf.color }};border-color:{{ sf.border }};" onClick="{{ sf.onClick }}"
+          style-hover="border-color:#AD8348">{{ sf.label }}</button>
+      </sc-for>
+    </div>
+
+    <!-- Room filter chips -->
+    <div style="display:flex;align-items:center;gap:6px;">
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:#78705F;">Room</span>
+      <sc-for list="{{ roomFilters }}" as="rf" hint-placeholder-count="3">
+        <button style="font-family:'Inter',sans-serif;font-size:12px;font-weight:600;padding:6px 12px;border-radius:14px;border:1px solid rgba(34,29,24,0.14);cursor:pointer;transition:all .12s ease;background:{{ rf.bg }};color:{{ rf.color }};border-color:{{ rf.border }};" onClick="{{ rf.onClick }}"
+          style-hover="border-color:#AD8348">{{ rf.label }}</button>
+      </sc-for>
+    </div>
+
+    <!-- Bulk upload button -->
+    <button style="font-family:'Inter',sans-serif;font-weight:600;font-size:13px;background:none;color:#4B443A;border:1px solid rgba(34,29,24,0.14);padding:8px 14px;border-radius:2px;cursor:pointer;display:flex;align-items:center;gap:6px;margin-left:auto;"
+      style-hover="border-color:#AD8348;color:#AD8348">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+      Bulk Upload
+    </button>
+  </div>
+
+  <!-- RESULTS COUNT -->
+  <div style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:#78705F;margin-bottom:16px;">
+    Showing {{ filteredCount }} of {{ totalCount }} images
+    <sc-if value="{{ hasActiveFilter }}" hint-placeholder-val="{{ false }}">
+      <span style="margin-left:6px;">·</span>
+      <button style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:#AD8348;background:none;border:none;cursor:pointer;padding:0;margin-left:4px;text-decoration:underline;" onClick="{{ clearFilters }}">Clear filters</button>
+    </sc-if>
+  </div>
+
+  <!-- IMAGE GALLERY GRID -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(220px, 1fr));gap:16px;">
+    <sc-for list="{{ images }}" as="img" hint-placeholder-count="8">
+      <div style="background:#fff;border:1px solid rgba(34,29,24,0.14);border-radius:3px;overflow:hidden;transition:box-shadow .15s ease;" style-hover="box-shadow:0 12px 30px rgba(26,22,17,0.14)">
+        <!-- Image preview -->
+        <div style="position:relative;aspect-ratio:4/3;overflow:hidden;background:{{ img.gradient }};">
+          <!-- Overlay actions on hover -->
+          <div style="position:absolute;inset:0;background:rgba(26,22,17,0.5);opacity:0;transition:opacity .15s ease;display:flex;align-items:center;justify-content:center;gap:8px;" style-hover="opacity:1">
+            <button style="font-family:'Inter',sans-serif;font-size:11px;font-weight:600;background:rgba(255,255,255,0.95);color:#221D18;border:none;padding:7px 12px;border-radius:2px;cursor:pointer;">Preview</button>
+            <button style="font-family:'Inter',sans-serif;font-size:11px;font-weight:600;background:rgba(255,255,255,0.95);color:#221D18;border:none;padding:7px 12px;border-radius:2px;cursor:pointer;">Replace</button>
+            <button style="font-family:'Inter',sans-serif;font-size:11px;font-weight:600;background:rgba(156,75,44,0.9);color:#fff;border:none;padding:7px 12px;border-radius:2px;cursor:pointer;">Delete</button>
+          </div>
+        </div>
+        <!-- Image info -->
+        <div style="padding:12px 14px;">
+          <div style="font-family:'Inter',sans-serif;font-size:13px;font-weight:600;color:#1A1611;margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ img.name }}</div>
+          <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px;">
+            <sc-for list="{{ img.tags }}" as="tag" hint-placeholder-count="2">
+              <span style="display:inline-block;font-size:10px;padding:2px 7px;border-radius:8px;background:{{ tag.bg }};color:{{ tag.color }};font-family:'Inter',sans-serif;font-weight:600;">{{ tag.label }}</span>
+            </sc-for>
+          </div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#B7AB94;">{{ img.meta }}</div>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+
+</main>
+
+<!-- FOOTER -->
+<footer style="max-width:1180px;margin:0 auto;padding:0 clamp(18px,4vw,56px) 50px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#B7AB94;text-align:center;">CASA DE AURUM — INTERNAL OPERATIONS TOOL · BUILT FOR STORE USE ONLY · NOT FOR RESALE OR DISTRIBUTION</footer>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = {
+    search: '',
+    activeStyle: null,
+    activeRoom: null,
+  };
+
+  images = [
+    { name: 'Marble Bathroom Luxe', style: 'Luxury', room: 'Bathroom', gradient: 'linear-gradient(135deg,#D9C8A6,#B79A6D)', meta: '2400×1600 · 1.8 MB · JPG' },
+    { name: 'Subtle Stone Washroom', style: 'Subtle', room: 'Bathroom', gradient: 'linear-gradient(135deg,#E7E0D0,#C9BFA9)', meta: '3200×2100 · 2.4 MB · JPG' },
+    { name: 'Bold Geometric Kitchen', style: 'Bold', room: 'Kitchen', gradient: 'linear-gradient(135deg,#33465A,#5B7386)', meta: '2800×1900 · 2.1 MB · PNG' },
+    { name: 'Ivory Living Room Floor', style: 'Subtle', room: 'Living Room', gradient: 'linear-gradient(135deg,#F1ECE1,#DFD5BF)', meta: '4000×2600 · 3.2 MB · JPG' },
+    { name: 'Rose Gold Niche Detail', style: 'Luxury', room: 'Bathroom', gradient: 'linear-gradient(135deg,#D8B677,#AD8348)', meta: '1800×1200 · 1.1 MB · JPG' },
+    { name: 'Terracotta Accent Wall', style: 'Bold', room: 'Living Room', gradient: 'linear-gradient(135deg,#9C4B2C,#B96A45)', meta: '2600×1800 · 1.9 MB · PNG' },
+    { name: 'Champagne Backsplash', style: 'Luxury', room: 'Kitchen', gradient: 'linear-gradient(135deg,#C7A25E,#8F6B34)', meta: '3000×2000 · 2.6 MB · JPG' },
+    { name: 'Nordic White Minimal', style: 'Subtle', room: 'Bathroom', gradient: 'linear-gradient(135deg,#C7CBC6,#9AA098)', meta: '2200×1500 · 1.4 MB · JPG' },
+    { name: 'Dark Onyx Feature Wall', style: 'Bold', room: 'Living Room', gradient: 'linear-gradient(135deg,#3B342A,#1A1611)', meta: '3600×2400 · 3.8 MB · PNG' },
+    { name: 'Warm Travertine Floor', style: 'Subtle', room: 'Kitchen', gradient: 'linear-gradient(135deg,#DCD2BC,#B7AB94)', meta: '2400×1600 · 1.7 MB · JPG' },
+    { name: 'Pink Quartz Feminine', style: 'Luxury', room: 'Bathroom', gradient: 'linear-gradient(135deg,#E8C8C0,#D4A49A)', meta: '2000×1400 · 1.3 MB · JPG' },
+    { name: 'Slate Grey Modern', style: 'Bold', room: 'Kitchen', gradient: 'linear-gradient(135deg,#4B443A,#78705F)', meta: '2800×1900 · 2.0 MB · JPG' },
+  ];
+
+  styles = ['Luxury', 'Subtle', 'Bold'];
+  rooms = ['Bathroom', 'Kitchen', 'Living Room'];
+
+  tagStyle(type, label) {
+    if (type === 'style') {
+      const colors = { Luxury: { bg: '#FBF6EC', color: '#AD8348' }, Subtle: { bg: '#E9E2D3', color: '#4B443A' }, Bold: { bg: '#F3EDE4', color: '#9C4B2C' } };
+      return { label, ...(colors[label] || { bg: '#E9E2D3', color: '#4B443A' }) };
+    }
+    return { label, bg: '#F1ECE1', color: '#78705F' };
+  }
+
+  renderVals() {
+    const s = this.state;
+    const search = (s.search || '').toLowerCase();
+
+    const filtered = this.images.filter(img => {
+      if (s.activeStyle && img.style !== s.activeStyle) return false;
+      if (s.activeRoom && img.room !== s.activeRoom) return false;
+      if (search && !img.name.toLowerCase().includes(search)) return false;
+      return true;
+    });
+
+    const makeChip = (list, activeKey, stateKey) => list.map(label => {
+      const isActive = s[stateKey] === label;
+      return {
+        label,
+        bg: isActive ? '#1A1611' : '#fff',
+        color: isActive ? '#F1ECE1' : '#4B443A',
+        border: isActive ? '#1A1611' : 'rgba(34,29,24,0.14)',
+        onClick: () => this.setState(prev => ({ [stateKey]: prev[stateKey] === label ? null : label })),
+      };
+    });
+
+    return {
+      imageCountBadge: this.images.length + ' images',
+      onSearch: (e) => this.setState({ search: e.target.value }),
+      styleFilters: makeChip(this.styles, 'activeStyle', 'activeStyle'),
+      roomFilters: makeChip(this.rooms, 'activeRoom', 'activeRoom'),
+      filteredCount: filtered.length,
+      totalCount: this.images.length,
+      hasActiveFilter: !!(s.activeStyle || s.activeRoom || search),
+      clearFilters: () => this.setState({ activeStyle: null, activeRoom: null, search: '' }),
+      goToRules: () => {},
+      images: filtered.map(img => ({
+        ...img,
+        tags: [
+          this.tagStyle('style', img.style),
+          this.tagStyle('room', img.room),
+        ],
+      })),
+    };
+  }
+}
+</script>
+</body>
+</html>

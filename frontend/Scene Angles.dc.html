@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+@keyframes fade{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:none;}}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:.4;}}
+html,body{margin:0;padding:0;height:100%;}
+body{background:#F1ECE1;color:#221D18;font-family:'Inter',sans-serif;-webkit-font-smoothing:antialiased;}
+a{color:#AD8348;text-decoration:none;}a:hover{color:#7A5B2C;}
+</style>
+</helmet>
+
+<div style="display:flex;min-height:100vh;">
+  <aside style="width:260px;background:#1A1611;color:#E9E2D3;display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:20;">
+    <div style="padding:24px 22px 20px;border-bottom:1px solid rgba(255,255,255,0.08);">
+      <div style="font-family:'Fraunces',serif;font-weight:600;font-size:18px;letter-spacing:.04em;color:#E9E2D3;">CASA DE A<span style="color:#D8B677;">U</span>RUM</div>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:#78705F;margin-top:3px;">User Panel</div>
+    </div>
+    <nav style="flex:1;padding:10px 10px 20px;display:flex;flex-direction:column;gap:2px;overflow-y:auto;">
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:#78705F;padding:16px 12px 6px;">Moodboard</div>
+      <a href="Tool Dashboard.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;color:#B7AB94;font-size:13px;font-weight:500;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">Dashboard</a>
+      <a href="Moodboard Wizard.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;color:#B7AB94;font-size:13px;font-weight:500;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">New Moodboard</a>
+      <a href="AI Loading Screen.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;color:#B7AB94;font-size:13px;font-weight:500;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">Generating</a>
+      <a href="Moodboard Results.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;color:#B7AB94;font-size:13px;font-weight:500;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">Results</a>
+      <a href="Scene Angles.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;background:rgba(173,131,72,0.12);color:#D8B677;font-size:13px;font-weight:600;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">Scene & Angles</a>
+      <a href="Print Board Designer.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;color:#B7AB94;font-size:13px;font-weight:500;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">Print Board</a>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:#78705F;padding:16px 12px 6px;">Account</div>
+      <a href="Login.dc.html" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;color:#8F8578;font-size:13px;font-weight:500;text-decoration:none;transition:all .12s ease;" style-hover="background:rgba(255,255,255,0.05);color:#E9E2D3">Sign out</a>
+    </nav>
+    <div style="padding:16px 22px;border-top:1px solid rgba(255,255,255,0.08);display:flex;align-items:center;gap:10px;">
+      <div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#AD8348,#D8B677);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;color:#fff;flex:none;">RS</div>
+      <div style="min-width:0;"><div style="font-size:12.5px;font-weight:600;color:#E9E2D3;">Rohit S.</div><div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#78705F;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Sales Staff</div></div>
+    </div>
+  </aside>
+
+  <div style="flex:1;margin-left:260px;min-width:0;">
+    <main style="max-width:1180px;margin:0 auto;padding:34px 40px 60px;animation:fade .35s ease;">
+
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#78705F;margin-bottom:16px;display:flex;align-items:center;gap:7px;">
+        <a href="Moodboard Results.dc.html" style="color:#AD8348;">Results</a>
+        <span style="color:#B7AB94;">/</span>
+        <span style="color:#221D18;">SCENE_000124</span>
+      </div>
+
+      <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-bottom:24px;">
+        <div>
+          <h1 style="font-family:'Fraunces',serif;font-weight:600;font-size:28px;margin:0 0 5px;color:#1A1611;">Soft Rose Corner</h1>
+          <p style="margin:0;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#78705F;">SCENE_000124 · locked Aug 26, 14:12 · prompt v3.2 · refs v1.8</p>
+        </div>
+        <a href="Print Board Designer.dc.html" style="font-weight:600;font-size:13px;background:#1A1611;color:#F1ECE1;padding:11px 18px;border-radius:2px;" style-hover="background:#000">Send to Print Board →</a>
+      </div>
+
+      <div style="display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:20px;align-items:start;">
+
+        <!-- LEFT: ANGLES -->
+        <div style="display:flex;flex-direction:column;gap:18px;">
+
+          <!-- ANGLE PICKER -->
+          <div style="background:#fff;border:1px solid rgba(34,29,24,0.14);border-radius:4px;">
+            <div style="padding:14px 18px;border-bottom:1px solid rgba(34,29,24,0.14);display:flex;align-items:center;justify-content:space-between;">
+              <h3 style="margin:0;font-size:12.5px;letter-spacing:.1em;text-transform:uppercase;font-family:'IBM Plex Mono',monospace;color:#4B443A;font-weight:500;">View Angle</h3>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#B7AB94;">Camera only — scene is fixed</span>
+            </div>
+            <div style="padding:16px 18px;display:flex;gap:8px;flex-wrap:wrap;">
+              <sc-for list="{{ angleButtons }}" as="ab" hint-placeholder-count="7">
+                <button style="font-size:12.5px;font-weight:600;padding:9px 15px;border-radius:14px;border:1px solid {{ ab.border }};background:{{ ab.bg }};color:{{ ab.color }};cursor:{{ ab.cursor }};display:inline-flex;align-items:center;gap:7px;" onClick="{{ ab.onClick }}" style-hover="border-color:#AD8348">
+                  {{ ab.label }}
+                  <sc-if value="{{ ab.done }}" hint-placeholder-val="{{ false }}">
+                    <span style="font-size:10px;color:{{ ab.tickColor }};">✓</span>
+                  </sc-if>
+                </button>
+              </sc-for>
+            </div>
+          </div>
+
+          <!-- GENERATING -->
+          <sc-if value="{{ generating }}" hint-placeholder-val="{{ false }}">
+            <div style="background:#fff;border:1px solid #AD8348;border-radius:4px;padding:20px;display:flex;align-items:center;gap:14px;">
+              <div style="width:8px;height:8px;border-radius:50%;background:#AD8348;animation:pulse 1s ease infinite;flex:none;"></div>
+              <div style="flex:1;">
+                <div style="font-size:13.5px;font-weight:600;color:#221D18;margin-bottom:3px;">Generating {{ generatingLabel }} view</div>
+                <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#78705F;">Same products, same materials, same layout — only the camera moves.</div>
+              </div>
+            </div>
+          </sc-if>
+
+          <!-- ANGLE GALLERY -->
+          <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:14px;">
+            <sc-for list="{{ gallery }}" as="gi" hint-placeholder-count="4">
+              <div style="background:#fff;border:1px solid {{ gi.border }};border-radius:4px;overflow:hidden;">
+                <div style="aspect-ratio:4/3;position:relative;display:flex;">
+                  <div style="flex:{{ gi.wallFlex }};background:linear-gradient(160deg,#F2E2DE,#E8C8C0);"></div>
+                  <div style="flex:{{ gi.accentFlex }};background:linear-gradient(160deg,#D4A49A,#B98276);"></div>
+                  <div style="position:absolute;left:0;right:0;bottom:0;height:{{ gi.floorHeight }};background:linear-gradient(180deg,#CFC0BA,#B09E97);"></div>
+                  <span style="position:absolute;top:11px;left:13px;font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,0.85);background:rgba(26,22,17,0.35);padding:3px 8px;border-radius:8px;">{{ gi.label }}</span>
+                </div>
+                <div style="padding:11px 14px;display:flex;align-items:center;justify-content:space-between;">
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#78705F;">{{ gi.file }}</span>
+                  <div style="display:flex;gap:11px;">
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#AD8348;cursor:pointer;" style-hover="text-decoration:underline">Download</span>
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#78705F;cursor:pointer;" style-hover="color:#9C4B2C">Redo</span>
+                  </div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+
+          <!-- AI INSTRUCTION -->
+          <div style="background:#1A1611;border:1px solid rgba(216,182,119,0.25);border-radius:4px;padding:18px 20px;">
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#D8B677;margin-bottom:10px;">Angle instruction sent with every request</div>
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:#B7AB94;line-height:1.7;">"Preserve the exact same scene, products, materials, colours, finishes, sanitary fixtures, layout, shower configuration and architectural elements. Do not replace, redesign or invent any product. Only change the camera viewpoint according to the requested angle."</div>
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#78705F;margin-top:12px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.08);">The frontend sends only <span style="color:#D8B677;">sceneId</span> and <span style="color:#D8B677;">angle</span>. Prompt assembly happens on the backend.</div>
+          </div>
+        </div>
+
+        <!-- RIGHT: LOCKED SCENE -->
+        <div style="position:sticky;top:20px;display:flex;flex-direction:column;gap:18px;">
+          <div style="background:#fff;border:1px solid rgba(34,29,24,0.14);border-radius:4px;">
+            <div style="padding:14px 18px;border-bottom:1px solid rgba(34,29,24,0.14);display:flex;align-items:center;justify-content:space-between;">
+              <h3 style="margin:0;font-size:12.5px;letter-spacing:.1em;text-transform:uppercase;font-family:'IBM Plex Mono',monospace;color:#4B443A;font-weight:500;">Locked Products</h3>
+              <span style="font-size:11px;color:#7A9165;">🔒</span>
+            </div>
+            <div style="padding:4px 0;">
+              <sc-for list="{{ lockedProducts }}" as="lp" hint-placeholder-count="7">
+                <div style="padding:10px 18px;border-bottom:1px solid rgba(34,29,24,0.06);display:flex;align-items:center;gap:10px;">
+                  <div style="width:26px;height:26px;border-radius:2px;background:{{ lp.swatch }};border:1px solid rgba(0,0,0,0.08);flex:none;"></div>
+                  <div style="flex:1;min-width:0;">
+                    <div style="font-size:12px;font-weight:600;color:#221D18;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ lp.name }}</div>
+                    <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#78705F;">{{ lp.slot }} · {{ lp.id }}</div>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="background:#fff;border:1px solid rgba(34,29,24,0.14);border-radius:4px;">
+            <div style="padding:14px 18px;border-bottom:1px solid rgba(34,29,24,0.14);">
+              <h3 style="margin:0;font-size:12.5px;letter-spacing:.1em;text-transform:uppercase;font-family:'IBM Plex Mono',monospace;color:#4B443A;font-weight:500;">Locked Configuration</h3>
+            </div>
+            <div style="padding:14px 18px;display:flex;flex-direction:column;gap:0;">
+              <sc-for list="{{ config }}" as="cf" hint-placeholder-count="6">
+                <div style="display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px dashed rgba(34,29,24,0.12);">
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:#78705F;">{{ cf.k }}</span>
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:#221D18;font-weight:500;">{{ cf.v }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="background:#fff;border:1px solid rgba(34,29,24,0.14);border-radius:4px;padding:16px 18px;">
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:#78705F;margin-bottom:10px;">Stored files</div>
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:#4B443A;line-height:1.85;">
+              SCENE_000124/<br>
+              <sc-for list="{{ files }}" as="fl" hint-placeholder-count="4">
+                <span style="color:#221D18;">&nbsp;&nbsp;├── {{ fl }}</span><br>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { done: ['Front', 'Left', 'Right', 'Wide'], generating: null };
+  timer = null;
+
+  angles = ['Front', 'Left', 'Right', 'Wide', 'Shower close-up', 'Basin close-up', 'WC area'];
+
+  geometry = {
+    'Front':            { wallFlex: '1.6', accentFlex: '1',   floorHeight: '34%' },
+    'Left':             { wallFlex: '1',   accentFlex: '1.8', floorHeight: '30%' },
+    'Right':            { wallFlex: '2.4', accentFlex: '1',   floorHeight: '30%' },
+    'Wide':             { wallFlex: '2',   accentFlex: '1.2', floorHeight: '40%' },
+    'Shower close-up':  { wallFlex: '1',   accentFlex: '2.6', floorHeight: '22%' },
+    'Basin close-up':   { wallFlex: '2.8', accentFlex: '1',   floorHeight: '18%' },
+    'WC area':          { wallFlex: '1.4', accentFlex: '1',   floorHeight: '26%' },
+  };
+
+  componentWillUnmount() { clearTimeout(this.timer); }
+
+  request(angle) {
+    if (this.state.done.includes(angle) || this.state.generating) return;
+    this.setState({ generating: angle });
+    this.timer = setTimeout(() => {
+      this.setState(p => ({ done: [...p.done, angle], generating: null }));
+    }, 1800);
+  }
+
+  renderVals() {
+    const s = this.state;
+    const slug = a => a.toLowerCase().replace(/\s+/g, '_').replace(/-/g, '');
+
+    return {
+      angleButtons: this.angles.map(a => {
+        const done = s.done.includes(a);
+        const busy = s.generating === a;
+        return {
+          label: a, done,
+          bg: busy ? '#FBF6EC' : done ? '#1A1611' : '#fff',
+          color: busy ? '#AD8348' : done ? '#F1ECE1' : '#4B443A',
+          border: busy ? '#AD8348' : done ? '#1A1611' : 'rgba(34,29,24,0.14)',
+          tickColor: '#7A9165',
+          cursor: s.generating ? 'wait' : 'pointer',
+          onClick: () => this.request(a),
+        };
+      }),
+      generating: !!s.generating,
+      generatingLabel: s.generating || '',
+      gallery: s.done.map(a => ({
+        label: a, file: slug(a) + '.jpg',
+        border: 'rgba(34,29,24,0.14)',
+        ...this.geometry[a],
+      })),
+      lockedProducts: [
+        { slot: 'Floor', name: 'Rose Mist Floor', id: 'PRD-06098', swatch: 'linear-gradient(135deg,#CFC0BA,#B09E97)' },
+        { slot: 'Wall', name: 'Blush Ivory Wall', id: 'PRD-06101', swatch: 'linear-gradient(135deg,#F2E2DE,#E8C8C0)' },
+        { slot: 'Highlight', name: 'Rose Quartz Listello', id: 'PRD-06120', swatch: 'linear-gradient(135deg,#E8C8C0,#D4A49A)' },
+        { slot: 'Basin', name: 'Aura Under-Counter Basin', id: 'SAN-01184', swatch: 'linear-gradient(135deg,#F6F4EF,#DDD9D0)' },
+        { slot: 'Faucet', name: 'Pirouette Mixer', id: 'SAN-02271', swatch: 'linear-gradient(135deg,#D8B677,#AD8348)' },
+        { slot: 'WC', name: 'Reach Wall-Hung WC', id: 'SAN-03340', swatch: 'linear-gradient(135deg,#F6F4EF,#DDD9D0)' },
+        { slot: 'Flush plate', name: 'Not required', id: '—', swatch: '#E9E2D3' },
+      ],
+      config: [
+        { k: 'Space', v: 'Bathroom' },
+        { k: 'Size', v: 'Medium' },
+        { k: 'Layout', v: 'Corner' },
+        { k: 'Shower', v: 'Separate' },
+        { k: 'Partition', v: 'Full glass' },
+        { k: 'Highlight', v: 'Feature wall' },
+        { k: 'Style', v: 'Modern' },
+        { k: 'Colour', v: 'Beige' },
+      ],
+      files: s.done.map(a => slug(a) + '.jpg'),
+    };
+  }
+}
+</script>
+</body>
+</html>
