@@ -4,6 +4,8 @@ import {
   Response,
 } from 'express';
 
+import { prisma } from '@db/connection';
+
 import {
   generateVisualization,
 } from '../services/python-ai.service';
@@ -80,13 +82,56 @@ router.post(
       // that request with a 400 before it ever reaches Python.
 
       // ========================================================
+      // RESOLVE THE MASTER-SHEET PRODUCT CODE
+      // ========================================================
+      // The frontend only ever knows the tile's Postgres id (the
+      // cuid Gemini's combination output uses as tileId) — the
+      // Python side's MASTER sheet is keyed by the catalog's own
+      // Product ID/Record ID, which lives on Tile.productCode.
+      // Sending the raw Postgres id straight through, as before,
+      // can never match a MASTER row.
+
+      const tile =
+        await prisma.tile.findUnique({
+          where: { id: product_id.trim() },
+          select: { productCode: true, name: true },
+        });
+
+      if (!tile) {
+        return res.status(404).json({
+          success: false,
+
+          error: {
+            type: 'NOT_FOUND',
+
+            message:
+              `Tile ${product_id.trim()} was not found.`,
+          },
+        });
+      }
+
+      if (!tile.productCode) {
+        return res.status(422).json({
+          success: false,
+
+          error: {
+            type: 'VALIDATION_ERROR',
+
+            message:
+              `Tile "${tile.name}" has no catalog product code set, ` +
+              `so it can't be matched in the MASTER sheet for AI visualization.`,
+          },
+        });
+      }
+
+      // ========================================================
       // NODE → PYTHON
       // ========================================================
 
       const result =
         await generateVisualization({
           product_id:
-            product_id.trim(),
+            tile.productCode,
 
           surface:
             surface
