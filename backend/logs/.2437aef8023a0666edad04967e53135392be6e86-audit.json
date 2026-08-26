@@ -6,11 +6,6 @@
     "auditLog": "C:\\Users\\Aryan\\Downloads\\Casa De Aurum\\backend\\logs\\.2437aef8023a0666edad04967e53135392be6e86-audit.json",
     "files": [
         {
-            "date": 1786520314095,
-            "name": "C:\\Users\\Aryan\\Downloads\\Casa De Aurum\\backend\\logs\\app-2026-08-12.log",
-            "hash": "883996173c65f940f3d5bb62c91c72e9ce820a69bbb1ff42597f4ea9b601f384"
-        },
-        {
             "date": 1786709025099,
             "name": "C:\\Users\\Aryan\\Downloads\\Casa De Aurum\\backend\\logs\\app-2026-08-14.log",
             "hash": "4dd91fc663d41fb9b125db8d0ecb6e9434ecd9638286a63a4cbdb3175935e764"
@@ -19,6 +14,11 @@
             "date": 1787638621703,
             "name": "C:\\Users\\Aryan\\Downloads\\Casa De Aurum\\backend\\logs\\app-2026-08-25.log",
             "hash": "65e8b6b1f0ea7faa1a466394ce0e782955cdf00346bba09f824bf9a449784deb"
+        },
+        {
+            "date": 1787751961907,
+            "name": "C:\\Users\\Aryan\\Downloads\\Casa De Aurum\\backend\\logs\\app-2026-08-26.log",
+            "hash": "46632e0cea89bdc0f69c1244d584a5f6b9de70d1c9dcba143ff2a2dfc03ba2c6"
         }
     ],
     "hashType": "sha256"
