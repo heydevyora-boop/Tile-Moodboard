@@ -311,7 +311,7 @@ export async function generateVisualization(
 
     sheet_name:
       request.sheet_name?.trim() ||
-      null,
+      'MASTER',
 
     scene_id:
       request.scene_id?.trim() ||
