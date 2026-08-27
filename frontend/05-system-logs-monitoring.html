@@ -178,7 +178,7 @@
       <div class="name">CASA DE A<em>U</em>RUM</div>
       <div class="sub">Internal Studio Tools · Not for external distribution</div>
     </div>
-    <div class="flowchip">① EXTRACT → ② RULES → ③ DEPLOY → ④ BRIEF → ⑤ PRINT → ⑥ SEND &nbsp;·&nbsp; <span id="whoami"></span> &nbsp;·&nbsp; <a href="#" id="logoutLink" style="color:var(--clay);">Sign out</a></div>
+    <div class="flowchip">① EXTRACT → ② RULES → ③ DEPLOY → ④ BRIEF → ⑤ AI → ⑥ PRINT → ⑦ SEND &nbsp;·&nbsp; <span id="whoami"></span> &nbsp;·&nbsp; <a href="#" id="logoutLink" style="color:var(--clay);">Sign out</a></div>
   </div>
   <div class="swatch-rail">
     <div class="sw1"></div><div class="sw2"></div><div class="sw3"></div><div class="sw4"></div>
@@ -204,7 +204,7 @@
 
   <!-- ============ STATUS GRID ============ -->
   <div class="panel">
-    <div class="panel-head"><h3>Service Status<span class="hint">Last 30 days</span></h3></div>
+    <div class="panel-head"><h3>Service Status<span class="hint">Design preview — no uptime-tracking backend yet</span></h3></div>
     <div class="panel-body">
       <div class="status-grid">
         <div class="status-card">
@@ -243,7 +243,7 @@
 
   <!-- ============ ALERTS ============ -->
   <div class="panel">
-    <div class="panel-head"><h3>Active Alerts</h3></div>
+    <div class="panel-head"><h3>Active Alerts<span class="hint">Design preview — no alert-generation backend yet</span></h3></div>
     <div class="panel-body">
       <div class="alert-row">
         <span class="dot warn"></span>
@@ -272,7 +272,6 @@
     </div>
   </div>
 
-
   <!-- ============ ACTIVITY LOG ============ -->
   <div class="panel">
     <div class="panel-head">
@@ -297,7 +296,7 @@
           <tr><th>Time</th><th>Action</th><th>Entity</th><th>Actor</th></tr>
         </thead>
         <tbody id="logTableBody">
-          <tr><td colspan="4" style="text-align:center;color:var(--stone-500);padding:16px;">Loading...</td></tr>
+          <tr><td colspan="4" style="text-align:center;color:var(--stone-400);padding:16px;">Loading…</td></tr>
         </tbody>
       </table>
     </div>
@@ -312,7 +311,7 @@
           <tr><th>Queue</th><th>Pending</th><th>Processing</th><th>Completed</th><th>Failed</th></tr>
         </thead>
         <tbody id="queueStatsBody">
-          <tr><td colspan="5" style="text-align:center;color:var(--stone-500);padding:16px;">Loading...</td></tr>
+          <tr><td colspan="5" style="text-align:center;color:var(--stone-400);padding:16px;">Loading…</td></tr>
         </tbody>
       </table>
     </div>
@@ -362,15 +361,10 @@
     const time = new Date(log.createdAt).toLocaleString();
     const actor = log.user ? log.user.name : 'System';
     const entity = log.entityType ? `${log.entityType}${log.entityId ? ` · ${log.entityId.slice(0, 8)}` : ''}` : '—';
-    // log.action is always one of our own literal action strings (e.g. "api_key.rotated") — never user input — so it's safe unescaped.
-    // actor (a staff member's name) IS user-supplied at account creation time, so it gets escaped like everything else below.
-    return `<tr><td class="logtime">${time}</td><td class="logevent">${log.action}</td><td>${escapeHtml(entity)}</td><td class="logactor">${escapeHtml(actor)}</td></tr>`;
+    return `<tr><td class="logtime">${time}</td><td class="logevent">${escapeHtml(log.action)}</td><td>${escapeHtml(entity)}</td><td class="logactor">${escapeHtml(actor)}</td></tr>`;
   }
   function formatLoginRow(a) {
     const time = new Date(a.createdAt).toLocaleString();
-    // a.email is the RAW string someone typed into the login form — it never needs to correspond to
-    // a real account, so this is fully attacker-controlled input with no server-side sanitization
-    // to rely on. Escaping here is not optional.
     const result = a.success ? '<span class="lvl ok"><span class="dot"></span>Success</span>' : `<span class="lvl error"><span class="dot"></span>${escapeHtml(a.failureReason || 'Failed')}</span>`;
     return `<tr><td class="logtime">${time}</td><td class="logevent">${escapeHtml(a.email)}</td><td>${result}</td><td class="logactor">${escapeHtml(a.ipAddress) || '—'}</td></tr>`;
   }
@@ -381,7 +375,6 @@
   function formatCatalogRow(c) {
     const time = new Date(c.createdAt).toLocaleString();
     const statusClass = c.status === 'COMPLETED' ? 'ok' : c.status === 'FAILED' ? 'error' : 'warn';
-    // c.fileName is the original uploaded filename, chosen entirely by whoever uploaded the PDF — a classic stored-XSS vector if rendered raw.
     const result = c.status === 'FAILED' ? escapeHtml(c.errorMessage || 'Failed') : `${c.tilesExtracted || 0} tiles extracted`;
     return `<tr><td class="logtime">${time}</td><td class="logevent">${escapeHtml(c.fileName)}</td><td><span class="lvl ${statusClass}"><span class="dot"></span>${c.status}</span></td><td class="logactor">${result}</td></tr>`;
   }
@@ -389,31 +382,31 @@
   async function loadLogs() {
     const tbody = document.getElementById('logTableBody');
     const colspan = LOG_TYPE_HEAD[currentLogType].length;
-    tbody.innerHTML = `<tr><td colspan="${colspan}" style="text-align:center;color:var(--stone-500);padding:16px;">Loading...</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="${colspan}" style="text-align:center;color:var(--stone-400);padding:16px;">Loading…</td></tr>`;
     try {
       if (currentLogType === 'activity') {
         const params = { limit: 100 };
         if (currentEntityFilter) params.entityType = currentEntityFilter;
         const { logs } = await CasaApi.admin.logs(params);
-        tbody.innerHTML = logs.length ? logs.map(formatActivityRow).join('') : `<tr><td colspan="${colspan}" style="text-align:center;color:var(--stone-500);padding:16px;">No activity recorded yet.</td></tr>`;
+        tbody.innerHTML = logs.length ? logs.map(formatActivityRow).join('') : `<tr><td colspan="${colspan}" style="text-align:center;color:var(--stone-400);padding:16px;">No activity recorded yet.</td></tr>`;
       } else if (currentLogType === 'login') {
         const { attempts } = await CasaApi.admin.loginHistory({ limit: 100 });
-        tbody.innerHTML = attempts.length ? attempts.map(formatLoginRow).join('') : `<tr><td colspan="${colspan}" style="text-align:center;color:var(--stone-500);padding:16px;">No login attempts recorded yet.</td></tr>`;
+        tbody.innerHTML = attempts.length ? attempts.map(formatLoginRow).join('') : `<tr><td colspan="${colspan}" style="text-align:center;color:var(--stone-400);padding:16px;">No login attempts recorded yet.</td></tr>`;
       } else if (currentLogType === 'errors') {
         const { errors } = await CasaApi.admin.errorLogs({ limit: 100 });
-        tbody.innerHTML = errors.length ? errors.map(formatErrorRow).join('') : `<tr><td colspan="${colspan}" style="text-align:center;color:var(--stone-500);padding:16px;">No server errors recorded — good sign.</td></tr>`;
+        tbody.innerHTML = errors.length ? errors.map(formatErrorRow).join('') : `<tr><td colspan="${colspan}" style="text-align:center;color:var(--stone-400);padding:16px;">No server errors recorded — good sign.</td></tr>`;
       } else if (currentLogType === 'catalog') {
         const { catalogs } = await CasaApi.admin.catalogLogs({ limit: 100 });
-        tbody.innerHTML = catalogs.length ? catalogs.map(formatCatalogRow).join('') : `<tr><td colspan="${colspan}" style="text-align:center;color:var(--stone-500);padding:16px;">No catalog runs yet.</td></tr>`;
+        tbody.innerHTML = catalogs.length ? catalogs.map(formatCatalogRow).join('') : `<tr><td colspan="${colspan}" style="text-align:center;color:var(--stone-400);padding:16px;">No catalog runs yet.</td></tr>`;
       } else if (currentLogType === 'moodboards') {
         const { logs } = await CasaApi.admin.moodBoardLogs({ limit: 100 });
-        tbody.innerHTML = logs.length ? logs.map(formatActivityRow).join('') : `<tr><td colspan="${colspan}" style="text-align:center;color:var(--stone-500);padding:16px;">No mood board activity yet.</td></tr>`;
+        tbody.innerHTML = logs.length ? logs.map(formatActivityRow).join('') : `<tr><td colspan="${colspan}" style="text-align:center;color:var(--stone-400);padding:16px;">No mood board activity yet.</td></tr>`;
       } else if (currentLogType === 'printboards') {
         const { logs } = await CasaApi.admin.printBoardLogs({ limit: 100 });
-        tbody.innerHTML = logs.length ? logs.map(formatActivityRow).join('') : `<tr><td colspan="${colspan}" style="text-align:center;color:var(--stone-500);padding:16px;">No print board activity yet.</td></tr>`;
+        tbody.innerHTML = logs.length ? logs.map(formatActivityRow).join('') : `<tr><td colspan="${colspan}" style="text-align:center;color:var(--stone-400);padding:16px;">No print board activity yet.</td></tr>`;
       }
     } catch (err) {
-      tbody.innerHTML = `<tr><td colspan="${colspan}" style="text-align:center;color:var(--clay);padding:16px;">${err.message || 'Failed to load logs.'}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="${colspan}" style="text-align:center;color:var(--clay);padding:16px;">${escapeHtml(err.message || 'Failed to load logs.')}</td></tr>`;
     }
   }
 
@@ -493,7 +486,7 @@
       table.style.display = '';
       tbody.innerHTML = failed.map((j) => `
         <tr data-job-id="${j.id}">
-          <td><div class="jobname">${j.type === 'IMAGE_PROCESSING' ? 'Image Processing' : 'Export'}<span class="sub">${j.id}</span></div></td>
+          <td><div class="jobname">${j.type === 'IMAGE_PROCESSING' ? 'Image Processing' : 'Export'}<span class="sub">${escapeHtml(j.id)}</span></div></td>
           <td style="font-size:12px;color:var(--clay);">${escapeHtml(j.error || 'Unknown error')}</td>
           <td style="font-family:var(--mono);">${j.attempts}/${j.maxAttempts}</td>
           <td><a class="retry-job" data-id="${j.id}">Retry</a></td>
@@ -520,7 +513,7 @@
       renderQueueStats(data);
       await loadFailedJobs();
     } catch (err) {
-      document.getElementById('queueStatsBody').innerHTML = `<tr><td colspan="5" style="text-align:center;color:var(--clay);padding:16px;">${err.message || 'Failed to load queue stats.'}</td></tr>`;
+      document.getElementById('queueStatsBody').innerHTML = `<tr><td colspan="5" style="text-align:center;color:var(--clay);padding:16px;">${escapeHtml(err.message || 'Failed to load queue stats.')}</td></tr>`;
     }
   }
 
@@ -531,8 +524,8 @@
 
     if (currentUser.role.name !== 'OWNER') {
       document.getElementById('restrictedBanner').style.display = 'block';
-      document.getElementById('logTableBody').innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--stone-500);padding:16px;">Owner access required.</td></tr>';
-      document.getElementById('queueStatsBody').innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--stone-500);padding:16px;">Owner access required.</td></tr>';
+      document.getElementById('logTableBody').innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--stone-400);padding:16px;">Owner access required.</td></tr>';
+      document.getElementById('queueStatsBody').innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--stone-400);padding:16px;">Owner access required.</td></tr>';
       return;
     }
 
