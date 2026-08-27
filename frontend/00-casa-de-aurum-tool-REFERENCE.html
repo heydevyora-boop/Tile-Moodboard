@@ -495,6 +495,11 @@
   }
   .export-status.ready{color:var(--brass);font-weight:600;}
 
+  footer.note{
+    max-width:1180px;margin:0 auto;padding:0 clamp(18px,4vw,56px) 50px;
+    font-family:var(--mono);font-size:11px;color:var(--stone-400);
+    text-align:center;
+  }
 
   /* ============ AI BATHROOM VISUALIZATION ============ */
   .ai-layout{
@@ -503,18 +508,15 @@
     gap:24px;
     align-items:start;
   }
-
   @media (max-width:900px){
     .ai-layout{grid-template-columns:1fr;}
   }
-
   .ai-panel{
     background:#fff;
     border:1px solid var(--line);
     border-radius:var(--radius);
     overflow:hidden;
   }
-
   .ai-panel-head{
     padding:14px 18px;
     border-bottom:1px solid var(--line);
@@ -523,7 +525,6 @@
     justify-content:space-between;
     gap:12px;
   }
-
   .ai-panel-head h3{
     margin:0;
     font-size:12.5px;
@@ -533,11 +534,8 @@
     color:var(--stone-700);
     font-weight:500;
   }
-
   .ai-panel-body{padding:18px;}
-
   .ai-field{margin-bottom:14px;}
-
   .ai-field label{
     display:block;
     font-size:12px;
@@ -546,7 +544,6 @@
     font-family:var(--mono);
     letter-spacing:.03em;
   }
-
   .ai-field select,
   .ai-field input{
     width:100%;
@@ -558,13 +555,11 @@
     background:var(--stone-50);
     color:var(--ink);
   }
-
   .ai-field select:focus,
   .ai-field input:focus{
     outline:2px solid var(--brass);
     outline-offset:1px;
   }
-
   .ai-selected{
     border:1px solid var(--line);
     background:var(--stone-50);
@@ -572,7 +567,6 @@
     border-radius:3px;
     margin-bottom:14px;
   }
-
   .ai-selected .label{
     font-family:var(--mono);
     font-size:10px;
@@ -581,14 +575,12 @@
     color:var(--stone-600);
     margin-bottom:5px;
   }
-
   .ai-selected .value{
     font-size:13px;
     line-height:1.45;
     font-weight:600;
     color:var(--charcoal);
   }
-
   .ai-status{
     margin-top:12px;
     min-height:20px;
@@ -597,11 +589,9 @@
     line-height:1.5;
     color:var(--stone-600);
   }
-
   .ai-status.ok{color:#5D704E;font-weight:600;}
   .ai-status.error{color:var(--clay);font-weight:600;}
   .ai-status.busy{color:var(--brass);font-weight:600;}
-
   .ai-preview-panel{
     background:#fff;
     border:1px solid var(--line);
@@ -609,7 +599,6 @@
     padding:18px;
     min-height:520px;
   }
-
   .ai-preview{
     width:100%;
     min-height:480px;
@@ -621,7 +610,6 @@
     justify-content:center;
     overflow:hidden;
   }
-
   .ai-preview.empty{
     padding:40px;
     text-align:center;
@@ -630,7 +618,6 @@
     font-size:11.5px;
     line-height:1.6;
   }
-
   .ai-preview img{
     display:block;
     width:100%;
@@ -638,7 +625,6 @@
     max-height:760px;
     object-fit:contain;
   }
-
   .ai-preview-meta{
     display:flex;
     justify-content:space-between;
@@ -649,14 +635,7 @@
     font-size:10.5px;
     color:var(--stone-600);
   }
-
   .ai-preview-meta strong{color:var(--ink);}
-
-  footer.note{
-    max-width:1180px;margin:0 auto;padding:0 clamp(18px,4vw,56px) 50px;
-    font-family:var(--mono);font-size:11px;color:var(--stone-400);
-    text-align:center;
-  }
 </style>
 </head>
 <body>
@@ -767,7 +746,7 @@
         <div class="phone-screen">
           <div class="phone-notch"></div>
           <div class="phone-title">New client brief</div>
-          <div class="phone-sub">Store floor · staff account required</div>
+          <div class="phone-sub">Store floor · no login needed</div>
 
           <textarea class="brief" id="briefText" placeholder="e.g. Pink washroom, female client, subtle style, mid budget">Pink washroom, female client, subtle style, mid budget</textarea>
 
@@ -814,7 +793,6 @@
       </div>
     </div>
   </section>
-
 
   <!-- ============ TOOL 3: AI BATHROOM VISUALIZATION ============ -->
   <section class="tool" id="aivisualization">
@@ -924,19 +902,6 @@
     <div class="pb-layout">
       <div>
         <div class="panel">
-          <div class="panel-head"><h3>Templates<span class="hint">Save the current setup, or load a saved one</span></h3></div>
-          <div class="panel-body">
-            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-              <select id="templateSelect" style="flex:1;min-width:160px;font-family:var(--mono);font-size:12.5px;padding:9px 10px;border:1px solid var(--line);border-radius:2px;background:var(--stone-50);">
-                <option value="">Choose a saved template...</option>
-              </select>
-              <button class="ghost" id="loadTemplateBtn" style="font-family:var(--sans);font-weight:600;font-size:12px;padding:8px 12px;border:1px solid var(--line);border-radius:2px;background:none;cursor:pointer;">Load</button>
-              <button class="ghost" id="saveTemplateBtn" style="font-family:var(--sans);font-weight:600;font-size:12px;padding:8px 12px;border:1px solid var(--line);border-radius:2px;background:none;cursor:pointer;">Save current as...</button>
-            </div>
-          </div>
-        </div>
-
-        <div class="panel">
           <div class="panel-head"><h3>Format</h3></div>
           <div class="panel-body">
             <div class="format-grid" id="formatGrid">
@@ -986,9 +951,9 @@
           <div class="panel-head"><h3>Export</h3></div>
           <div class="panel-body">
             <div class="export-row" id="exportRow">
-              <label class="export-opt on"><input type="radio" name="exp" data-format="PNG" data-dpi="300" checked><div><div class="lab">PNG · 300 DPI</div><div class="sub">Send via WhatsApp or email</div></div></label>
-              <label class="export-opt"><input type="radio" name="exp" data-format="PDF" data-dpi="300"><div><div class="lab">PDF · exact size</div><div class="sub">Preferred by professional shops</div></div></label>
-              <label class="export-opt"><input type="radio" name="exp" data-format="PDF" data-dpi="600"><div><div class="lab">PDF · 600 DPI</div><div class="sub">For 6×10 ft boards and above — PNG at this size and DPI would be too large to render</div></div></label>
+              <label class="export-opt on"><input type="radio" name="exp" checked><div><div class="lab">PNG · 300 DPI</div><div class="sub">Send via WhatsApp or email</div></div></label>
+              <label class="export-opt"><input type="radio" name="exp"><div><div class="lab">PDF · exact size</div><div class="sub">Preferred by professional shops</div></div></label>
+              <label class="export-opt"><input type="radio" name="exp"><div><div class="lab">600 DPI option</div><div class="sub">For 6×10 ft boards and above</div></div></label>
             </div>
             <button class="primary" id="exportBtn" style="width:100%;margin-top:16px;">Download for print shop</button>
           </div>
@@ -2211,8 +2176,7 @@ async function selectApprovedCombinationForAi(index) {
 
 loadBathroomScenes();
 
-
-/* ============ TOOL 4: PRINT BOARD DESIGNER ============ */
+/* ============ TOOL 3: PRINT BOARD DESIGNER ============ */
 const presetsByFormat = {
   cassette: [{l:'4×8 ft', w:4,h:8,u:'ft'},{l:'6×4 ft', w:6,h:4,u:'ft'},{l:'6×10 ft', w:6,h:10,u:'ft'}],
   acp: [{l:'4×8 ft', w:4,h:8,u:'ft'}],
@@ -2305,93 +2269,20 @@ document.querySelectorAll('.export-opt').forEach(opt=>{
 
 const FORMAT_MAP = { cassette: 'CASSETTE_PANEL', acp: 'ACP_SIGNBOARD', handout: 'MOOD_BOARD_PRINT', custom: 'CUSTOM' };
 const LAYOUT_MAP = { hero: 'HERO_IMAGE', grid: 'TILE_GRID', side: 'SIDE_BY_SIDE', cassette: 'CASSETTE_STYLE' };
-const REVERSE_FORMAT_MAP = Object.fromEntries(Object.entries(FORMAT_MAP).map(([k, v]) => [v, k]));
-const REVERSE_LAYOUT_MAP = Object.fromEntries(Object.entries(LAYOUT_MAP).map(([k, v]) => [v, k]));
 
 function currentDpi() {
-  const input = document.querySelector('.export-opt.on input');
-  return Number(input?.dataset.dpi) || 300;
+  const label = document.querySelector('.export-opt.on .lab')?.textContent || '';
+  return label.includes('600') ? 600 : 300;
 }
 
 function currentFileFormat() {
-  const input = document.querySelector('.export-opt.on input');
-  return input?.dataset.format || 'PDF';
+  const label = document.querySelector('.export-opt.on .lab')?.textContent || '';
+  return label.includes('PDF') ? 'PDF' : 'PNG';
 }
-
-let cachedTemplates = [];
-const templateSelect = document.getElementById('templateSelect');
-
-async function loadTemplateOptions() {
-  try {
-    cachedTemplates = await CasaApi.printBoards.templates.list();
-    templateSelect.innerHTML = '<option value="">Choose a saved template...</option>' + cachedTemplates.map((t) => `<option value="${t.id}">${escapeHtml(t.name)}</option>`).join('');
-  } catch (err) {
-    // Non-fatal — the panel just stays empty if templates can't load.
-  }
-}
-
-document.getElementById('loadTemplateBtn').addEventListener('click', () => {
-  const template = cachedTemplates.find((t) => t.id === templateSelect.value);
-  if (!template) {
-    CasaNotify.error('Choose a template first.');
-    return;
-  }
-
-  const formatKey = REVERSE_FORMAT_MAP[template.format];
-  const layoutKey = REVERSE_LAYOUT_MAP[template.layout];
-
-  if (formatKey) {
-    formatCards.forEach((c) => c.classList.toggle('on', c.dataset.fmt === formatKey));
-    currentFormat = formatKey;
-    renderPresets();
-  }
-  if (layoutKey) {
-    layoutCards.forEach((c) => c.classList.toggle('on', c.dataset.layout === layoutKey));
-    currentLayout = layoutKey;
-    renderLayout();
-  }
-  dimW.value = template.widthValue;
-  dimH.value = template.heightValue;
-  dimUnit.value = template.unit.toLowerCase();
-
-  document.querySelectorAll('.export-opt').forEach((o) => o.classList.remove('on'));
-  const targetOpt = [...document.querySelectorAll('.export-opt')].find((o) => Number(o.querySelector('input').dataset.dpi) === (template.dpi >= 600 ? 600 : 300));
-  if (targetOpt) {
-    document.querySelectorAll('.export-opt').forEach((o) => o.classList.remove('on'));
-    targetOpt.classList.add('on');
-    targetOpt.querySelector('input').checked = true;
-  }
-
-  updatePreview();
-  readoutDpi.textContent = `${template.dpi} DPI`;
-  CasaNotify.success(`Loaded "${template.name}".`);
-});
-
-document.getElementById('saveTemplateBtn').addEventListener('click', async () => {
-  const name = prompt('Name this template (e.g. "Standard Cassette 4x8"):');
-  if (!name) return;
-
-  const notice = CasaNotify.processing(`Saving template "${name}"...`);
-  try {
-    await CasaApi.printBoards.templates.create({
-      name,
-      format: FORMAT_MAP[currentFormat],
-      layout: LAYOUT_MAP[currentLayout],
-      widthValue: Number(dimW.value),
-      heightValue: Number(dimH.value),
-      unit: dimUnit.value.toUpperCase(),
-      dpi: currentDpi(),
-    });
-    await loadTemplateOptions();
-    notice.success(`Saved "${name}".`);
-  } catch (err) {
-    notice.error(err.message || 'Could not save template.');
-  }
-});
 
 const exportBtn = document.getElementById('exportBtn');
 const exportStatus = document.getElementById('exportStatus');
-exportBtn.addEventListener('click', async () => {
+exportBtn.addEventListener('click', async ()=>{
   exportStatus.classList.remove('ready');
 
   if (!savedBoardId || chosenCombinationIndex === null) {
@@ -2420,8 +2311,8 @@ exportBtn.addEventListener('click', async () => {
       fileFormat,
     });
     exportStatus.classList.add('ready');
-    const filename = `${formatLabels[currentFormat]}_${dimW.value}x${dimH.value}${dimUnit.value}.pdf`;
-    exportStatus.innerHTML = `\u2713 Ready \u2014 <a href="${absoluteUrl(board.fileUrl)}" target="_blank" style="color:inherit;text-decoration:underline;">open ${filename}</a> \u00b7 <a href="#" id="shareToDriveLink" style="color:inherit;text-decoration:underline;">share via Google Drive</a>`;
+    const filename = `${formatLabels[currentFormat]}_${dimW.value}x${dimH.value}${dimUnit.value}.${fileFormat.toLowerCase()}`;
+    exportStatus.innerHTML = `✓ Ready — <a href="${absoluteUrl(board.fileUrl)}" target="_blank" style="color:inherit;text-decoration:underline;">open ${filename}</a> · <a href="#" id="shareToDriveLink" style="color:inherit;text-decoration:underline;">share via Google Drive</a>`;
     notice.dismiss();
     CasaNotify.exportReady(`${fileFormat} export ready.`, { url: absoluteUrl(board.fileUrl), label: `Open ${filename}` });
 
@@ -2432,7 +2323,7 @@ exportBtn.addEventListener('click', async () => {
       const shareNotice = CasaNotify.processing('Uploading to Google Drive...');
       try {
         const shared = await CasaApi.printBoards.share(board.id);
-        link.outerHTML = `<a href="${shared.driveShareUrl}" target="_blank" style="color:inherit;text-decoration:underline;">Drive link ready \u2192</a>`;
+        link.outerHTML = `<a href="${shared.driveShareUrl}" target="_blank" style="color:inherit;text-decoration:underline;">Drive link ready →</a>`;
         shareNotice.dismiss();
         CasaNotify.exportReady('Uploaded to Google Drive.', { url: shared.driveShareUrl, label: 'Open Drive link' });
       } catch (err) {
@@ -2448,7 +2339,7 @@ exportBtn.addEventListener('click', async () => {
   }
 });
 
-/* ============ AUTH GUARD (applies to the whole page, all three tabs) ============ */
+/* ============ AUTH GUARD (applies to the whole page) ============ */
 (async () => {
   const currentUser = await CasaApi.requireAuth();
   const ROLE_LABEL = { OWNER: 'Owner', ADMIN: 'Manager', STAFF: 'Sales Staff' };
@@ -2457,7 +2348,6 @@ exportBtn.addEventListener('click', async () => {
     e.preventDefault();
     CasaApi.auth.logout();
   });
-  await loadTemplateOptions();
 })();
 </script>
 </body>
