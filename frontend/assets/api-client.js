@@ -2096,23 +2096,35 @@ function resolveSceneImagePath(payload) {
      * SEED_feminine_01
      * seed_feminine_01
      *
-     * These are scene IDs, not image files.
+     * These are scene IDs, not image files. This also catches
+     * the case where a placeholder ID has already been wrapped
+     * into a Drive URL server-side, e.g.
+     * https://drive.google.com/uc?id=SEED_feminine_01 — which is
+     * exactly what seeded reference images return and is NOT a
+     * real, fetchable Drive file. Without unwrapping the id=
+     * param first, that URL passes the bare startsWith() checks
+     * below and gets sent on to Python as a real reference image.
      */
 
-    const lower =
-      value.toLowerCase();
+    const driveIdMatch =
+      value.match(/[?&]id=([^&]+)/i) ||
+      value.match(/\/d\/([^/]+)/i);
+
+    const placeholderCandidate = (
+      driveIdMatch ? driveIdMatch[1] : value
+    ).toLowerCase();
 
     if (
-      lower.startsWith(
+      placeholderCandidate.startsWith(
         'seed_'
       ) ||
-      lower.startsWith(
+      placeholderCandidate.startsWith(
         'scene_'
       ) ||
-      lower === 'feminine_01' ||
-      lower === 'feminine_02' ||
-      lower === 'masculine_01' ||
-      lower === 'masculine_02'
+      placeholderCandidate === 'feminine_01' ||
+      placeholderCandidate === 'feminine_02' ||
+      placeholderCandidate === 'masculine_01' ||
+      placeholderCandidate === 'masculine_02'
     ) {
       continue;
     }

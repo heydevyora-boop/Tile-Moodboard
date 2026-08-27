@@ -14,6 +14,8 @@ Tile visualization pipeline
 Moodboard-ready visualization result
 """
 
+import re
+
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -256,6 +258,118 @@ def get_product_name(
 
 
 # ============================================================
+# SYNTHETIC PRODUCT FALLBACK
+# ============================================================
+#
+# A product_id with no matching MASTER row is not always a real
+# error: local/demo tiles carry a real productCode in Postgres, but
+# it was never synced into the live MASTER sheet because no catalog
+# upload ran for them (that's the only process that writes rows into
+# MASTER). Rather than failing the whole visualization request in
+# that case, generate a neutral placeholder swatch locally -- same
+# idea as the random-bathroom-scene fallback -- so staff still get a
+# usable preview instead of a hard error.
+
+def _build_synthetic_product(
+    product_id: str,
+) -> Dict[str, Any]:
+    """Placeholder MASTER-shaped record for a product_id with no real row."""
+
+    display_name = (
+        str(product_id)
+        .strip()
+        .replace("_", " ")
+        .replace("-", " ")
+        .title()
+        or "Untitled Tile"
+    )
+
+    return {
+        "Product ID": str(product_id).strip(),
+        "Record ID": str(product_id).strip(),
+        "Name": display_name,
+        "synthetic": True,
+    }
+
+
+def _generate_synthetic_product_swatch(
+    product_id: str,
+) -> Path:
+    """
+    Draw a neutral tile-grid placeholder image for a product with no
+    resolvable catalog image. Cached by product_id so repeat requests
+    for the same tile reuse the same file instead of regenerating it.
+    """
+
+    try:
+        from PIL import Image, ImageDraw
+    except ImportError as error:
+        raise FileNotFoundError(
+            "Product image could not be resolved and Pillow is not "
+            "installed to generate a placeholder swatch."
+        ) from error
+
+    safe_id = (
+        re.sub(
+            r"[^A-Za-z0-9_-]+",
+            "_",
+            str(product_id).strip(),
+        )
+        or "tile"
+    )
+
+    swatch_dir = (
+        OUTPUT_ROOT
+        / "tile_swatches"
+    )
+
+    swatch_dir.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    output_path = (
+        swatch_dir
+        / f"{safe_id}.png"
+    )
+
+    if output_path.exists():
+        return output_path.resolve()
+
+    size = 600
+    tile = 150
+    grout = 6
+
+    image = Image.new(
+        "RGB",
+        (size, size),
+        "#d8d2c4",
+    )
+    draw = ImageDraw.Draw(image)
+
+    for y in range(0, size, tile):
+        for x in range(0, size, tile):
+            draw.rectangle(
+                [
+                    x + grout,
+                    y + grout,
+                    x + tile - grout,
+                    y + tile - grout,
+                ],
+                fill="#e6e0d2",
+                outline="#b7ae9a",
+                width=2,
+            )
+
+    output_path.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+    image.save(output_path, format="PNG")
+    return output_path.resolve()
+
+
+# ============================================================
 # GENERATE VISUALIZATION
 # ============================================================
 
@@ -301,27 +415,40 @@ def generate_product_visualization(
     # --------------------------------------------------------
     # PRODUCT
     # --------------------------------------------------------
+    # Falls back to a synthetic placeholder (see above) when the
+    # product_id has no MASTER row, or the row exists but has no
+    # resolvable image -- either way, that's a data gap, not a
+    # reason to fail the whole visualization request.
 
-    product = get_product_for_visualization(
-        records,
-        product_id,
-    )
+    master_source = "GOOGLE_SHEETS_MASTER"
 
-    # --------------------------------------------------------
-    # IMAGE
-    # --------------------------------------------------------
+    try:
+        product = get_product_for_visualization(
+            records,
+            product_id,
+        )
 
-    tile_image = resolve_product_image(
-        product
-    )
+        tile_image = resolve_product_image(
+            product
+        )
 
-    # --------------------------------------------------------
-    # NAME
-    # --------------------------------------------------------
+        product_name = get_product_name(
+            product
+        )
 
-    product_name = get_product_name(
-        product
-    )
+    except (KeyError, FileNotFoundError):
+
+        product = _build_synthetic_product(
+            product_id
+        )
+
+        tile_image = _generate_synthetic_product_swatch(
+            product_id
+        )
+
+        product_name = product["Name"]
+
+        master_source = "SYNTHETIC_LOCAL_PLACEHOLDER"
 
     # --------------------------------------------------------
     # GENERATE
@@ -354,7 +481,7 @@ def generate_product_visualization(
     result["product_record"] = product
 
     result["master_source"] = (
-        "GOOGLE_SHEETS_MASTER"
+        master_source
     )
 
     return result

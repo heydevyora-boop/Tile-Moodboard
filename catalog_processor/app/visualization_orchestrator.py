@@ -325,15 +325,31 @@ def generate_and_persist_visualization(
 
     # --------------------------------------------------------
     # STEP 5
-    # Google Drive
+    # Google Drive (best-effort)
     # --------------------------------------------------------
+    # The applied-tile image is already generated and validated on
+    # local disk at this point (Express serves it directly from
+    # there), and Drive is archival/backup on top of that -- not a
+    # requirement for staff to see the result. A Drive failure
+    # (e.g. a service account with no storage quota, or a transient
+    # network/auth issue) should not turn an otherwise-successful
+    # visualization into a hard error.
 
-    drive_result = (
-        upload_visualization_to_drive(
-            registry_record,
-            update_registry=True,
+    drive_upload_succeeded = True
+
+    try:
+        drive_result = (
+            upload_visualization_to_drive(
+                registry_record,
+                update_registry=True,
+            )
         )
-    )
+    except Exception as drive_error:
+        drive_upload_succeeded = False
+        drive_result = {
+            "success": False,
+            "error": str(drive_error),
+        }
 
     visualization_result[
         "drive_result"
@@ -341,6 +357,7 @@ def generate_and_persist_visualization(
 
     # --------------------------------------------------------
     # Update normalized record with Drive information
+    # (left empty when the upload above failed)
     # --------------------------------------------------------
 
     image_upload = (
@@ -348,6 +365,8 @@ def generate_and_persist_visualization(
             "image",
             {},
         )
+        if drive_upload_succeeded
+        else {}
     )
 
     registry_record[
@@ -370,13 +389,19 @@ def generate_and_persist_visualization(
 
     registry_record[
         "status"
-    ] = "UPLOADED"
+    ] = (
+        "UPLOADED"
+        if drive_upload_succeeded
+        else "LOCAL_ONLY"
+    )
 
     metadata_upload = (
         drive_result.get(
             "metadata",
             {},
         )
+        if drive_upload_succeeded
+        else {}
     )
 
     registry_record[
@@ -399,26 +424,34 @@ def generate_and_persist_visualization(
 
     # --------------------------------------------------------
     # STEP 6
-    # Google MASTER persistence
+    # Google MASTER persistence (also best-effort, for the same
+    # reason -- it shares the same Google credentials as Drive and
+    # shouldn't block returning an already-generated image either).
     # --------------------------------------------------------
 
-    master_result = (
-        persist_visualization_to_master(
-            spreadsheet_id=spreadsheet_id,
-            visualization_record=registry_record,
-            moodboard_id=(
-                _safe_text(
-                    (
-                        moodboard or {}
-                    ).get(
-                        "moodboard_id",
-                        "",
+    try:
+        master_result = (
+            persist_visualization_to_master(
+                spreadsheet_id=spreadsheet_id,
+                visualization_record=registry_record,
+                moodboard_id=(
+                    _safe_text(
+                        (
+                            moodboard or {}
+                        ).get(
+                            "moodboard_id",
+                            "",
+                        )
                     )
-                )
-            ),
-            sheet_name=sheet_name,
+                ),
+                sheet_name=sheet_name,
+            )
         )
-    )
+    except Exception as master_error:
+        master_result = {
+            "success": False,
+            "error": str(master_error),
+        }
 
     visualization_result[
         "master_result"

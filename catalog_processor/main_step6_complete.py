@@ -97,9 +97,17 @@ class InternalVisualizationRequest(BaseModel):
         min_length=1
     )
 
-    scene_image_path: str = Field(
-        min_length=1
-    )
+    # Optional: empty/omitted means "generate a bathroom scene
+    # instead of fetching one." A required min_length=1 field here
+    # would reject that request outright with a 422 before the
+    # handler ever runs.
+    scene_image_path: str = ""
+
+    scene_image_url: Optional[str] = None
+
+    scene_image_mode: Optional[str] = None
+
+    generate_random_scene: Optional[bool] = None
 
     spreadsheet_id: Optional[str] = None
 
@@ -163,6 +171,36 @@ def _build_remote_download_url(source: str) -> str:
         )
 
     return source
+
+
+def _is_placeholder_scene_reference(value: str) -> bool:
+    """
+    Return True for a scene value that is metadata, not a real
+    image — a bare scene ID like "SEED_feminine_01", or that same
+    ID wrapped in a Drive URL by seeded reference-image data, e.g.
+    "https://drive.google.com/uc?id=SEED_feminine_01". Neither is
+    a real Drive file, so downloading either always 404s. The id=
+    (or /d/<id>/) segment is unwrapped first so the wrapping URL
+    doesn't hide the placeholder prefix from the check below.
+    """
+
+    text = str(value or "").strip()
+    if not text:
+        return False
+
+    drive_file_id = _extract_google_drive_file_id(text)
+    candidate = drive_file_id if drive_file_id else text
+
+    if re.search(r"\.(png|jpe?g|webp|bmp)$", candidate, re.IGNORECASE):
+        return False
+
+    return bool(
+        re.match(
+            r"^(SEED_|feminine_|masculine_|bathroom-|scene-|AI_RANDOM_BATHROOM)",
+            candidate,
+            re.IGNORECASE,
+        )
+    )
 
 
 def _validate_downloaded_image(data: bytes, source: str) -> str:
@@ -368,9 +406,35 @@ def internal_visualization(
                 },
             }
 
-        scene_image = resolve_scene_image(
-            request.scene_image_path,
-            scene_id=request.scene_id,
+        # Empty scene_image_path, an explicit random-scene request, or a
+        # placeholder scene reference (a bare ID like SEED_feminine_01,
+        # or that same ID wrapped in a Drive URL by seeded reference-image
+        # data) all mean: generate a bathroom scene instead of fetching
+        # one. None of those are real, fetchable images, and attempting
+        # to download them here always ends in a 404 straight from
+        # Google Drive. Skip this file's own resolve_scene_image (which
+        # only downloads/reads a path and cannot generate a scene) and
+        # let create_visualization's own scene resolver handle it.
+        raw_scene_image = (
+            request.scene_image_path
+            or request.scene_image_url
+            or ""
+        ).strip()
+
+        wants_random_scene = (
+            not raw_scene_image
+            or request.generate_random_scene is True
+            or (request.scene_image_mode or "").strip().lower() == "random"
+            or _is_placeholder_scene_reference(raw_scene_image)
+        )
+
+        scene_image = (
+            ""
+            if wants_random_scene
+            else resolve_scene_image(
+                raw_scene_image,
+                scene_id=request.scene_id,
+            )
         )
 
         result = create_visualization(
@@ -382,6 +446,10 @@ def internal_visualization(
                 ),
                 "product_id": request.product_id.strip(),
                 "scene_image": scene_image,
+                "scene_image_mode": (
+                    "random" if wants_random_scene else "reference"
+                ),
+                "generate_random_scene": wants_random_scene,
                 "surface": request.surface.strip().upper(),
                 "scene_id": request.scene_id,
                 "theme": request.theme,

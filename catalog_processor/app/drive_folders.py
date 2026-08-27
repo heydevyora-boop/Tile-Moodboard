@@ -160,7 +160,13 @@ def find_folder(
                 spaces="drive",
                 fields="nextPageToken, files(id, name, mimeType, parents)",
                 pageSize=100,
-                pageToken=page_token
+                pageToken=page_token,
+                # Required to see items inside a Shared Drive -- the
+                # service account has no personal Drive quota, so
+                # ROOT_FOLDER_ID must live in a Shared Drive, and
+                # without these flags the API silently excludes it.
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True
             )
             .execute()
         )
@@ -204,7 +210,8 @@ def create_folder(
         drive.files()
         .create(
             body=metadata,
-            fields="id,name,parents"
+            fields="id,name,parents",
+            supportsAllDrives=True
         )
         .execute()
     )
@@ -411,7 +418,8 @@ def upload_file_to_folder(
         .create(
             body=metadata,
             media_body=media,
-            fields="id, name, webViewLink, parents"
+            fields="id, name, webViewLink, parents",
+            supportsAllDrives=True
         )
         .execute()
     )

@@ -21,7 +21,14 @@ const BACKEND_PUBLIC_URL =
 export interface VisualizationRequest {
   product_id: string;
   surface: string;
-  scene_image_path: string;
+  // Optional: empty/omitted means "generate a bathroom scene
+  // instead of fetching one."
+  scene_image_path?: string;
+  scene_image_url?: string;
+  scene_image_mode?: string;
+  generate_random_scene?: boolean;
+  spreadsheet_id?: string;
+  sheet_name?: string;
   scene_id?: string;
   theme?: string;
   requirements?: Record<string, unknown>;
@@ -252,19 +259,28 @@ export async function generateVisualization(
     );
   }
 
-  if (
-    typeof request.scene_image_path !==
-      'string' ||
-    !request.scene_image_path.trim()
-  ) {
-    throw new Error(
-      'scene_image_path is required.',
-    );
-  }
-
   // ==========================================================
   // BUILD PYTHON PAYLOAD
   // ==========================================================
+
+  // scene_image_path is intentionally optional here: an empty
+  // value (or scene_image_mode "random"/generate_random_scene)
+  // tells Python to generate a bathroom scene instead of fetching
+  // one. Requiring it non-empty would block that flow entirely.
+  const sceneImagePath =
+    request.scene_image_path?.trim() ||
+    '';
+
+  const sceneImageUrl =
+    request.scene_image_url?.trim() ||
+    '';
+
+  const wantsRandomScene =
+    request.generate_random_scene ===
+      true ||
+    request.scene_image_mode ===
+      'random' ||
+    !(sceneImagePath || sceneImageUrl);
 
   const payload = {
     product_id:
@@ -276,7 +292,26 @@ export async function generateVisualization(
         .toUpperCase(),
 
     scene_image_path:
-      request.scene_image_path.trim(),
+      sceneImagePath,
+
+    scene_image_url:
+      sceneImageUrl,
+
+    scene_image_mode:
+      wantsRandomScene
+        ? 'random'
+        : 'reference',
+
+    generate_random_scene:
+      wantsRandomScene,
+
+    spreadsheet_id:
+      request.spreadsheet_id?.trim() ||
+      null,
+
+    sheet_name:
+      request.sheet_name?.trim() ||
+      'MASTER',
 
     scene_id:
       request.scene_id?.trim() ||

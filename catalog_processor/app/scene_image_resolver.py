@@ -175,6 +175,57 @@ def _is_remote_scene_image(
 
 
 # ============================================================
+# PLACEHOLDER / SEED SCENE DETECTION
+# ============================================================
+
+def _is_placeholder_scene_reference(
+    value: str,
+) -> bool:
+    """
+    Return True for scene metadata IDs that are not a real,
+    fetchable image — for example a scene ID such as
+    "SEED_feminine_01", or the same ID wrapped in a Drive URL
+    by seeded reference-image data, e.g.
+    "https://drive.google.com/uc?id=SEED_feminine_01". Those are
+    never real Drive files, so attempting to download them
+    always fails with a 404. The id= (or /d/<id>/) segment is
+    unwrapped first so a wrapping URL doesn't hide the
+    placeholder prefix from the check below.
+    """
+
+    text = str(value or "").strip()
+
+    if not text:
+        return False
+
+    drive_id_match = (
+        re.search(r"[?&]id=([^&]+)", text)
+        or re.search(r"/d/([^/]+)", text)
+    )
+
+    candidate = (
+        drive_id_match.group(1)
+        if drive_id_match
+        else text
+    )
+
+    if re.search(
+        r"\.(png|jpe?g|webp|bmp)$",
+        candidate,
+        re.IGNORECASE,
+    ):
+        return False
+
+    return bool(
+        re.match(
+            r"^(SEED_|feminine_|masculine_|bathroom-|scene-|AI_RANDOM_BATHROOM)",
+            candidate,
+            re.IGNORECASE,
+        )
+    )
+
+
+# ============================================================
 # DATA URL
 # ============================================================
 
@@ -666,6 +717,20 @@ def resolve_scene_image(
     if isinstance(value, str):
 
         if _is_remote_scene_image(value):
+
+            if _is_placeholder_scene_reference(value):
+
+                raise ValueError(
+                    "scene_image is a placeholder scene ID "
+                    f"({value!r}), not a real, fetchable image. "
+                    "Seeded reference images carry a scene ID "
+                    "wrapped in a Google Drive URL rather than a "
+                    "real Drive file, so it can never be "
+                    "downloaded. Omit scene_image (or pass "
+                    "scene_image_mode=\"random\" through the "
+                    "visualization API) to generate a bathroom "
+                    "scene instead of fetching one."
+                )
 
             return _download_remote_scene_image(
                 source=value,

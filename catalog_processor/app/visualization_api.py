@@ -51,21 +51,42 @@ from app.visualization_orchestrator import (
 # ============================================================
 
 def _is_placeholder_scene_reference(value: str) -> bool:
-    """Return True for metadata IDs that are not image locations."""
+    """Return True for metadata IDs that are not image locations.
+
+    This also unwraps a Google Drive URL's id= (or /d/<id>/) segment
+    before checking, because seeded reference images return the
+    placeholder wrapped in a URL such as
+    https://drive.google.com/uc?id=SEED_feminine_01 rather than the
+    bare ID. Checking the raw URL against the SEED_/feminine_ prefix
+    never matches (it starts with "https://"), so without unwrapping
+    it first, that fake URL is treated as a real Drive file and
+    downloading it 404s.
+    """
     text = str(value or "").strip()
 
     if not text:
         return True
 
-    if re.search(r"\.(png|jpe?g|webp|bmp)$", text, re.IGNORECASE):
+    drive_id_match = re.search(
+        r"[?&]id=([^&]+)", text
+    ) or re.search(r"/d/([^/]+)", text)
+
+    candidate = drive_id_match.group(1) if drive_id_match else text
+
+    if re.search(r"\.(png|jpe?g|webp|bmp)$", candidate, re.IGNORECASE):
         return False
 
     if re.match(
-        r"^(SEED_|feminine_|bathroom-|scene-|AI_RANDOM_BATHROOM)",
-        text,
+        r"^(SEED_|feminine_|masculine_|bathroom-|scene-|AI_RANDOM_BATHROOM)",
+        candidate,
         re.IGNORECASE,
     ):
         return True
+
+    if drive_id_match:
+        # A Drive URL whose id= didn't match a known placeholder
+        # prefix is a real Drive reference, not a placeholder.
+        return False
 
     if (
         "://" not in text
