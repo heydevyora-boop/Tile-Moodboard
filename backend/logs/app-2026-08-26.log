@@ -5,3 +5,10 @@
 {"level":"info","message":"   API base: http://localhost:5000/api/v1","timestamp":"2026-08-26T13:50:12.183Z"}
 {"level":"info","message":"   Health:   http://localhost:5000/api/v1/health","timestamp":"2026-08-26T13:50:12.184Z"}
 {"level":"error","message":"Prisma error: \nInvalid `prisma.job.findFirst()` invocation in\nC:\\Users\\Aryan\\Downloads\\Casa De Aurum\\backend\\src\\services\\jobQueue.service.ts:81:34\n\n  78 \n  79 while (runtime.running.size < runtime.concurrency) {\n  80   const now = new Date();\n→ 81   const due = await prisma.job.findFirst(\nCan't reach database server at aws-0-ap-south-1.pooler.supabase.com","timestamp":"2026-08-26T15:02:57.314Z"}
+{"level":"info","message":"✅ Database connected","timestamp":"2026-08-26T15:17:54.845Z"}
+{"level":"info","message":"Image Processing Queue worker registered","timestamp":"2026-08-26T15:17:54.867Z"}
+{"level":"info","message":"Export Queue worker registered","timestamp":"2026-08-26T15:17:54.872Z"}
+{"level":"info","message":"🚀 Casa de Aurum Internal Tool running in development mode on port 5000","timestamp":"2026-08-26T15:17:55.361Z"}
+{"level":"info","message":"   API base: http://localhost:5000/api/v1","timestamp":"2026-08-26T15:17:55.372Z"}
+{"level":"info","message":"   Health:   http://localhost:5000/api/v1/health","timestamp":"2026-08-26T15:17:55.383Z"}
+{"level":"error","message":"Prisma error: \nInvalid `prisma.job.findFirst()` invocation in\nC:\\Users\\Aryan\\Downloads\\Casa De Aurum\\backend\\src\\services\\jobQueue.service.ts:81:34\n\n  78 \n  79 while (runtime.running.size < runtime.concurrency) {\n  80   const now = new Date();\n→ 81   const due = await prisma.job.findFirst(\nCan't reach database server at aws-0-ap-south-1.pooler.supabase.com","timestamp":"2026-08-26T15:47:46.437Z"}
