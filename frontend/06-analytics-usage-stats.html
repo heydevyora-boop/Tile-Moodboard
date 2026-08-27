@@ -170,7 +170,7 @@
       <div class="name">CASA DE A<em>U</em>RUM</div>
       <div class="sub">Internal Studio Tools · Not for external distribution</div>
     </div>
-    <div class="flowchip">① EXTRACT → ② RULES → ③ DEPLOY → ④ BRIEF → ⑤ PRINT → ⑥ SEND &nbsp;·&nbsp; <span id="whoami"></span> &nbsp;·&nbsp; <a href="#" id="logoutLink" style="color:var(--clay);">Sign out</a></div>
+    <div class="flowchip">① EXTRACT → ② RULES → ③ DEPLOY → ④ BRIEF → ⑤ AI → ⑥ PRINT → ⑦ SEND &nbsp;·&nbsp; <span id="whoami"></span> &nbsp;·&nbsp; <a href="#" id="logoutLink" style="color:var(--clay);">Sign out</a></div>
   </div>
   <div class="swatch-rail">
     <div class="sw1"></div><div class="sw2"></div><div class="sw3"></div><div class="sw4"></div>
@@ -224,14 +224,14 @@
     <div class="panel" style="margin-bottom:0;">
       <div class="panel-head"><h3>Combinations by Style</h3></div>
       <div class="panel-body" id="styleBarsBody">
-        <div style="color:var(--stone-500);font-size:13px;">Loading...</div>
+        <div style="color:var(--stone-400);font-size:13px;">Loading…</div>
       </div>
     </div>
 
     <div class="panel" style="margin-bottom:0;">
       <div class="panel-head"><h3>Combinations by Room</h3></div>
       <div class="panel-body" id="roomBarsBody">
-        <div style="color:var(--stone-500);font-size:13px;">Loading...</div>
+        <div style="color:var(--stone-400);font-size:13px;">Loading…</div>
       </div>
     </div>
   </div>
@@ -239,7 +239,7 @@
   <div class="panel" style="margin-top:20px;">
     <div class="panel-head"><h3>Exports by Format<span class="hint">PNG vs PDF</span></h3></div>
     <div class="panel-body" id="formatBarsBody">
-      <div style="color:var(--stone-500);font-size:13px;">Loading...</div>
+      <div style="color:var(--stone-400);font-size:13px;">Loading…</div>
     </div>
   </div>
 
@@ -251,7 +251,7 @@
         <table class="stat">
           <thead><tr><th>Tile</th><th>Favorited</th></tr></thead>
           <tbody id="topTilesBody">
-            <tr><td colspan="2" style="text-align:center;color:var(--stone-500);padding:16px;">Loading...</td></tr>
+            <tr><td colspan="2" style="text-align:center;color:var(--stone-400);padding:16px;">Loading…</td></tr>
           </tbody>
         </table>
       </div>
@@ -260,7 +260,7 @@
     <div class="panel" style="margin-bottom:0;">
       <div class="panel-head"><h3>Staff Activity<span class="hint">Actions logged, this range</span></h3></div>
       <div class="panel-body" id="staffActivityBody">
-        <div style="color:var(--stone-500);font-size:13px;">Loading...</div>
+        <div style="color:var(--stone-400);font-size:13px;">Loading…</div>
       </div>
     </div>
   </div>
@@ -282,7 +282,7 @@
   function renderBars(containerId, items, labelKey, countKey) {
     const container = document.getElementById(containerId);
     if (!items.length) {
-      container.innerHTML = '<div style="color:var(--stone-500);font-size:13px;">No data yet for this range.</div>';
+      container.innerHTML = '<div style="color:var(--stone-400);font-size:13px;">No data yet for this range.</div>';
       return;
     }
     const total = items.reduce((sum, i) => sum + i[countKey], 0) || 1;
@@ -300,7 +300,7 @@
   function renderTopTiles(tiles) {
     const tbody = document.getElementById('topTilesBody');
     if (!tiles.length) {
-      tbody.innerHTML = '<tr><td colspan="2" style="text-align:center;color:var(--stone-500);padding:16px;">No favorites recorded yet.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="2" style="text-align:center;color:var(--stone-400);padding:16px;">No favorites recorded yet.</td></tr>';
       return;
     }
     tbody.innerHTML = tiles.map((t) => `
@@ -313,7 +313,7 @@
   function renderStaffActivity(staff) {
     const container = document.getElementById('staffActivityBody');
     if (!staff.length) {
-      container.innerHTML = '<div style="color:var(--stone-500);font-size:13px;">No activity logged in this range.</div>';
+      container.innerHTML = '<div style="color:var(--stone-400);font-size:13px;">No activity logged in this range.</div>';
       return;
     }
     container.innerHTML = staff.map((s, idx) => {
@@ -374,4 +374,3 @@
 </script>
 </body>
 </html>
-
