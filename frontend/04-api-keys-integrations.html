@@ -198,7 +198,7 @@
       <div class="name">CASA DE A<em>U</em>RUM</div>
       <div class="sub">Internal Studio Tools · Not for external distribution</div>
     </div>
-    <div class="flowchip">① EXTRACT → ② RULES → ③ DEPLOY → ④ BRIEF → ⑤ PRINT → ⑥ SEND &nbsp;·&nbsp; <span id="whoami"></span> &nbsp;·&nbsp; <a href="#" id="logoutLink" style="color:var(--clay);">Sign out</a></div>
+    <div class="flowchip">① EXTRACT → ② RULES → ③ DEPLOY → ④ BRIEF → ⑤ AI → ⑥ PRINT → ⑦ SEND &nbsp;·&nbsp; <span id="whoami"></span> &nbsp;·&nbsp; <a href="#" id="logoutLink" style="color:var(--clay);">Sign out</a></div>
   </div>
   <div class="swatch-rail">
     <div class="sw1"></div><div class="sw2"></div><div class="sw3"></div><div class="sw4"></div>
@@ -207,12 +207,8 @@
 </header>
 
 <div class="crumb">
-  <a href="dashboard.html">Admin Dashboard</a><span class="sep">/</span>
+  <a href="#">Admin Dashboard</a><span class="sep">/</span>
   <span class="now">API Keys &amp; Integrations</span>
-</div>
-
-<div id="restrictedBanner" style="display:none;background:#FBF3E8;border:1px solid var(--brass);color:var(--stone-700);font-family:var(--mono);font-size:12px;padding:10px 14px;margin:0 clamp(18px,4vw,56px);border-radius:2px;">
-  Live integration status requires Owner access — showing this page's static preview.
 </div>
 
 <main>
@@ -221,7 +217,7 @@
       <h1>API Keys &amp; Integrations</h1>
       <p>Everything the tools connect to behind the scenes — the AI that reads your design rules, the sheet that holds the tile bank, and where finished boards get sent. Owner-only.</p>
     </div>
-    <span class="badge" id="summaryBadge">Checking Gemini...</span>
+    <span class="badge" id="summaryBadge">Loading…</span>
   </div>
 
   <!-- ============ CONNECTED SERVICES ============ -->
@@ -235,10 +231,22 @@
             <div>
               <div class="t">Gemini AI</div>
               <div class="d">Powers Mood Board Generator combinations</div>
-              <div class="svc-status off" id="geminiStatus"><span class="dot"></span>Checking...</div>
+              <div class="svc-status off" id="geminiStatus"><span class="dot"></span>Checking…</div>
             </div>
           </div>
-          <button class="svc-action" id="geminiManageBtn">Manage</button>
+          <button class="svc-action" id="testGeminiBtn">Test connection</button>
+        </div>
+
+        <div class="svc-card">
+          <div class="si">
+            <div class="ic">⬒</div>
+            <div>
+              <div class="t">Google Drive</div>
+              <div class="d">Stores extracted tile images and reference photos</div>
+              <div class="svc-status off" id="driveStatus"><span class="dot"></span>Checking…</div>
+            </div>
+          </div>
+          <button class="svc-action" id="testDriveBtn">Test connection</button>
         </div>
 
         <div class="svc-card">
@@ -247,22 +255,10 @@
             <div>
               <div class="t">Google Sheets</div>
               <div class="d">CasaDeAurum Tiles — the reference sheet</div>
-              <div class="svc-status on"><span class="dot"></span>Connected</div>
+              <div class="svc-status off"><span class="dot"></span>Design preview — shares Drive's credentials, no separate status check</div>
             </div>
           </div>
-          <button class="svc-action">Manage</button>
-        </div>
-
-        <div class="svc-card">
-          <div class="si">
-            <div class="ic">⬒</div>
-            <div>
-              <div class="t">Google Drive</div>
-              <div class="d">Stores print board exports and generates shareable links</div>
-              <div class="svc-status off" id="driveStatus"><span class="dot"></span>Checking...</div>
-            </div>
-          </div>
-          <button class="svc-action" id="driveManageBtn">Manage</button>
+          <button class="svc-action" disabled>Manage</button>
         </div>
 
         <div class="svc-card">
@@ -271,10 +267,10 @@
             <div>
               <div class="t">Print Shop Email</div>
               <div class="d">Where "Download for print shop" sends the file</div>
-              <div class="svc-status on"><span class="dot"></span>orders@rangoliprint.in</div>
+              <div class="svc-status off"><span class="dot"></span>Design preview — not wired to a backend service yet</div>
             </div>
           </div>
-          <button class="svc-action">Manage</button>
+          <button class="svc-action" disabled>Manage</button>
         </div>
 
         <div class="svc-card">
@@ -283,10 +279,10 @@
             <div>
               <div class="t">WhatsApp Business</div>
               <div class="d">Send boards straight to a customer's number</div>
-              <div class="svc-status off"><span class="dot"></span>Not connected</div>
+              <div class="svc-status off"><span class="dot"></span>Design preview — not wired to a backend service yet</div>
             </div>
           </div>
-          <button class="svc-action connect">Connect</button>
+          <button class="svc-action connect" disabled>Connect</button>
         </div>
 
         <div class="svc-card">
@@ -295,10 +291,10 @@
             <div>
               <div class="t">Zapier / Webhooks</div>
               <div class="d">Push new tiles or boards to other store systems</div>
-              <div class="svc-status off"><span class="dot"></span>Not connected</div>
+              <div class="svc-status off"><span class="dot"></span>Design preview — not wired to a backend service yet</div>
             </div>
           </div>
-          <button class="svc-action connect">Connect</button>
+          <button class="svc-action connect" disabled>Connect</button>
         </div>
       </div>
     </div>
@@ -306,14 +302,14 @@
 
   <!-- ============ API KEYS TABLE ============ -->
   <div class="panel">
-    <div class="panel-head"><h3>API Keys &amp; Credentials<span class="hint">Gemini &amp; custom keys — stored encrypted, rotatable without redeploying</span></h3></div>
+    <div class="panel-head"><h3>API Keys &amp; Credentials</h3></div>
     <div class="panel-body" style="padding:8px 0;overflow-x:auto;">
       <table class="keys">
         <thead>
           <tr><th>Name</th><th>Key</th><th>Last rotated</th><th>Status</th><th></th></tr>
         </thead>
         <tbody id="apiKeysBody">
-          <tr><td colspan="5" style="text-align:center;color:var(--stone-500);padding:16px;">Loading...</td></tr>
+          <tr><td colspan="5" style="text-align:center;color:var(--stone-400);padding:24px;">Loading keys…</td></tr>
         </tbody>
       </table>
     </div>
@@ -328,8 +324,8 @@
           <label>Service</label>
           <select id="newKeyService">
             <option value="GEMINI">Gemini AI</option>
-            <option value="GOOGLE_DRIVE">Google Drive / Sheets</option>
-            <option value="CUSTOM">Custom / other</option>
+            <option value="GOOGLE_DRIVE">Google Drive</option>
+            <option value="CUSTOM">Custom</option>
           </select>
         </div>
         <div class="field">
@@ -339,31 +335,27 @@
         <div class="field">
           <label>Key or credential</label>
           <input type="password" id="newKeyValue" placeholder="Paste key — stored encrypted">
-          <div class="desc">Never shown in full after saving. Only the first/last 4 characters stay visible for identification.</div>
+          <div class="desc">Never shown in full after saving. Only the last 4 characters stay visible for identification.</div>
         </div>
-        <div id="addKeyError" style="display:none;color:var(--clay);font-size:12px;margin-bottom:8px;"></div>
+        <div id="addKeyError" style="color:var(--clay);font-size:12.5px;margin-bottom:10px;display:none;"></div>
         <button class="primary" id="saveKeyBtn" style="width:100%;margin-top:2px;">Save key</button>
       </div>
     </div>
 
     <div class="panel" style="margin-bottom:0;">
-      <div class="panel-head"><h3>Usage Today<span class="hint">Preview only — not yet tracked</span></h3></div>
+      <div class="panel-head"><h3>Usage Today<span class="hint">Design preview — no usage-metering backend yet</span></h3></div>
       <div class="panel-body">
         <div class="usage-row">
-          <div class="usage-top"><span class="t">Gemini API — requests</span><span class="v">312 / 1,000</span></div>
-          <div class="usage-bar-wrap"><div class="usage-bar" style="width:31%;"></div></div>
+          <div class="usage-top"><span class="t">Gemini API — requests</span><span class="v">— / —</span></div>
+          <div class="usage-bar-wrap"><div class="usage-bar" style="width:0%;"></div></div>
         </div>
         <div class="usage-row">
-          <div class="usage-top"><span class="t">Google Sheets — reads/writes</span><span class="v">1,204 / 5,000</span></div>
-          <div class="usage-bar-wrap"><div class="usage-bar" style="width:24%;"></div></div>
+          <div class="usage-top"><span class="t">Google Sheets — reads/writes</span><span class="v">— / —</span></div>
+          <div class="usage-bar-wrap"><div class="usage-bar" style="width:0%;"></div></div>
         </div>
         <div class="usage-row">
-          <div class="usage-top"><span class="t">Google Drive — storage used</span><span class="v">2.1 GB / 15 GB</span></div>
-          <div class="usage-bar-wrap"><div class="usage-bar" style="width:14%;"></div></div>
-        </div>
-        <div class="usage-row">
-          <div class="usage-top"><span class="t">Print Shop SMTP — emails sent</span><span class="v">18 / 500</span></div>
-          <div class="usage-bar-wrap"><div class="usage-bar" style="width:4%;"></div></div>
+          <div class="usage-top"><span class="t">Google Drive — storage used</span><span class="v">— / —</span></div>
+          <div class="usage-bar-wrap"><div class="usage-bar" style="width:0%;"></div></div>
         </div>
       </div>
     </div>
@@ -374,41 +366,12 @@
     <div class="panel-head"><h3>Danger Zone</h3></div>
     <div class="panel-body">
       <div class="danger-row">
-        <div><div class="t">Disconnect all integrations</div><div class="d">Deactivates every currently-active API key at once. Every tool stops working until keys are reactivated or replaced. Use this only if a key may have leaked.</div></div>
+        <div><div class="t">Disconnect all integrations</div><div class="d">Deactivates every API key below. Every tool stops working until keys are reactivated. Use this only if a key may have leaked.</div></div>
         <button class="danger-btn" id="disconnectAllBtn">Disconnect all</button>
       </div>
     </div>
   </div>
 </main>
-
-
-<div id="geminiModal" style="display:none;position:fixed;inset:0;background:rgba(26,22,17,0.5);z-index:50;align-items:center;justify-content:center;">
-  <div style="background:#fff;border-radius:3px;width:100%;max-width:440px;max-height:90vh;overflow-y:auto;box-shadow:0 12px 30px rgba(26,22,17,0.24);">
-    <div class="panel-head" style="border-bottom:1px solid var(--line);">
-      <h3 style="margin:0;">Manage Gemini AI</h3>
-      <a href="#" id="closeGeminiModal" style="font-family:var(--mono);font-size:12px;color:var(--stone-600);">Close</a>
-    </div>
-    <div class="panel-body" style="padding:18px;font-family:var(--mono);font-size:12.5px;">
-      <div id="geminiConfigList" style="margin-bottom:16px;line-height:1.9;color:var(--stone-700);"></div>
-      <button class="svc-action" id="testGeminiBtn" style="width:100%;">Test Connection</button>
-      <div id="geminiTestResult" style="margin-top:12px;padding:10px 12px;border-radius:2px;font-size:12px;display:none;"></div>
-    </div>
-  </div>
-</div>
-
-<div id="driveModal" style="display:none;position:fixed;inset:0;background:rgba(26,22,17,0.5);z-index:50;align-items:center;justify-content:center;">
-  <div style="background:#fff;border-radius:3px;width:100%;max-width:440px;max-height:90vh;overflow-y:auto;box-shadow:0 12px 30px rgba(26,22,17,0.24);">
-    <div class="panel-head" style="border-bottom:1px solid var(--line);">
-      <h3 style="margin:0;">Manage Google Drive</h3>
-      <a href="#" id="closeDriveModal" style="font-family:var(--mono);font-size:12px;color:var(--stone-600);">Close</a>
-    </div>
-    <div class="panel-body" style="padding:18px;font-family:var(--mono);font-size:12.5px;">
-      <div id="driveConfigList" style="margin-bottom:16px;line-height:1.9;color:var(--stone-700);"></div>
-      <button class="svc-action" id="testDriveBtn" style="width:100%;">Test Connection</button>
-      <div id="driveTestResult" style="margin-top:12px;padding:10px 12px;border-radius:2px;font-size:12px;display:none;"></div>
-    </div>
-  </div>
-</div>
 
 <footer class="note">CASA DE AURUM — INTERNAL OPERATIONS TOOL · BUILT FOR STORE USE ONLY · NOT FOR RESALE OR DISTRIBUTION</footer>
 
@@ -424,7 +387,7 @@
   function renderApiKeys(keys) {
     const tbody = document.getElementById('apiKeysBody');
     if (!keys.length) {
-      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--stone-500);padding:16px;">No API keys stored yet — add one below.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--stone-400);padding:16px;">No API keys stored yet — add one below.</td></tr>';
       return;
     }
     tbody.innerHTML = keys.map((k) => {
@@ -434,13 +397,12 @@
       return `
         <tr data-id="${k.id}">
           <td><div class="keyname">${escapeHtml(k.label)}<span class="sub">${escapeHtml(SERVICE_LABEL[k.service] || k.service)}</span></div></td>
-          <td><span class="keyval">${k.maskedValue}</span></td>
+          <td><span class="keyval">${escapeHtml(k.maskedValue)}</span></td>
           <td style="font-family:var(--mono);font-size:12px;color:var(--stone-600);">${rotated}</td>
           <td><span class="status-pill ${statusClass}"><span class="dot"></span>${statusLabel}</span></td>
           <td><div class="rowact">
             <a class="rotate-key" data-id="${k.id}">Rotate</a>
-            <a class="${k.isActive ? '' : 'toggle-key'}" ${k.isActive ? '' : `data-id="${k.id}" data-action="activate"`}>${k.isActive ? '' : 'Activate'}</a>
-            ${k.isActive ? `<a class="toggle-key" data-id="${k.id}" data-action="deactivate">Deactivate</a>` : ''}
+            ${k.isActive ? `<a class="toggle-key" data-id="${k.id}" data-action="deactivate">Deactivate</a>` : `<a class="toggle-key" data-id="${k.id}" data-action="activate">Activate</a>`}
             <a class="danger delete-key" data-id="${k.id}">Delete</a>
           </div></td>
         </tr>`;
@@ -455,8 +417,9 @@
     try {
       const keys = await CasaApi.apiKeys.list();
       renderApiKeys(keys);
+      document.getElementById('summaryBadge').textContent = `${keys.filter((k) => k.isActive).length} connected`;
     } catch (err) {
-      document.getElementById('apiKeysBody').innerHTML = `<tr><td colspan="5" style="text-align:center;color:var(--clay);padding:16px;">${err.message || 'Failed to load API keys.'}</td></tr>`;
+      document.getElementById('apiKeysBody').innerHTML = `<tr><td colspan="5" style="text-align:center;color:var(--clay);padding:16px;">${escapeHtml(err.message || 'Failed to load API keys.')}</td></tr>`;
     }
   }
 
@@ -524,172 +487,80 @@
     }
   });
 
-  const disconnectAllBtn = document.getElementById('disconnectAllBtn');
-  if (disconnectAllBtn) {
-    disconnectAllBtn.addEventListener('click', async () => {
-      if (!confirm('Deactivate every active API key? Every tool depending on one will stop working until keys are reactivated or replaced.')) return;
-      disconnectAllBtn.disabled = true;
-      disconnectAllBtn.textContent = 'Disconnecting...';
-      try {
-        const result = await CasaApi.apiKeys.deactivateAll();
-        await loadApiKeys();
-        CasaNotify.success(`Deactivated ${result.deactivatedCount} key${result.deactivatedCount === 1 ? '' : 's'}.`);
-      } catch (err) {
-        CasaNotify.error('Could not disconnect all: ' + err.message);
-      } finally {
-        disconnectAllBtn.disabled = false;
-        disconnectAllBtn.textContent = 'Disconnect all';
-      }
-    });
-  }
-
-  let geminiConfig = null;
+  document.getElementById('disconnectAllBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('disconnectAllBtn');
+    if (!confirm('Deactivate every active API key? Every tool depending on one will stop working until keys are reactivated or replaced.')) return;
+    btn.disabled = true;
+    btn.textContent = 'Disconnecting...';
+    try {
+      const result = await CasaApi.apiKeys.deactivateAll();
+      await loadApiKeys();
+      CasaNotify.success(`Deactivated ${result.deactivatedCount} key${result.deactivatedCount === 1 ? '' : 's'}.`);
+    } catch (err) {
+      CasaNotify.error('Could not disconnect all: ' + err.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Disconnect all';
+    }
+  });
 
   async function loadGeminiStatus() {
     const statusEl = document.getElementById('geminiStatus');
-    const badge = document.getElementById('summaryBadge');
     try {
       const data = await CasaApi.geminiStatus();
-      geminiConfig = data;
-      if (data.configured) {
-        statusEl.className = 'svc-status on';
-        statusEl.innerHTML = '<span class="dot"></span>Configured';
-        badge.textContent = 'Gemini configured';
-      } else {
-        statusEl.className = 'svc-status off';
-        statusEl.innerHTML = '<span class="dot"></span>Not configured';
-        badge.textContent = 'Gemini not configured';
-      }
+      statusEl.className = data.configured ? 'svc-status on' : 'svc-status off';
+      statusEl.innerHTML = `<span class="dot"></span>${data.configured ? 'Configured' : 'Not configured'}`;
     } catch (err) {
       statusEl.className = 'svc-status off';
       statusEl.innerHTML = '<span class="dot"></span>Unknown';
-      badge.textContent = 'Status unavailable';
     }
   }
 
-  document.getElementById('geminiManageBtn').addEventListener('click', () => {
-    const list = document.getElementById('geminiConfigList');
-    if (geminiConfig) {
-      list.innerHTML = `
-        <div>Model: <strong>${geminiConfig.model}</strong></div>
-        <div>Configured: <strong>${geminiConfig.configured ? 'Yes' : 'No'}</strong></div>
-        <div>Timeout: ${geminiConfig.timeoutMs}ms</div>
-        <div>Max retries: ${geminiConfig.maxRetries}</div>
-        <div>Retry base delay: ${geminiConfig.retryBaseDelayMs}ms</div>
-        <div>Temperature: ${geminiConfig.temperature}</div>
-        <div>Max output tokens: ${geminiConfig.maxOutputTokens}</div>`;
-    } else {
-      list.innerHTML = '<div style="color:var(--clay);">Could not load configuration.</div>';
-    }
-    document.getElementById('geminiTestResult').style.display = 'none';
-    document.getElementById('geminiModal').style.display = 'flex';
-  });
-
-  document.getElementById('closeGeminiModal').addEventListener('click', (e) => {
-    e.preventDefault();
-    document.getElementById('geminiModal').style.display = 'none';
-  });
-
   document.getElementById('testGeminiBtn').addEventListener('click', async () => {
     const btn = document.getElementById('testGeminiBtn');
-    const resultEl = document.getElementById('geminiTestResult');
     btn.disabled = true;
-    btn.textContent = 'Testing...';
-    resultEl.style.display = 'none';
+    btn.textContent = 'Testing…';
+    const notice = CasaNotify.processing('Testing Gemini connection...');
     try {
       const result = await CasaApi.testGeminiConnection();
-      resultEl.style.display = 'block';
-      if (result.ok) {
-        resultEl.style.background = '#F1F5EE';
-        resultEl.style.border = '1px solid var(--sage)';
-        resultEl.style.color = 'var(--stone-700)';
-        resultEl.textContent = `Connected — responded in ${result.latencyMs}ms.`;
-      } else {
-        resultEl.style.background = '#FBEEEA';
-        resultEl.style.border = '1px solid var(--clay)';
-        resultEl.style.color = 'var(--clay)';
-        resultEl.textContent = result.message || 'Connection test failed.';
-      }
+      if (result.ok) notice.success(`Connected — responded in ${result.latencyMs}ms.`);
+      else notice.error(result.message || 'Connection test failed.');
     } catch (err) {
-      resultEl.style.display = 'block';
-      resultEl.style.background = '#FBEEEA';
-      resultEl.style.border = '1px solid var(--clay)';
-      resultEl.style.color = 'var(--clay)';
-      resultEl.textContent = err.message || 'Connection test failed.';
+      notice.error(err.message || 'Connection test failed.');
     } finally {
       btn.disabled = false;
-      btn.textContent = 'Test Connection';
+      btn.textContent = 'Test connection';
+      loadGeminiStatus();
     }
   });
-
-  let driveConfig = null;
 
   async function loadDriveStatus() {
     const statusEl = document.getElementById('driveStatus');
     try {
       const data = await CasaApi.driveStatus();
-      driveConfig = data;
-      if (data.configured) {
-        statusEl.className = 'svc-status on';
-        statusEl.innerHTML = '<span class="dot"></span>Configured';
-      } else {
-        statusEl.className = 'svc-status off';
-        statusEl.innerHTML = '<span class="dot"></span>Not configured';
-      }
+      statusEl.className = data.configured ? 'svc-status on' : 'svc-status off';
+      statusEl.innerHTML = `<span class="dot"></span>${data.configured ? 'Configured' : 'Not configured'}`;
     } catch (err) {
       statusEl.className = 'svc-status off';
       statusEl.innerHTML = '<span class="dot"></span>Unknown';
     }
   }
 
-  document.getElementById('driveManageBtn').addEventListener('click', () => {
-    const list = document.getElementById('driveConfigList');
-    if (driveConfig) {
-      list.innerHTML = `
-        <div>Root folder: <strong>${driveConfig.rootFolder}</strong></div>
-        <div>Configured: <strong>${driveConfig.configured ? 'Yes' : 'No'}</strong></div>
-        <div style="margin-top:10px;color:var(--stone-600);">Print board exports are uploaded to <em>${driveConfig.rootFolder} / Print Board Exports</em> and shared as public view-only links.</div>`;
-    } else {
-      list.innerHTML = '<div style="color:var(--clay);">Could not load configuration.</div>';
-    }
-    document.getElementById('driveTestResult').style.display = 'none';
-    document.getElementById('driveModal').style.display = 'flex';
-  });
-
-  document.getElementById('closeDriveModal').addEventListener('click', (e) => {
-    e.preventDefault();
-    document.getElementById('driveModal').style.display = 'none';
-  });
-
   document.getElementById('testDriveBtn').addEventListener('click', async () => {
     const btn = document.getElementById('testDriveBtn');
-    const resultEl = document.getElementById('driveTestResult');
     btn.disabled = true;
-    btn.textContent = 'Testing...';
-    resultEl.style.display = 'none';
+    btn.textContent = 'Testing…';
+    const notice = CasaNotify.processing('Testing Google Drive connection...');
     try {
       const result = await CasaApi.testDriveConnection();
-      resultEl.style.display = 'block';
-      if (result.ok) {
-        resultEl.style.background = '#F1F5EE';
-        resultEl.style.border = '1px solid var(--sage)';
-        resultEl.style.color = 'var(--stone-700)';
-        resultEl.textContent = `Connected — responded in ${result.latencyMs}ms.`;
-      } else {
-        resultEl.style.background = '#FBEEEA';
-        resultEl.style.border = '1px solid var(--clay)';
-        resultEl.style.color = 'var(--clay)';
-        resultEl.textContent = result.message || 'Connection test failed.';
-      }
+      if (result.ok) notice.success(`Connected — responded in ${result.latencyMs}ms.`);
+      else notice.error(result.message || 'Connection test failed.');
     } catch (err) {
-      resultEl.style.display = 'block';
-      resultEl.style.background = '#FBEEEA';
-      resultEl.style.border = '1px solid var(--clay)';
-      resultEl.style.color = 'var(--clay)';
-      resultEl.textContent = err.message || 'Connection test failed.';
+      notice.error(err.message || 'Connection test failed.');
     } finally {
       btn.disabled = false;
-      btn.textContent = 'Test Connection';
+      btn.textContent = 'Test connection';
+      loadDriveStatus();
     }
   });
 
@@ -700,12 +571,7 @@
     document.getElementById('logoutLink').addEventListener('click', (e) => { e.preventDefault(); CasaApi.auth.logout(); });
 
     if (currentUser.role.name !== 'OWNER') {
-      document.getElementById('restrictedBanner').style.display = 'block';
       document.getElementById('summaryBadge').textContent = 'Owner access required';
-      document.getElementById('geminiStatus').innerHTML = '<span class="dot"></span>Connected';
-      document.getElementById('geminiStatus').className = 'svc-status on';
-      document.getElementById('driveStatus').innerHTML = '<span class="dot"></span>Connected';
-      document.getElementById('driveStatus').className = 'svc-status on';
       document.getElementById('apiKeysBody').innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--stone-500);padding:16px;">Owner access required.</td></tr>';
       return;
     }
