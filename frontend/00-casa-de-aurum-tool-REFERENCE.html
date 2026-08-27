@@ -688,10 +688,10 @@
   <section class="tool active" id="extractor">
     <div class="tool-head">
       <div>
-        <h1>Catalog Extractor<span class="badge" style="margin-left:10px;">Preview only — use Catalog Upload</span></h1>
-        <p>Points at the pen drive, reads every catalog PDF, saves tile images to Drive and tile data to the reference sheet. Run once per batch of new catalogs — leave it overnight. This tab is a design preview — <a href="catalog-upload.html">the real, working version is here</a>.</p>
+        <h1>Catalog Extractor</h1>
+        <p>Upload catalog PDFs from the pen drive and the backend extracts every tile — images, sizes, finishes — straight into the product database. A browser can't read a local pen-drive folder path or run a script on your machine, so this uploads the files instead; everything downstream (extraction, storage) is the same real pipeline.</p>
       </div>
-      <span class="badge">Runs on shop laptop</span>
+      <span class="badge">Runs on the backend</span>
     </div>
 
     <div class="console-grid">
@@ -700,51 +700,50 @@
           <div class="panel-head"><h3>Source &amp; Destination</h3></div>
           <div class="panel-body">
             <div class="field">
-              <label>Pen drive folder</label>
-              <input id="pdfFolder" type="text" value="E:\Catalogs">
-            </div>
-            <div class="field">
-              <label>Google Sheet</label>
-              <input type="text" value="CasaDeAurum Tiles" readonly>
+              <label>Brand</label>
+              <select id="extractorBrand">
+                <option value="">Loading brands…</option>
+              </select>
             </div>
             <div class="field" style="margin-bottom:8px;">
-              <label>Service account key</label>
-              <input type="text" value="C:\CasaDeAurum\casadeaurum_key.json" readonly>
+              <label>Catalog PDFs (from the pen drive)</label>
+              <input id="pdfFiles" type="file" accept="application/pdf" multiple>
             </div>
           </div>
         </div>
 
         <div class="panel" style="margin-top:16px;">
-          <div class="panel-head"><h3>Detected Files</h3></div>
+          <div class="panel-head"><h3>Selected Files</h3></div>
           <div class="panel-body" style="padding-bottom:8px;">
-            <div class="filelist" id="fileList"></div>
-            <button class="primary" id="runBtn" style="width:100%;">Run extract.py</button>
+            <div class="filelist" id="fileList">
+              <div class="filerow"><span class="fn" style="color:var(--stone-400);">No files selected yet.</span></div>
+            </div>
+            <button class="primary" id="runBtn" style="width:100%;" disabled>Upload &amp; extract</button>
             <div class="progress-wrap"><div class="progress-bar" id="progBar"></div></div>
-            <div class="progress-label"><span id="progLabel">Idle</span><span id="progCount">0 / 0 tiles</span></div>
+            <div class="progress-label"><span id="progLabel">Idle</span><span id="progCount">0 / 0 files</span></div>
           </div>
         </div>
       </div>
 
       <div>
         <div class="panel">
-          <div class="panel-head"><h3>Command Prompt</h3></div>
+          <div class="panel-head"><h3>Extraction Log</h3></div>
           <div class="panel-body" style="padding:0;">
             <div class="terminal" id="terminal">
-              <div class="dim">C:\CasaDeAurum&gt; python extract.py</div>
-              <div class="dim">Waiting to run…</div>
+              <div class="dim">Waiting for files…</div>
             </div>
           </div>
         </div>
 
         <div class="panel" style="margin-top:16px;">
-          <div class="panel-head"><h3>Google Sheet — CasaDeAurum Tiles</h3></div>
+          <div class="panel-head"><h3>Extracted Tiles</h3></div>
           <div class="panel-body" style="padding:8px 0;overflow-x:auto;">
             <table class="results">
               <thead>
                 <tr><th>Tile</th><th>Brand</th><th>Size</th><th>Finish</th><th>Type</th><th>Image</th></tr>
               </thead>
               <tbody id="resultsBody">
-                <tr><td colspan="6" style="text-align:center;color:var(--stone-400);padding:24px;">No rows yet — run the extractor</td></tr>
+                <tr><td colspan="6" style="text-align:center;color:var(--stone-400);padding:24px;">No rows yet — upload catalogs to extract</td></tr>
               </tbody>
             </table>
           </div>
@@ -1026,43 +1025,19 @@ document.querySelectorAll('nav.tools button').forEach(btn=>{
 });
 
 /* ============ TOOL 1: CATALOG EXTRACTOR ============ */
-const files = [
-  {name:'Somany_FloorCollection_2024.pdf', brand:'Somany', ok:true, pages:142, tiles:287},
-  {name:'RAK_Bathroom_Series.pdf', brand:'RAK', ok:true, pages:98, tiles:194},
-  {name:'Johnson_WallTiles_v2.pdf', brand:'Johnson', ok:true, pages:76, tiles:151},
-  {name:'Kajaria_KitchenRange_2023.pdf', brand:'Kajaria', ok:true, pages:64, tiles:118},
-  {name:'catalog_new.pdf', brand:null, ok:false, pages:0, tiles:0},
-];
+
+const extractorBrandSelect = document.getElementById('extractorBrand');
+const pdfFilesInput = document.getElementById('pdfFiles');
 const fileListEl = document.getElementById('fileList');
-files.forEach(f=>{
-  const row = document.createElement('div');
-  row.className = 'filerow' + (f.ok ? '' : ' bad');
-  row.innerHTML = `<span class="tick">${f.ok?'✅':'❌'}</span><span class="fn">${f.name}</span><span class="brand">${f.ok?f.brand:'no brand — skipped'}</span>`;
-  fileListEl.appendChild(row);
-});
-
-const tileBank = [
-  {name:'Marbella Grey Large', brand:'Somany', size:'600x600mm', finish:'Matt', type:'Base', tone:'Cool Grey'},
-  {name:'Ivory Stone Base', brand:'Somany', size:'600x1200mm', finish:'Matt', type:'Large Format Base', tone:'Warm Beige'},
-  {name:'Rose Quartz Listello', brand:'RAK', size:'100x300mm', finish:'Polished', tone:'Warm Beige'},
-  {name:'Champagne Metallic Strip', brand:'RAK', size:'75x300mm', finish:'Lappato', tone:'Warm Beige'},
-  {name:'Nordic White Wall', brand:'Johnson', size:'300x600mm', finish:'Gloss', tone:'Cool Grey'},
-  {name:'Terracotta Rustic', brand:'Kajaria', size:'300x300mm', finish:'Anti-Slip', tone:'Deep Blue'},
-  {name:'Emerald Deco Border', brand:'RAK', size:'100x300mm', finish:'Gloss', tone:'Deep Blue'},
-  {name:'Bianco Marble Base', brand:'Somany', size:'800x800mm', finish:'Polished', tone:'Warm Beige'},
-];
-function swatchColor(t){
-  const map = {'Warm Beige':'linear-gradient(135deg,#D9C8A6,#B79A6D)','Cool Grey':'linear-gradient(135deg,#C7CBC6,#9AA098)','Deep Blue':'linear-gradient(135deg,#5B7386,#33465A)'};
-  return map[t] || '#ccc';
-}
-
-let running = false;
 const runBtn = document.getElementById('runBtn');
 const terminal = document.getElementById('terminal');
 const progBar = document.getElementById('progBar');
 const progLabel = document.getElementById('progLabel');
 const progCount = document.getElementById('progCount');
 const resultsBody = document.getElementById('resultsBody');
+
+let extractorRunning = false;
+let selectedPdfFiles = [];
 
 function termLine(html){
   const d = document.createElement('div');
@@ -1071,56 +1046,135 @@ function termLine(html){
   terminal.scrollTop = terminal.scrollHeight;
 }
 
-runBtn.addEventListener('click', () => {
-  if (running) return;
-  running = true;
+function refreshRunBtnState(){
+  runBtn.disabled =
+    extractorRunning ||
+    !selectedPdfFiles.length ||
+    !extractorBrandSelect.value;
+}
+
+async function loadExtractorBrands(){
+  try {
+    const brands = await CasaApi.catalogExtractor.brands();
+    extractorBrandSelect.innerHTML =
+      (Array.isArray(brands) ? brands : [])
+        .map(b => `<option value="${escapeHtml(b.id)}">${escapeHtml(b.name)}</option>`)
+        .join('') ||
+      '<option value="">No brands yet — add one in Admin</option>';
+  } catch (err) {
+    extractorBrandSelect.innerHTML = '<option value="">Could not load brands</option>';
+    console.warn('Failed to load catalog brands:', err);
+  }
+  refreshRunBtnState();
+}
+loadExtractorBrands();
+extractorBrandSelect.addEventListener('change', refreshRunBtnState);
+
+pdfFilesInput.addEventListener('change', () => {
+  selectedPdfFiles = Array.from(pdfFilesInput.files || []);
+
+  fileListEl.innerHTML =
+    selectedPdfFiles.length
+      ? selectedPdfFiles
+          .map(f => `
+            <div class="filerow">
+              <span class="tick">📄</span>
+              <span class="fn">${escapeHtml(f.name)}</span>
+              <span class="brand">${(f.size / 1024).toFixed(0)} KB</span>
+            </div>
+          `)
+          .join('')
+      : '<div class="filerow"><span class="fn" style="color:var(--stone-400);">No files selected yet.</span></div>';
+
+  refreshRunBtnState();
+});
+
+function renderExtractedTileRow(t){
+  const tr = document.createElement('tr');
+  const imageUrl = resolveAiImageUrl(t.imageUrl || '');
+  tr.innerHTML = `
+    <td>${escapeHtml(t.name || '')}</td>
+    <td>${escapeHtml(t.brandName || '')}</td>
+    <td>${escapeHtml(t.size || '—')}</td>
+    <td>${escapeHtml(t.finish || '—')}</td>
+    <td><span class="tag">${escapeHtml(t.type || 'BASE')}</span></td>
+    <td class="swatch-cell">${
+      imageUrl
+        ? `<img class="mini-sw" src="${escapeHtml(imageUrl)}" alt="" style="object-fit:cover;">`
+        : `<div class="mini-sw" style="background:var(--stone-200);"></div>`
+    }</td>
+  `;
+  resultsBody.appendChild(tr);
+}
+
+async function extractOneFile(file, brandId, brandName, fileIndex, totalFiles){
+  termLine(`<span class="brand-line">${escapeHtml(file.name)}:</span> uploading…`);
+
+  const catalog = await CasaApi.catalogExtractor.upload(file, { brandId });
+
+  const finalCatalog = await CasaApi.catalogExtractor.pollUntilDone(
+    catalog.id,
+    (updated) => {
+      const pageInfo =
+        updated.totalPages
+          ? ` (page ${updated.currentPage || 0}/${updated.totalPages})`
+          : '';
+      progLabel.textContent = `${file.name}: ${updated.status}${pageInfo}`;
+    },
+    { intervalMs: 1500, maxAttempts: 240 }
+  );
+
+  if (finalCatalog.status === 'FAILED'){
+    termLine(`&nbsp;&nbsp;→ <span class="warn">Failed: ${escapeHtml(finalCatalog.errorMessage || 'Unknown error')}</span>`);
+    return 0;
+  }
+
+  termLine(`&nbsp;&nbsp;→ <span class="ok">${finalCatalog.tilesExtracted || 0} tiles</span> extracted`);
+
+  const { tiles } = await CasaApi.catalogExtractor.tiles(catalog.id, { limit: 200 });
+  tiles.forEach(t => renderExtractedTileRow({ ...t, brandName }));
+
+  const pct = Math.round(((fileIndex + 1) / totalFiles) * 100);
+  progBar.style.width = pct + '%';
+
+  return finalCatalog.tilesExtracted || 0;
+}
+
+runBtn.addEventListener('click', async () => {
+  if (extractorRunning || !selectedPdfFiles.length || !extractorBrandSelect.value) return;
+
+  extractorRunning = true;
   runBtn.disabled = true;
-  runBtn.textContent = 'Running…';
+  runBtn.textContent = 'Extracting…';
   terminal.innerHTML = '';
   resultsBody.innerHTML = '';
-  const folder = document.getElementById('pdfFolder').value || 'E:\\Catalogs';
-  termLine(`<span class="dim">C:\\CasaDeAurum&gt; python extract.py</span>`);
-  termLine(`Found ${files.length} PDFs in ${folder}`);
-  let total = 0, done = 0;
-  const validFiles = files.filter(f=>f.ok);
-  progLabel.textContent = 'Processing…';
+  progBar.style.width = '0%';
+  progLabel.textContent = 'Starting…';
+  progCount.textContent = `0 / ${selectedPdfFiles.length} files`;
 
-  function processNext(i){
-    if (i >= files.length){
-      termLine(`<br><span class="ok">Done. ${total} tiles saved to Google Sheet.</span>`);
-      progLabel.textContent = 'Complete';
-      progBar.style.width = '100%';
-      progCount.textContent = `${total} / ${total} tiles`;
-      runBtn.disabled = false;
-      runBtn.textContent = 'Run extract.py';
-      running = false;
-      // populate table with sample rows
-      tileBank.forEach(t=>{
-        const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${t.name}</td><td>${t.brand}</td><td>${t.size}</td><td>${t.finish}</td><td><span class="tag">${t.type||'Base'}</span></td>
-        <td class="swatch-cell"><div class="mini-sw" style="background:${swatchColor(t.tone)}"></div></td>`;
-        resultsBody.appendChild(tr);
-      });
-      return;
+  const brandId = extractorBrandSelect.value;
+  const brandName = extractorBrandSelect.selectedOptions[0]?.textContent || '';
+
+  termLine(`Uploading ${selectedPdfFiles.length} file(s) for ${escapeHtml(brandName)}…`);
+
+  let totalTiles = 0;
+
+  for (let i = 0; i < selectedPdfFiles.length; i++){
+    try {
+      totalTiles += await extractOneFile(selectedPdfFiles[i], brandId, brandName, i, selectedPdfFiles.length);
+    } catch (err) {
+      termLine(`&nbsp;&nbsp;→ <span class="warn">${escapeHtml(err instanceof Error ? err.message : 'Upload failed')}</span>`);
     }
-    const f = files[i];
-    if (!f.ok){
-      termLine(`<span class="warn">Skipped ${f.name} — no brand prefix in filename</span>`);
-      setTimeout(()=>processNext(i+1), 220);
-      return;
-    }
-    termLine(`<span class="brand-line">${f.brand}:</span> ${f.pages} pages`);
-    setTimeout(()=>{
-      total += f.tiles;
-      done++;
-      termLine(`&nbsp;&nbsp;→ <span class="ok">${f.tiles} tiles</span> from ${f.name}`);
-      const pct = Math.round((done/validFiles.length)*100);
-      progBar.style.width = pct + '%';
-      progCount.textContent = `${total} tiles so far`;
-      setTimeout(()=>processNext(i+1), 260);
-    }, 380);
+    progCount.textContent = `${i + 1} / ${selectedPdfFiles.length} files`;
   }
-  processNext(0);
+
+  termLine(`<br><span class="ok">Done. ${totalTiles} tiles saved.</span>`);
+  progLabel.textContent = 'Complete';
+  progBar.style.width = '100%';
+
+  extractorRunning = false;
+  runBtn.textContent = 'Upload & extract';
+  refreshRunBtnState();
 });
 
 /* ============ TOOL 2: MOOD BOARD GENERATOR ============ */
@@ -1480,10 +1534,23 @@ function normalizeScene(scene, index) {
       path.startsWith('/')
     );
 
-  const usableImageUrl =
-    /^https?:\/\//i.test(String(imageUrl || '').trim()) &&
+  /*
+   * Real reference images are stored locally and returned as a
+   * relative backend path (e.g. /static/reference-images/xyz.jpg),
+   * not an absolute URL -- resolveAiImageUrl() turns that into
+   * something the browser (and, once copied into scene_image_path,
+   * Python) can actually fetch. Without this, every real uploaded
+   * reference image looked "unusable" and only the AI Random
+   * Bathroom Scene ever showed up as a selectable option.
+   */
+  const resolvedImageUrl =
     !isPlaceholderSceneValue(imageUrl)
-      ? String(imageUrl).trim()
+      ? resolveAiImageUrl(imageUrl)
+      : '';
+
+  const usableImageUrl =
+    /^https?:\/\//i.test(resolvedImageUrl)
+      ? resolvedImageUrl
       : '';
 
   return {
@@ -1566,14 +1633,28 @@ async function loadBathroomScenes() {
       `)
       .join('');
 
-  aiSceneSelect.value = randomScene.id;
+  /*
+   * Default to the first real uploaded reference image when one
+   * exists -- staff picked those specifically for this purpose, so
+   * generation should use them, not a random scene, unless nothing
+   * real is available.
+   */
+  const firstRealScene =
+    bathroomScenes.find(
+      (scene) => scene !== randomScene
+    );
+
+  aiSceneSelect.value =
+    firstRealScene
+      ? firstRealScene.id
+      : randomScene.id;
 
   selectBathroomScene();
 
   setAiStatus(
-    bathroomScenes.length > 1
-      ? 'Bathroom references loaded. Choose one or use the AI random scene.'
-      : 'AI random bathroom scene is ready. No Drive image is required.',
+    firstRealScene
+      ? 'Using your uploaded bathroom reference image. Switch to the AI random scene if you\'d rather generate a fresh one.'
+      : 'No bathroom reference images uploaded yet. Using the AI random scene instead.',
     'ok'
   );
 }
