@@ -2895,6 +2895,31 @@ const ai = {
   }
 
   // ============================================================
+  // PYTHON AI SERVICE
+  // ============================================================
+
+  function pythonAiStatus() {
+    return apiFetch(
+      '/integrations/python-ai/status'
+    ).then(
+      (r) =>
+        r.data
+    );
+  }
+
+  function testPythonAiConnection() {
+    return apiFetch(
+      '/integrations/python-ai/test',
+      {
+        method: 'POST'
+      }
+    ).then(
+      (r) =>
+        r.data
+    );
+  }
+
+  // ============================================================
   // FINAL PUBLIC API
   // ============================================================
 
@@ -2942,6 +2967,10 @@ const ai = {
     driveStatus,
 
     testDriveConnection,
+
+    pythonAiStatus,
+
+    testPythonAiConnection,
 
     requireAuth,
 

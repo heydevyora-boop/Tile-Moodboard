@@ -251,6 +251,18 @@
 
         <div class="svc-card">
           <div class="si">
+            <div class="ic">⌁</div>
+            <div>
+              <div class="t">Python AI Service</div>
+              <div class="d">Catalog extraction &amp; AI bathroom visualization pipeline</div>
+              <div class="svc-status off" id="pythonAiStatus"><span class="dot"></span>Checking…</div>
+            </div>
+          </div>
+          <button class="svc-action" id="testPythonAiBtn">Test connection</button>
+        </div>
+
+        <div class="svc-card">
+          <div class="si">
             <div class="ic">▦</div>
             <div>
               <div class="t">Google Sheets</div>
@@ -534,6 +546,37 @@
     }
   });
 
+  async function loadPythonAiStatus() {
+    const statusEl = document.getElementById('pythonAiStatus');
+    try {
+      const status = await CasaApi.pythonAiStatus();
+      const result = await CasaApi.testPythonAiConnection();
+      statusEl.className = result.ok ? 'svc-status on' : 'svc-status off';
+      statusEl.innerHTML = `<span class="dot"></span>${result.ok ? `Connected — ${status.baseUrl}` : (result.message || 'Unreachable')}`;
+    } catch (err) {
+      statusEl.className = 'svc-status off';
+      statusEl.innerHTML = '<span class="dot"></span>Unknown';
+    }
+  }
+
+  document.getElementById('testPythonAiBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('testPythonAiBtn');
+    btn.disabled = true;
+    btn.textContent = 'Testing…';
+    const notice = CasaNotify.processing('Testing Python AI service connection...');
+    try {
+      const result = await CasaApi.testPythonAiConnection();
+      if (result.ok) notice.success(`Connected — responded in ${result.latencyMs}ms.`);
+      else notice.error(result.message || 'Connection test failed.');
+    } catch (err) {
+      notice.error(err.message || 'Connection test failed.');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Test connection';
+      loadPythonAiStatus();
+    }
+  });
+
   async function loadDriveStatus() {
     const statusEl = document.getElementById('driveStatus');
     try {
@@ -576,7 +619,7 @@
       return;
     }
 
-    await Promise.all([loadGeminiStatus(), loadDriveStatus(), loadApiKeys()]);
+    await Promise.all([loadGeminiStatus(), loadDriveStatus(), loadPythonAiStatus(), loadApiKeys()]);
   })();
 </script>
 </body>

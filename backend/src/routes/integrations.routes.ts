@@ -11,5 +11,7 @@ router.get('/gemini/status', integrationsController.getGeminiStatus);
 router.post('/gemini/test', integrationsController.testGeminiConnection);
 router.get('/drive/status', integrationsController.getDriveStatus);
 router.post('/drive/test', integrationsController.testDriveConnection);
+router.get('/python-ai/status', integrationsController.getPythonAiStatus);
+router.post('/python-ai/test', integrationsController.testPythonAiConnection);
 
 export default router;
