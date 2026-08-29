@@ -121,5 +121,9 @@
     return user;
   }
 
-  window.CasaShell = { init, NAV, ROLE_LABEL, escapeHtml };
+  function initials(name) {
+    return CasaApi.initials ? CasaApi.initials(name) : (name || '?').slice(0, 2).toUpperCase();
+  }
+
+  window.CasaShell = { init, NAV, ROLE_LABEL, escapeHtml, initials };
 })();
