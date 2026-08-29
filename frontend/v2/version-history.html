@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Casa de Aurum — Version History</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/shell.css">
+<style>
+  .owner-badge{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--brass);border:1px solid var(--brass);padding:5px 10px;border-radius:2px;white-space:nowrap;}
+  .subnav{display:flex;gap:0;margin-bottom:22px;border-bottom:1px solid var(--line);}
+  .subnav a{font-family:var(--sans);font-weight:600;font-size:13px;padding:10px 18px;color:var(--stone-600);text-decoration:none;position:relative;}
+  .subnav a:hover{color:var(--charcoal);}
+  .subnav a.active{color:var(--charcoal);}
+  .subnav a.active::after{content:"";position:absolute;left:18px;right:18px;bottom:-1px;height:2px;background:var(--brass);}
+
+  .vh-grid{display:grid;grid-template-columns:1fr 400px;gap:22px;align-items:start;}
+  @media (max-width:960px){.vh-grid{grid-template-columns:1fr;}}
+
+  .version-row{padding:14px 18px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:14px;cursor:pointer;transition:background .1s ease;}
+  .version-row:last-child{border-bottom:none;}
+  .version-row:hover{background:#FBF6EC;}
+  .version-row.selected{background:#FBF6EC;}
+  .vr-check{width:18px;height:18px;border:1px solid rgba(34,29,24,0.2);border-radius:2px;flex:none;display:flex;align-items:center;justify-content:center;background:#fff;}
+  .vr-check.on{background:var(--charcoal);border-color:var(--charcoal);}
+  .vr-info{flex:1;min-width:0;}
+  .vr-top{display:flex;align-items:center;gap:8px;margin-bottom:4px;}
+  .vr-num{font-family:var(--mono);font-size:13px;font-weight:500;color:var(--charcoal);}
+  .vr-pill{display:inline-block;font-size:9px;padding:2px 6px;border-radius:8px;background:var(--brass);color:#fff;font-family:var(--sans);font-weight:700;letter-spacing:.04em;text-transform:uppercase;}
+  .vr-meta{font-family:var(--mono);font-size:11px;color:var(--stone-600);}
+  .vr-words{font-family:var(--mono);font-size:11px;color:var(--stone-400);white-space:nowrap;flex:none;}
+
+  .side-col{position:sticky;top:20px;display:flex;flex-direction:column;gap:16px;}
+  .detail-row{display:flex;justify-content:space-between;padding:6px 0;}
+  .detail-row .k{font-family:var(--mono);font-size:12px;color:var(--stone-600);}
+  .detail-row .v{font-family:var(--mono);font-size:12px;color:var(--ink);text-align:right;max-width:60%;}
+  .detail-div{width:100%;height:1px;background:rgba(34,29,24,0.08);}
+  .summary-text{font-family:var(--mono);font-size:12px;color:var(--stone-700);line-height:1.55;}
+  .diff-line{font-family:var(--mono);font-size:11.5px;white-space:pre-wrap;padding:1px 4px;}
+  .actions-row{display:flex;gap:10px;}
+  .compare-panel{border:1px solid var(--brass) !important;}
+  .compare-panel .panel-head h3{color:var(--brass);}
+  .err-box{background:#FBEEEA;border:1px solid var(--clay);color:var(--clay);font-size:12px;padding:9px 11px;border-radius:2px;margin-top:10px;display:none;}
+  .modal-backdrop{display:none;position:fixed;inset:0;background:rgba(26,22,17,0.5);z-index:50;align-items:center;justify-content:center;}
+  .modal-card{background:#fff;border-radius:3px;width:100%;max-width:680px;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 12px 30px rgba(26,22,17,0.24);}
+</style>
+</head>
+<body>
+<div id="casa-main-content">
+  <div class="casa-pageheader">
+    <div>
+      <h1>Version History</h1>
+      <p id="badgeSub">Review, compare, and restore previous versions of your design rules.</p>
+    </div>
+    <span class="owner-badge" id="countBadge">…</span>
+  </div>
+
+  <div class="subnav">
+    <a href="design-rules-setup.html">Design Rules</a>
+    <a href="reference-image-library.html">Reference Images</a>
+    <a href="version-history.html" class="active">Version History</a>
+  </div>
+
+  <div class="vh-grid">
+    <div class="casa-panel">
+      <div class="panel-head">
+        <h3>All Versions</h3>
+        <button class="casa-btn secondary" id="compareToggleBtn" style="padding:6px 12px;font-size:12px;">Compare Versions</button>
+      </div>
+      <div id="versionList"><div style="padding:20px 18px;font-family:var(--mono);font-size:12.5px;color:var(--stone-600);">Loading…</div></div>
+    </div>
+
+    <div class="side-col">
+      <div class="casa-panel" style="margin-bottom:0;">
+        <div class="panel-head">
+          <h3>Version Preview</h3>
+          <span class="casa-hint" id="selectedVersionLabel"></span>
+        </div>
+        <div class="panel-body" id="detailBody">
+          <div class="casa-hint">Select a version to see its detail.</div>
+        </div>
+      </div>
+
+      <div class="casa-panel" style="margin-bottom:0;">
+        <div class="panel-head"><h3>Changes</h3></div>
+        <div class="panel-body" id="changesBody">
+          <div class="casa-hint">—</div>
+        </div>
+      </div>
+
+      <div class="actions-row">
+        <button class="casa-btn secondary" id="previewFullBtn" style="flex:1;">Preview Full</button>
+        <button class="casa-btn" id="restoreBtn" style="flex:1;">Restore This Version</button>
+        <button class="casa-btn secondary" id="deleteVersionBtn" style="color:var(--clay);border-color:var(--clay);">Delete</button>
+      </div>
+
+      <div class="casa-panel compare-panel" id="comparePanel" style="display:none;margin-bottom:0;">
+        <div class="panel-head"><h3>Compare Versions</h3></div>
+        <div class="panel-body" id="compareBody"></div>
+      </div>
+      <div class="err-box" id="vhError"></div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="fullModal">
+  <div class="modal-card">
+    <div class="panel-head" style="border-bottom:1px solid var(--line);">
+      <h3 id="fullModalTitle" style="margin:0;">Full Content</h3>
+      <a href="#" id="closeFullModal" style="font-family:var(--mono);font-size:12px;color:var(--stone-600);">Close</a>
+    </div>
+    <div id="fullModalBody" style="margin:0;padding:16px 18px;overflow-y:auto;font-family:var(--mono);font-size:12px;white-space:pre-wrap;line-height:1.6;"></div>
+  </div>
+</div>
+
+<script src="../assets/api-client.js"></script>
+<script src="../assets/notifications.js"></script>
+<script src="assets/shell.js"></script>
+<script>
+(async () => {
+  const user = await CasaShell.init({ current: 'version-history.html' });
+
+  function escapeHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  function wordCount(text) {
+    if (!text || !text.trim()) return 0;
+    return text.trim().split(/\s+/).length;
+  }
+
+  let versions = [];
+  let selectedId = null;
+  let currentVersionId = null; // the live-published one, from designRules.preview()
+  let compareMode = false;
+  let compareChecked = [];
+  let selectedFullContent = '';
+
+  function renderVersionList() {
+    const el = document.getElementById('versionList');
+    if (!versions.length) {
+      el.innerHTML = '<div style="padding:20px 18px;font-family:var(--mono);font-size:12.5px;color:var(--stone-600);">Nothing published yet.</div>';
+      return;
+    }
+    el.innerHTML = versions.map((v) => {
+      const isCurrent = v.id === currentVersionId;
+      const checked = compareChecked.includes(v.id);
+      return `
+        <div class="version-row ${v.id === selectedId ? 'selected' : ''}" data-id="${v.id}">
+          ${compareMode ? `<div class="vr-check ${checked ? 'on' : ''}" data-compare="${v.id}">${checked ? '✓' : ''}</div>` : ''}
+          <div class="vr-info">
+            <div class="vr-top">
+              <span class="vr-num">v${v.versionNumber}</span>
+              ${isCurrent ? '<span class="vr-pill">Current</span>' : ''}
+            </div>
+            <div class="vr-meta">${new Date(v.createdAt).toLocaleString()} · ${v.createdBy ? escapeHtml(v.createdBy.name) : 'System'}</div>
+          </div>
+          <span class="vr-words">${escapeHtml(v.changeSummary ? (v.changeSummary.length > 40 ? v.changeSummary.slice(0, 40) + '…' : v.changeSummary) : 'No summary')}</span>
+        </div>`;
+    }).join('');
+
+    el.querySelectorAll('.version-row').forEach((row) => {
+      row.addEventListener('click', (e) => {
+        if (e.target.closest('[data-compare]')) return;
+        selectedId = row.dataset.id;
+        renderVersionList();
+        loadDetail(selectedId);
+      });
+    });
+    el.querySelectorAll('[data-compare]').forEach((chk) => {
+      chk.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = chk.dataset.compare;
+        const idx = compareChecked.indexOf(id);
+        if (idx > -1) compareChecked.splice(idx, 1);
+        else if (compareChecked.length < 2) compareChecked.push(id);
+        renderVersionList();
+        renderCompare();
+      });
+    });
+  }
+
+  async function loadDetail(id) {
+    const v = versions.find((x) => x.id === id);
+    document.getElementById('selectedVersionLabel').textContent = v ? `v${v.versionNumber}` : '';
+    document.getElementById('detailBody').innerHTML = '<div class="casa-hint">Loading…</div>';
+    document.getElementById('changesBody').innerHTML = '<div class="casa-hint">Loading…</div>';
+    try {
+      const full = await CasaApi.designRules.getVersion(id);
+      selectedFullContent = full.content || '';
+      const words = wordCount(selectedFullContent);
+      const tokens = Math.round(words * 1.35);
+      const isCurrent = id === currentVersionId;
+
+      document.getElementById('detailBody').innerHTML = `
+        <div class="detail-row"><span class="k">Created</span><span class="v">${new Date(v.createdAt).toLocaleString()}</span></div>
+        <div class="detail-div"></div>
+        <div class="detail-row"><span class="k">Author</span><span class="v">${v.createdBy ? escapeHtml(v.createdBy.name) : 'System'}</span></div>
+        <div class="detail-div"></div>
+        <div class="detail-row"><span class="k">Status</span><span class="v">${isCurrent ? 'Current — live' : 'Superseded'}</span></div>
+        <div class="detail-div"></div>
+        <div class="detail-row"><span class="k">Word count</span><span class="v">${words}</span></div>
+        <div class="detail-div"></div>
+        <div class="detail-row"><span class="k">Est. tokens</span><span class="v">${tokens}</span></div>
+      `;
+
+      document.getElementById('changesBody').innerHTML = v.changeSummary
+        ? `<div class="summary-text">${escapeHtml(v.changeSummary)}</div>`
+        : `<div class="casa-hint">No change summary recorded for this publish.</div>`;
+
+      // Diff against the previous version in the list, when one exists — real data via compareVersions().
+      const idx = versions.findIndex((x) => x.id === id);
+      const prev = versions[idx + 1];
+      if (prev) {
+        const result = await CasaApi.designRules.compareVersions(prev.id, v.id);
+        const lines = (result.diff || []).filter((l) => l.type !== 'unchanged').slice(0, 12);
+        if (lines.length) {
+          document.getElementById('changesBody').innerHTML += lines.map((line) => {
+            const color = line.type === 'added' ? 'var(--sage)' : line.type === 'removed' ? 'var(--clay)' : 'var(--stone-700)';
+            const bg = line.type === 'added' ? '#F1F5EE' : line.type === 'removed' ? '#FBEEEA' : 'transparent';
+            const prefix = line.type === 'added' ? '+ ' : line.type === 'removed' ? '- ' : '  ';
+            return `<div class="diff-line" style="color:${color};background:${bg};">${prefix}${escapeHtml(line.value)}</div>`;
+          }).join('');
+        }
+      }
+
+      document.getElementById('restoreBtn').style.display = isCurrent ? 'none' : '';
+      document.getElementById('deleteVersionBtn').style.display = isCurrent ? 'none' : '';
+    } catch (err) {
+      document.getElementById('detailBody').innerHTML = `<div class="casa-hint" style="color:var(--clay);">${escapeHtml(err.message)}</div>`;
+    }
+  }
+
+  function renderCompare() {
+    const panel = document.getElementById('comparePanel');
+    if (!compareMode || compareChecked.length !== 2) {
+      panel.style.display = 'none';
+      return;
+    }
+    panel.style.display = 'block';
+    const [aId, bId] = compareChecked
+      .map((id) => versions.find((v) => v.id === id))
+      .sort((x, y) => x.versionNumber - y.versionNumber)
+      .map((v) => v.id);
+    const a = versions.find((v) => v.id === aId);
+    const b = versions.find((v) => v.id === bId);
+    document.getElementById('compareBody').innerHTML = `<div class="casa-hint" style="margin-bottom:10px;">Loading comparison v${a.versionNumber} → v${b.versionNumber}…</div>`;
+    CasaApi.designRules.compareVersions(aId, bId).then((result) => {
+      const lines = (result.diff || []).filter((l) => l.type !== 'unchanged');
+      document.getElementById('compareBody').innerHTML =
+        `<div class="summary-text" style="margin-bottom:10px;">v${a.versionNumber} → v${b.versionNumber}</div>` +
+        (lines.length
+          ? lines.map((line) => {
+              const color = line.type === 'added' ? 'var(--sage)' : line.type === 'removed' ? 'var(--clay)' : 'var(--stone-700)';
+              const bg = line.type === 'added' ? '#F1F5EE' : line.type === 'removed' ? '#FBEEEA' : 'transparent';
+              const prefix = line.type === 'added' ? '+ ' : line.type === 'removed' ? '- ' : '  ';
+              return `<div class="diff-line" style="color:${color};background:${bg};">${prefix}${escapeHtml(line.value)}</div>`;
+            }).join('')
+          : '<div class="casa-hint">No differences.</div>');
+    }).catch((err) => {
+      document.getElementById('compareBody').innerHTML = `<div class="casa-hint" style="color:var(--clay);">${escapeHtml(err.message)}</div>`;
+    });
+  }
+
+  document.getElementById('compareToggleBtn').addEventListener('click', () => {
+    compareMode = !compareMode;
+    compareChecked = [];
+    document.getElementById('compareToggleBtn').textContent = compareMode ? 'Exit Compare' : 'Compare Versions';
+    renderVersionList();
+    renderCompare();
+  });
+
+  document.getElementById('previewFullBtn').addEventListener('click', () => {
+    if (!selectedId) return;
+    const v = versions.find((x) => x.id === selectedId);
+    document.getElementById('fullModalTitle').textContent = v ? `v${v.versionNumber} — Full Content` : 'Full Content';
+    document.getElementById('fullModalBody').textContent = selectedFullContent || '(empty)';
+    document.getElementById('fullModal').style.display = 'flex';
+  });
+  document.getElementById('closeFullModal').addEventListener('click', (e) => { e.preventDefault(); document.getElementById('fullModal').style.display = 'none'; });
+
+  document.getElementById('restoreBtn').addEventListener('click', async () => {
+    if (!selectedId) return;
+    if (!confirm('Restore this version into the draft? This replaces all current draft rules. You will still need to Publish (from Design Rules Setup) to make it live.')) return;
+    const errBox = document.getElementById('vhError');
+    errBox.style.display = 'none';
+    try {
+      await CasaApi.designRules.restoreVersion(selectedId);
+      CasaNotify.success('Draft restored from that version. Open Design Rules Setup and Publish to make it live.');
+    } catch (err) {
+      errBox.textContent = err.message || 'Restore failed.';
+      errBox.style.display = 'block';
+      CasaNotify.error(err.message || 'Restore failed.');
+    }
+  });
+
+  document.getElementById('deleteVersionBtn').addEventListener('click', async () => {
+    if (!selectedId) return;
+    if (!confirm('Delete this published version from history? This cannot be undone.')) return;
+    try {
+      await CasaApi.designRules.removeVersion(selectedId);
+      selectedId = null;
+      await loadVersions();
+      CasaNotify.success('Version deleted.');
+    } catch (err) {
+      CasaNotify.error('Delete failed: ' + err.message);
+    }
+  });
+
+  async function loadVersions() {
+    try {
+      const [{ versions: v }, preview] = await Promise.all([
+        CasaApi.designRules.versions({ limit: 50 }),
+        CasaApi.designRules.preview().catch(() => null),
+      ]);
+      versions = v;
+      currentVersionId = preview?.lastPublished?.id || (versions[0] && versions[0].id) || null;
+      document.getElementById('countBadge').textContent = `${versions.length} version${versions.length === 1 ? '' : 's'}`;
+      renderVersionList();
+      if (versions.length) {
+        selectedId = versions[0].id;
+        renderVersionList();
+        await loadDetail(selectedId);
+      } else {
+        document.getElementById('detailBody').innerHTML = '<div class="casa-hint">Nothing published yet.</div>';
+        document.getElementById('restoreBtn').style.display = 'none';
+        document.getElementById('deleteVersionBtn').style.display = 'none';
+      }
+    } catch (err) {
+      document.getElementById('versionList').innerHTML = `<div style="padding:20px 18px;font-family:var(--mono);font-size:12.5px;color:var(--clay);">${escapeHtml(err.message)}</div>`;
+    }
+  }
+
+  await loadVersions();
+})();
+</script>
+</body>
+</html>

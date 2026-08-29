@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Casa de Aurum — Owner Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/shell.css">
+<style>
+  .owner-badge{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--brass);border:1px solid var(--brass);padding:5px 10px;border-radius:2px;white-space:nowrap;}
+  .decision-panel{background:#fff;border:1px solid var(--line);border-left:3px solid var(--brass);border-radius:3px;margin-bottom:22px;}
+  .decision-panel .panel-head{padding:14px 18px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;}
+  .decision-row{padding:13px 18px;border-bottom:1px solid rgba(34,29,24,0.06);display:flex;align-items:center;gap:12px;text-decoration:none;transition:background .1s ease;}
+  .decision-row:last-child{border-bottom:none;}
+  .decision-row:hover{background:#FBF6EC;}
+  .decision-dot{width:8px;height:8px;border-radius:50%;flex:none;}
+  .decision-title{font-size:13.5px;font-weight:600;color:var(--ink);}
+  .decision-detail{font-family:var(--mono);font-size:11px;color:var(--stone-600);margin-top:2px;}
+  .decision-cta{font-family:var(--mono);font-size:11px;color:var(--brass);flex:none;white-space:nowrap;}
+  .decision-empty{padding:24px 18px;font-family:var(--mono);font-size:12.5px;color:var(--stone-600);}
+
+  .control-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin-bottom:22px;}
+  .control-card{background:#fff;border:1px solid var(--line);border-radius:3px;overflow:hidden;text-decoration:none;display:block;transition:box-shadow .15s ease;}
+  .control-card:hover{box-shadow:0 12px 30px rgba(26,22,17,0.13);}
+  .control-card .bar{height:7px;}
+  .control-card .body{padding:20px;}
+  .control-card .title{font-family:var(--display);font-weight:600;font-size:16.5px;color:var(--charcoal);margin-bottom:5px;}
+  .control-card p{margin:0 0 14px;font-size:12.5px;color:var(--stone-600);line-height:1.5;}
+  .control-card .status-row{display:flex;align-items:center;gap:6px;}
+  .control-card .dot{width:7px;height:7px;border-radius:50%;flex:none;}
+  .control-card .status-text{font-family:var(--mono);font-size:10.5px;color:var(--stone-600);}
+
+  .bottom-row{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:16px;}
+  @media (max-width:900px){.bottom-row{grid-template-columns:1fr;}}
+  .activity-row{padding:11px 18px;border-bottom:1px solid rgba(34,29,24,0.06);display:flex;align-items:flex-start;gap:10px;}
+  .activity-row:last-child{border-bottom:none;}
+  .activity-tag{font-family:var(--mono);font-size:11px;flex:none;width:70px;}
+  .activity-text{font-size:12.5px;color:var(--ink);line-height:1.45;}
+  .activity-when{font-family:var(--mono);font-size:10px;color:var(--stone-400);margin-top:2px;}
+
+  .matrix-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px dashed rgba(34,29,24,0.12);}
+  .matrix-row:last-child{border-bottom:none;}
+  .matrix-what{font-family:var(--mono);font-size:11.5px;color:var(--stone-700);}
+  .matrix-badges{display:flex;gap:6px;flex:none;}
+  .matrix-badge{font-family:var(--mono);font-size:9.5px;padding:2px 7px;border-radius:7px;}
+  .matrix-note{font-family:var(--mono);font-size:10px;color:var(--stone-400);line-height:1.55;margin-top:12px;padding:0 18px 14px;}
+  .err-inline{font-family:var(--mono);font-size:12px;color:var(--clay);padding:16px 18px;}
+</style>
+</head>
+<body>
+<div id="casa-main-content">
+  <div class="casa-pageheader">
+    <div>
+      <h1>Owner Dashboard</h1>
+      <p id="dateLine">Loading…</p>
+    </div>
+    <span class="owner-badge">Full control</span>
+  </div>
+
+  <div class="decision-panel">
+    <div class="panel-head">
+      <h3>Needs Your Decision</h3>
+      <span class="casa-hint" id="decisionCount"></span>
+    </div>
+    <div id="decisionList"><div class="decision-empty">Checking…</div></div>
+  </div>
+
+  <div class="casa-stat-grid" id="statGrid">
+    <div class="casa-stat-card"><div class="label">Loading…</div><div class="value">—</div></div>
+  </div>
+
+  <div class="control-grid" id="controlGrid"></div>
+
+  <div class="bottom-row">
+    <div class="casa-panel">
+      <div class="panel-head"><h3>Owner Activity Log</h3></div>
+      <div id="activityList"><div class="decision-empty">Loading…</div></div>
+    </div>
+    <div class="casa-panel">
+      <div class="panel-head"><h3>Who Can Do What</h3></div>
+      <div class="panel-body" style="padding-top:6px;padding-bottom:2px;" id="matrixBody"></div>
+      <div class="matrix-note">Filled badge = allowed. Enforced server-side by role — hiding a menu item is not access control.</div>
+    </div>
+  </div>
+</div>
+
+<script src="../assets/api-client.js"></script>
+<script src="../assets/notifications.js"></script>
+<script src="assets/shell.js"></script>
+<script>
+(async () => {
+  const user = await CasaShell.init({ current: 'owner-dashboard.html' });
+
+  function escapeHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  document.getElementById('dateLine').textContent =
+    new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) +
+    ' · you are the only role that can publish rules or rotate keys.';
+
+  const CONTROLS = [
+    { title: 'System Instructions', blurb: 'The rules every generation obeys. Edit, test, publish, roll back.', bar: 'linear-gradient(90deg,#AD8348,#D8B677)', href: 'design-rules-setup.html' },
+    { title: 'Reference Library', blurb: 'Visual context the AI matches against, by room and style.', bar: 'linear-gradient(90deg,#C9BFA9,#8F8062)', href: 'reference-image-library.html' },
+    { title: 'Prompt Versions', blurb: 'Every published version, kept. Compare and restore.', bar: 'linear-gradient(90deg,#4B443A,#78705F)', href: 'version-history.html' },
+    { title: 'Rules & Filters', blurb: 'Hard versus soft filters, priority and fallback behaviour.', bar: 'linear-gradient(90deg,#7C8577,#9CA793)', href: 'admin-design-rules.html' },
+    { title: 'AI Test Mode', blurb: 'Run a brief against draft rules without touching production.', bar: 'linear-gradient(90deg,#3B342A,#1A1611)', href: 'owner-ai-test.html' },
+    { title: 'Users & Staff', blurb: 'Who can open which tool, on which device.', bar: 'linear-gradient(90deg,#8F8062,#C9BFA9)', href: 'admin-users.html' },
+    { title: 'API & Integrations', blurb: 'Gemini, Sheets, Drive credentials and quotas.', bar: 'linear-gradient(90deg,#9C4B2C,#B96A45)', href: 'admin-api-keys.html' },
+  ];
+
+  const MATRIX = [
+    { what: 'Create moodboards', roles: [true, true, true] },
+    { what: 'Extraction & catalogs', roles: [true, true, false] },
+    { what: 'Publish AI rules', roles: [true, false, false] },
+    { what: 'Reference library', roles: [true, false, false] },
+    { what: 'API keys', roles: [true, false, false] },
+    { what: 'Manage staff', roles: [true, false, false] },
+  ];
+
+  function renderMatrix() {
+    const yes = { bg: 'var(--charcoal)', color: 'var(--brass-light)' };
+    const no = { bg: 'var(--stone-100)', color: 'var(--stone-400)' };
+    document.getElementById('matrixBody').innerHTML = MATRIX.map((row) => `
+      <div class="matrix-row">
+        <span class="matrix-what">${escapeHtml(row.what)}</span>
+        <div class="matrix-badges">
+          ${['Owner', 'Admin', 'Staff'].map((label, i) => {
+            const on = row.roles[i];
+            const st = on ? yes : no;
+            return `<span class="matrix-badge" style="background:${st.bg};color:${st.color};">${label}</span>`;
+          }).join('')}
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function statCard(label, value, sub, dot, subColor) {
+    return `<div class="casa-stat-card">
+      <div class="label" style="display:flex;align-items:center;justify-content:space-between;">${escapeHtml(label)}<span style="width:7px;height:7px;border-radius:50%;background:${dot};"></span></div>
+      <div class="value">${escapeHtml(value)}</div>
+      <div class="delta" style="color:${subColor || 'var(--stone-600)'};">${escapeHtml(sub)}</div>
+    </div>`;
+  }
+
+  const ACTIVITY_TAG_COLOR = {
+    CREATE: 'var(--sage)', UPDATE: 'var(--brass)', DELETE: 'var(--clay)',
+    PUBLISH: 'var(--brass)', LOGIN: 'var(--stone-600)', DEFAULT: 'var(--stone-600)',
+  };
+
+  function tagFor(action) {
+    const a = String(action || '').toUpperCase();
+    for (const key of Object.keys(ACTIVITY_TAG_COLOR)) {
+      if (a.includes(key)) return { tag: key === 'DEFAULT' ? a.split(/[_\s]/)[0] : key, color: ACTIVITY_TAG_COLOR[key] };
+    }
+    return { tag: a.split(/[_\s]/)[0] || 'ACTIVITY', color: ACTIVITY_TAG_COLOR.DEFAULT };
+  }
+
+  function renderActivity(items) {
+    const el = document.getElementById('activityList');
+    if (!items || !items.length) {
+      el.innerHTML = '<div class="decision-empty">No activity yet.</div>';
+      return;
+    }
+    el.innerHTML = items.slice(0, 8).map((a) => {
+      const t = tagFor(a.action);
+      return `<div class="activity-row">
+        <span class="activity-tag" style="color:${t.color};">${escapeHtml(t.tag)}</span>
+        <div style="flex:1;min-width:0;">
+          <div class="activity-text">${a.user ? escapeHtml(a.user.name) + ' — ' : ''}${escapeHtml(a.action)}${a.entityType ? ` <span style="color:var(--stone-600);">· ${escapeHtml(a.entityType)}</span>` : ''}</div>
+          <div class="activity-when">${CasaApi.relativeTime(a.createdAt)}</div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  (async () => {
+    renderMatrix();
+
+    const results = await Promise.allSettled([
+      CasaApi.dashboard.overview(),
+      CasaApi.designRules.preview(),
+      CasaApi.designRules.list(),
+      CasaApi.designRules.versions({ limit: 1 }),
+      CasaApi.referenceImages.list({ limit: 100 }),
+      CasaApi.apiKeys.list(),
+      CasaApi.users.list({ limit: 100 }),
+    ]);
+
+    const [overviewR, previewR, rulesR, versionsR, refImagesR, apiKeysR, usersR] = results;
+
+    // ---- STATS + ACTIVITY ----
+    if (overviewR.status === 'fulfilled') {
+      const overview = overviewR.value;
+      const s = overview.stats;
+      const completed = s.catalogs.byStatus.find((x) => x.status === 'COMPLETED')?.count || 0;
+      const readyPct = s.catalogs.total ? Math.round((completed / s.catalogs.total) * 100) : 0;
+      const approved = s.moodBoards.byStatus?.find((x) => x.status === 'APPROVED')?.count || 0;
+      const approvedPct = s.moodBoards.total ? Math.round((approved / s.moodBoards.total) * 100) : 0;
+
+      const versionLabel = previewR.status === 'fulfilled' && previewR.value.lastPublished
+        ? `v${previewR.value.lastPublished.versionNumber}` : '—';
+
+      document.getElementById('statGrid').innerHTML = [
+        statCard('Active rules', versionLabel, previewR.status === 'fulfilled' && previewR.value.lastPublished ? `published ${new Date(previewR.value.lastPublished.createdAt).toLocaleDateString()}` : 'nothing published yet', 'var(--sage)'),
+        statCard('Library ready', `${readyPct}%`, `${completed} of ${s.catalogs.total} catalogs`, 'var(--brass)', 'var(--brass)'),
+        statCard('Staff accounts', String(s.users.total), `${s.users.active} active`, 'var(--sage)'),
+        statCard('Moodboards', String(s.moodBoards.total), `this week +${s.moodBoards.newThisWeek} · ${approvedPct}% approved`, 'var(--sage)', 'var(--sage)'),
+      ].join('');
+      renderActivity(overview.recentActivity);
+    } else {
+      document.getElementById('statGrid').innerHTML = `<div class="casa-stat-card"><div class="label">Error</div><div class="value" style="font-size:15px;color:var(--clay);">${escapeHtml(overviewR.reason?.message || 'Failed to load stats.')}</div></div>`;
+      document.getElementById('activityList').innerHTML = `<div class="err-inline">Could not load activity.</div>`;
+    }
+
+    // ---- CONTROL CARDS ----
+    const ruleCount = rulesR.status === 'fulfilled' ? rulesR.value.length : null;
+    const activeRuleCount = rulesR.status === 'fulfilled' ? rulesR.value.filter((r) => r.isActive).length : null;
+    const draftState = previewR.status === 'fulfilled'
+      ? (previewR.value.hasUnpublishedChanges ? 'unpublished changes' : 'matches live')
+      : '—';
+    const refCount = refImagesR.status === 'fulfilled' ? (refImagesR.value.meta?.total ?? refImagesR.value.images.length) : null;
+    const versionCount = versionsR.status === 'fulfilled' ? (versionsR.value.meta?.total ?? versionsR.value.versions.length) : null;
+    const activeKeys = apiKeysR.status === 'fulfilled' ? apiKeysR.value.filter((k) => k.isActive).length : null;
+    const totalKeys = apiKeysR.status === 'fulfilled' ? apiKeysR.value.length : null;
+    const activeStaff = usersR.status === 'fulfilled' ? usersR.value.users.filter((u) => u.isActive).length : null;
+    const totalStaff = usersR.status === 'fulfilled' ? usersR.value.users.length : null;
+
+    const STATUS = {
+      'System Instructions': draftState,
+      'Reference Library': refCount !== null ? `${refCount} image${refCount === 1 ? '' : 's'}` : '—',
+      'Prompt Versions': versionCount !== null ? `${versionCount} version${versionCount === 1 ? '' : 's'} stored` : '—',
+      'Rules & Filters': ruleCount !== null ? `${activeRuleCount} of ${ruleCount} rules active` : '—',
+      'AI Test Mode': 'sandbox · not logged',
+      'Users & Staff': totalStaff !== null ? `${activeStaff} active · ${totalStaff} total` : '—',
+      'API & Integrations': totalKeys !== null ? `${activeKeys} of ${totalKeys} keys active` : '—',
+    };
+    const DOT = {
+      'System Instructions': previewR.status === 'fulfilled' && previewR.value.hasUnpublishedChanges ? 'var(--brass)' : 'var(--sage)',
+      'Reference Library': refCount === 0 ? 'var(--brass)' : 'var(--sage)',
+      'Prompt Versions': 'var(--sage)',
+      'Rules & Filters': 'var(--sage)',
+      'AI Test Mode': 'var(--brass)',
+      'Users & Staff': 'var(--sage)',
+      'API & Integrations': (activeKeys !== null && totalKeys !== null && activeKeys < totalKeys) ? 'var(--brass)' : 'var(--sage)',
+    };
+
+    document.getElementById('controlGrid').innerHTML = CONTROLS.map((c) => `
+      <a class="control-card" href="${c.href}">
+        <div class="bar" style="background:${c.bar};"></div>
+        <div class="body">
+          <div class="title">${escapeHtml(c.title)}</div>
+          <p>${escapeHtml(c.blurb)}</p>
+          <div class="status-row"><span class="dot" style="background:${DOT[c.title]};"></span><span class="status-text">${escapeHtml(STATUS[c.title])}</span></div>
+        </div>
+      </a>
+    `).join('');
+
+    // ---- NEEDS YOUR DECISION ----
+    const decisions = [];
+    if (previewR.status === 'fulfilled' && previewR.value.hasUnpublishedChanges) {
+      decisions.push({
+        title: previewR.value.lastPublished ? `Draft rules waiting to publish` : 'Draft rules have never been published',
+        detail: previewR.value.lastPublished ? `Unpublished changes since v${previewR.value.lastPublished.versionNumber}` : 'Publish once your rules are ready for the showroom floor.',
+        dot: 'var(--brass)', cta: 'Review & publish', href: 'design-rules-setup.html',
+      });
+    }
+    if (refImagesR.status === 'fulfilled') {
+      const images = refImagesR.value.images || [];
+      const rooms = ['BATHROOM', 'KITCHEN', 'LIVING_ROOM'];
+      const missing = rooms.filter((room) => !images.some((img) => (img.room || '').toUpperCase() === room));
+      if (missing.length) {
+        decisions.push({
+          title: `Reference library has no ${missing[0].replace('_', ' ').toLowerCase()} image`,
+          detail: `${images.length} image${images.length === 1 ? '' : 's'} uploaded · generations for that room run without visual context`,
+          dot: 'var(--brass)', cta: 'Upload', href: 'reference-image-library.html',
+        });
+      }
+    }
+    if (apiKeysR.status === 'fulfilled') {
+      const stale = apiKeysR.value
+        .filter((k) => k.isActive && k.lastRotatedAt)
+        .map((k) => ({ k, days: Math.floor((Date.now() - new Date(k.lastRotatedAt).getTime()) / 86400000) }))
+        .filter((x) => x.days >= 75)
+        .sort((a, b) => b.days - a.days)[0];
+      if (stale) {
+        decisions.push({
+          title: `${stale.k.label} key is ${stale.days} days old`,
+          detail: 'Recommended rotation policy is 90 days.',
+          dot: 'var(--clay)', cta: 'Rotate', href: 'admin-api-keys.html',
+        });
+      }
+      const noKeys = apiKeysR.value.length === 0;
+      if (noKeys) {
+        decisions.push({ title: 'No API keys stored yet', detail: 'Gemini and Google Drive need credentials before generation will work.', dot: 'var(--clay)', cta: 'Add a key', href: 'admin-api-keys.html' });
+      }
+    }
+
+    document.getElementById('decisionCount').textContent = `${decisions.length} open`;
+    document.getElementById('decisionList').innerHTML = decisions.length
+      ? decisions.map((d) => `
+        <a class="decision-row" href="${d.href}">
+          <span class="decision-dot" style="background:${d.dot};"></span>
+          <div style="flex:1;min-width:0;">
+            <div class="decision-title">${escapeHtml(d.title)}</div>
+            <div class="decision-detail">${escapeHtml(d.detail)}</div>
+          </div>
+          <span class="decision-cta">${escapeHtml(d.cta)} →</span>
+        </a>
+      `).join('')
+      : '<div class="decision-empty">Nothing needs your attention right now.</div>';
+  })();
+})();
+</script>
+</body>
+</html>

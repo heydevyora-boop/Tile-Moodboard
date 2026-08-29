@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Casa de Aurum — Design Rules Setup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/shell.css">
+<style>
+  .casa-main-inner{padding-bottom:96px !important;}
+  .setup-head{display:flex;justify-content:space-between;align-items:flex-end;gap:20px;flex-wrap:wrap;margin-bottom:22px;}
+  .setup-head p{margin:0;max-width:56ch;color:var(--stone-700);font-size:14px;line-height:1.55;font-family:var(--sans);}
+  .owner-badge{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--brass);border:1px solid var(--brass);padding:5px 10px;border-radius:2px;white-space:nowrap;}
+
+  .status-bar{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:20px;}
+  .status-item{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11.5px;color:var(--stone-600);}
+  .status-dot{width:8px;height:8px;border-radius:50%;}
+  .status-sep{width:1px;height:14px;background:var(--line);}
+
+  .setup-grid{display:grid;grid-template-columns:1fr 340px;gap:22px;align-items:start;}
+  @media (max-width:960px){.setup-grid{grid-template-columns:1fr;}}
+
+  .accordion{display:flex;flex-direction:column;gap:14px;}
+  .acc-section{background:#fff;border:1px solid var(--line);border-radius:3px;}
+  .acc-head{padding:14px 18px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;cursor:pointer;}
+  .acc-head .left{display:flex;align-items:center;gap:10px;}
+  .acc-num{font-family:var(--mono);font-size:10.5px;color:var(--brass);font-weight:500;}
+  .acc-title{margin:0;font-size:12.5px;letter-spacing:.1em;text-transform:uppercase;font-family:var(--mono);color:var(--stone-700);font-weight:500;}
+  .acc-tag{display:inline-block;font-size:10px;padding:2px 7px;border-radius:8px;font-family:var(--sans);font-weight:600;}
+  .acc-tag.style{background:var(--stone-100);color:var(--stone-700);}
+  .acc-tag.room{background:#FBF6EC;color:var(--brass);}
+  .acc-tag.client{background:#F3EDE4;color:var(--stone-600);}
+  .acc-right{display:flex;align-items:center;gap:10px;}
+  .acc-words{font-family:var(--mono);font-size:10.5px;color:var(--stone-400);}
+  .acc-chevron{font-size:12px;color:var(--stone-400);transition:transform .2s ease;display:inline-block;}
+  .acc-body{padding:18px;display:none;}
+  .acc-body.open{display:block;}
+  .acc-hint{font-family:var(--mono);font-size:11px;color:var(--stone-600);margin-bottom:8px;}
+  .acc-body textarea{width:100%;min-height:120px;resize:vertical;font-family:var(--mono);font-size:13px;padding:12px 14px;border:1px solid var(--line);border-radius:2px;background:var(--stone-50);color:var(--ink);line-height:1.65;}
+  .acc-body textarea:focus{outline:2px solid var(--brass);outline-offset:1px;}
+
+  .side-col{position:sticky;top:20px;display:flex;flex-direction:column;gap:16px;}
+  .preview-box{font-family:var(--mono);font-size:11.5px;line-height:1.65;background:var(--charcoal);color:#D9D2C2;padding:16px 18px;margin:0 12px 12px;border-radius:2px;max-height:340px;overflow-y:auto;}
+  .preview-box .hdr{color:var(--brass-light);margin-bottom:6px;}
+  .preview-note{font-family:var(--mono);font-size:11px;color:var(--stone-600);padding:12px 18px 6px;}
+  .stat-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;}
+  .stat-row .k{font-family:var(--mono);font-size:12px;color:var(--stone-600);}
+  .stat-row .v{font-family:var(--mono);font-size:13px;color:var(--ink);font-weight:500;}
+  .stat-div{width:100%;height:1px;background:rgba(34,29,24,0.08);}
+  .token-bar-wrap{background:var(--stone-100);border-radius:2px;overflow:hidden;height:6px;margin-top:4px;}
+  .token-bar{height:100%;background:linear-gradient(90deg,var(--brass),var(--brass-light));}
+
+  .ai-status-row{display:flex;align-items:center;gap:8px;padding:5px 0;font-family:var(--mono);font-size:12px;color:var(--ink);}
+
+  .sticky-bar{position:fixed;bottom:0;left:260px;right:0;z-index:10;background:#fff;border-top:1px solid var(--line);box-shadow:0 -4px 20px rgba(26,22,17,0.06);}
+  .sticky-bar-inner{max-width:1180px;margin:0 auto;padding:14px 40px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;}
+  @media (max-width:760px){.sticky-bar{left:0;}}
+  .err-box{background:#FBEEEA;border:1px solid var(--clay);color:var(--clay);font-size:12px;padding:9px 11px;border-radius:2px;margin-bottom:16px;display:none;}
+</style>
+</head>
+<body>
+<div id="casa-main-content">
+  <div class="setup-head">
+    <div>
+      <h1 style="font-family:var(--display);font-weight:600;font-size:clamp(24px,3.2vw,32px);margin:0 0 6px;color:var(--charcoal);">Design Rules Setup</h1>
+      <p>Configure how AI creates luxury tile combinations. These rules are sent to Gemini before every mood board generation — staff never see or edit them.</p>
+    </div>
+    <span class="owner-badge">Owner / Admin only</span>
+  </div>
+
+  <div class="err-box" id="topError"></div>
+
+  <div class="status-bar" id="statusBar">
+    <span class="status-item"><span class="status-dot" style="background:var(--stone-400);"></span><span id="saveStatus">Loading…</span></span>
+    <div class="status-sep"></div>
+    <span class="status-item">Version <strong style="color:var(--ink);" id="versionLabel">—</strong></span>
+    <div class="status-sep"></div>
+    <span class="status-item" id="publishStatus"></span>
+  </div>
+
+  <div class="setup-grid">
+    <div class="accordion" id="accordion"></div>
+
+    <div class="side-col">
+      <div class="casa-panel" style="margin-bottom:0;">
+        <div class="panel-head">
+          <h3>Live Prompt Preview</h3>
+          <span class="acc-tag room">Server draft</span>
+        </div>
+        <div class="preview-note">Exactly what's saved on the server right now — Save Draft to refresh this after editing:</div>
+        <div class="preview-box" id="previewBox">Loading…</div>
+      </div>
+
+      <div class="casa-panel" style="margin-bottom:0;">
+        <div class="panel-head"><h3>Prompt Statistics</h3></div>
+        <div class="panel-body">
+          <div class="stat-row"><span class="k">Word count (editor)</span><span class="v" id="statWords">0</span></div>
+          <div class="stat-div"></div>
+          <div class="stat-row"><span class="k">Est. tokens</span><span class="v" id="statTokens">0</span></div>
+          <div class="stat-div"></div>
+          <div class="stat-row"><span class="k">Sections filled</span><span class="v" id="statSections">0 / 10</span></div>
+          <div style="margin-top:6px;">
+            <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span class="casa-hint">Token budget</span><span class="casa-hint" id="tokenPct">0%</span></div>
+            <div class="token-bar-wrap"><div class="token-bar" id="tokenBar" style="width:0%;"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="casa-panel" style="margin-bottom:0;">
+        <div class="panel-head"><h3>AI Status</h3></div>
+        <div class="panel-body" id="aiStatusBody">
+          <div class="ai-status-row"><span class="status-dot" style="background:var(--stone-400);"></span>Checking…</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="sticky-bar">
+  <div class="sticky-bar-inner">
+    <div style="display:flex;align-items:center;gap:12px;">
+      <button class="casa-btn secondary" id="saveDraftBtn">Save Draft</button>
+      <button class="casa-btn secondary" id="resetBtn" style="color:var(--clay);border-color:var(--clay);">Reset</button>
+    </div>
+    <div style="display:flex;align-items:center;gap:14px;">
+      <span class="casa-hint" id="footerVersion"></span>
+      <button class="casa-btn" id="publishBtn">Publish Rules</button>
+    </div>
+  </div>
+</div>
+
+<script src="../assets/api-client.js"></script>
+<script src="../assets/notifications.js"></script>
+<script src="assets/shell.js"></script>
+<script>
+(async () => {
+  const user = await CasaShell.init({ current: 'design-rules-setup.html' });
+
+  function escapeHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  const SLOTS = [
+    { id: 'general', section: 'GENERAL', key: null, title: 'General Rules', tag: null, num: '01', hint: 'Core instructions sent with every prompt, regardless of style or room.', open: true },
+    { id: 'luxury', section: 'STYLE', key: 'LUXURY', title: 'Luxury', tag: 'style', num: '02', hint: 'Rules applied when staff selects "Luxury" style.' },
+    { id: 'subtle', section: 'STYLE', key: 'SUBTLE', title: 'Subtle', tag: 'style', num: '03', hint: 'Rules applied when staff selects "Subtle" style.' },
+    { id: 'bold', section: 'STYLE', key: 'BOLD', title: 'Bold', tag: 'style', num: '04', hint: 'Rules applied when staff selects "Bold" style.' },
+    { id: 'bathroom', section: 'ROOM', key: 'BATHROOM', title: 'Bathroom', tag: 'room', num: '05', hint: 'Room-specific rules for bathroom tile combinations.' },
+    { id: 'kitchen', section: 'ROOM', key: 'KITCHEN', title: 'Kitchen', tag: 'room', num: '06', hint: 'Room-specific rules for kitchen tile combinations.' },
+    { id: 'livingRoom', section: 'ROOM', key: 'LIVING_ROOM', title: 'Living Room', tag: 'room', num: '07', hint: 'Room-specific rules for living room tile combinations.' },
+    { id: 'traditional', section: 'CLIENT', key: 'TRADITIONAL', title: 'Traditional', tag: 'client', num: '08', hint: 'Rules applied for traditional / conservative client preferences.' },
+    { id: 'femaleClient', section: 'CLIENT', key: 'FEMALE_CLIENT', title: 'Female Client', tag: 'client', num: '09', hint: 'Rules applied when "Feminine" client type is selected.' },
+    { id: 'custom', section: 'GENERAL', key: null, title: 'Custom Rules', tag: null, num: '10', hint: "Any additional rules or overrides not covered by the sections above." },
+  ];
+
+  let serverRules = [];   // raw rules from API
+  let slotState = {};     // slotId -> { ruleId, content, sortOrder, isActive, loadedContent }
+  let openState = {};     // slotId -> bool
+
+  function findRuleFor(slot) {
+    if (slot.key) return serverRules.find((r) => r.section === slot.section && r.key === slot.key);
+    return serverRules.find((r) => r.section === slot.section && !r.key && r.title === slot.title);
+  }
+
+  function syncSlotStateFromServer() {
+    slotState = {};
+    SLOTS.forEach((slot) => {
+      const rule = findRuleFor(slot);
+      slotState[slot.id] = {
+        ruleId: rule ? rule.id : null,
+        content: rule ? rule.content : '',
+        loadedContent: rule ? rule.content : '',
+        sortOrder: rule ? rule.sortOrder : SLOTS.indexOf(slot),
+        isActive: rule ? rule.isActive : true,
+      };
+      if (openState[slot.id] === undefined) openState[slot.id] = !!slot.open;
+    });
+  }
+
+  function wordCount(text) {
+    if (!text || !text.trim()) return 0;
+    return text.trim().split(/\s+/).length;
+  }
+
+  function hasUnsavedEdits() {
+    return SLOTS.some((slot) => (slotState[slot.id].content || '') !== (slotState[slot.id].loadedContent || ''));
+  }
+
+  function renderAccordion() {
+    const el = document.getElementById('accordion');
+    el.innerHTML = SLOTS.map((slot) => {
+      const st = slotState[slot.id];
+      const open = openState[slot.id];
+      const words = wordCount(st.content);
+      const tagHtml = slot.tag ? `<span class="acc-tag ${slot.tag}">${slot.tag === 'style' ? 'Style' : slot.tag === 'room' ? 'Room' : 'Client'}</span>` : '';
+      return `
+        <div class="acc-section">
+          <div class="acc-head" data-toggle="${slot.id}">
+            <div class="left">
+              <span class="acc-num">${slot.num}</span>
+              <h3 class="acc-title">${escapeHtml(slot.title)}</h3>
+              ${tagHtml}
+            </div>
+            <div class="acc-right">
+              <span class="acc-words">${words} words</span>
+              <span class="acc-chevron" style="transform:${open ? 'rotate(0deg)' : 'rotate(-90deg)'};">▾</span>
+            </div>
+          </div>
+          <div class="acc-body ${open ? 'open' : ''}" data-body="${slot.id}">
+            <div class="acc-hint">${escapeHtml(slot.hint)}</div>
+            <textarea data-input="${slot.id}" placeholder="Type rule content…">${escapeHtml(st.content)}</textarea>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    el.querySelectorAll('[data-toggle]').forEach((head) => {
+      head.addEventListener('click', () => {
+        const id = head.dataset.toggle;
+        openState[id] = !openState[id];
+        renderAccordion();
+      });
+    });
+    el.querySelectorAll('[data-input]').forEach((ta) => {
+      ta.addEventListener('input', (e) => {
+        slotState[e.target.dataset.input].content = e.target.value;
+        renderStats();
+        renderStatusBar();
+      });
+    });
+  }
+
+  function renderStats() {
+    const allText = SLOTS.map((s) => slotState[s.id].content || '').join('\n');
+    const words = wordCount(allText);
+    const tokens = Math.round(words * 1.35);
+    const maxTokens = 2000;
+    const pct = Math.min(Math.round((tokens / maxTokens) * 100), 100);
+    const filled = SLOTS.filter((s) => (slotState[s.id].content || '').trim()).length;
+
+    document.getElementById('statWords').textContent = words;
+    document.getElementById('statTokens').textContent = tokens;
+    document.getElementById('statSections').textContent = `${filled} / ${SLOTS.length}`;
+    document.getElementById('tokenPct').textContent = `${pct}%`;
+    document.getElementById('tokenBar').style.width = `${pct}%`;
+  }
+
+  function renderStatusBar() {
+    const dirty = hasUnsavedEdits();
+    const dot = document.querySelector('#statusBar .status-dot');
+    dot.style.background = dirty ? 'var(--brass)' : 'var(--sage)';
+    document.getElementById('saveStatus').textContent = dirty ? 'Unsaved changes' : 'All changes saved';
+  }
+
+  async function loadPreview() {
+    const box = document.getElementById('previewBox');
+    const versionLabel = document.getElementById('versionLabel');
+    const footerVersion = document.getElementById('footerVersion');
+    const publishStatus = document.getElementById('publishStatus');
+    const publishBtn = document.getElementById('publishBtn');
+    try {
+      const preview = await CasaApi.designRules.preview();
+      box.innerHTML = `<div class="hdr">## SYSTEM: Design Rules</div><div>${escapeHtml(preview.content || '(nothing saved yet)')}</div>`;
+      const v = preview.lastPublished ? `v${preview.lastPublished.versionNumber}` : '—';
+      versionLabel.textContent = v;
+      footerVersion.textContent = preview.lastPublished ? `${v} · ${preview.hasUnpublishedChanges ? 'Draft ahead of published' : 'Published'}` : 'Never published';
+      publishStatus.innerHTML = preview.hasUnpublishedChanges
+        ? `<span class="status-dot" style="background:var(--brass);display:inline-block;margin-right:6px;"></span>Draft has unpublished changes`
+        : `<span class="status-dot" style="background:var(--sage);display:inline-block;margin-right:6px;"></span>Published — matches live`;
+      publishBtn.disabled = !preview.hasUnpublishedChanges;
+      return preview;
+    } catch (err) {
+      box.textContent = 'Error loading preview: ' + err.message;
+      return null;
+    }
+  }
+
+  async function loadAiStatus(preview) {
+    const body = document.getElementById('aiStatusBody');
+    const [gemini, drive] = await Promise.allSettled([CasaApi.geminiStatus(), CasaApi.driveStatus()]);
+    const rows = [];
+    if (gemini.status === 'fulfilled') {
+      rows.push({ ok: gemini.value.configured, text: gemini.value.configured ? 'Gemini API connected' : 'Gemini API not configured' });
+    } else {
+      rows.push({ ok: false, text: 'Gemini status unknown' });
+    }
+    if (drive.status === 'fulfilled') {
+      rows.push({ ok: drive.value.configured, text: drive.value.configured ? 'Google Drive connected' : 'Google Drive not configured' });
+    } else {
+      rows.push({ ok: false, text: 'Drive status unknown' });
+    }
+    rows.push({
+      ok: !(preview && preview.hasUnpublishedChanges),
+      text: preview && preview.hasUnpublishedChanges ? 'Rules: draft (unpublished changes)' : 'Rules: published and live',
+    });
+    body.innerHTML = rows.map((r) => `<div class="ai-status-row"><span class="status-dot" style="background:${r.ok ? 'var(--sage)' : 'var(--brass)'};"></span>${escapeHtml(r.text)}</div>`).join('');
+  }
+
+  async function loadRules() {
+    serverRules = await CasaApi.designRules.list();
+    syncSlotStateFromServer();
+    renderAccordion();
+    renderStats();
+    renderStatusBar();
+  }
+
+  async function refreshAll() {
+    await loadRules();
+    const preview = await loadPreview();
+    await loadAiStatus(preview);
+  }
+
+  document.getElementById('saveDraftBtn').addEventListener('click', async () => {
+    const errBox = document.getElementById('topError');
+    errBox.style.display = 'none';
+    const btn = document.getElementById('saveDraftBtn');
+    btn.disabled = true;
+    btn.textContent = 'Saving…';
+    const notice = CasaNotify.processing('Saving draft rules…');
+    try {
+      for (const slot of SLOTS) {
+        const st = slotState[slot.id];
+        const content = (st.content || '').trim();
+        if (st.ruleId) {
+          if (content !== (st.loadedContent || '').trim()) {
+            await CasaApi.designRules.update(st.ruleId, { content });
+          }
+        } else if (content) {
+          const payload = { section: slot.section, title: slot.title, content, sortOrder: SLOTS.indexOf(slot) };
+          if (slot.key) payload.key = slot.key;
+          await CasaApi.designRules.create(payload);
+        }
+      }
+      await refreshAll();
+      notice.success('Draft saved.');
+    } catch (err) {
+      errBox.textContent = err.message || 'Could not save draft.';
+      errBox.style.display = 'block';
+      notice.error(err.message || 'Could not save draft.');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Save Draft';
+    }
+  });
+
+  document.getElementById('resetBtn').addEventListener('click', async () => {
+    if (hasUnsavedEdits() && !confirm('Discard your unsaved edits and reload the last-saved draft?')) return;
+    await loadRules();
+    CasaNotify.success('Reloaded from the last saved draft.');
+  });
+
+  document.getElementById('publishBtn').addEventListener('click', async () => {
+    if (hasUnsavedEdits() && !confirm('You have unsaved edits in the editor. Publish only sends what was last saved with "Save Draft" — continue without saving them?')) return;
+    const summary = prompt('Optional: describe what changed in this publish');
+    if (summary === null) return;
+    const btn = document.getElementById('publishBtn');
+    btn.disabled = true;
+    btn.textContent = 'Publishing…';
+    const notice = CasaNotify.processing('Publishing design rules…');
+    try {
+      await CasaApi.designRules.publish(summary || undefined);
+      await refreshAll();
+      notice.success('Design rules published — now live for AI generation.');
+    } catch (err) {
+      notice.error(err.message || 'Publish failed.');
+    } finally {
+      btn.textContent = 'Publish Rules';
+    }
+  });
+
+  await refreshAll();
+})();
+</script>
+</body>
+</html>

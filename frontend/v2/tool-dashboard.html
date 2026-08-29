@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Casa de Aurum — Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/shell.css">
+<style>
+  .casa-toolcards { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+  @media (max-width: 720px) { .casa-toolcards { grid-template-columns: 1fr; } }
+  .toolcard { background: #fff; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; text-decoration: none; display: block; transition: box-shadow .15s ease; }
+  .toolcard:hover { box-shadow: var(--shadow); }
+  .toolcard .bar { height: 8px; }
+  .toolcard .body { padding: 22px 20px; }
+  .toolcard .eyebrow { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: .1em; color: var(--brass); margin-bottom: 9px; }
+  .toolcard .title { font-family: var(--display); font-weight: 600; font-size: 19px; color: var(--charcoal); margin-bottom: 6px; }
+  .toolcard .desc { font-size: 13px; color: var(--stone-600); line-height: 1.55; margin-bottom: 16px; }
+  .toolcard .status { display: flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 11px; color: var(--stone-600); }
+  .toolcard .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--sage); flex: none; }
+
+  .casa-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 900px) { .casa-two-col { grid-template-columns: 1fr; } }
+
+  .activity-row { padding: 10px 18px; display: flex; align-items: flex-start; gap: 10px; border-bottom: 1px solid rgba(34,29,24,0.06); }
+  .activity-row:last-child { border-bottom: none; }
+  .activity-row .adot { width: 6px; height: 6px; border-radius: 50%; background: var(--brass); margin-top: 5px; flex: none; }
+  .activity-row .who { font-size: 12.5px; color: var(--ink); }
+  .activity-row .when { font-family: var(--mono); font-size: 10.5px; color: var(--stone-400); margin-top: 2px; }
+
+  .sys-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; }
+  .sys-row .sdot { width: 8px; height: 8px; border-radius: 50%; background: var(--sage); flex: none; }
+  .sys-row .sdot.off { background: var(--clay); }
+  .sys-row span.t { font-family: var(--mono); font-size: 12px; color: var(--ink); }
+
+  .err-inline { font-family: var(--mono); font-size: 12px; color: var(--clay); padding: 14px 18px; }
+</style>
+</head>
+<body>
+<div id="casa-main-content">
+
+  <div class="casa-pageheader">
+    <div>
+      <h1 id="welcomeHeading">Welcome back</h1>
+      <p id="todayLine">Casa de Aurum showroom tools</p>
+    </div>
+  </div>
+
+  <div class="casa-stat-grid" id="statGrid">
+    <div class="casa-stat-card"><div class="label">Loading…</div><div class="value">—</div></div>
+  </div>
+
+  <div class="casa-toolcards">
+    <a class="toolcard" href="moodboard-wizard.html">
+      <div class="bar" style="background:linear-gradient(90deg,#AD8348,#D8B677);"></div>
+      <div class="body">
+        <div class="eyebrow">Part 03</div>
+        <div class="title">Mood Board Generator</div>
+        <div class="desc">Enter customer requirements — style, room, budget — and get AI-generated tile combinations in seconds.</div>
+        <div class="status" id="moodboardToolStatus"><span class="dot"></span><span>Ready</span></div>
+      </div>
+    </a>
+    <a class="toolcard" href="print-board-designer.html">
+      <div class="bar" style="background:linear-gradient(90deg,#1A1611,#4B443A);"></div>
+      <div class="body">
+        <div class="eyebrow">Part 04</div>
+        <div class="title">Print Board Designer</div>
+        <div class="desc">Build cassette panels, ACP signboards, or handouts at exact print dimensions and send to print shop.</div>
+        <div class="status"><span class="dot"></span><span>Ready · PNG / PDF export</span></div>
+      </div>
+    </a>
+  </div>
+
+  <div class="casa-two-col">
+    <div class="casa-panel">
+      <div class="panel-head"><h3>Recent Activity</h3></div>
+      <div class="panel-body" style="padding:6px 0;" id="activityBody">
+        <div class="err-inline" style="color:var(--stone-400);">Loading…</div>
+      </div>
+    </div>
+    <div class="casa-panel">
+      <div class="panel-head"><h3>System Status</h3></div>
+      <div class="panel-body" id="systemBody">
+        <div class="err-inline" style="color:var(--stone-400);">Loading…</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script src="../assets/api-client.js"></script>
+<script src="../assets/notifications.js"></script>
+<script src="assets/shell.js"></script>
+<script>
+  function escapeHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  function statCard(label, value, sub) {
+    return `<div class="casa-stat-card"><div class="label">${escapeHtml(label)}</div><div class="value">${escapeHtml(value)}</div>${sub ? `<div class="delta">${escapeHtml(sub)}</div>` : ''}</div>`;
+  }
+
+  function renderStats(stats) {
+    const approved = Array.isArray(stats.moodBoards?.byStatus)
+      ? (stats.moodBoards.byStatus.find((s) => s.status === 'APPROVED')?.count || 0)
+      : 0;
+    document.getElementById('statGrid').innerHTML = [
+      statCard('Mood Boards', stats.moodBoards?.total ?? 0, 'lifetime total'),
+      statCard('Approved', approved, stats.moodBoards?.total ? `${Math.round((approved / stats.moodBoards.total) * 100)}% of total` : ''),
+      statCard('Print Boards', stats.printBoards?.total ?? 0, 'lifetime total'),
+      statCard('Tiles in Stock', stats.tiles?.total ?? 0, 'in library'),
+    ].join('');
+
+    document.getElementById('moodboardToolStatus').innerHTML =
+      `<span class="dot"></span><span>Ready · ${escapeHtml(stats.tiles?.total ?? 0)} tiles in library</span>`;
+  }
+
+  function renderActivity(items) {
+    const body = document.getElementById('activityBody');
+    if (!Array.isArray(items) || !items.length) {
+      body.innerHTML = `<div class="err-inline" style="color:var(--stone-400);">No activity yet.</div>`;
+      return;
+    }
+    body.innerHTML = items.slice(0, 8).map((a) => `
+      <div class="activity-row">
+        <div class="adot"></div>
+        <div style="flex:1;">
+          <div class="who">${escapeHtml(a.action || 'Activity')}${a.entityType ? ` <span class="casa-hint">· ${escapeHtml(a.entityType)}</span>` : ''}</div>
+          <div class="when">${escapeHtml(CasaApi.relativeTime(a.createdAt))}${a.user ? ` · ${escapeHtml(a.user.name)}` : ''}</div>
+        </div>
+      </div>`).join('');
+  }
+
+  function renderSystem(system, stats) {
+    const body = document.getElementById('systemBody');
+    const rows = [];
+    if (system) {
+      rows.push({ ok: system.db === 'up', text: system.db === 'up' ? `Database online · ${system.env || ''}` : 'Database unreachable' });
+    }
+    if (stats?.tiles) rows.push({ ok: true, text: `Tile database synced · ${stats.tiles.total} tiles` });
+    if (stats?.designRules) rows.push({ ok: true, text: `${stats.designRules.total} design rule set(s) active` });
+    if (stats?.printBoards) rows.push({ ok: true, text: `${stats.printBoards.total} print board(s) exported to date` });
+    body.innerHTML = rows.length
+      ? rows.map((r) => `<div class="sys-row"><div class="sdot${r.ok ? '' : ' off'}"></div><span class="t">${escapeHtml(r.text)}</span></div>`).join('')
+      : `<div class="err-inline" style="color:var(--stone-400);">No system status available.</div>`;
+  }
+
+  (async () => {
+    const user = await CasaShell.init({ current: 'tool-dashboard.html' });
+
+    document.getElementById('welcomeHeading').textContent = `Welcome back, ${user.name ? user.name.split(' ')[0] : ''}`;
+    document.getElementById('todayLine').textContent =
+      new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ' · Casa de Aurum showroom tools';
+
+    try {
+      const overview = await CasaApi.dashboard.overview();
+      renderStats(overview.stats);
+      renderActivity(overview.recentActivity);
+      renderSystem(overview.system, overview.stats);
+    } catch (err) {
+      document.getElementById('statGrid').innerHTML =
+        `<div class="casa-stat-card"><div class="label">Error</div><div class="value" style="font-size:15px;color:var(--clay);">${escapeHtml(err.message || 'Could not load dashboard stats.')}</div></div>`;
+      document.getElementById('activityBody').innerHTML = `<div class="err-inline">Could not load activity.</div>`;
+      document.getElementById('systemBody').innerHTML = `<div class="err-inline">Could not load system status.</div>`;
+    }
+  })();
+</script>
+</body>
+</html>

@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Casa de Aurum — Rules &amp; Filters</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/shell.css">
+<style>
+  .open-editor{font-family:var(--sans);font-weight:600;font-size:12px;color:var(--brass);border:1px solid var(--brass);padding:8px 14px;border-radius:2px;text-decoration:none;white-space:nowrap;}
+  .open-editor:hover{background:var(--brass);color:#fff;}
+  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;}
+  @media (max-width:900px){.two-col{grid-template-columns:1fr;}}
+  .cfg-field{margin-bottom:14px;}
+  .cfg-field:last-child{margin-bottom:0;}
+  .cfg-field label{display:block;font-size:12px;color:var(--stone-600);margin-bottom:6px;font-family:var(--mono);}
+  .cfg-field input, .cfg-field select{width:100%;font-family:var(--mono);font-size:13px;padding:10px 11px;border:1px solid var(--line);border-radius:2px;background:var(--stone-50);color:var(--ink);}
+  .cfg-field input:focus, .cfg-field select:focus{outline:2px solid var(--brass);outline-offset:1px;}
+  .cfg-field input:disabled{color:var(--stone-400);cursor:not-allowed;}
+  .cfg-hint{font-family:var(--sans);font-size:11px;color:var(--stone-400);}
+  .toggle-row{display:flex;align-items:center;justify-content:space-between;padding:2px 0;}
+  .toggle-row .lbl{font-family:var(--mono);font-size:12px;color:var(--stone-700);}
+  .toggle{width:40px;height:22px;border-radius:11px;position:relative;flex:none;}
+  .toggle .knob{width:18px;height:18px;border-radius:50%;background:#fff;position:absolute;top:2px;box-shadow:0 1px 3px rgba(0,0,0,0.15);}
+  .toggle.on{background:var(--brass);}
+  .toggle.on .knob{right:2px;}
+  .toggle.off{background:var(--stone-100);}
+  .toggle.off .knob{left:2px;}
+  .row-div{width:100%;height:1px;background:rgba(34,29,24,0.08);margin:12px 0;}
+
+  .sec-row{padding:12px 18px;border-bottom:1px solid rgba(34,29,24,0.06);display:flex;align-items:center;gap:14px;}
+  .sec-row:last-child{border-bottom:none;}
+  .sec-num{font-family:var(--mono);font-size:10.5px;color:var(--brass);font-weight:500;width:24px;flex:none;}
+  .sec-name{font-family:var(--mono);font-size:13px;color:var(--ink);flex:1;min-width:0;}
+  .sec-tag{display:inline-block;font-size:10px;padding:2px 7px;border-radius:8px;font-family:var(--sans);font-weight:600;flex:none;}
+  .sec-words{font-family:var(--mono);font-size:11px;color:var(--stone-400);width:80px;text-align:right;flex:none;}
+  .sec-dot{width:8px;height:8px;border-radius:50%;flex:none;}
+  .save-row{display:flex;justify-content:flex-end;margin-top:14px;}
+  .err-box{background:#FBEEEA;border:1px solid var(--clay);color:var(--clay);font-size:12px;padding:9px 11px;border-radius:2px;margin-top:10px;display:none;}
+</style>
+</head>
+<body>
+<div id="casa-main-content">
+  <div class="casa-pageheader">
+    <div>
+      <h1>Rules &amp; Filters</h1>
+      <p>Section-by-section status of the design rules, plus default generation settings and versioning behaviour.</p>
+    </div>
+    <a class="open-editor" href="design-rules-setup.html">Open Rules Editor →</a>
+  </div>
+
+  <div class="two-col">
+    <div class="casa-panel" style="margin-bottom:0;">
+      <div class="panel-head"><h3>Rules Storage</h3></div>
+      <div class="panel-body">
+        <div class="cfg-field">
+          <label>Storage backend</label>
+          <input type="text" value="Postgres — design_rules table (via API)" disabled>
+          <div class="cfg-hint">Design preview — this app stores rules in the database, not as flat files. Path-style config isn't applicable to this backend.</div>
+        </div>
+        <div class="cfg-field">
+          <label>Reference images folder</label>
+          <input type="text" value="Backend media storage (via Reference Image Library)" disabled>
+        </div>
+      </div>
+    </div>
+
+    <div class="casa-panel" style="margin-bottom:0;">
+      <div class="panel-head"><h3>Auto-Save &amp; Versioning</h3></div>
+      <div class="panel-body">
+        <div class="toggle-row">
+          <span class="lbl">Auto-save drafts</span>
+          <div class="toggle off"><div class="knob"></div></div>
+        </div>
+        <div class="cfg-hint" style="margin-top:4px;">Design preview — drafts save when you click "Save Draft" on the Rules Editor, not automatically.</div>
+        <div class="row-div"></div>
+        <div class="toggle-row">
+          <span class="lbl">Create version on publish</span>
+          <div class="toggle on"><div class="knob"></div></div>
+        </div>
+        <div class="cfg-hint" style="margin-top:4px;">Real — every Publish on the Rules Editor creates a new version, visible on Prompt Versions.</div>
+        <div class="row-div"></div>
+        <div class="toggle-row">
+          <span class="lbl">Require review before publish</span>
+          <div class="toggle off"><div class="knob"></div></div>
+        </div>
+        <div class="cfg-hint" style="margin-top:4px;">Design preview — not enforced by this backend yet. Any Owner/Admin can publish directly.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="casa-panel">
+    <div class="panel-head">
+      <h3>Rule Sections</h3>
+      <span class="casa-hint" id="sectionSummary"></span>
+    </div>
+    <div id="sectionList"><div style="padding:20px 18px;font-family:var(--mono);font-size:12.5px;color:var(--stone-600);">Loading…</div></div>
+  </div>
+
+  <div class="casa-panel">
+    <div class="panel-head"><h3>Default Generation Settings</h3></div>
+    <div class="panel-body">
+      <div class="casa-hint" style="margin-bottom:12px;">Real — stored server-side, applied as defaults whenever a mood board brief doesn't specify these explicitly.</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;">
+        <div class="cfg-field">
+          <label>Min tiles per combination</label>
+          <input type="number" id="rulesMinTiles" min="1">
+        </div>
+        <div class="cfg-field">
+          <label>Max combinations per brief</label>
+          <input type="number" id="rulesMaxCombinations" min="1">
+        </div>
+        <div class="cfg-field">
+          <label>Default room type</label>
+          <input type="text" id="rulesDefaultRoom" placeholder="BATHROOM">
+        </div>
+        <div class="cfg-field">
+          <label>Default style tag</label>
+          <input type="text" id="rulesDefaultStyle" placeholder="LUXURY">
+        </div>
+      </div>
+      <div class="err-box" id="rulesSettingsError"></div>
+      <div class="save-row">
+        <button class="casa-btn" id="saveRulesSettingsBtn">Save defaults</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="../assets/api-client.js"></script>
+<script src="../assets/notifications.js"></script>
+<script src="assets/shell.js"></script>
+<script>
+(async () => {
+  const user = await CasaShell.init({ current: 'admin-design-rules.html' });
+
+  function escapeHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  const SLOT_ORDER = [
+    { section: 'GENERAL', key: null, title: 'General Rules', tag: 'Core', tagBg: 'var(--stone-100)', tagColor: 'var(--stone-700)' },
+    { section: 'STYLE', key: 'LUXURY', title: 'Luxury', tag: 'Style', tagBg: 'var(--stone-100)', tagColor: 'var(--stone-700)' },
+    { section: 'STYLE', key: 'SUBTLE', title: 'Subtle', tag: 'Style', tagBg: 'var(--stone-100)', tagColor: 'var(--stone-700)' },
+    { section: 'STYLE', key: 'BOLD', title: 'Bold', tag: 'Style', tagBg: 'var(--stone-100)', tagColor: 'var(--stone-700)' },
+    { section: 'ROOM', key: 'BATHROOM', title: 'Bathroom', tag: 'Room', tagBg: '#FBF6EC', tagColor: 'var(--brass)' },
+    { section: 'ROOM', key: 'KITCHEN', title: 'Kitchen', tag: 'Room', tagBg: '#FBF6EC', tagColor: 'var(--brass)' },
+    { section: 'ROOM', key: 'LIVING_ROOM', title: 'Living Room', tag: 'Room', tagBg: '#FBF6EC', tagColor: 'var(--brass)' },
+    { section: 'CLIENT', key: 'TRADITIONAL', title: 'Traditional', tag: 'Client', tagBg: '#F3EDE4', tagColor: 'var(--stone-600)' },
+    { section: 'CLIENT', key: 'FEMALE_CLIENT', title: 'Female Client', tag: 'Client', tagBg: '#F3EDE4', tagColor: 'var(--stone-600)' },
+    { section: 'GENERAL', key: null, title: 'Custom Rules', tag: 'Custom', tagBg: 'var(--stone-100)', tagColor: 'var(--stone-700)' },
+  ];
+
+  function wordCount(text) {
+    if (!text || !text.trim()) return 0;
+    return text.trim().split(/\s+/).length;
+  }
+
+  async function loadSections() {
+    const listEl = document.getElementById('sectionList');
+    try {
+      const rules = await CasaApi.designRules.list();
+      const rows = SLOT_ORDER.map((slot, i) => {
+        const rule = slot.key
+          ? rules.find((r) => r.section === slot.section && r.key === slot.key)
+          : rules.find((r) => r.section === slot.section && !r.key && r.title === slot.title);
+        return {
+          num: String(i + 1).padStart(2, '0'),
+          name: slot.title,
+          tag: slot.tag, tagBg: slot.tagBg, tagColor: slot.tagColor,
+          words: rule ? wordCount(rule.content) : 0,
+          exists: !!rule,
+          active: rule ? rule.isActive : null,
+        };
+      });
+
+      listEl.innerHTML = rows.map((r) => `
+        <div class="sec-row">
+          <span class="sec-num">${r.num}</span>
+          <span class="sec-name">${escapeHtml(r.name)}</span>
+          <span class="sec-tag" style="background:${r.tagBg};color:${r.tagColor};">${r.tag}</span>
+          <span class="sec-words">${r.words} words</span>
+          <span class="sec-dot" style="background:${!r.exists ? 'var(--stone-200)' : r.active ? 'var(--sage)' : 'var(--stone-400)'};" title="${!r.exists ? 'Not yet written' : r.active ? 'Active' : 'Inactive'}"></span>
+        </div>
+      `).join('');
+
+      const written = rows.filter((r) => r.exists).length;
+      document.getElementById('sectionSummary').textContent = `${written} of ${rows.length} sections written`;
+    } catch (err) {
+      listEl.innerHTML = `<div style="padding:20px 18px;font-family:var(--mono);font-size:12.5px;color:var(--clay);">${escapeHtml(err.message)}</div>`;
+    }
+  }
+
+  async function loadRulesSettings() {
+    try {
+      const s = await CasaApi.settings.getCategory('rules');
+      document.getElementById('rulesMinTiles').value = s.defaultMinTiles ?? '';
+      document.getElementById('rulesMaxCombinations').value = s.defaultMaxCombinations ?? '';
+      document.getElementById('rulesDefaultRoom').value = s.defaultRoomType || '';
+      document.getElementById('rulesDefaultStyle').value = s.defaultStyleTag || '';
+    } catch (err) {
+      document.getElementById('rulesSettingsError').textContent = err.message || 'Could not load default generation settings.';
+      document.getElementById('rulesSettingsError').style.display = 'block';
+    }
+  }
+
+  document.getElementById('saveRulesSettingsBtn').addEventListener('click', async () => {
+    const errBox = document.getElementById('rulesSettingsError');
+    errBox.style.display = 'none';
+    const btn = document.getElementById('saveRulesSettingsBtn');
+    btn.disabled = true;
+    btn.textContent = 'Saving…';
+    try {
+      await CasaApi.settings.updateCategory('rules', {
+        defaultMinTiles: Number(document.getElementById('rulesMinTiles').value) || undefined,
+        defaultMaxCombinations: Number(document.getElementById('rulesMaxCombinations').value) || undefined,
+        defaultRoomType: document.getElementById('rulesDefaultRoom').value.trim(),
+        defaultStyleTag: document.getElementById('rulesDefaultStyle').value.trim(),
+      });
+      CasaNotify.success('Default generation settings saved.');
+    } catch (err) {
+      errBox.textContent = err.message || 'Failed to save.';
+      errBox.style.display = 'block';
+      CasaNotify.error(err.message || 'Failed to save.');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Save defaults';
+    }
+  });
+
+  await Promise.all([loadSections(), loadRulesSettings()]);
+})();
+</script>
+</body>
+</html>
