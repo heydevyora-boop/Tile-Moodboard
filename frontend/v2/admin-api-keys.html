@@ -1,0 +1,423 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Casa de Aurum — API Keys &amp; Integrations</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/shell.css">
+<style>
+  .owner-badge{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--brass);border:1px solid var(--brass);padding:5px 10px;border-radius:2px;white-space:nowrap;}
+
+  .svc-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  @media (max-width:760px){.svc-grid{grid-template-columns:1fr;}}
+  .svc-card{border:1px solid var(--line);border-radius:5px;padding:14px 16px;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;}
+  .svc-card .si{display:flex;gap:11px;align-items:flex-start;}
+  .svc-card .ic{width:34px;height:34px;border-radius:6px;flex:none;background:var(--stone-100);display:flex;align-items:center;justify-content:center;font-size:16px;}
+  .svc-card .t{font-size:13.5px;font-weight:700;color:var(--ink);margin-bottom:2px;}
+  .svc-card .d{font-size:11.5px;color:var(--stone-600);line-height:1.4;}
+  .svc-status{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10.5px;margin-top:7px;}
+  .svc-status .dot{width:7px;height:7px;border-radius:50%;}
+  .svc-status.on .dot{background:var(--sage);}
+  .svc-status.on{color:var(--sage);}
+  .svc-status.off .dot{background:var(--stone-400);}
+  .svc-status.off{color:var(--stone-600);}
+  .svc-action{font-family:var(--sans);font-size:11.5px;font-weight:600;background:none;border:1px solid var(--line);padding:6px 12px;border-radius:2px;cursor:pointer;color:var(--stone-700);white-space:nowrap;}
+  .svc-action:hover{border-color:var(--brass);color:var(--brass);}
+  .svc-action:disabled{opacity:.5;cursor:not-allowed;}
+
+  table.keys td{font-family:var(--mono);}
+  .keyname{font-weight:600;color:var(--ink);font-size:13px;font-family:var(--sans) !important;}
+  .keyname .sub{display:block;font-weight:400;font-size:11px;color:var(--stone-600);font-family:var(--mono);margin-top:2px;}
+  .keyval{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:12px;background:var(--stone-50);border:1px solid var(--line);border-radius:2px;padding:5px 9px;color:var(--stone-700);}
+  .rowact{display:flex;gap:14px;}
+  .rowact a{font-family:var(--mono);font-size:11px;color:var(--stone-600);text-decoration:none;cursor:pointer;}
+  .rowact a:hover{color:var(--brass);}
+  .rowact a.danger:hover{color:var(--clay);}
+  .status-pill{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:11px;color:var(--stone-700);}
+  .status-pill .dot{width:7px;height:7px;border-radius:50%;flex:none;}
+  .status-pill.active .dot{background:var(--sage);}
+  .status-pill.expiring .dot{background:var(--brass);}
+
+  .split-grid{display:grid;grid-template-columns:1fr 1.15fr;gap:20px;align-items:start;}
+  @media (max-width:900px){.split-grid{grid-template-columns:1fr;}}
+  .field{margin-bottom:14px;}
+  .field:last-child{margin-bottom:0;}
+  .field label{display:block;font-size:12px;color:var(--stone-600);margin-bottom:6px;font-family:var(--mono);letter-spacing:.03em;}
+  .field input, .field select{width:100%;font-family:var(--mono);font-size:13px;padding:10px 11px;border:1px solid var(--line);border-radius:2px;background:var(--stone-50);color:var(--ink);}
+  .field input:focus, .field select:focus{outline:2px solid var(--brass);outline-offset:1px;}
+  .field .desc{font-size:12px;color:var(--stone-600);margin-top:5px;line-height:1.45;}
+
+  .usage-row{padding:13px 0;border-bottom:1px dashed var(--line);}
+  .usage-row:last-child{border-bottom:none;padding-bottom:0;}
+  .usage-row:first-child{padding-top:0;}
+  .usage-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:7px;}
+  .usage-top .t{font-size:12.5px;font-weight:600;color:var(--ink);}
+  .usage-top .v{font-family:var(--mono);font-size:11.5px;color:var(--stone-600);}
+  .usage-bar-wrap{background:var(--stone-100);border-radius:2px;overflow:hidden;height:6px;}
+  .usage-bar{height:100%;background:linear-gradient(90deg,var(--brass),var(--brass-light));}
+
+  .panel-danger{border-color:rgba(156,75,44,.35) !important;}
+  .panel-danger .panel-head{background:#FBF3EE;border-bottom-color:rgba(156,75,44,.2);}
+  .panel-danger .panel-head h3{color:var(--clay);}
+  .danger-row{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;padding:12px 0;border-bottom:1px dashed rgba(156,75,44,.2);}
+  .danger-row:last-child{border-bottom:none;padding-bottom:0;}
+  .danger-row:first-child{padding-top:0;}
+  .danger-row .t{font-size:13px;font-weight:600;color:var(--ink);}
+  .danger-row .d{font-size:12px;color:var(--stone-600);}
+  button.danger-btn{font-family:var(--sans);font-weight:600;font-size:12.5px;background:none;color:var(--clay);border:1px solid var(--clay);padding:8px 14px;border-radius:2px;cursor:pointer;white-space:nowrap;}
+  button.danger-btn:hover{background:var(--clay);color:#fff;}
+  .err-box{background:#FBEEEA;border:1px solid var(--clay);color:var(--clay);font-size:12.5px;padding:9px 11px;border-radius:2px;margin-bottom:10px;display:none;}
+</style>
+</head>
+<body>
+<div id="casa-main-content">
+  <div class="casa-pageheader">
+    <div>
+      <h1>API Keys &amp; Integrations</h1>
+      <p>Everything the tools connect to behind the scenes — the AI that reads your design rules, and where finished boards get sent. Owner-only.</p>
+    </div>
+    <span class="owner-badge" id="summaryBadge">Loading…</span>
+  </div>
+
+  <div id="ownerOnlyNotice" style="display:none;" class="casa-panel">
+    <div class="panel-body" style="text-align:center;color:var(--stone-600);font-family:var(--mono);font-size:13px;">You don't have permission to view this. API keys and integrations are Owner-only.</div>
+  </div>
+
+  <div id="pageBody">
+    <div class="casa-panel">
+      <div class="panel-head"><h3>Connected Services</h3></div>
+      <div class="panel-body">
+        <div class="svc-grid">
+          <div class="svc-card">
+            <div class="si">
+              <div class="ic">✦</div>
+              <div>
+                <div class="t">Gemini AI</div>
+                <div class="d">Powers Mood Board Generator combinations</div>
+                <div class="svc-status off" id="geminiStatus"><span class="dot"></span>Checking…</div>
+              </div>
+            </div>
+            <button class="svc-action" id="testGeminiBtn">Test connection</button>
+          </div>
+
+          <div class="svc-card">
+            <div class="si">
+              <div class="ic">⬒</div>
+              <div>
+                <div class="t">Google Drive</div>
+                <div class="d">Stores extracted tile images and reference photos</div>
+                <div class="svc-status off" id="driveStatus"><span class="dot"></span>Checking…</div>
+              </div>
+            </div>
+            <button class="svc-action" id="testDriveBtn">Test connection</button>
+          </div>
+
+          <div class="svc-card">
+            <div class="si">
+              <div class="ic">▦</div>
+              <div>
+                <div class="t">Google Sheets</div>
+                <div class="d">Reference sheet backing the tile catalog</div>
+                <div class="svc-status off"><span class="dot"></span>Design preview — shares Drive's credentials, no separate status check</div>
+              </div>
+            </div>
+            <button class="svc-action" disabled>Manage</button>
+          </div>
+
+          <div class="svc-card">
+            <div class="si">
+              <div class="ic">✎</div>
+              <div>
+                <div class="t">Print Shop Email</div>
+                <div class="d">Where "Download for print shop" sends the file</div>
+                <div class="svc-status off"><span class="dot"></span>Design preview — not wired to a backend service yet</div>
+              </div>
+            </div>
+            <button class="svc-action" disabled>Manage</button>
+          </div>
+
+          <div class="svc-card">
+            <div class="si">
+              <div class="ic">◐</div>
+              <div>
+                <div class="t">WhatsApp Business</div>
+                <div class="d">Send boards straight to a customer's number</div>
+                <div class="svc-status off"><span class="dot"></span>Design preview — not wired to a backend service yet</div>
+              </div>
+            </div>
+            <button class="svc-action" disabled>Connect</button>
+          </div>
+
+          <div class="svc-card">
+            <div class="si">
+              <div class="ic">◫</div>
+              <div>
+                <div class="t">Zapier / Webhooks</div>
+                <div class="d">Push new tiles or boards to other store systems</div>
+                <div class="svc-status off"><span class="dot"></span>Design preview — not wired to a backend service yet</div>
+              </div>
+            </div>
+            <button class="svc-action" disabled>Connect</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="casa-panel">
+      <div class="panel-head"><h3>API Keys &amp; Credentials</h3></div>
+      <div class="panel-body" style="padding:8px 0;overflow-x:auto;">
+        <table class="casa-table keys">
+          <thead><tr><th>Name</th><th>Key</th><th>Last rotated</th><th>Status</th><th></th></tr></thead>
+          <tbody id="apiKeysBody"><tr><td colspan="5" style="text-align:center;color:var(--stone-400);padding:24px;">Loading keys…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="split-grid">
+      <div class="casa-panel" style="margin-bottom:0;">
+        <div class="panel-head"><h3>Add a Key</h3></div>
+        <div class="panel-body">
+          <div class="field">
+            <label>Service</label>
+            <select id="newKeyService"><option value="GEMINI">Gemini AI</option><option value="GOOGLE_DRIVE">Google Drive</option><option value="CUSTOM">Custom</option></select>
+          </div>
+          <div class="field"><label>Label</label><input type="text" id="newKeyLabel" placeholder="e.g. Backup Gemini Key"></div>
+          <div class="field">
+            <label>Key or credential</label>
+            <input type="password" id="newKeyValue" placeholder="Paste key — stored encrypted">
+            <div class="desc">Never shown in full after saving. Only the last 4 characters stay visible for identification.</div>
+          </div>
+          <div class="err-box" id="addKeyError"></div>
+          <button class="casa-btn" id="saveKeyBtn" style="width:100%;margin-top:2px;">Save key</button>
+        </div>
+      </div>
+
+      <div class="casa-panel" style="margin-bottom:0;">
+        <div class="panel-head"><h3>Usage Today<span class="casa-hint" style="margin-left:10px;">Design preview — no usage-metering backend yet</span></h3></div>
+        <div class="panel-body">
+          <div class="usage-row"><div class="usage-top"><span class="t">Gemini API — requests</span><span class="v">— / —</span></div><div class="usage-bar-wrap"><div class="usage-bar" style="width:0%;"></div></div></div>
+          <div class="usage-row"><div class="usage-top"><span class="t">Google Sheets — reads/writes</span><span class="v">— / —</span></div><div class="usage-bar-wrap"><div class="usage-bar" style="width:0%;"></div></div></div>
+          <div class="usage-row"><div class="usage-top"><span class="t">Google Drive — storage used</span><span class="v">— / —</span></div><div class="usage-bar-wrap"><div class="usage-bar" style="width:0%;"></div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="casa-panel panel-danger" style="margin-top:20px;margin-bottom:0;">
+      <div class="panel-head"><h3>Danger Zone</h3></div>
+      <div class="panel-body">
+        <div class="danger-row">
+          <div><div class="t">Disconnect all integrations</div><div class="d">Deactivates every API key below. Every tool stops working until keys are reactivated. Use this only if a key may have leaked.</div></div>
+          <button class="danger-btn" id="disconnectAllBtn">Disconnect all</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="../assets/api-client.js"></script>
+<script src="../assets/notifications.js"></script>
+<script src="assets/shell.js"></script>
+<script>
+(async () => {
+  const user = await CasaShell.init({ current: 'admin-api-keys.html' });
+
+  function escapeHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  if (user.role?.name !== 'OWNER') {
+    document.getElementById('pageBody').style.display = 'none';
+    document.getElementById('ownerOnlyNotice').style.display = 'block';
+    document.getElementById('summaryBadge').textContent = 'Owner access required';
+    return;
+  }
+
+  const SERVICE_LABEL = { GEMINI: 'Gemini API Key', GOOGLE_DRIVE: 'Google Drive / Sheets Key', CUSTOM: 'Custom Key' };
+
+  function renderApiKeys(keys) {
+    const tbody = document.getElementById('apiKeysBody');
+    if (!keys.length) {
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--stone-400);padding:16px;">No API keys stored yet — add one below.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = keys.map((k) => {
+      const rotated = k.lastRotatedAt ? new Date(k.lastRotatedAt).toLocaleString() : 'Never';
+      const statusClass = k.isActive ? 'active' : 'expiring';
+      const statusLabel = k.isActive ? 'Active' : 'Inactive';
+      return `
+        <tr data-id="${k.id}">
+          <td><div class="keyname">${escapeHtml(k.label)}<span class="sub">${escapeHtml(SERVICE_LABEL[k.service] || k.service)}</span></div></td>
+          <td><span class="keyval">${escapeHtml(k.maskedValue)}</span></td>
+          <td>${rotated}</td>
+          <td><span class="status-pill ${statusClass}"><span class="dot"></span>${statusLabel}</span></td>
+          <td><div class="rowact">
+            <a class="rotate-key" data-id="${k.id}">Rotate</a>
+            ${k.isActive ? `<a class="toggle-key" data-id="${k.id}" data-action="deactivate">Deactivate</a>` : `<a class="toggle-key" data-id="${k.id}" data-action="activate">Activate</a>`}
+            <a class="danger delete-key" data-id="${k.id}">Delete</a>
+          </div></td>
+        </tr>`;
+    }).join('');
+
+    tbody.querySelectorAll('.rotate-key').forEach((el) => el.addEventListener('click', () => rotateKey(el.dataset.id)));
+    tbody.querySelectorAll('.toggle-key').forEach((el) => el.addEventListener('click', () => toggleKey(el.dataset.id, el.dataset.action)));
+    tbody.querySelectorAll('.delete-key').forEach((el) => el.addEventListener('click', () => deleteKey(el.dataset.id)));
+  }
+
+  async function loadApiKeys() {
+    try {
+      const keys = await CasaApi.apiKeys.list();
+      renderApiKeys(keys);
+      document.getElementById('summaryBadge').textContent = `${keys.filter((k) => k.isActive).length} connected`;
+    } catch (err) {
+      document.getElementById('apiKeysBody').innerHTML = `<tr><td colspan="5" style="text-align:center;color:var(--clay);padding:16px;">${escapeHtml(err.message || 'Failed to load API keys.')}</td></tr>`;
+    }
+  }
+
+  async function rotateKey(id) {
+    const value = prompt('Paste the new key value:');
+    if (!value) return;
+    try {
+      await CasaApi.apiKeys.rotate(id, value);
+      await loadApiKeys();
+      CasaNotify.success('Key rotated.');
+    } catch (err) {
+      CasaNotify.error('Rotate failed: ' + err.message);
+    }
+  }
+
+  async function toggleKey(id, action) {
+    try {
+      if (action === 'activate') await CasaApi.apiKeys.activate(id);
+      else await CasaApi.apiKeys.deactivate(id);
+      await loadApiKeys();
+      CasaNotify.success(action === 'activate' ? 'Key activated.' : 'Key deactivated.');
+    } catch (err) {
+      CasaNotify.error('Update failed: ' + err.message);
+    }
+  }
+
+  async function deleteKey(id) {
+    if (!confirm('Delete this API key? This cannot be undone.')) return;
+    try {
+      await CasaApi.apiKeys.remove(id);
+      await loadApiKeys();
+      CasaNotify.success('Key deleted.');
+    } catch (err) {
+      CasaNotify.error('Delete failed: ' + err.message);
+    }
+  }
+
+  document.getElementById('saveKeyBtn').addEventListener('click', async () => {
+    const errorBox = document.getElementById('addKeyError');
+    errorBox.style.display = 'none';
+    const service = document.getElementById('newKeyService').value;
+    const label = document.getElementById('newKeyLabel').value.trim();
+    const value = document.getElementById('newKeyValue').value.trim();
+    if (!label || !value) {
+      errorBox.textContent = 'Label and key value are both required.';
+      errorBox.style.display = 'block';
+      return;
+    }
+    const btn = document.getElementById('saveKeyBtn');
+    btn.disabled = true;
+    btn.textContent = 'Saving…';
+    try {
+      await CasaApi.apiKeys.create({ service, label, value });
+      document.getElementById('newKeyLabel').value = '';
+      document.getElementById('newKeyValue').value = '';
+      await loadApiKeys();
+      CasaNotify.success('API key saved.');
+    } catch (err) {
+      errorBox.textContent = err.message || 'Failed to save key.';
+      errorBox.style.display = 'block';
+      CasaNotify.error(err.message || 'Failed to save key.');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Save key';
+    }
+  });
+
+  document.getElementById('disconnectAllBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('disconnectAllBtn');
+    if (!confirm('Deactivate every active API key? Every tool depending on one will stop working until keys are reactivated or replaced.')) return;
+    btn.disabled = true;
+    btn.textContent = 'Disconnecting…';
+    try {
+      const result = await CasaApi.apiKeys.deactivateAll();
+      await loadApiKeys();
+      CasaNotify.success(`Deactivated ${result.deactivatedCount} key${result.deactivatedCount === 1 ? '' : 's'}.`);
+    } catch (err) {
+      CasaNotify.error('Could not disconnect all: ' + err.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Disconnect all';
+    }
+  });
+
+  async function loadGeminiStatus() {
+    const statusEl = document.getElementById('geminiStatus');
+    try {
+      const data = await CasaApi.geminiStatus();
+      statusEl.className = data.configured ? 'svc-status on' : 'svc-status off';
+      statusEl.innerHTML = `<span class="dot"></span>${data.configured ? 'Configured' : 'Not configured'}`;
+    } catch (err) {
+      statusEl.className = 'svc-status off';
+      statusEl.innerHTML = '<span class="dot"></span>Unknown';
+    }
+  }
+
+  document.getElementById('testGeminiBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('testGeminiBtn');
+    btn.disabled = true;
+    btn.textContent = 'Testing…';
+    const notice = CasaNotify.processing('Testing Gemini connection…');
+    try {
+      const result = await CasaApi.testGeminiConnection();
+      if (result.ok) notice.success(`Connected — responded in ${result.latencyMs}ms.`);
+      else notice.error(result.message || 'Connection test failed.');
+    } catch (err) {
+      notice.error(err.message || 'Connection test failed.');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Test connection';
+      loadGeminiStatus();
+    }
+  });
+
+  async function loadDriveStatus() {
+    const statusEl = document.getElementById('driveStatus');
+    try {
+      const data = await CasaApi.driveStatus();
+      statusEl.className = data.configured ? 'svc-status on' : 'svc-status off';
+      statusEl.innerHTML = `<span class="dot"></span>${data.configured ? 'Configured' : 'Not configured'}`;
+    } catch (err) {
+      statusEl.className = 'svc-status off';
+      statusEl.innerHTML = '<span class="dot"></span>Unknown';
+    }
+  }
+
+  document.getElementById('testDriveBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('testDriveBtn');
+    btn.disabled = true;
+    btn.textContent = 'Testing…';
+    const notice = CasaNotify.processing('Testing Google Drive connection…');
+    try {
+      const result = await CasaApi.testDriveConnection();
+      if (result.ok) notice.success(`Connected — responded in ${result.latencyMs}ms.`);
+      else notice.error(result.message || 'Connection test failed.');
+    } catch (err) {
+      notice.error(err.message || 'Connection test failed.');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Test connection';
+      loadDriveStatus();
+    }
+  });
+
+  await Promise.all([loadGeminiStatus(), loadDriveStatus(), loadApiKeys()]);
+})();
+</script>
+</body>
+</html>
