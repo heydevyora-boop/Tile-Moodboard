@@ -189,7 +189,7 @@
   }
 
   (async () => {
-    await CasaShell.init({ current: 'admin-catalog-detail.html' });
+    await CasaShell.init({ current: 'admin-catalog-detail.html', allowedRoles: ['ADMIN','OWNER'] });
 
     if (!catalogId) {
       document.getElementById('notFound').style.display = '';

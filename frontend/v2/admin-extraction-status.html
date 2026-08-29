@@ -245,7 +245,7 @@
   }
 
   (async () => {
-    await CasaShell.init({ current: 'admin-extraction-status.html' });
+    await CasaShell.init({ current: 'admin-extraction-status.html', allowedRoles: ['ADMIN','OWNER'] });
 
     renderStatusFilters();
     document.getElementById('brandSearch').addEventListener('input', (e) => {

@@ -186,7 +186,7 @@
   }
 
   (async () => {
-    const user = await CasaShell.init({ current: 'admin-mood-board.html' });
+    const user = await CasaShell.init({ current: 'admin-mood-board.html', allowedRoles: ['ADMIN','OWNER'] });
 
     document.getElementById('stepUp').addEventListener('click', () => { if (comboCount < 20) { comboCount++; updatePreview(); } });
     document.getElementById('stepDown').addEventListener('click', () => { if (comboCount > 1) { comboCount--; updatePreview(); } });

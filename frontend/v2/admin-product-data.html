@@ -220,7 +220,7 @@
   }
 
   (async () => {
-    await CasaShell.init({ current: 'admin-product-data.html' });
+    await CasaShell.init({ current: 'admin-product-data.html', allowedRoles: ['ADMIN','OWNER'] });
 
     await loadBrands();
 

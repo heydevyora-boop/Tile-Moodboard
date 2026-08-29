@@ -132,7 +132,7 @@
 <script src="assets/shell.js"></script>
 <script>
 (async () => {
-  const user = await CasaShell.init({ current: 'owner-ai-test.html' });
+  const user = await CasaShell.init({ current: 'owner-ai-test.html', allowedRoles: ['ADMIN','OWNER'] });
 
   function escapeHtml(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));

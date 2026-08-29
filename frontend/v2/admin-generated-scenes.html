@@ -188,7 +188,7 @@
   }
 
   (async () => {
-    await CasaShell.init({ current: 'admin-generated-scenes.html' });
+    await CasaShell.init({ current: 'admin-generated-scenes.html', allowedRoles: ['ADMIN','OWNER'] });
     renderStatusChips();
     renderViewToggle();
     await loadBoards();

@@ -254,7 +254,7 @@
   });
 
   (async () => {
-    await CasaShell.init({ current: 'admin-catalog-extractor.html' });
+    await CasaShell.init({ current: 'admin-catalog-extractor.html', allowedRoles: ['ADMIN','OWNER'] });
     await loadExtractorBrands();
     await loadHistory();
   })();

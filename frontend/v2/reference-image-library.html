@@ -136,7 +136,7 @@
 <script src="assets/shell.js"></script>
 <script>
 (async () => {
-  const user = await CasaShell.init({ current: 'reference-image-library.html' });
+  const user = await CasaShell.init({ current: 'reference-image-library.html', allowedRoles: ['ADMIN','OWNER'] });
 
   function escapeHtml(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));

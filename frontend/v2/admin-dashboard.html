@@ -154,7 +154,7 @@
   }
 
   (async () => {
-    await CasaShell.init({ current: 'admin-dashboard.html' });
+    await CasaShell.init({ current: 'admin-dashboard.html', allowedRoles: ['ADMIN','OWNER'] });
 
     document.getElementById('refreshBtn').addEventListener('click', loadDashboard);
 

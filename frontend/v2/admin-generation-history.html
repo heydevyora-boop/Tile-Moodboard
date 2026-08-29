@@ -197,7 +197,7 @@
   }
 
   (async () => {
-    await CasaShell.init({ current: 'admin-generation-history.html' });
+    await CasaShell.init({ current: 'admin-generation-history.html', allowedRoles: ['ADMIN','OWNER'] });
 
     renderActionFilters();
     document.getElementById('entitySearch').addEventListener('input', (e) => { searchText = e.target.value; renderRows(); });
