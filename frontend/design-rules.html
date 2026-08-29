@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Casa de Aurum — Design Rules</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#221D18; --charcoal:#1A1611; --stone-50:#F1ECE1; --stone-100:#E9E2D3; --stone-200:#DFD5BF;
+    --stone-400:#B7AB94; --stone-600:#78705F; --stone-700:#4B443A; --brass:#AD8348; --brass-light:#D8B677;
+    --clay:#9C4B2C; --sage:#7A9165; --line: rgba(34,29,24,0.14); --shadow: 0 12px 30px rgba(26,22,17,0.14);
+    --radius: 3px; --display: 'Fraunces', serif; --sans: 'Inter', sans-serif; --mono: 'IBM Plex Mono', monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{background:var(--stone-50);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased;}
+  a{color:var(--brass);text-decoration:none;}
+  header.top{padding:26px clamp(18px,4vw,56px) 0;background:var(--stone-50);border-bottom:1px solid var(--line);}
+  .brandrow{display:flex;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;gap:14px;padding-bottom:20px;}
+  .wordmark .name{font-family:var(--display);font-weight:600;font-size:clamp(22px,3vw,30px);letter-spacing:.04em;color:var(--charcoal);}
+  .wordmark .name em{font-style:normal;color:var(--brass);}
+  .wordmark .sub{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--stone-600);}
+  .flowchip{font-family:var(--mono);font-size:12px;color:var(--stone-600);display:flex;align-items:center;gap:16px;}
+  main{max-width:1280px;margin:0 auto;padding:32px clamp(18px,4vw,56px) 60px;}
+  .tool-head{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px;}
+  h1{font-family:var(--display);font-weight:600;font-size:28px;margin:0 0 4px;color:var(--charcoal);}
+  .tool-head p{margin:0;font-family:var(--mono);font-size:12px;color:var(--stone-600);}
+
+  .status-banner{display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:2px;font-family:var(--mono);font-size:12px;margin-bottom:20px;}
+  .status-banner.dirty{background:#FBF3E8;border:1px solid var(--brass);color:var(--stone-700);}
+  .status-banner.clean{background:#F1F5EE;border:1px solid var(--sage);color:var(--stone-700);}
+  .status-banner button{margin-left:auto;font-family:var(--sans);font-weight:600;font-size:12.5px;background:var(--charcoal);color:var(--stone-50);border:none;padding:8px 16px;border-radius:2px;cursor:pointer;}
+  .status-banner button:disabled{opacity:.5;cursor:not-allowed;}
+
+  .layout{display:grid;grid-template-columns:1.1fr 0.9fr;gap:20px;align-items:start;}
+  @media (max-width:900px){.layout{grid-template-columns:1fr;}}
+
+  .panel{background:#fff;border:1px solid var(--line);border-radius:var(--radius);margin-bottom:20px;}
+  .panel-head{padding:14px 18px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;}
+  .panel-head h3{margin:0;font-size:12.5px;letter-spacing:.1em;text-transform:uppercase;font-family:var(--mono);color:var(--stone-700);font-weight:500;}
+  .panel-body{padding:18px;}
+
+  .section-group{margin-bottom:18px;}
+  .section-group:last-child{margin-bottom:0;}
+  .section-label{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--brass);margin-bottom:8px;}
+  .rule-card{border:1px solid var(--line);border-radius:2px;padding:12px 14px;margin-bottom:8px;background:var(--stone-50);}
+  .rule-card.inactive{opacity:.5;}
+  .rule-card-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px;}
+  .rule-card-head .title{font-weight:600;font-size:13px;}
+  .rule-card-head .key{font-family:var(--mono);font-size:10.5px;color:var(--stone-600);}
+  .rule-card pre{margin:0;font-family:var(--mono);font-size:12px;white-space:pre-wrap;color:var(--stone-700);}
+  .rule-actions{display:flex;gap:10px;margin-top:8px;}
+  .rule-actions a{font-family:var(--mono);font-size:11px;cursor:pointer;}
+  .rule-actions a.danger{color:var(--clay);}
+
+  button.primary{font-family:var(--sans);font-weight:600;font-size:13px;background:var(--charcoal);color:var(--stone-50);border:none;padding:9px 16px;border-radius:2px;cursor:pointer;}
+  button.primary:hover{background:#000;}
+  button.primary:disabled{opacity:.5;cursor:not-allowed;}
+  button.ghost{font-family:var(--sans);font-weight:600;font-size:12px;background:none;color:var(--stone-700);border:1px solid var(--line);padding:6px 12px;border-radius:2px;cursor:pointer;}
+  button.ghost:hover{border-color:var(--brass);color:var(--brass);}
+
+  .field{margin-bottom:12px;}
+  .field label{display:block;font-size:11.5px;color:var(--stone-600);margin-bottom:5px;font-family:var(--mono);}
+  .field input, .field select, .field textarea{width:100%;font-family:var(--mono);font-size:12.5px;padding:9px 10px;border:1px solid var(--line);border-radius:2px;background:var(--stone-50);color:var(--ink);}
+  .field textarea{min-height:80px;resize:vertical;}
+
+  .preview-content{font-family:var(--mono);font-size:12px;white-space:pre-wrap;background:var(--charcoal);color:#e9e2d3;padding:16px;border-radius:2px;max-height:520px;overflow-y:auto;line-height:1.6;}
+
+  .version-row{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid rgba(34,29,24,0.06);font-size:12.5px;}
+  .version-row:last-child{border-bottom:none;}
+  .version-row .num{font-family:var(--mono);font-weight:600;}
+  .version-row .meta{font-family:var(--mono);font-size:11px;color:var(--stone-600);}
+
+  .error-box{background:#FBEEEA;border:1px solid var(--clay);color:var(--clay);font-size:12px;padding:9px 11px;border-radius:2px;margin-top:10px;display:none;}
+
+  footer.note{max-width:1280px;margin:0 auto;padding:0 clamp(18px,4vw,56px) 50px;font-family:var(--mono);font-size:11px;color:var(--stone-400);text-align:center;}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="brandrow">
+    <div class="wordmark">
+      <div class="name">CASA DE A<em>U</em>RUM</div>
+      <div class="sub">Internal Studio Tools . Design Rules</div>
+    </div>
+    <div class="flowchip">
+      <span id="whoami"></span>
+      <a href="dashboard.html">Dashboard</a>
+      <a href="catalog-upload.html">Catalog Upload</a>
+      <a href="#" id="logoutLink" style="color:var(--clay);">Sign out</a>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div class="tool-head">
+    <div>
+      <h1>Design Rules</h1>
+      <p>These rules are loaded into the AI's instructions whenever it generates a mood board.</p>
+    </div>
+  </div>
+
+  <div class="status-banner" id="statusBanner">
+    <span id="statusText">Checking...</span>
+    <button id="publishBtn">Publish</button>
+  </div>
+  <div class="error-box" id="publishError"></div>
+
+  <div class="layout">
+    <div>
+      <div class="panel">
+        <div class="panel-head">
+          <h3>Draft Rules</h3>
+          <button class="ghost" id="addRuleBtn">+ Add Rule</button>
+        </div>
+        <div class="panel-body" id="rulesContainer">Loading...</div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h3>Version History</h3>
+          <button class="ghost" id="compareBtn">Compare Selected</button>
+        </div>
+        <div class="panel-body" id="versionsContainer">Loading...</div>
+      </div>
+    </div>
+
+    <div>
+      <div class="panel">
+        <div class="panel-head"><h3>Live Preview</h3></div>
+        <div class="panel-body">
+          <div class="preview-content" id="previewContent">Loading...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<div id="compareModal" style="display:none;position:fixed;inset:0;background:rgba(26,22,17,0.5);z-index:50;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:3px;width:100%;max-width:640px;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 12px 30px rgba(26,22,17,0.24);">
+    <div class="panel-head" style="border-bottom:1px solid var(--line);">
+      <h3 id="compareModalTitle" style="margin:0;">Compare Versions</h3>
+      <a href="#" id="closeCompareModal" style="font-family:var(--mono);font-size:12px;color:var(--stone-600);">Close</a>
+    </div>
+    <div id="compareContent" style="margin:0;padding:16px 18px;overflow-y:auto;font-family:var(--mono);font-size:11.5px;line-height:1.7;"></div>
+  </div>
+</div>
+
+<div id="ruleModal" style="display:none;position:fixed;inset:0;background:rgba(26,22,17,0.5);z-index:50;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:3px;width:100%;max-width:460px;max-height:90vh;overflow-y:auto;box-shadow:0 12px 30px rgba(26,22,17,0.24);">
+    <div class="panel-head" style="border-bottom:1px solid var(--line);">
+      <h3 id="ruleModalTitle" style="margin:0;">Add Rule</h3>
+      <a href="#" id="closeRuleModal" style="font-family:var(--mono);font-size:12px;color:var(--stone-600);">Close</a>
+    </div>
+    <div class="panel-body">
+      <div class="error-box" id="ruleError"></div>
+      <div class="field">
+        <label>Section</label>
+        <select id="ruleSection">
+          <option value="GENERAL">General</option>
+          <option value="STYLE">Style</option>
+          <option value="ROOM">Room</option>
+          <option value="CLIENT">Client</option>
+        </select>
+      </div>
+      <div class="field" id="ruleKeyField">
+        <label>Key (e.g. LUXURY, BATHROOM)</label>
+        <input type="text" id="ruleKey" placeholder="LUXURY">
+      </div>
+      <div class="field">
+        <label>Title</label>
+        <input type="text" id="ruleTitle" placeholder="Style: Luxury">
+      </div>
+      <div class="field">
+        <label>Content</label>
+        <textarea id="ruleContent" placeholder="- Base: large format, marble-look"></textarea>
+      </div>
+      <div class="field">
+        <label>Sort order</label>
+        <input type="number" id="ruleSortOrder" value="0">
+      </div>
+      <button class="primary" id="saveRuleBtn" style="width:100%;">Save</button>
+    </div>
+  </div>
+</div>
+
+<footer class="note">CASA DE AURUM — INTERNAL OPERATIONS TOOL</footer>
+
+<script src="assets/api-client.js"></script>
+<script src="assets/notifications.js"></script>
+<script>
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  const SECTION_LABEL = { GENERAL: 'General', STYLE: 'Style', ROOM: 'Room', CLIENT: 'Client' };
+  let editingRuleId = null;
+
+  function ruleSectionKeyChanged() {
+    const section = document.getElementById('ruleSection').value;
+    document.getElementById('ruleKeyField').style.display = section === 'GENERAL' ? 'none' : 'block';
+  }
+  document.getElementById('ruleSection').addEventListener('change', ruleSectionKeyChanged);
+
+  async function loadRules() {
+    const container = document.getElementById('rulesContainer');
+    try {
+      const rules = await CasaApi.designRules.list();
+      if (!rules.length) {
+        container.innerHTML = `<p style="font-family:var(--mono);font-size:12px;color:var(--stone-600);">No rules yet -- add one to get started.</p>`;
+        return;
+      }
+      const bySection = {};
+      rules.forEach((r) => { (bySection[r.section] = bySection[r.section] || []).push(r); });
+
+      container.innerHTML = Object.entries(bySection).map(([section, list]) => `
+        <div class="section-group">
+          <div class="section-label">${SECTION_LABEL[section] || section}</div>
+          ${list.map((r) => `
+            <div class="rule-card ${r.isActive ? '' : 'inactive'}">
+              <div class="rule-card-head">
+                <span class="title">${escapeHtml(r.title)}</span>
+                <span class="key">${r.key ? escapeHtml(r.key) : ''}</span>
+              </div>
+              <pre>${escapeHtml(r.content)}</pre>
+              <div class="rule-actions">
+                <a data-action="edit" data-id="${r.id}">Edit</a>
+                <a data-action="toggle" data-id="${r.id}" data-active="${r.isActive}">${r.isActive ? 'Deactivate' : 'Activate'}</a>
+                <a class="danger" data-action="delete" data-id="${r.id}">Delete</a>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `).join('');
+
+      container.querySelectorAll('[data-action="edit"]').forEach((el) => el.addEventListener('click', () => openEditModal(el.dataset.id)));
+      container.querySelectorAll('[data-action="toggle"]').forEach((el) => el.addEventListener('click', () => toggleActive(el.dataset.id, el.dataset.active === 'true')));
+      container.querySelectorAll('[data-action="delete"]').forEach((el) => el.addEventListener('click', () => deleteRule(el.dataset.id)));
+    } catch (err) {
+      container.innerHTML = `<p style="color:var(--clay);font-family:var(--mono);font-size:12px;">${escapeHtml(err.message)}</p>`;
+    }
+  }
+
+  async function loadPreview() {
+    const el = document.getElementById('previewContent');
+    const banner = document.getElementById('statusBanner');
+    const statusText = document.getElementById('statusText');
+    const publishBtn = document.getElementById('publishBtn');
+    try {
+      const preview = await CasaApi.designRules.preview();
+      el.textContent = preview.content || '(nothing to preview yet)';
+      if (preview.hasUnpublishedChanges) {
+        banner.className = 'status-banner dirty';
+        statusText.textContent = preview.lastPublished
+          ? `Unpublished changes since v${preview.lastPublished.versionNumber}`
+          : 'Draft has never been published';
+        publishBtn.disabled = false;
+      } else {
+        banner.className = 'status-banner clean';
+        statusText.textContent = preview.lastPublished
+          ? `Live -- matches published v${preview.lastPublished.versionNumber}`
+          : 'Nothing to publish';
+        publishBtn.disabled = true;
+      }
+    } catch (err) {
+      el.textContent = 'Error loading preview: ' + err.message;
+    }
+  }
+
+  async function loadVersions() {
+    const container = document.getElementById('versionsContainer');
+    try {
+      const { versions } = await CasaApi.designRules.versions({ limit: 10 });
+      if (!versions.length) {
+        container.innerHTML = `<p style="font-family:var(--mono);font-size:12px;color:var(--stone-600);">Nothing published yet.</p>`;
+        return;
+      }
+      container.innerHTML = versions.map((v) => `
+        <div class="version-row">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+            <input type="checkbox" class="compare-check" value="${v.id}" data-version="${v.versionNumber}">
+            <div><span class="num">v${v.versionNumber}</span> -- ${escapeHtml(v.changeSummary || 'No summary')}</div>
+          </label>
+          <div style="display:flex;align-items:center;gap:12px;">
+            <span class="meta">${v.createdBy ? escapeHtml(v.createdBy.name) : 'System'} . ${CasaApi.relativeTime(v.createdAt)}</span>
+            <a href="#" data-action="restore" data-id="${v.id}" style="font-family:var(--mono);font-size:11px;">Restore</a>
+            <a href="#" data-action="delete-version" data-id="${v.id}" style="font-family:var(--mono);font-size:11px;color:var(--clay);">Delete</a>
+          </div>
+        </div>
+      `).join('');
+
+      container.querySelectorAll('[data-action="restore"]').forEach((el) => el.addEventListener('click', (e) => { e.preventDefault(); restoreVersion(el.dataset.id); }));
+      container.querySelectorAll('[data-action="delete-version"]').forEach((el) => el.addEventListener('click', (e) => { e.preventDefault(); deleteVersion(el.dataset.id); }));
+    } catch (err) {
+      container.innerHTML = `<p style="color:var(--clay);font-family:var(--mono);font-size:12px;">${escapeHtml(err.message)}</p>`;
+    }
+  }
+
+  async function restoreVersion(id) {
+    if (!confirm('Restore this version into the draft? This replaces all current draft rules. You will still need to Publish to make it live.')) return;
+    try {
+      await CasaApi.designRules.restoreVersion(id);
+      await refreshAll();
+      CasaNotify.success('Draft restored from that version. Publish to make it live.');
+    } catch (err) {
+      CasaNotify.error('Restore failed: ' + err.message);
+    }
+  }
+
+  async function deleteVersion(id) {
+    if (!confirm('Delete this published version from history? This cannot be undone.')) return;
+    try {
+      await CasaApi.designRules.removeVersion(id);
+      await loadVersions();
+      CasaNotify.success('Version deleted.');
+    } catch (err) {
+      CasaNotify.error('Delete failed: ' + err.message);
+    }
+  }
+
+  document.getElementById('compareBtn').addEventListener('click', async () => {
+    const checked = [...document.querySelectorAll('.compare-check:checked')];
+    if (checked.length !== 2) {
+      CasaNotify.error('Select exactly 2 versions to compare.');
+      return;
+    }
+    const [a, b] = checked.sort((x, y) => Number(x.dataset.version) - Number(y.dataset.version));
+    try {
+      const result = await CasaApi.designRules.compareVersions(a.value, b.value);
+      document.getElementById('compareModalTitle').textContent = `Compare v${result.from.versionNumber} -> v${result.to.versionNumber}`;
+      document.getElementById('compareContent').innerHTML = result.diff.map((line) => {
+        const color = line.type === 'added' ? 'var(--sage)' : line.type === 'removed' ? 'var(--clay)' : 'var(--stone-700)';
+        const bg = line.type === 'added' ? '#F1F5EE' : line.type === 'removed' ? '#FBEEEA' : 'transparent';
+        const prefix = line.type === 'added' ? '+ ' : line.type === 'removed' ? '- ' : '  ';
+        return `<div style="color:${color};background:${bg};white-space:pre-wrap;padding:1px 4px;">${prefix}${escapeHtml(line.value)}</div>`;
+      }).join('');
+      document.getElementById('compareModal').style.display = 'flex';
+    } catch (err) {
+      CasaNotify.error('Compare failed: ' + err.message);
+    }
+  });
+
+  document.getElementById('closeCompareModal').addEventListener('click', (e) => { e.preventDefault(); document.getElementById('compareModal').style.display = 'none'; });
+
+  async function refreshAll() {
+    await Promise.all([loadRules(), loadPreview(), loadVersions()]);
+  }
+
+  function openAddModal() {
+    editingRuleId = null;
+    document.getElementById('ruleModalTitle').textContent = 'Add Rule';
+    document.getElementById('ruleSection').value = 'GENERAL';
+    document.getElementById('ruleKey').value = '';
+    document.getElementById('ruleTitle').value = '';
+    document.getElementById('ruleContent').value = '';
+    document.getElementById('ruleSortOrder').value = '0';
+    document.getElementById('ruleError').style.display = 'none';
+    ruleSectionKeyChanged();
+    document.getElementById('ruleModal').style.display = 'flex';
+  }
+
+  async function openEditModal(id) {
+    const rule = await CasaApi.designRules.get(id);
+    editingRuleId = id;
+    document.getElementById('ruleModalTitle').textContent = 'Edit Rule';
+    document.getElementById('ruleSection').value = rule.section;
+    document.getElementById('ruleKey').value = rule.key || '';
+    document.getElementById('ruleTitle').value = rule.title;
+    document.getElementById('ruleContent').value = rule.content;
+    document.getElementById('ruleSortOrder').value = rule.sortOrder;
+    document.getElementById('ruleError').style.display = 'none';
+    ruleSectionKeyChanged();
+    document.getElementById('ruleModal').style.display = 'flex';
+  }
+
+  document.getElementById('addRuleBtn').addEventListener('click', openAddModal);
+  document.getElementById('closeRuleModal').addEventListener('click', (e) => { e.preventDefault(); document.getElementById('ruleModal').style.display = 'none'; });
+
+  document.getElementById('saveRuleBtn').addEventListener('click', async () => {
+    const errorBox = document.getElementById('ruleError');
+    errorBox.style.display = 'none';
+
+    const section = document.getElementById('ruleSection').value;
+    const key = document.getElementById('ruleKey').value.trim();
+    const title = document.getElementById('ruleTitle').value.trim();
+    const content = document.getElementById('ruleContent').value.trim();
+    const sortOrder = Number(document.getElementById('ruleSortOrder').value) || 0;
+
+    if (!title || !content) {
+      errorBox.textContent = 'Title and content are required.';
+      errorBox.style.display = 'block';
+      return;
+    }
+
+    try {
+      if (editingRuleId) {
+        await CasaApi.designRules.update(editingRuleId, { title, content, sortOrder });
+      } else {
+        const payload = { section, title, content, sortOrder };
+        if (section !== 'GENERAL') payload.key = key;
+        await CasaApi.designRules.create(payload);
+      }
+      document.getElementById('ruleModal').style.display = 'none';
+      await refreshAll();
+      CasaNotify.success(editingRuleId ? 'Rule updated.' : 'Rule added.');
+    } catch (err) {
+      errorBox.textContent = err.message || 'Could not save rule.';
+      errorBox.style.display = 'block';
+    }
+  });
+
+  async function toggleActive(id, currentlyActive) {
+    try {
+      await CasaApi.designRules.update(id, { isActive: !currentlyActive });
+      await refreshAll();
+    } catch (err) {
+      CasaNotify.error('Could not update: ' + err.message);
+    }
+  }
+
+  async function deleteRule(id) {
+    if (!confirm('Delete this rule? This cannot be undone.')) return;
+    try {
+      await CasaApi.designRules.remove(id);
+      await refreshAll();
+      CasaNotify.success('Rule deleted.');
+    } catch (err) {
+      CasaNotify.error('Could not delete: ' + err.message);
+    }
+  }
+
+  document.getElementById('publishBtn').addEventListener('click', async () => {
+    const errorBox = document.getElementById('publishError');
+    errorBox.style.display = 'none';
+    const summary = prompt('Optional: describe what changed in this publish');
+    if (summary === null) return;
+
+    const btn = document.getElementById('publishBtn');
+    btn.disabled = true;
+    btn.textContent = 'Publishing...';
+    const notice = CasaNotify.processing('Publishing design rules...');
+    try {
+      await CasaApi.designRules.publish(summary || undefined);
+      await refreshAll();
+      notice.success('Design rules published — now live for AI generation.');
+    } catch (err) {
+      errorBox.textContent = err.message || 'Publish failed.';
+      errorBox.style.display = 'block';
+      notice.error(err.message || 'Publish failed.');
+    } finally {
+      btn.textContent = 'Publish';
+    }
+  });
+
+  (async () => {
+    const currentUser = await CasaApi.requireAuth();
+    const ROLE_LABEL = { OWNER: 'Owner', ADMIN: 'Manager', STAFF: 'Sales Staff' };
+    document.getElementById('whoami').textContent = `${currentUser.name} (${ROLE_LABEL[currentUser.role.name] || currentUser.role.name})`;
+    document.getElementById('logoutLink').addEventListener('click', (e) => { e.preventDefault(); CasaApi.auth.logout(); });
+    await refreshAll();
+  })();
+</script>
+</body>
+</html>

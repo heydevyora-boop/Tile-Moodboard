@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Casa de Aurum — Customer Management</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#221D18; --charcoal:#1A1611; --stone-50:#F1ECE1; --stone-100:#E9E2D3; --stone-200:#DFD5BF;
+    --stone-400:#B7AB94; --stone-600:#78705F; --stone-700:#4B443A; --brass:#AD8348; --brass-light:#D8B677;
+    --clay:#9C4B2C; --sage:#7A9165; --line: rgba(34,29,24,0.14); --shadow: 0 12px 30px rgba(26,22,17,0.14);
+    --radius: 3px; --display: 'Fraunces', serif; --sans: 'Inter', sans-serif; --mono: 'IBM Plex Mono', monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{background:var(--stone-50);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased;}
+  a{color:var(--brass);text-decoration:none;}
+  header.top{padding:26px clamp(18px,4vw,56px) 0;background:var(--stone-50);border-bottom:1px solid var(--line);}
+  .brandrow{display:flex;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;gap:14px;padding-bottom:20px;}
+  .wordmark .name{font-family:var(--display);font-weight:600;font-size:clamp(22px,3vw,30px);letter-spacing:.04em;color:var(--charcoal);}
+  .wordmark .name em{font-style:normal;color:var(--brass);}
+  .wordmark .sub{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--stone-600);}
+  .flowchip{font-family:var(--mono);font-size:12px;color:var(--stone-600);display:flex;align-items:center;gap:16px;}
+  main{max-width:1280px;margin:0 auto;padding:32px clamp(18px,4vw,56px) 60px;}
+  .tool-head{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px;}
+  h1{font-family:var(--display);font-weight:600;font-size:28px;margin:0 0 4px;color:var(--charcoal);}
+  .tool-head p{margin:0;font-family:var(--mono);font-size:12px;color:var(--stone-600);}
+
+  .panel{background:#fff;border:1px solid var(--line);border-radius:var(--radius);margin-bottom:20px;}
+  .panel-head{padding:14px 18px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;}
+  .panel-head h3{margin:0;font-size:12.5px;letter-spacing:.1em;text-transform:uppercase;font-family:var(--mono);color:var(--stone-700);font-weight:500;}
+  .panel-body{padding:18px;}
+
+  .field label{display:block;font-size:11px;color:var(--stone-600);margin-bottom:5px;font-family:var(--mono);}
+  .field input, .field select, .field textarea{width:100%;font-family:var(--mono);font-size:12.5px;padding:9px 10px;border:1px solid var(--line);border-radius:2px;background:var(--stone-50);color:var(--ink);}
+  .field{margin-bottom:12px;}
+  button.primary{font-family:var(--sans);font-weight:600;font-size:13px;background:var(--charcoal);color:var(--stone-50);border:none;padding:10px 16px;border-radius:2px;cursor:pointer;}
+  button.primary:hover{background:#000;}
+  button.primary:disabled{opacity:.5;cursor:not-allowed;}
+  button.ghost{font-family:var(--sans);font-weight:600;font-size:11.5px;background:none;color:var(--stone-700);border:1px solid var(--line);padding:5px 10px;border-radius:2px;cursor:pointer;}
+  button.ghost:hover{border-color:var(--brass);color:var(--brass);}
+  button.ghost.danger:hover{border-color:var(--clay);color:var(--clay);}
+
+  .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:18px;justify-content:space-between;}
+  .toolbar input[type=text]{font-family:var(--mono);font-size:13px;padding:9px 12px;border:1px solid var(--line);border-radius:2px;background:#fff;min-width:260px;}
+
+  table.customers{width:100%;border-collapse:collapse;font-size:13px;}
+  table.customers th{text-align:left;font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--stone-600);padding:8px 12px;border-bottom:1px solid var(--line);}
+  table.customers td{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:middle;}
+  table.customers tr:hover td{background:var(--stone-50);}
+  table.customers .nm{font-weight:600;cursor:pointer;}
+  table.customers .nm:hover{color:var(--brass);}
+  table.customers .sub{font-family:var(--mono);font-size:11px;color:var(--stone-600);}
+  .badge{background:var(--stone-100);padding:2px 7px;border-radius:8px;font-family:var(--mono);font-size:10.5px;color:var(--stone-700);}
+
+  .error-box{background:#FBEEEA;border:1px solid var(--clay);color:var(--clay);font-size:12px;padding:9px 11px;border-radius:2px;margin-top:10px;display:none;}
+
+  .modal-overlay{display:none;position:fixed;inset:0;background:rgba(26,22,17,0.5);z-index:50;align-items:flex-start;justify-content:center;overflow-y:auto;padding:40px 16px;}
+  .modal-box{background:#fff;border-radius:3px;width:100%;max-width:640px;box-shadow:var(--shadow);}
+  .modal-box .panel-head{border-bottom:1px solid var(--line);}
+  .modal-body{padding:18px;}
+
+  .tabs{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;}
+  .tab{font-family:var(--mono);font-size:11.5px;padding:6px 12px;border:1px solid var(--line);border-radius:14px;cursor:pointer;color:var(--stone-700);}
+  .tab.on{background:var(--charcoal);color:var(--stone-50);border-color:var(--charcoal);}
+
+  .mb-row{border:1px solid var(--line);border-radius:2px;padding:10px 12px;margin-bottom:8px;}
+  .mb-row .top{display:flex;justify-content:space-between;align-items:center;font-size:12.5px;}
+  .mb-row .brief{color:var(--stone-700);font-size:12px;margin-top:4px;}
+
+  .fav-row{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:2px;padding:8px 10px;margin-bottom:6px;}
+  .fav-row .nm{font-weight:600;font-size:12.5px;flex:1;}
+  .fav-row .note{font-size:11.5px;color:var(--stone-600);flex:1;}
+
+  .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:0 14px;}
+  @media (max-width:560px){.grid-2{grid-template-columns:1fr;}}
+
+  footer.note{max-width:1280px;margin:0 auto;padding:0 clamp(18px,4vw,56px) 50px;font-family:var(--mono);font-size:11px;color:var(--stone-400);text-align:center;}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="brandrow">
+    <div class="wordmark">
+      <div class="name">CASA DE A<em>U</em>RUM</div>
+      <div class="sub">Internal Studio Tools · Customer Management</div>
+    </div>
+    <div class="flowchip">
+      <span id="whoami"></span>
+      <a href="dashboard.html">Dashboard</a>
+      <a href="#" id="logoutLink" style="color:var(--clay);">Sign out</a>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div class="tool-head">
+    <div>
+      <h1>Customer Management</h1>
+      <p>Every client who's walked in — their preferences, mood board history, and favorited tiles, in one place.</p>
+    </div>
+    <button class="primary" id="addCustomerBtn">Add Customer</button>
+  </div>
+
+  <div class="toolbar">
+    <input type="text" id="searchInput" placeholder="Search name, phone, or email...">
+    <span class="sub" id="customerCount" style="font-family:var(--mono);font-size:11.5px;color:var(--stone-600);"></span>
+  </div>
+
+  <div class="panel" style="margin-bottom:0;">
+    <div class="panel-body" style="padding:0;overflow-x:auto;">
+      <table class="customers">
+        <thead>
+          <tr><th>Name</th><th>Contact</th><th>Preferences</th><th>Budget</th><th>Added</th><th></th></tr>
+        </thead>
+        <tbody id="customerTableBody">
+          <tr><td colspan="6" style="text-align:center;color:var(--stone-500);padding:20px;">Loading...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</main>
+
+<!-- ============ ADD / EDIT CUSTOMER MODAL ============ -->
+<div class="modal-overlay" id="editModal">
+  <div class="modal-box">
+    <div class="panel-head">
+      <h3 id="editModalTitle">Add Customer</h3>
+      <a href="#" id="closeEditModal" style="font-family:var(--mono);font-size:12px;color:var(--stone-600);">Close</a>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="editCustomerId">
+      <div class="grid-2">
+        <div class="field"><label>Name *</label><input type="text" id="editName"></div>
+        <div class="field"><label>Phone</label><input type="text" id="editPhone"></div>
+        <div class="field"><label>Email</label><input type="text" id="editEmail"></div>
+        <div class="field"><label>Budget</label><input type="text" id="editBudget" placeholder="e.g. 2-3 Lakh"></div>
+        <div class="field"><label>Preferred style</label><input type="text" id="editStyle" placeholder="LUXURY"></div>
+        <div class="field"><label>Preferred room</label><input type="text" id="editRoom" placeholder="BATHROOM"></div>
+      </div>
+      <div class="field"><label>Notes</label><textarea id="editNotes" rows="3"></textarea></div>
+      <div class="error-box" id="editError"></div>
+      <button class="primary" id="saveCustomerBtn">Save Customer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ CUSTOMER DETAIL MODAL ============ -->
+<div class="modal-overlay" id="detailModal">
+  <div class="modal-box" style="max-width:720px;">
+    <div class="panel-head">
+      <h3 id="detailModalTitle">Customer</h3>
+      <a href="#" id="closeDetailModal" style="font-family:var(--mono);font-size:12px;color:var(--stone-600);">Close</a>
+    </div>
+    <div class="modal-body">
+      <div class="tabs">
+        <div class="tab on" data-tab="info">Info</div>
+        <div class="tab" data-tab="history">Mood Board History</div>
+        <div class="tab" data-tab="favorites">Favorited Tiles</div>
+      </div>
+
+      <div id="tabInfo">
+        <div class="grid-2" id="detailInfoGrid" style="font-size:13px;line-height:2;"></div>
+        <div id="detailNotes" style="font-size:12.5px;color:var(--stone-700);margin-top:8px;"></div>
+        <div style="margin-top:14px;display:flex;gap:8px;">
+          <button class="ghost" id="editFromDetailBtn">Edit</button>
+          <button class="ghost danger" id="deleteFromDetailBtn">Delete Customer</button>
+        </div>
+      </div>
+
+      <div id="tabHistory" style="display:none;">
+        <div id="historyList"><p style="color:var(--stone-500);font-size:12.5px;">Loading...</p></div>
+      </div>
+
+      <div id="tabFavorites" style="display:none;">
+        <div id="favoritesList"><p style="color:var(--stone-500);font-size:12.5px;">Loading...</p></div>
+        <div class="grid-2" style="margin-top:14px;">
+          <div class="field"><label>Tile ID to favorite</label><input type="text" id="newFavoriteTileId" placeholder="Paste a tile id"></div>
+          <div class="field"><label>Note (optional)</label><input type="text" id="newFavoriteNote" placeholder="e.g. loved this on her last visit"></div>
+        </div>
+        <button class="ghost" id="addFavoriteBtn">Add Favorite</button>
+        <div class="error-box" id="favoriteError"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer class="note">CASA DE AURUM — INTERNAL OPERATIONS TOOL · BUILT FOR STORE USE ONLY · NOT FOR RESALE OR DISTRIBUTION</footer>
+
+<script src="assets/api-client.js"></script>
+<script src="assets/notifications.js"></script>
+<script>
+  function escapeHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  let currentSearch = '';
+  let searchDebounce = null;
+  let currentDetailCustomerId = null;
+
+  function customerRowHtml(c) {
+    const contact = [c.phone, c.email].filter(Boolean).join(' · ') || '—';
+    const prefs = [c.preferredStyle, c.preferredRoom].filter(Boolean).map((p) => `<span class="badge">${escapeHtml(p)}</span>`).join(' ') || '—';
+    const added = new Date(c.createdAt).toLocaleDateString();
+    return `
+      <tr data-id="${c.id}">
+        <td><div class="nm" data-action="view" data-id="${c.id}">${escapeHtml(c.name)}</div></td>
+        <td class="sub">${escapeHtml(contact)}</td>
+        <td>${prefs}</td>
+        <td class="sub">${escapeHtml(c.budget) || '—'}</td>
+        <td class="sub">${added}</td>
+        <td><button class="ghost" data-action="edit" data-id="${c.id}">Edit</button></td>
+      </tr>`;
+  }
+
+  async function loadCustomers() {
+    const tbody = document.getElementById('customerTableBody');
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--stone-500);padding:20px;">Loading...</td></tr>';
+    try {
+      const { customers, meta } = await CasaApi.customers.list({ search: currentSearch || undefined, limit: 100 });
+      document.getElementById('customerCount').textContent = meta ? `${meta.total} customer${meta.total === 1 ? '' : 's'}` : '';
+      tbody.innerHTML = customers.length
+        ? customers.map(customerRowHtml).join('')
+        : '<tr><td colspan="6" style="text-align:center;color:var(--stone-500);padding:20px;">No customers found.</td></tr>';
+      tbody.querySelectorAll('[data-action="view"]').forEach((el) => el.addEventListener('click', () => openDetailModal(el.dataset.id)));
+      tbody.querySelectorAll('[data-action="edit"]').forEach((el) => el.addEventListener('click', () => openEditModal(el.dataset.id)));
+    } catch (err) {
+      tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--clay);padding:20px;">${escapeHtml(err.message)}</td></tr>`;
+    }
+  }
+
+  document.getElementById('searchInput').addEventListener('input', (e) => {
+    clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(() => { currentSearch = e.target.value.trim(); loadCustomers(); }, 300);
+  });
+
+  // ---- Add / Edit modal ----
+  function resetEditForm() {
+    document.getElementById('editCustomerId').value = '';
+    document.getElementById('editName').value = '';
+    document.getElementById('editPhone').value = '';
+    document.getElementById('editEmail').value = '';
+    document.getElementById('editBudget').value = '';
+    document.getElementById('editStyle').value = '';
+    document.getElementById('editRoom').value = '';
+    document.getElementById('editNotes').value = '';
+    document.getElementById('editError').style.display = 'none';
+  }
+
+  document.getElementById('addCustomerBtn').addEventListener('click', () => {
+    resetEditForm();
+    document.getElementById('editModalTitle').textContent = 'Add Customer';
+    document.getElementById('editModal').style.display = 'flex';
+  });
+
+  async function openEditModal(id) {
+    resetEditForm();
+    document.getElementById('editModalTitle').textContent = 'Edit Customer';
+    try {
+      const c = await CasaApi.customers.get(id);
+      document.getElementById('editCustomerId').value = c.id;
+      document.getElementById('editName').value = c.name || '';
+      document.getElementById('editPhone').value = c.phone || '';
+      document.getElementById('editEmail').value = c.email || '';
+      document.getElementById('editBudget').value = c.budget || '';
+      document.getElementById('editStyle').value = c.preferredStyle || '';
+      document.getElementById('editRoom').value = c.preferredRoom || '';
+      document.getElementById('editNotes').value = c.notes || '';
+      document.getElementById('editModal').style.display = 'flex';
+    } catch (err) {
+      CasaNotify.error(err.message || 'Failed to load customer.');
+    }
+  }
+
+  document.getElementById('closeEditModal').addEventListener('click', (e) => { e.preventDefault(); document.getElementById('editModal').style.display = 'none'; });
+  document.getElementById('editModal').addEventListener('click', (e) => { if (e.target.id === 'editModal') document.getElementById('editModal').style.display = 'none'; });
+
+  document.getElementById('saveCustomerBtn').addEventListener('click', async () => {
+    const errorBox = document.getElementById('editError');
+    errorBox.style.display = 'none';
+    const id = document.getElementById('editCustomerId').value;
+    const payload = {
+      name: document.getElementById('editName').value.trim(),
+      phone: document.getElementById('editPhone').value.trim(),
+      email: document.getElementById('editEmail').value.trim(),
+      budget: document.getElementById('editBudget').value.trim(),
+      preferredStyle: document.getElementById('editStyle').value.trim(),
+      preferredRoom: document.getElementById('editRoom').value.trim(),
+      notes: document.getElementById('editNotes').value.trim(),
+    };
+    if (!payload.name) {
+      errorBox.textContent = 'Name is required.';
+      errorBox.style.display = 'block';
+      return;
+    }
+    const btn = document.getElementById('saveCustomerBtn');
+    btn.disabled = true;
+    btn.textContent = 'Saving...';
+    try {
+      if (id) {
+        await CasaApi.customers.update(id, payload);
+        CasaNotify.success('Customer updated.');
+      } else {
+        await CasaApi.customers.create(payload);
+        CasaNotify.success('Customer added.');
+      }
+      document.getElementById('editModal').style.display = 'none';
+      await loadCustomers();
+    } catch (err) {
+      errorBox.textContent = err.message || 'Failed to save customer.';
+      errorBox.style.display = 'block';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Save Customer';
+    }
+  });
+
+  // ---- Detail modal ----
+  function switchDetailTab(tab) {
+    document.querySelectorAll('.tabs .tab').forEach((t) => t.classList.toggle('on', t.dataset.tab === tab));
+    document.getElementById('tabInfo').style.display = tab === 'info' ? '' : 'none';
+    document.getElementById('tabHistory').style.display = tab === 'history' ? '' : 'none';
+    document.getElementById('tabFavorites').style.display = tab === 'favorites' ? '' : 'none';
+    if (tab === 'history') loadHistory(currentDetailCustomerId);
+    if (tab === 'favorites') loadFavorites(currentDetailCustomerId);
+  }
+  document.querySelectorAll('.tabs .tab').forEach((t) => t.addEventListener('click', () => switchDetailTab(t.dataset.tab)));
+
+  async function openDetailModal(id) {
+    currentDetailCustomerId = id;
+    switchDetailTab('info');
+    document.getElementById('detailModalTitle').textContent = 'Loading...';
+    document.getElementById('detailInfoGrid').innerHTML = '';
+    document.getElementById('detailNotes').textContent = '';
+    try {
+      const c = await CasaApi.customers.get(id);
+      document.getElementById('detailModalTitle').textContent = c.name;
+      document.getElementById('detailInfoGrid').innerHTML = `
+        <div><strong>Phone</strong><br>${escapeHtml(c.phone) || '—'}</div>
+        <div><strong>Email</strong><br>${escapeHtml(c.email) || '—'}</div>
+        <div><strong>Preferred style</strong><br>${escapeHtml(c.preferredStyle) || '—'}</div>
+        <div><strong>Preferred room</strong><br>${escapeHtml(c.preferredRoom) || '—'}</div>
+        <div><strong>Budget</strong><br>${escapeHtml(c.budget) || '—'}</div>
+        <div><strong>Added</strong><br>${new Date(c.createdAt).toLocaleDateString()}</div>`;
+      document.getElementById('detailNotes').innerHTML = c.notes ? `<strong>Notes:</strong> ${escapeHtml(c.notes)}` : '';
+      document.getElementById('detailModal').style.display = 'flex';
+    } catch (err) {
+      CasaNotify.error(err.message || 'Failed to load customer.');
+    }
+  }
+
+  document.getElementById('closeDetailModal').addEventListener('click', (e) => { e.preventDefault(); document.getElementById('detailModal').style.display = 'none'; });
+  document.getElementById('detailModal').addEventListener('click', (e) => { if (e.target.id === 'detailModal') document.getElementById('detailModal').style.display = 'none'; });
+
+  document.getElementById('editFromDetailBtn').addEventListener('click', () => {
+    document.getElementById('detailModal').style.display = 'none';
+    openEditModal(currentDetailCustomerId);
+  });
+
+  document.getElementById('deleteFromDetailBtn').addEventListener('click', async () => {
+    if (!confirm('Delete this customer? This cannot be undone.')) return;
+    try {
+      await CasaApi.customers.remove(currentDetailCustomerId);
+      document.getElementById('detailModal').style.display = 'none';
+      await loadCustomers();
+      CasaNotify.success('Customer deleted.');
+    } catch (err) {
+      CasaNotify.error(err.message || 'Failed to delete customer.');
+    }
+  });
+
+  function moodBoardRowHtml(mb) {
+    const date = new Date(mb.createdAt).toLocaleDateString();
+    const combos = Array.isArray(mb.combinations) ? mb.combinations.length : 0;
+    return `
+      <div class="mb-row">
+        <div class="top"><span><strong>${escapeHtml(mb.style)}</strong> · ${escapeHtml(mb.room)}</span><span class="badge">${mb.status}</span></div>
+        <div class="brief">${escapeHtml(mb.clientBrief)}</div>
+        <div class="sub" style="margin-top:4px;font-family:var(--mono);font-size:11px;color:var(--stone-600);">${date} · ${combos} combination${combos === 1 ? '' : 's'}${mb.printBoards && mb.printBoards.length ? ` · ${mb.printBoards.length} print board${mb.printBoards.length === 1 ? '' : 's'} exported` : ''}</div>
+      </div>`;
+  }
+
+  async function loadHistory(id) {
+    const container = document.getElementById('historyList');
+    container.innerHTML = '<p style="color:var(--stone-500);font-size:12.5px;">Loading...</p>';
+    try {
+      const boards = await CasaApi.customers.history(id);
+      container.innerHTML = boards.length
+        ? boards.map(moodBoardRowHtml).join('')
+        : '<p style="color:var(--stone-500);font-size:12.5px;">No mood boards generated for this customer yet.</p>';
+    } catch (err) {
+      container.innerHTML = `<p style="color:var(--clay);font-size:12.5px;">${escapeHtml(err.message)}</p>`;
+    }
+  }
+
+  function favoriteRowHtml(f) {
+    const brand = f.tile && f.tile.brand ? f.tile.brand.name : '';
+    return `
+      <div class="fav-row" data-tile-id="${f.tileId}">
+        <div class="nm">${escapeHtml(f.tile ? f.tile.name : f.tileId)}${brand ? ` <span class="sub">· ${escapeHtml(brand)}</span>` : ''}</div>
+        <div class="note">${escapeHtml(f.note) || ''}</div>
+        <button class="ghost danger" data-action="remove-favorite" data-tile-id="${f.tileId}">Remove</button>
+      </div>`;
+  }
+
+  async function loadFavorites(id) {
+    const container = document.getElementById('favoritesList');
+    container.innerHTML = '<p style="color:var(--stone-500);font-size:12.5px;">Loading...</p>';
+    try {
+      const favorites = await CasaApi.customers.favorites(id);
+      container.innerHTML = favorites.length
+        ? favorites.map(favoriteRowHtml).join('')
+        : '<p style="color:var(--stone-500);font-size:12.5px;">No favorited tiles yet.</p>';
+      container.querySelectorAll('[data-action="remove-favorite"]').forEach((el) => el.addEventListener('click', () => removeFavorite(el.dataset.tileId)));
+    } catch (err) {
+      container.innerHTML = `<p style="color:var(--clay);font-size:12.5px;">${escapeHtml(err.message)}</p>`;
+    }
+  }
+
+  document.getElementById('addFavoriteBtn').addEventListener('click', async () => {
+    const errorBox = document.getElementById('favoriteError');
+    errorBox.style.display = 'none';
+    const tileId = document.getElementById('newFavoriteTileId').value.trim();
+    const note = document.getElementById('newFavoriteNote').value.trim();
+    if (!tileId) {
+      errorBox.textContent = 'Tile ID is required.';
+      errorBox.style.display = 'block';
+      return;
+    }
+    try {
+      await CasaApi.customers.addFavorite(currentDetailCustomerId, tileId, note);
+      document.getElementById('newFavoriteTileId').value = '';
+      document.getElementById('newFavoriteNote').value = '';
+      await loadFavorites(currentDetailCustomerId);
+      CasaNotify.success('Tile favorited.');
+    } catch (err) {
+      errorBox.textContent = err.message || 'Failed to add favorite.';
+      errorBox.style.display = 'block';
+    }
+  });
+
+  async function removeFavorite(tileId) {
+    try {
+      await CasaApi.customers.removeFavorite(currentDetailCustomerId, tileId);
+      await loadFavorites(currentDetailCustomerId);
+      CasaNotify.success('Favorite removed.');
+    } catch (err) {
+      CasaNotify.error(err.message || 'Failed to remove favorite.');
+    }
+  }
+
+  (async () => {
+    const currentUser = await CasaApi.requireAuth();
+    const ROLE_LABEL = { OWNER: 'Owner', ADMIN: 'Manager', STAFF: 'Sales Staff' };
+    document.getElementById('whoami').textContent = `${currentUser.name} (${ROLE_LABEL[currentUser.role.name] || currentUser.role.name})`;
+    document.getElementById('logoutLink').addEventListener('click', (e) => { e.preventDefault(); CasaApi.auth.logout(); });
+    await loadCustomers();
+  })();
+</script>
+</body>
+</html>
