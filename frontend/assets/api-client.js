@@ -2743,8 +2743,14 @@ const ai = {
         "You don't have permission to view this page."
       );
 
+      // Route staff back to the actual tool (their only real home) and
+      // everyone else to the dashboard — never back into another
+      // admin-only page, or a STAFF user denied on any admin page would
+      // bounce endlessly between two pages that both reject them.
       location.href =
-        '03-user-staff-management.html';
+        user.role?.name === 'STAFF'
+          ? '00-casa-de-aurum-tool-REFERENCE.html'
+          : 'dashboard.html';
 
       return new Promise(
         () => {}

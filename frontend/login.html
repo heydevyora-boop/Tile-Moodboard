@@ -244,12 +244,19 @@
         errorBox.style.display = "none";
       }
 
+      // Staff land on the actual tool (backend/admin pages aren't theirs to
+      // see); Admin and Owner land on the dashboard.
+      function roleHome(user) {
+        return user?.role?.name === "STAFF"
+          ? "00-casa-de-aurum-tool-REFERENCE.html"
+          : "dashboard.html";
+      }
+
       // If a session already exists (refresh cookie still valid), skip straight past login.
       (async () => {
         const params = new URLSearchParams(location.search);
-        const redirect = params.get("redirect") || "dashboard.html";
         const user = await CasaApi.auth.ensureSession();
-        if (user) location.href = redirect;
+        if (user) location.href = params.get("redirect") || roleHome(user);
       })();
 
       form.addEventListener("submit", async (e) => {
@@ -262,9 +269,9 @@
         const password = document.getElementById("password").value;
 
         try {
-          await CasaApi.auth.login(email, password);
+          const user = await CasaApi.auth.login(email, password);
           const params = new URLSearchParams(location.search);
-          location.href = params.get("redirect") || "dashboard.html";
+          location.href = params.get("redirect") || roleHome(user);
         } catch (err) {
           showError(
             err.message ||

@@ -360,7 +360,7 @@
   });
 
   (async () => {
-    const currentUser = await CasaApi.requireAuth();
+    const currentUser = await CasaApi.requireAuth(['OWNER']);
     document.getElementById('whoami').textContent = `${currentUser.name} (${ROLE_LABEL[currentUser.role.name] || currentUser.role.name})`;
     document.getElementById('logoutLink').addEventListener('click', (e) => { e.preventDefault(); CasaApi.auth.logout(); });
 

@@ -319,7 +319,7 @@
   document.getElementById('refreshBtn').addEventListener('click', loadHistory);
 
   (async () => {
-    const currentUser = await CasaApi.requireAuth();
+    const currentUser = await CasaApi.requireAuth(['ADMIN','OWNER']);
     const ROLE_LABEL = { OWNER: 'Owner', ADMIN: 'Manager', STAFF: 'Sales Staff' };
     document.getElementById('whoami').textContent = `${currentUser.name} (${ROLE_LABEL[currentUser.role.name] || currentUser.role.name})`;
 

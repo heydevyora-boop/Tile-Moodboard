@@ -15,19 +15,24 @@
 (function () {
   const STORAGE_KEY = 'casaSidebarCollapsed';
 
+  // Backend access (dashboard, catalog admin, design rules, reference
+  // images, users, settings, and the owner-only items below) is admin-only.
+  // Staff get only the Mood Board & Print Board tool and Customers — the
+  // actual floor-facing frontend — flagged `adminOnly: false` implicitly
+  // by omission; everything else is `adminOnly: true`.
   const NAV_SECTIONS = [
     {
       label: 'Overview',
-      items: [{ key: 'dashboard', label: 'Dashboard', href: 'dashboard.html', icon: '&#9635;' }],
+      items: [{ key: 'dashboard', label: 'Dashboard', href: 'dashboard.html', icon: '&#9635;', adminOnly: true }],
     },
     {
       label: 'Tools',
       numbered: true,
       items: [
-        { key: 'catalog', label: 'Catalog Extractor', href: 'catalog-upload.html', icon: '&#128193;' },
-        { key: 'rules', label: 'Design Rules', href: 'design-rules.html', icon: '&#128220;' },
+        { key: 'catalog', label: 'Catalog Extractor', href: 'catalog-upload.html', icon: '&#128193;', adminOnly: true },
+        { key: 'rules', label: 'Design Rules', href: 'design-rules.html', icon: '&#128220;', adminOnly: true },
         { key: 'tool', label: 'Mood Board & Print Board', href: '00-casa-de-aurum-tool-REFERENCE.html', icon: '&#9998;' },
-        { key: 'images', label: 'Reference Images', href: 'reference-images.html', icon: '&#128247;' },
+        { key: 'images', label: 'Reference Images', href: 'reference-images.html', icon: '&#128247;', adminOnly: true },
       ],
     },
     {
@@ -37,11 +42,11 @@
     {
       label: 'System',
       items: [
-        { key: 'users', label: 'Users & Staff', href: '03-user-staff-management.html', icon: '&#128101;' },
+        { key: 'users', label: 'Users & Staff', href: '03-user-staff-management.html', icon: '&#128101;', adminOnly: true },
         { key: 'apikeys', label: 'API Keys & Integrations', href: '04-api-keys-integrations.html', icon: '&#128273;', ownerOnly: true },
         { key: 'logs', label: 'System Logs', href: '05-system-logs-monitoring.html', icon: '&#128203;', ownerOnly: true },
         { key: 'analytics', label: 'Analytics', href: '06-analytics-usage-stats.html', icon: '&#128202;', ownerOnly: true },
-        { key: 'settings', label: 'Settings', href: '07-application-settings.html', icon: '&#9881;' },
+        { key: 'settings', label: 'Settings', href: '07-application-settings.html', icon: '&#9881;', adminOnly: true },
       ],
     },
   ];
@@ -145,10 +150,10 @@
     document.head.appendChild(style);
   }
 
-  function buildMarkup(activeKey, isOwner) {
+  function buildMarkup(activeKey, isOwner, isAdmin) {
     const sections = NAV_SECTIONS.map((section, i) => {
       const items = section.items
-        .filter((item) => !item.ownerOnly || isOwner)
+        .filter((item) => (!item.ownerOnly || isOwner) && (!item.adminOnly || isAdmin || isOwner))
         .map((item, idx) => {
           const marker = section.numbered
             ? `<span class="sb-num">${String(idx + 1).padStart(2, '0')}</span>`
@@ -192,9 +197,10 @@
     injectStyles();
 
     const isOwner = currentUser?.role?.name === 'OWNER';
+    const isAdmin = currentUser?.role?.name === 'ADMIN';
     const aside = document.createElement('aside');
     aside.id = 'casaSidebar';
-    aside.innerHTML = buildMarkup(activeKey, isOwner);
+    aside.innerHTML = buildMarkup(activeKey, isOwner, isAdmin);
     document.body.insertBefore(aside, document.body.firstChild);
     document.body.classList.add('has-sidebar');
 

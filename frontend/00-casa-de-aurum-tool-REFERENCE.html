@@ -2348,6 +2348,20 @@ exportBtn.addEventListener('click', async ()=>{
     e.preventDefault();
     CasaApi.auth.logout();
   });
+
+  // Catalog Extractor needs catalogs:write, which STAFF doesn't have —
+  // remove it from the nav rather than let staff open a tab where every
+  // action just 403s, and jump them to the Mood Board tab instead.
+  if (currentUser.role.name === 'STAFF') {
+    const extractorBtn = document.querySelector('nav.tools button[data-tool="extractor"]');
+    if (extractorBtn) extractorBtn.remove();
+    document.querySelectorAll('nav.tools button').forEach((b) => b.classList.remove('active'));
+    document.querySelectorAll('section.tool').forEach((s) => s.classList.remove('active'));
+    const moodboardBtn = document.querySelector('nav.tools button[data-tool="moodboard"]');
+    if (moodboardBtn) moodboardBtn.classList.add('active');
+    const moodboardSection = document.getElementById('moodboard');
+    if (moodboardSection) moodboardSection.classList.add('active');
+  }
 })();
 </script>
 </body>
