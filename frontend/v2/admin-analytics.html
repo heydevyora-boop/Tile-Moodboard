@@ -178,7 +178,7 @@
   (async () => {
     const currentUser = await CasaShell.init({ current: 'admin-analytics.html', allowedRoles: ['ADMIN','OWNER'] });
 
-    if (currentUser.role.name !== 'OWNER') {
+    if (currentUser.role !== 'OWNER') {
       document.getElementById('restrictedBanner').style.display = 'block';
       document.getElementById('analyticsContent').style.display = 'none';
       return;

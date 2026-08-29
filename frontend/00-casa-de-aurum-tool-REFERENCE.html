@@ -2343,7 +2343,7 @@ exportBtn.addEventListener('click', async ()=>{
 (async () => {
   const currentUser = await CasaApi.requireAuth();
   const ROLE_LABEL = { OWNER: 'Owner', ADMIN: 'Manager', STAFF: 'Sales Staff' };
-  document.getElementById('whoami').textContent = `${currentUser.name} (${ROLE_LABEL[currentUser.role.name] || currentUser.role.name})`;
+  document.getElementById('whoami').textContent = `${currentUser.name} (${ROLE_LABEL[currentUser.role] || currentUser.role})`;
   document.getElementById('logoutLink').addEventListener('click', (e) => {
     e.preventDefault();
     CasaApi.auth.logout();
@@ -2352,7 +2352,7 @@ exportBtn.addEventListener('click', async ()=>{
   // Catalog Extractor needs catalogs:write, which STAFF doesn't have —
   // remove it from the nav rather than let staff open a tab where every
   // action just 403s, and jump them to the Mood Board tab instead.
-  if (currentUser.role.name === 'STAFF') {
+  if (currentUser.role === 'STAFF') {
     const extractorBtn = document.querySelector('nav.tools button[data-tool="extractor"]');
     if (extractorBtn) extractorBtn.remove();
     document.querySelectorAll('nav.tools button').forEach((b) => b.classList.remove('active'));

@@ -361,10 +361,10 @@
 
   (async () => {
     const currentUser = await CasaApi.requireAuth(['OWNER']);
-    document.getElementById('whoami').textContent = `${currentUser.name} (${ROLE_LABEL[currentUser.role.name] || currentUser.role.name})`;
+    document.getElementById('whoami').textContent = `${currentUser.name} (${ROLE_LABEL[currentUser.role] || currentUser.role})`;
     document.getElementById('logoutLink').addEventListener('click', (e) => { e.preventDefault(); CasaApi.auth.logout(); });
 
-    if (currentUser.role.name !== 'OWNER') {
+    if (currentUser.role !== 'OWNER') {
       document.getElementById('restrictedBanner').style.display = 'block';
       return;
     }

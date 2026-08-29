@@ -152,7 +152,7 @@
 
     document.getElementById('signedInNote').style.display = 'block';
     document.getElementById('signedInNote').innerHTML =
-      `Signed in as ${CasaApi ? '' : ''}<strong>${user.name}</strong> (${user.role?.name}) — <a href="${ROLE_HOME[user.role?.name] || 'tool-dashboard.html'}">go to your dashboard →</a>`;
+      `Signed in as ${CasaApi ? '' : ''}<strong>${user.name}</strong> (${user.role}) — <a href="${ROLE_HOME[user.role] || 'tool-dashboard.html'}">go to your dashboard →</a>`;
 
     try {
       const overview = await CasaApi.dashboard.overview();

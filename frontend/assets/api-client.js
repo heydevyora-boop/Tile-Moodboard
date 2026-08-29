@@ -2736,7 +2736,7 @@ const ai = {
     if (
       allowedRoles &&
       !allowedRoles.includes(
-        user.role?.name
+        user.role
       )
     ) {
       alert(
@@ -2748,7 +2748,7 @@ const ai = {
       // admin-only page, or a STAFF user denied on any admin page would
       // bounce endlessly between two pages that both reject them.
       location.href =
-        user.role?.name === 'STAFF'
+        user.role === 'STAFF'
           ? '00-casa-de-aurum-tool-REFERENCE.html'
           : 'dashboard.html';
 

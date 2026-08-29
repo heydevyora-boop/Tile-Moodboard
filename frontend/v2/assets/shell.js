@@ -68,7 +68,7 @@
   }
 
   function renderSidebar(user, current) {
-    const roleName = user.role?.name || 'STAFF';
+    const roleName = user.role || 'STAFF';
     const nav = NAV[roleName] || NAV.STAFF;
     const panelLabel = ROLE_LABEL[roleName] || 'User Panel';
 
@@ -101,12 +101,12 @@
   }
 
   function renderRestricted(user) {
-    const home = ROLE_HOME[user.role?.name] || 'login.html';
+    const home = ROLE_HOME[user.role] || 'login.html';
     document.body.innerHTML = `
       <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#F1ECE1;font-family:'Inter',sans-serif;padding:24px;">
         <div style="max-width:420px;text-align:center;background:#fff;border:1px solid rgba(34,29,24,0.14);border-radius:3px;padding:40px 32px;">
           <div style="font-family:'Fraunces',serif;font-weight:600;font-size:20px;color:#1A1611;margin-bottom:10px;">You don't have access to this page</div>
-          <p style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:#78705F;line-height:1.6;margin:0 0 20px;">Your account (${escapeHtml(user.role?.name || 'unknown role')}) doesn't have permission to view this screen. Backend access is admin-only — staff use the moodboard tool.</p>
+          <p style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:#78705F;line-height:1.6;margin:0 0 20px;">Your account (${escapeHtml(user.role || 'unknown role')}) doesn't have permission to view this screen. Backend access is admin-only — staff use the moodboard tool.</p>
           <a href="${escapeHtml(home)}" style="display:inline-block;font-weight:600;font-size:13px;background:#1A1611;color:#F1ECE1;padding:11px 20px;border-radius:2px;">Go to your dashboard →</a>
         </div>
       </div>`;
@@ -128,7 +128,7 @@
     opts = opts || {};
     const user = await CasaApi.requireAuth(); // no allowedRoles — we gate ourselves below
 
-    if (opts.allowedRoles && !opts.allowedRoles.includes(user.role?.name)) {
+    if (opts.allowedRoles && !opts.allowedRoles.includes(user.role)) {
       renderRestricted(user);
       return new Promise(() => {}); // never resolves — page is done, nothing else should run
     }

@@ -196,7 +196,7 @@
 
   (async () => {
     const currentUser = await CasaApi.requireAuth(['ADMIN','OWNER']);
-    document.getElementById('whoami').textContent = `${currentUser.name} (${ROLE_LABEL[currentUser.role.name] || currentUser.role.name})`;
+    document.getElementById('whoami').textContent = `${currentUser.name} (${ROLE_LABEL[currentUser.role] || currentUser.role})`;
 
     document.getElementById('logoutLink').addEventListener('click', (e) => {
       e.preventDefault();

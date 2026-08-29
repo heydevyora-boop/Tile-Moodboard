@@ -455,7 +455,7 @@
   (async () => {
     const currentUser = await CasaApi.requireAuth();
     const ROLE_LABEL = { OWNER: 'Owner', ADMIN: 'Manager', STAFF: 'Sales Staff' };
-    document.getElementById('whoami').textContent = `${currentUser.name} (${ROLE_LABEL[currentUser.role.name] || currentUser.role.name})`;
+    document.getElementById('whoami').textContent = `${currentUser.name} (${ROLE_LABEL[currentUser.role] || currentUser.role})`;
     document.getElementById('logoutLink').addEventListener('click', (e) => { e.preventDefault(); CasaApi.auth.logout(); });
     await loadCustomers();
   })();

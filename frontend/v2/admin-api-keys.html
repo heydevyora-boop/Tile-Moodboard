@@ -227,7 +227,7 @@
     return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
 
-  if (user.role?.name !== 'OWNER') {
+  if (user.role !== 'OWNER') {
     document.getElementById('pageBody').style.display = 'none';
     document.getElementById('ownerOnlyNotice').style.display = 'block';
     document.getElementById('summaryBadge').textContent = 'Owner access required';

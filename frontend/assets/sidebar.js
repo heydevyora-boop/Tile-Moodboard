@@ -196,8 +196,8 @@
   function init(currentUser, activeKey) {
     injectStyles();
 
-    const isOwner = currentUser?.role?.name === 'OWNER';
-    const isAdmin = currentUser?.role?.name === 'ADMIN';
+    const isOwner = currentUser?.role === 'OWNER';
+    const isAdmin = currentUser?.role === 'ADMIN';
     const aside = document.createElement('aside');
     aside.id = 'casaSidebar';
     aside.innerHTML = buildMarkup(activeKey, isOwner, isAdmin);
@@ -229,7 +229,7 @@
     const roleEl = document.getElementById('sbUserRole');
     if (avatarEl) avatarEl.textContent = initials(currentUser?.name);
     if (nameEl) nameEl.textContent = currentUser?.name ?? '';
-    if (roleEl) roleEl.textContent = ROLE_LABEL[currentUser?.role?.name] || currentUser?.role?.name || '';
+    if (roleEl) roleEl.textContent = ROLE_LABEL[currentUser?.role] || currentUser?.role || '';
 
     const signOut = document.getElementById('sbSignOut');
     if (signOut) {

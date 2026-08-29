@@ -1,8 +1,17 @@
 /* eslint-disable no-console */
 import { PrismaClient, RuleSection, TileType, CatalogStatus, MoodBoardStatus, PrintFormat, PrintLayout, DimensionUnit, PrintFileFormat, Tile } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
 import bcrypt from 'bcryptjs';
 
-const prisma = new PrismaClient();
+// Prisma 7's generated client requires an explicit driver adapter — same
+// one the real app uses in src/db/connection.ts. A bare `new PrismaClient()`
+// throws "instantiated without any options" at runtime.
+const connectionString = process.env.DATABASE_URL;
+if (!connectionString) {
+  throw new Error('DATABASE_URL is not defined in the environment.');
+}
+const adapter = new PrismaPg({ connectionString });
+const prisma = new PrismaClient({ adapter });
 
 // Default password for all seeded users. Change on first login in a real
 // deployment — this is only for local/dev bootstrapping.

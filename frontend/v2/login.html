@@ -171,7 +171,7 @@
     const params = new URLSearchParams(location.search);
     const redirect = params.get('redirect');
     const user = await CasaApi.auth.ensureSession();
-    if (user) location.href = redirect || ROLE_HOME[user.role?.name] || 'tool-dashboard.html';
+    if (user) location.href = redirect || ROLE_HOME[user.role] || 'tool-dashboard.html';
   })();
 
   form.addEventListener('submit', async (e) => {
@@ -187,7 +187,7 @@
       const user = await CasaApi.auth.login(email, password);
       const params = new URLSearchParams(location.search);
       const redirect = params.get('redirect');
-      location.href = redirect || ROLE_HOME[user?.role?.name] || 'tool-dashboard.html';
+      location.href = redirect || ROLE_HOME[user?.role] || 'tool-dashboard.html';
     } catch (err) {
       showError(err.message || 'Could not sign in. Check your credentials and try again.');
       submitBtn.disabled = false;

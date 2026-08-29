@@ -247,7 +247,7 @@
       // Staff land on the actual tool (backend/admin pages aren't theirs to
       // see); Admin and Owner land on the dashboard.
       function roleHome(user) {
-        return user?.role?.name === "STAFF"
+        return user?.role === "STAFF"
           ? "00-casa-de-aurum-tool-REFERENCE.html"
           : "dashboard.html";
       }

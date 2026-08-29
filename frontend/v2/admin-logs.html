@@ -285,7 +285,7 @@
   (async () => {
     const currentUser = await CasaShell.init({ current: 'admin-logs.html', allowedRoles: ['ADMIN','OWNER'] });
 
-    if (currentUser.role.name !== 'OWNER') {
+    if (currentUser.role !== 'OWNER') {
       document.getElementById('restrictedBanner').style.display = 'block';
       document.getElementById('statusPanel').style.display = 'none';
       document.getElementById('logTableBody').innerHTML = '<tr><td colspan="4" class="casa-empty">Owner access required.</td></tr>';
