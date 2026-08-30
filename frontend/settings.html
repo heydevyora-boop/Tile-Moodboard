@@ -338,7 +338,14 @@
 
   function disableIfNotOwner() {
     if (isOwner) return;
-    document.querySelectorAll('main input, main select, main button.primary').forEach((el) => { el.disabled = true; });
+    // #casa-main-inner, not <main> — the v2 shell has no <main> element.
+    // CasaShell.init() also removes #casa-main-content itself (it moves
+    // that element's innerHTML into #casa-main-inner and drops the
+    // original node), so scoping to #casa-main-content wouldn't work
+    // either — that id doesn't exist anymore once init() has run. This
+    // selector always matched zero elements before, so nothing was ever
+    // actually disabled for non-owners.
+    document.querySelectorAll('#casa-main-inner input, #casa-main-inner select, #casa-main-inner button.primary').forEach((el) => { el.disabled = true; });
   }
 
   async function saveCategory(category, payload, errorId, btnId, btnLabel) {

@@ -1,3 +1,7 @@
+// Rewritten for the frontend/v2 swap: 07-application-settings.html ->
+// settings.html, wrapped in shell.js. Real role is a plain string now,
+// not { name: ... }. Markup/IDs and disableIfNotOwner()/restrictedBanner
+// logic are otherwise unchanged from the original.
 const { JSDOM } = require('jsdom');
 const fs = require('fs');
 const path = require('path');
@@ -11,23 +15,25 @@ function check(label, cond, extra) {
 
 const frontendDir = path.join(__dirname, '..', '..', 'frontend');
 const notificationsSrc = fs.readFileSync(path.join(frontendDir, 'assets', 'notifications.js'), 'utf8');
+const shellSrc = fs.readFileSync(path.join(frontendDir, 'assets', 'shell.js'), 'utf8');
 
 function loadPage(casaApiStub) {
-  let html = fs.readFileSync(path.join(frontendDir, '07-application-settings.html'), 'utf8');
+  let html = fs.readFileSync(path.join(frontendDir, 'settings.html'), 'utf8');
   html = html.replace(/<script src="assets\/api-client\.js"><\/script>\s*/, '');
   html = html.replace(/<script src="assets\/notifications\.js"><\/script>\s*/, '');
+  html = html.replace(/<script src="assets\/shell\.js"><\/script>\s*/, '');
 
-  const dom = new JSDOM(html, { runScripts: 'outside-only', url: 'http://localhost/07-application-settings.html' });
+  const dom = new JSDOM(html, { runScripts: 'outside-only', url: 'http://localhost/settings.html' });
   const { window } = dom;
   window.requestAnimationFrame = (cb) => cb();
   window.CasaApi = casaApiStub;
   window.alert = () => { throw new Error('alert() should never be called on this page'); };
 
   dom.window.eval(notificationsSrc);
+  dom.window.eval(shellSrc);
   const start = html.indexOf('<script>');
   const end = html.indexOf('</script>', start);
-  const scriptBody = html.slice(start + '<script>'.length, end);
-  dom.window.eval(scriptBody);
+  dom.window.eval(html.slice(start + '<script>'.length, end));
   return dom;
 }
 
@@ -42,7 +48,8 @@ async function main() {
   let updateCalledWith = null;
 
   const stub = {
-    requireAuth: async () => ({ name: 'Store Owner', role: { name: 'OWNER' } }),
+    requireAuth: async () => ({ name: 'Store Owner', role: 'OWNER' }),
+    initials: (n) => String(n || '?').split(/\s+/).map((p) => p[0]).join('').toUpperCase(),
     auth: { logout: async () => {} },
     settings: {
       getAll: async () => DEFAULT_SETTINGS,
@@ -70,7 +77,7 @@ async function main() {
   check('5d. A real success toast appears after saving', [...successToasts].some((t) => t.textContent.includes('saved')), [...successToasts].map((t) => t.textContent));
 
   updateCalledWith = null;
-  const staffStub = { ...stub, requireAuth: async () => ({ name: 'Staff Member', role: { name: 'STAFF' } }) };
+  const staffStub = { ...stub, requireAuth: async () => ({ name: 'Staff Member', role: 'STAFF' }) };
   const staffDom = loadPage(staffStub);
   await new Promise((r) => setTimeout(r, 60));
 

@@ -1,3 +1,6 @@
+// Rewritten for the frontend/v2 swap: 08-customer-management.html ->
+// customers.html, wrapped in shell.js. Real role is a plain string now,
+// not { name: ... }. Markup/IDs are otherwise unchanged from the original.
 const { JSDOM } = require('jsdom');
 const fs = require('fs');
 const path = require('path');
@@ -11,13 +14,15 @@ function check(label, cond, extra) {
 
 const frontendDir = path.join(__dirname, '..', '..', 'frontend');
 const notificationsSrc = fs.readFileSync(path.join(frontendDir, 'assets', 'notifications.js'), 'utf8');
+const shellSrc = fs.readFileSync(path.join(frontendDir, 'assets', 'shell.js'), 'utf8');
 
 function loadPage(casaApiStub) {
-  let html = fs.readFileSync(path.join(frontendDir, '08-customer-management.html'), 'utf8');
+  let html = fs.readFileSync(path.join(frontendDir, 'customers.html'), 'utf8');
   html = html.replace(/<script src="assets\/api-client\.js"><\/script>\s*/, '');
   html = html.replace(/<script src="assets\/notifications\.js"><\/script>\s*/, '');
+  html = html.replace(/<script src="assets\/shell\.js"><\/script>\s*/, '');
 
-  const dom = new JSDOM(html, { runScripts: 'outside-only', url: 'http://localhost/08-customer-management.html' });
+  const dom = new JSDOM(html, { runScripts: 'outside-only', url: 'http://localhost/customers.html' });
   const { window } = dom;
   window.requestAnimationFrame = (cb) => cb();
   window.CasaApi = casaApiStub;
@@ -25,10 +30,10 @@ function loadPage(casaApiStub) {
   window.alert = () => { throw new Error('alert() should never be called on this page'); };
 
   dom.window.eval(notificationsSrc);
+  dom.window.eval(shellSrc);
   const start = html.indexOf('<script>');
   const end = html.indexOf('</script>', start);
-  const scriptBody = html.slice(start + '<script>'.length, end);
-  dom.window.eval(scriptBody);
+  dom.window.eval(html.slice(start + '<script>'.length, end));
   return dom;
 }
 
@@ -52,7 +57,8 @@ async function main() {
   let customers = [...SAMPLE_CUSTOMERS];
 
   const stub = {
-    requireAuth: async () => ({ name: 'Store Owner', role: { name: 'OWNER' } }),
+    requireAuth: async () => ({ name: 'Store Owner', role: 'OWNER' }),
+    initials: (n) => String(n || '?').split(/\s+/).map((p) => p[0]).join('').toUpperCase(),
     auth: { logout: async () => {} },
     customers: {
       list: async () => ({ customers, meta: { total: customers.length } }),
@@ -128,6 +134,20 @@ async function main() {
   dom.window.document.getElementById('deleteFromDetailBtn').dispatchEvent(new dom.window.Event('click', { bubbles: true }));
   await new Promise((r) => setTimeout(r, 60));
   check('7. Deleting from the detail view genuinely calls CasaApi.customers.remove with the real customer id', deleteCalledWith === 'c-1', deleteCalledWith);
+
+  // customers.html has no allowedRoles restriction — Staff has customers
+  // read/write permission on the backend, so the page should render fully
+  // for Staff too, not get shell-blocked or restricted.
+  const staffStub = {
+    requireAuth: async () => ({ name: 'Staff Member', role: 'STAFF' }),
+    initials: (n) => String(n || '?').split(/\s+/).map((p) => p[0]).join('').toUpperCase(),
+    auth: { logout: async () => {} },
+    customers: { list: async () => ({ customers: SAMPLE_CUSTOMERS, meta: { total: 2 } }) },
+  };
+  const staffDom = loadPage(staffStub);
+  await new Promise((r) => setTimeout(r, 60));
+  const staffRows = staffDom.window.document.querySelectorAll('#customerTableBody tr');
+  check('8. Staff (no restriction on this page) sees the full real customer table, not blocked', staffRows.length === 2 && !staffDom.window.document.body.textContent.includes("don't have access"), [...staffRows].map((r) => r.textContent));
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail > 0 ? 1 : 0);
