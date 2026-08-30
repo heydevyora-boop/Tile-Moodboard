@@ -1,304 +1,211 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Casa de Aurum — Sign In</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap"
-      rel="stylesheet"
-    />
-    <style>
-      :root {
-        --ink: #221d18;
-        --charcoal: #1a1611;
-        --stone-50: #f1ece1;
-        --stone-100: #e9e2d3;
-        --stone-200: #dfd5bf;
-        --stone-400: #b7ab94;
-        --stone-600: #78705f;
-        --stone-700: #4b443a;
-        --brass: #ad8348;
-        --brass-light: #d8b677;
-        --clay: #9c4b2c;
-        --sage: #7a9165;
-        --line: rgba(34, 29, 24, 0.14);
-        --shadow: 0 12px 30px rgba(26, 22, 17, 0.14);
-        --radius: 3px;
-        --display: "Fraunces", serif;
-        --sans: "Inter", sans-serif;
-        --mono: "IBM Plex Mono", monospace;
-      }
-      * {
-        box-sizing: border-box;
-      }
-      html,
-      body {
-        margin: 0;
-        padding: 0;
-        height: 100%;
-      }
-      body {
-        background: var(--stone-50);
-        color: var(--ink);
-        font-family: var(--sans);
-        -webkit-font-smoothing: antialiased;
-        display: flex;
-        flex-direction:column;
-        align-items: center;
-        justify-content: center;
-        min-height: 100vh;
-        padding: 20px;
-      }
-      .grain {
-        position: fixed;
-        inset: 0;
-        pointer-events: none;
-        z-index: 0;
-        opacity: 0.05;
-        background-image: radial-gradient(
-          circle at 1px 1px,
-          #000 1px,
-          transparent 0
-        );
-        background-size: 3px 3px;
-      }
-      .card {
-        position: relative;
-        z-index: 1;
-        width: 100%;
-        max-width: 380px;
-        background: #fff;
-        border: 1px solid var(--line);
-        border-radius: var(--radius);
-        box-shadow: var(--shadow);
-        padding: 36px 32px 32px;
-      }
-      .wordmark {
-        text-align: center;
-        margin-bottom: 6px;
-      }
-      .wordmark .name {
-        font-family: var(--display);
-        font-weight: 600;
-        font-size: 24px;
-        letter-spacing: 0.04em;
-        color: var(--charcoal);
-      }
-      .wordmark .name em {
-        font-style: normal;
-        color: var(--brass);
-      }
-      .sub {
-        font-family: var(--mono);
-        font-size: 10.5px;
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
-        color: var(--stone-600);
-        text-align: center;
-        margin-bottom: 28px;
-      }
-      .field {
-        margin-bottom: 16px;
-      }
-      .field label {
-        display: block;
-        font-size: 12px;
-        color: var(--stone-600);
-        margin-bottom: 6px;
-        font-family: var(--mono);
-        letter-spacing: 0.03em;
-      }
-      .field input {
-        width: 100%;
-        font-family: var(--mono);
-        font-size: 13.5px;
-        padding: 11px 12px;
-        border: 1px solid var(--line);
-        border-radius: 2px;
-        background: var(--stone-50);
-        color: var(--ink);
-      }
-      .field input:focus {
-        outline: 2px solid var(--brass);
-        outline-offset: 1px;
-      }
-      button.primary {
-        width: 100%;
-        font-family: var(--sans);
-        font-weight: 600;
-        font-size: 13.5px;
-        background: var(--charcoal);
-        color: var(--stone-50);
-        border: none;
-        padding: 13px 22px;
-        border-radius: 2px;
-        cursor: pointer;
-        letter-spacing: 0.01em;
-        transition: background 0.15s ease;
-        margin-top: 6px;
-      }
-      button.primary:hover {
-        background: #000;
-      }
-      button.primary:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
-      }
-      .error-box {
-        background: #fbeeea;
-        border: 1px solid var(--clay);
-        color: var(--clay);
-        font-size: 12.5px;
-        padding: 10px 12px;
-        border-radius: 2px;
-        margin-bottom: 16px;
-        display: none;
-        font-family: var(--sans);
-      }
-      .success-box {
-        background: #f1f5ee;
-        border: 1px solid var(--sage);
-        color: var(--sage);
-        font-size: 12.5px;
-        padding: 10px 12px;
-        border-radius: 2px;
-        margin-bottom: 16px;
-        display: none;
-        font-family: var(--sans);
-      }
-      .forgot {
-        display: block;
-        text-align: center;
-        margin-top: 18px;
-        font-size: 12.5px;
-        color: var(--stone-600);
-        text-decoration: none;
-        font-family: var(--mono);
-      }
-      .forgot:hover {
-        color: var(--brass);
-      }
-      footer.note {
-        text-align: center;
-        margin-top: 24px;
-        font-family: var(--mono);
-        font-size: 10.5px;
-        color: var(--stone-400);
-      }
-    </style>
-  </head>
-  <body>
-    <div class="grain"></div>
-    <div class="card">
-      <div class="wordmark"><div class="name">CASA DE A<em>U</em>RUM</div></div>
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Casa de Aurum — Sign In</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --ink:#221D18; --charcoal:#1A1611; --stone-50:#F1ECE1; --stone-100:#E9E2D3; --stone-200:#DFD5BF;
+    --stone-400:#B7AB94; --stone-600:#78705F; --stone-700:#4B443A; --brass:#AD8348; --brass-light:#D8B677;
+    --clay:#9C4B2C; --sage:#7A9165; --line: rgba(34,29,24,0.14); --shadow: 0 12px 30px rgba(26,22,17,0.14);
+    --radius: 3px; --display: 'Fraunces', serif; --sans: 'Inter', sans-serif; --mono: 'IBM Plex Mono', monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;min-height:100%;}
+  body{background:var(--stone-50);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased;}
+  a{color:var(--brass);text-decoration:none;}a:hover{color:#7A5B2C;}
+  .grain{position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.05;background-image:radial-gradient(circle at 1px 1px, #000 1px, transparent 0);background-size:3px 3px;}
+  .wrap{position:relative;z-index:1;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:48px 24px;}
+  .inner{width:100%;max-width:900px;}
+  .brand{text-align:center;margin-bottom:12px;}
+  .brand .name{font-family:var(--display);font-weight:600;font-size:clamp(26px,4vw,36px);letter-spacing:.05em;color:var(--charcoal);}
+  .brand .name em{font-style:normal;color:var(--brass);}
+  .brand .sub{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--stone-600);margin-top:5px;}
+  .swatchrule{display:flex;border:1px solid var(--line);overflow:hidden;max-width:420px;margin:0 auto 40px;}
+  .swatchrule div{flex:1;height:7px;}
+  .heading{text-align:center;margin-bottom:26px;}
+  .heading h1{font-family:var(--display);font-weight:600;font-size:22px;margin:0 0 6px;color:var(--charcoal);}
+  .heading p{margin:0;font-family:var(--mono);font-size:11.5px;color:var(--stone-600);}
+  .roles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-bottom:22px;}
+  .role-card{background:#fff;border:1px solid var(--line);border-radius:4px;overflow:hidden;}
+  .role-card .bar{height:7px;}
+  .role-card .body{padding:20px 18px;}
+  .role-card .avatar{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;color:#fff;margin-bottom:12px;}
+  .role-card .title{font-family:var(--display);font-weight:600;font-size:16px;color:var(--charcoal);margin-bottom:3px;}
+  .role-card .scope{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--brass);margin-bottom:10px;}
+  .role-card p{margin:0 0 12px;font-size:12px;color:var(--stone-600);line-height:1.5;}
+  .role-card .cap{display:flex;flex-direction:column;gap:4px;}
+  .role-card .cap div{display:flex;align-items:flex-start;gap:6px;font-family:var(--mono);font-size:10px;line-height:1.4;}
+  .role-card .cap .yes{color:#4B443A;}
+  .role-card .cap .no{color:var(--stone-400);}
+  .card{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:22px;max-width:440px;margin:0 auto;box-shadow:var(--shadow);}
+  .card .signas{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--stone-600);margin-bottom:14px;}
+  .field{margin-bottom:16px;}
+  .field label{display:block;font-size:12px;color:var(--stone-600);margin-bottom:6px;font-family:var(--mono);letter-spacing:.03em;}
+  .field input{width:100%;font-family:var(--mono);font-size:13.5px;padding:11px 12px;border:1px solid var(--line);border-radius:2px;background:var(--stone-50);color:var(--ink);}
+  .field input:focus{outline:2px solid var(--brass);outline-offset:1px;}
+  button.primary{width:100%;font-family:var(--sans);font-weight:600;font-size:13.5px;background:var(--charcoal);color:var(--stone-50);border:none;padding:13px 22px;border-radius:2px;cursor:pointer;letter-spacing:.01em;transition:background .15s ease;margin-top:6px;}
+  button.primary:hover{background:#000;}
+  button.primary:disabled{opacity:.6;cursor:not-allowed;}
+  .error-box{background:#FBEEEA;border:1px solid var(--clay);color:var(--clay);font-size:12.5px;padding:10px 12px;border-radius:2px;margin-bottom:16px;display:none;}
+  .success-box{background:#F1F5EE;border:1px solid var(--sage);color:var(--sage);font-size:12.5px;padding:10px 12px;border-radius:2px;margin-bottom:16px;display:none;}
+  .forgot{display:block;text-align:center;margin-top:14px;font-size:12.5px;color:var(--stone-600);font-family:var(--mono);}
+  .note{font-family:var(--mono);font-size:10px;color:var(--stone-400);text-align:center;margin-top:12px;line-height:1.5;}
+  footer.foot{text-align:center;margin-top:24px;font-family:var(--mono);font-size:10.5px;color:var(--stone-400);}
+</style>
+</head>
+<body>
+<div class="grain"></div>
+<div class="wrap">
+  <div class="inner">
+    <div class="brand">
+      <div class="name">CASA DE A<em>U</em>RUM</div>
       <div class="sub">Internal Studio Tools</div>
+    </div>
+    <div class="swatchrule">
+      <div style="background:linear-gradient(100deg,#C9BFA9,#DCD2BC);"></div>
+      <div style="background:linear-gradient(100deg,#3B342A,#5A4F40);"></div>
+      <div style="background:linear-gradient(100deg,#AD8348,#D8B677);"></div>
+      <div style="background:linear-gradient(100deg,#9C4B2C,#B96A45);"></div>
+      <div style="background:linear-gradient(100deg,#7C8577,#9CA793);"></div>
+      <div style="background:linear-gradient(100deg,#4B443A,#2A251E);"></div>
+    </div>
+    <div class="heading">
+      <h1>Sign in</h1>
+      <p>Your role decides which panel opens — and what you can change.</p>
+    </div>
 
+    <div class="roles">
+      <div class="role-card">
+        <div class="bar" style="background:linear-gradient(90deg,#C9BFA9,#8F8062);"></div>
+        <div class="body">
+          <div class="avatar" style="background:#8F8062;">RS</div>
+          <div class="title">Staff</div>
+          <div class="scope">Showroom floor</div>
+          <p>Takes the client brief and generates moodboards on the floor.</p>
+          <div class="cap">
+            <div class="yes"><span>✓</span><span>Create moodboards</span></div>
+            <div class="yes"><span>✓</span><span>Lock a scene, generate angles</span></div>
+            <div class="yes"><span>✓</span><span>Export print boards</span></div>
+            <div class="no"><span>✕</span><span>No access to rules, keys, or catalogs</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="role-card">
+        <div class="bar" style="background:linear-gradient(90deg,#AD8348,#D8B677);"></div>
+        <div class="body">
+          <div class="avatar" style="background:#AD8348;">AK</div>
+          <div class="title">Admin</div>
+          <div class="scope">Operations</div>
+          <p>Runs the catalog pipeline and watches system health.</p>
+          <div class="cap">
+            <div class="yes"><span>✓</span><span>Extraction & catalog readiness</span></div>
+            <div class="yes"><span>✓</span><span>Product data, logs, analytics</span></div>
+            <div class="yes"><span>✓</span><span>Tool configuration</span></div>
+            <div class="no"><span>✕</span><span>Cannot edit AI rules or API keys</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="role-card">
+        <div class="bar" style="background:linear-gradient(90deg,#3B342A,#1A1611);"></div>
+        <div class="body">
+          <div class="avatar" style="background:#1A1611;">O</div>
+          <div class="title">Owner</div>
+          <div class="scope">Full control</div>
+          <p>Owns the AI rules, reference library, staff, and credentials.</p>
+          <div class="cap">
+            <div class="yes"><span>✓</span><span>System instructions & versions</span></div>
+            <div class="yes"><span>✓</span><span>Reference library & filters</span></div>
+            <div class="yes"><span>✓</span><span>Users, API keys, settings</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="signas">Sign in with your Casa de Aurum account</div>
       <div class="error-box" id="errorBox"></div>
       <div class="success-box" id="successBox"></div>
-
       <form id="loginForm">
         <div class="field">
           <label for="email">Email</label>
-          <input
-            type="email"
-            id="email"
-            autocomplete="username"
-            placeholder="you@casadeaurum.com"
-            required
-          />
+          <input type="email" id="email" autocomplete="username" placeholder="you@casadeaurum.com" required />
         </div>
         <div class="field">
           <label for="password">Password</label>
-          <input
-            type="password"
-            id="password"
-            autocomplete="current-password"
-            placeholder="********"
-            required
-          />
+          <input type="password" id="password" autocomplete="current-password" placeholder="••••••••••" required />
         </div>
         <button type="submit" class="primary" id="submitBtn">Sign in</button>
       </form>
-
       <a href="#" class="forgot" id="forgotLink">Forgot your password?</a>
+      <div class="note">Role permissions are enforced by the backend, not by hiding menu items.</div>
     </div>
-    <footer class="note">CASA DE AURUM — INTERNAL OPERATIONS TOOL</footer>
+    <footer class="foot">CASA DE AURUM — INTERNAL OPERATIONS TOOL</footer>
+  </div>
+</div>
 
-    <script src="assets/api-client.js"></script>
-    <script>
-      const form = document.getElementById("loginForm");
-      const errorBox = document.getElementById("errorBox");
-      const successBox = document.getElementById("successBox");
-      const submitBtn = document.getElementById("submitBtn");
+<script src="assets/api-client.js"></script>
+<script>
+  const ROLE_HOME = { STAFF: 'tool-dashboard.html', ADMIN: 'admin-dashboard.html', OWNER: 'admin-dashboard.html' };
 
-      function showError(msg) {
-        errorBox.textContent = msg;
-        errorBox.style.display = "block";
-        successBox.style.display = "none";
-      }
-      function showSuccess(msg) {
-        successBox.textContent = msg;
-        successBox.style.display = "block";
-        errorBox.style.display = "none";
-      }
+  const form = document.getElementById('loginForm');
+  const errorBox = document.getElementById('errorBox');
+  const successBox = document.getElementById('successBox');
+  const submitBtn = document.getElementById('submitBtn');
 
-      // Staff land on the actual tool (backend/admin pages aren't theirs to
-      // see); Admin and Owner land on the dashboard.
-      function roleHome(user) {
-        return user?.role === "STAFF"
-          ? "00-casa-de-aurum-tool-REFERENCE.html"
-          : "dashboard.html";
-      }
+  function showError(msg) {
+    errorBox.textContent = msg;
+    errorBox.style.display = 'block';
+    successBox.style.display = 'none';
+  }
+  function showSuccess(msg) {
+    successBox.textContent = msg;
+    successBox.style.display = 'block';
+    errorBox.style.display = 'none';
+  }
 
-      // If a session already exists (refresh cookie still valid), skip straight past login.
-      (async () => {
-        const params = new URLSearchParams(location.search);
-        const user = await CasaApi.auth.ensureSession();
-        if (user) location.href = params.get("redirect") || roleHome(user);
-      })();
+  (async () => {
+    const params = new URLSearchParams(location.search);
+    const redirect = params.get('redirect');
+    const user = await CasaApi.auth.ensureSession();
+    if (user) location.href = redirect || ROLE_HOME[user.role] || 'tool-dashboard.html';
+  })();
 
-      form.addEventListener("submit", async (e) => {
-        e.preventDefault();
-        errorBox.style.display = "none";
-        submitBtn.disabled = true;
-        submitBtn.textContent = "Signing in...";
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    errorBox.style.display = 'none';
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Signing in...';
 
-        const email = document.getElementById("email").value.trim();
-        const password = document.getElementById("password").value;
+    const email = document.getElementById('email').value.trim();
+    const password = document.getElementById('password').value;
 
-        try {
-          const user = await CasaApi.auth.login(email, password);
-          const params = new URLSearchParams(location.search);
-          location.href = params.get("redirect") || roleHome(user);
-        } catch (err) {
-          showError(
-            err.message ||
-              "Could not sign in. Check your credentials and try again.",
-          );
-          submitBtn.disabled = false;
-          submitBtn.textContent = "Sign in";
-        }
-      });
+    try {
+      const user = await CasaApi.auth.login(email, password);
+      const params = new URLSearchParams(location.search);
+      const redirect = params.get('redirect');
+      location.href = redirect || ROLE_HOME[user?.role] || 'tool-dashboard.html';
+    } catch (err) {
+      showError(err.message || 'Could not sign in. Check your credentials and try again.');
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Sign in';
+    }
+  });
 
-      document
-        .getElementById("forgotLink")
-        .addEventListener("click", async (e) => {
-          e.preventDefault();
-          const email = prompt(
-            "Enter your account email - we will send a reset link if it exists:",
-          );
-          if (!email) return;
-          try {
-            await CasaApi.auth.forgotPassword(email.trim());
-            showSuccess(
-              "If an account exists for that email, a reset link has been sent.",
-            );
-          } catch (err) {
-            showError(err.message || "Something went wrong. Try again.");
-          }
-        });
-    </script>
-  </body>
+  document.getElementById('forgotLink').addEventListener('click', async (e) => {
+    e.preventDefault();
+    const email = prompt('Enter your account email - we will send a reset link if it exists:');
+    if (!email) return;
+    try {
+      await CasaApi.auth.forgotPassword(email.trim());
+      showSuccess('If an account exists for that email, a reset link has been sent.');
+    } catch (err) {
+      showError(err.message || 'Something went wrong. Try again.');
+    }
+  });
+</script>
+</body>
 </html>

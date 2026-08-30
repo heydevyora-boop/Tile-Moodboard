@@ -2749,8 +2749,8 @@ const ai = {
       // bounce endlessly between two pages that both reject them.
       location.href =
         user.role === 'STAFF'
-          ? '00-casa-de-aurum-tool-REFERENCE.html'
-          : 'dashboard.html';
+          ? 'tool-dashboard.html'
+          : 'admin-dashboard.html';
 
       return new Promise(
         () => {}

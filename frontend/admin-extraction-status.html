@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Casa de Aurum — Extraction Status</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/shell.css">
+<style>
+  .progress-summary{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:20px;margin-bottom:18px;}
+  .progress-summary .top{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:10px;}
+  .progress-summary .top .lab{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--stone-600);}
+  .progress-summary .top .pct{font-family:var(--display);font-weight:600;font-size:20px;color:var(--charcoal);}
+  .progress-track{background:var(--stone-100);border-radius:2px;overflow:hidden;height:10px;display:flex;margin-bottom:14px;}
+  .progress-track > div{height:100%;}
+  .legend{display:flex;gap:22px;flex-wrap:wrap;}
+  .legend .item{display:flex;align-items:center;gap:7px;font-family:var(--mono);font-size:11.5px;color:var(--stone-700);}
+  .legend .sw{width:9px;height:9px;border-radius:2px;flex:none;}
+  .filters-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;align-items:center;}
+  .filters-row input[type=text]{font-family:var(--mono);font-size:12px;padding:8px 11px;border:1px solid var(--line);border-radius:2px;background:#fff;color:var(--stone-700);width:230px;}
+  .brand-row{padding:12px 16px;display:grid;grid-template-columns:1fr 110px 90px 90px 100px;gap:12px;align-items:center;cursor:pointer;background:#FAF7F0;border-bottom:1px solid var(--line);}
+  .brand-row .name{display:flex;align-items:center;gap:9px;min-width:0;}
+  .brand-row .chev{font-size:10px;color:var(--stone-400);transition:transform .15s ease;flex:none;}
+  .brand-row .chev.open{transform:rotate(0deg);}
+  .brand-row .chev.closed{transform:rotate(-90deg);}
+  .brand-row .brandname{font-family:var(--display);font-weight:600;font-size:15px;color:var(--charcoal);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .catalog-row{padding:11px 16px 11px 40px;display:grid;grid-template-columns:1fr 110px 90px 90px 140px;gap:12px;align-items:center;border-bottom:1px solid rgba(34,29,24,0.06);text-decoration:none;color:inherit;}
+  .catalog-row:hover{background:#FBF6EC;}
+  .catalog-row .fn{font-weight:600;font-size:13px;color:var(--ink);}
+  .catalog-row .meta{font-family:var(--mono);font-size:10.5px;color:var(--stone-600);}
+  .catalog-actions{display:flex;gap:6px;justify-content:flex-end;}
+  .catalog-actions a{font-family:var(--mono);font-size:11px;color:var(--stone-600);cursor:pointer;}
+  .catalog-actions a:hover{color:var(--brass);}
+  .catalog-actions a.danger:hover{color:var(--clay);}
+  .load-more-row{padding:10px 16px;text-align:center;font-family:var(--mono);font-size:11.5px;color:var(--brass);cursor:pointer;border-bottom:1px solid rgba(34,29,24,0.06);}
+</style>
+</head>
+<body>
+<div id="casa-main-content">
+  <div class="casa-pageheader">
+    <div>
+      <h1>Extraction Status</h1>
+      <p>Brand → Catalog → PDF → Extraction. Expand a brand to see its catalogs.</p>
+    </div>
+    <div class="casa-actions">
+      <button class="casa-btn secondary" id="refreshBtn">Refresh</button>
+      <a class="casa-btn" href="admin-catalog-extractor.html">Upload New Catalog</a>
+    </div>
+  </div>
+
+  <div class="progress-summary">
+    <div class="top"><span class="lab">Overall Progress</span><span class="pct" id="pctLabel">—</span></div>
+    <div class="progress-track" id="progressTrack"></div>
+    <div class="legend" id="legendRow"></div>
+  </div>
+
+  <div class="filters-row">
+    <input type="text" id="brandSearch" placeholder="Search brand…">
+    <div id="statusFilters" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
+  </div>
+
+  <div class="casa-panel">
+    <div id="brandTree"><div class="casa-empty">Loading brands…</div></div>
+  </div>
+  <div class="casa-hint" id="brandCountHint"></div>
+</div>
+
+<script src="assets/api-client.js"></script>
+<script src="assets/notifications.js"></script>
+<script src="assets/shell.js"></script>
+<script>
+  const STATUS_PILL = { PENDING: 'neutral', PROCESSING: 'warn', COMPLETED: 'ok', FAILED: 'err' };
+  const STATUS_BAR = { PENDING: '#DFD5BF', PROCESSING: 'linear-gradient(90deg,#AD8348,#D8B677)', COMPLETED: 'linear-gradient(90deg,#7A9165,#9CA793)', FAILED: '#9C4B2C' };
+  const STATUSES = ['PENDING', 'PROCESSING', 'COMPLETED', 'FAILED'];
+
+  function esc(s) { return CasaShell.escapeHtml(s); }
+
+  let brands = [];
+  const open = {};
+  const brandCatalogs = {}; // brandId -> { catalogs, loaded }
+  let statusFilter = '';
+  let brandFilterText = '';
+
+  function renderLegend(stats) {
+    const byStatus = stats.catalogs.byStatus;
+    const total = stats.catalogs.total || 1;
+    const counts = {};
+    STATUSES.forEach((s) => { counts[s] = 0; });
+    byStatus.forEach((s) => { counts[s.status] = s.count; });
+
+    document.getElementById('pctLabel').textContent = `${Math.round((counts.COMPLETED / total) * 100)}% complete`;
+    document.getElementById('progressTrack').innerHTML = STATUSES.map((s) => `<div style="width:${(counts[s] / total) * 100}%;background:${STATUS_BAR[s]};"></div>`).join('');
+    document.getElementById('legendRow').innerHTML = STATUSES.map((s) => `
+      <span class="item"><span class="sw" style="background:${STATUS_BAR[s].replace('linear-gradient(90deg,', '').split(',')[0]};"></span>${esc(s)} <strong>${counts[s]}</strong></span>
+    `).join('') + `<span class="item">Total <strong>${total}</strong></span>`;
+  }
+
+  function renderStatusFilters() {
+    const opts = [{ v: '', l: 'All' }, ...STATUSES.map((s) => ({ v: s, l: s.charAt(0) + s.slice(1).toLowerCase() }))];
+    document.getElementById('statusFilters').innerHTML = opts.map((o) => `
+      <div class="casa-chip ${statusFilter === o.v ? 'on' : ''}" data-v="${esc(o.v)}">${esc(o.l)}</div>
+    `).join('');
+    document.querySelectorAll('#statusFilters .casa-chip').forEach((chip) => {
+      chip.addEventListener('click', async () => {
+        statusFilter = chip.dataset.v;
+        renderStatusFilters();
+        // Re-fetch any expanded brands under the new filter.
+        Object.keys(brandCatalogs).forEach((bid) => { brandCatalogs[bid].loaded = false; });
+        renderBrandTree();
+        for (const bid of Object.keys(open).filter((k) => open[k])) await loadBrandCatalogs(bid);
+        renderBrandTree();
+      });
+    });
+  }
+
+  async function loadBrandCatalogs(brandId) {
+    if (brandCatalogs[brandId] && brandCatalogs[brandId].loaded) return brandCatalogs[brandId];
+    try {
+      const { catalogs } = await CasaApi.catalogExtractor.list({ brandId, status: statusFilter || undefined, limit: 50 });
+      brandCatalogs[brandId] = { catalogs, loaded: true, error: null };
+    } catch (err) {
+      brandCatalogs[brandId] = { catalogs: [], loaded: true, error: err.message || 'Failed to load catalogs.' };
+    }
+    return brandCatalogs[brandId];
+  }
+
+  function catalogRowHtml(cat) {
+    const pct = cat.totalPages ? Math.round(((cat.currentPage || 0) / cat.totalPages) * 100) : (cat.status === 'COMPLETED' ? 100 : 0);
+    return `
+      <a class="catalog-row" href="admin-catalog-detail.html?id=${encodeURIComponent(cat.id)}">
+        <div style="min-width:0;">
+          <div class="fn">${esc(cat.fileName)}</div>
+          <div class="meta">${cat.totalPages ? `${cat.currentPage || 0} / ${cat.totalPages} pages` : '—'}</div>
+        </div>
+        <span class="casa-pill ${STATUS_PILL[cat.status] || 'neutral'}" style="text-align:center;">${esc(cat.status)}</span>
+        <span class="meta" style="text-align:right;">${pct}%</span>
+        <span class="meta" style="text-align:right;">${cat.tilesExtracted || 0} tiles</span>
+        <span class="catalog-actions" onclick="event.preventDefault();event.stopPropagation();">
+          ${cat.status === 'FAILED' || cat.status === 'PENDING' ? `<a data-retry="${esc(cat.id)}">Retry</a>` : ''}
+          <a data-remove="${esc(cat.id)}" class="danger">Remove</a>
+        </span>
+      </a>`;
+  }
+
+  function renderBrandTree() {
+    const list = brands.filter((b) => !brandFilterText || b.name.toLowerCase().includes(brandFilterText.toLowerCase()));
+    document.getElementById('brandCountHint').textContent = `Showing ${list.length} of ${brands.length} brands`;
+
+    if (!list.length) {
+      document.getElementById('brandTree').innerHTML = '<div class="casa-empty">No brands match.</div>';
+      return;
+    }
+
+    document.getElementById('brandTree').innerHTML = list.map((b) => {
+      const isOpen = !!open[b.id];
+      const state = brandCatalogs[b.id];
+      let inner = '';
+      if (isOpen) {
+        if (!state || !state.loaded) {
+          inner = '<div class="casa-empty">Loading catalogs…</div>';
+        } else if (state.error) {
+          inner = `<div class="casa-error-inline">${esc(state.error)}</div>`;
+        } else if (!state.catalogs.length) {
+          inner = '<div class="casa-empty">No catalogs match this filter.</div>';
+        } else {
+          inner = state.catalogs.map(catalogRowHtml).join('');
+        }
+      }
+      return `
+        <div>
+          <div class="brand-row" data-brand="${esc(b.id)}">
+            <div class="name"><span class="chev ${isOpen ? 'open' : 'closed'}">▾</span><span class="brandname">${esc(b.name)}</span></div>
+            <span class="meta" style="font-family:var(--mono);font-size:11px;color:var(--stone-600);">${b.isActive === false ? 'inactive' : 'active'}</span>
+            <span></span><span></span><span></span>
+          </div>
+          <div>${inner}</div>
+        </div>`;
+    }).join('');
+
+    document.querySelectorAll('.brand-row').forEach((row) => {
+      row.addEventListener('click', async () => {
+        const id = row.dataset.brand;
+        open[id] = !open[id];
+        renderBrandTree();
+        if (open[id]) {
+          await loadBrandCatalogs(id);
+          renderBrandTree();
+        }
+      });
+    });
+
+    document.querySelectorAll('[data-retry]').forEach((a) => {
+      a.addEventListener('click', async () => {
+        const id = a.dataset.retry;
+        const notice = CasaNotify.processing('Queuing retry…');
+        try {
+          await CasaApi.catalogExtractor.retry(id);
+          notice.success('Retry queued.');
+          Object.keys(brandCatalogs).forEach((k) => { brandCatalogs[k].loaded = false; });
+          await loadOverview();
+          for (const bid of Object.keys(open).filter((k) => open[k])) await loadBrandCatalogs(bid);
+          renderBrandTree();
+        } catch (err) {
+          notice.error(err.message || 'Retry failed.');
+        }
+      });
+    });
+
+    document.querySelectorAll('[data-remove]').forEach((a) => {
+      a.addEventListener('click', async () => {
+        const id = a.dataset.remove;
+        if (!confirm('Remove this catalog? Its tiles will be detached, not deleted.')) return;
+        const notice = CasaNotify.processing('Removing catalog…');
+        try {
+          await CasaApi.catalogExtractor.remove(id, false);
+          notice.success('Catalog removed.');
+          Object.keys(brandCatalogs).forEach((k) => { brandCatalogs[k].loaded = false; });
+          await loadOverview();
+          for (const bid of Object.keys(open).filter((k) => open[k])) await loadBrandCatalogs(bid);
+          renderBrandTree();
+        } catch (err) {
+          notice.error(err.message || 'Remove failed.');
+        }
+      });
+    });
+  }
+
+  async function loadOverview() {
+    try {
+      const overview = await CasaApi.dashboard.overview();
+      renderLegend(overview.stats);
+    } catch {
+      document.getElementById('legendRow').innerHTML = '<span class="casa-hint">Could not load progress summary.</span>';
+    }
+  }
+
+  async function loadBrands() {
+    try {
+      brands = await CasaApi.catalogExtractor.brands();
+      renderBrandTree();
+    } catch (err) {
+      document.getElementById('brandTree').innerHTML = `<div class="casa-error-inline">${esc(err.message || 'Failed to load brands.')}</div>`;
+    }
+  }
+
+  (async () => {
+    await CasaShell.init({ current: 'admin-extraction-status.html', allowedRoles: ['ADMIN','OWNER'] });
+
+    renderStatusFilters();
+    document.getElementById('brandSearch').addEventListener('input', (e) => {
+      brandFilterText = e.target.value;
+      renderBrandTree();
+    });
+    document.getElementById('refreshBtn').addEventListener('click', async () => {
+      Object.keys(brandCatalogs).forEach((k) => { brandCatalogs[k].loaded = false; });
+      await loadOverview();
+      await loadBrands();
+      for (const bid of Object.keys(open).filter((k) => open[k])) await loadBrandCatalogs(bid);
+      renderBrandTree();
+    });
+
+    await loadOverview();
+    await loadBrands();
+  })();
+</script>
+</body>
+</html>
