@@ -358,42 +358,45 @@
     }
   }
 
-  document.getElementById('saveCompanyBtn').addEventListener('click', () => saveCategory('company', {
-    name: document.getElementById('companyName').value.trim(),
-    address: document.getElementById('companyAddress').value.trim(),
-    phone: document.getElementById('companyPhone').value.trim(),
-    email: document.getElementById('companyEmail').value.trim(),
-    taxId: document.getElementById('companyTaxId').value.trim(),
-    website: document.getElementById('companyWebsite').value.trim(),
-  }, 'companyError', 'saveCompanyBtn', 'Save company info'));
-
-  document.getElementById('savePrintBtn').addEventListener('click', () => saveCategory('print', {
-    defaultDpi: Number(document.getElementById('printDpi').value),
-    defaultFormat: document.getElementById('printFormat').value,
-    defaultFileFormat: document.getElementById('printFileFormat').value,
-    defaultUnit: document.getElementById('printUnit').value,
-  }, 'printError', 'savePrintBtn', 'Save print settings'));
-
-  document.getElementById('saveRulesBtn').addEventListener('click', () => saveCategory('rules', {
-    defaultMinTiles: Number(document.getElementById('rulesMinTiles').value),
-    defaultMaxCombinations: Number(document.getElementById('rulesMaxCombinations').value),
-    defaultRoomType: document.getElementById('rulesDefaultRoom').value.trim(),
-    defaultStyleTag: document.getElementById('rulesDefaultStyle').value.trim(),
-  }, 'rulesError', 'saveRulesBtn', 'Save default rules'));
-
-  document.getElementById('saveGeneralBtn').addEventListener('click', () => saveCategory('general', {
-    timezone: document.getElementById('generalTimezone').value.trim(),
-    currency: document.getElementById('generalCurrency').value.trim(),
-    dateFormat: document.getElementById('generalDateFormat').value.trim(),
-    sessionTimeoutMinutes: Number(document.getElementById('generalSessionTimeout').value),
-  }, 'generalError', 'saveGeneralBtn', 'Save general configuration'));
-
   (async () => {
     // No allowedRoles — settings are viewable by everyone (Staff included,
     // matching the backend's own GET /settings permission model), only
     // editing (PUT) is Owner-only, enforced below via disableIfNotOwner().
     const currentUser = await CasaShell.init({ current: 'settings.html' });
     isOwner = currentUser.role === 'OWNER';
+
+    // Attached here, after CasaShell.init() has rebuilt the DOM — binding
+    // these before that point would attach listeners to elements that get
+    // destroyed and replaced, leaving the real on-screen buttons inert.
+    document.getElementById('saveCompanyBtn').addEventListener('click', () => saveCategory('company', {
+      name: document.getElementById('companyName').value.trim(),
+      address: document.getElementById('companyAddress').value.trim(),
+      phone: document.getElementById('companyPhone').value.trim(),
+      email: document.getElementById('companyEmail').value.trim(),
+      taxId: document.getElementById('companyTaxId').value.trim(),
+      website: document.getElementById('companyWebsite').value.trim(),
+    }, 'companyError', 'saveCompanyBtn', 'Save company info'));
+
+    document.getElementById('savePrintBtn').addEventListener('click', () => saveCategory('print', {
+      defaultDpi: Number(document.getElementById('printDpi').value),
+      defaultFormat: document.getElementById('printFormat').value,
+      defaultFileFormat: document.getElementById('printFileFormat').value,
+      defaultUnit: document.getElementById('printUnit').value,
+    }, 'printError', 'savePrintBtn', 'Save print settings'));
+
+    document.getElementById('saveRulesBtn').addEventListener('click', () => saveCategory('rules', {
+      defaultMinTiles: Number(document.getElementById('rulesMinTiles').value),
+      defaultMaxCombinations: Number(document.getElementById('rulesMaxCombinations').value),
+      defaultRoomType: document.getElementById('rulesDefaultRoom').value.trim(),
+      defaultStyleTag: document.getElementById('rulesDefaultStyle').value.trim(),
+    }, 'rulesError', 'saveRulesBtn', 'Save default rules'));
+
+    document.getElementById('saveGeneralBtn').addEventListener('click', () => saveCategory('general', {
+      timezone: document.getElementById('generalTimezone').value.trim(),
+      currency: document.getElementById('generalCurrency').value.trim(),
+      dateFormat: document.getElementById('generalDateFormat').value.trim(),
+      sessionTimeoutMinutes: Number(document.getElementById('generalSessionTimeout').value),
+    }, 'generalError', 'saveGeneralBtn', 'Save general configuration'));
 
     if (!isOwner) {
       document.getElementById('restrictedBanner').style.display = 'block';

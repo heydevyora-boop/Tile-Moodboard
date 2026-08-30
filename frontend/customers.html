@@ -218,11 +218,6 @@
     }
   }
 
-  document.getElementById('searchInput').addEventListener('input', (e) => {
-    clearTimeout(searchDebounce);
-    searchDebounce = setTimeout(() => { currentSearch = e.target.value.trim(); loadCustomers(); }, 300);
-  });
-
   // ---- Add / Edit modal ----
   function resetEditForm() {
     document.getElementById('editCustomerId').value = '';
@@ -235,12 +230,6 @@
     document.getElementById('editNotes').value = '';
     document.getElementById('editError').style.display = 'none';
   }
-
-  document.getElementById('addCustomerBtn').addEventListener('click', () => {
-    resetEditForm();
-    document.getElementById('editModalTitle').textContent = 'Add Customer';
-    document.getElementById('editModal').style.display = 'flex';
-  });
 
   async function openEditModal(id) {
     resetEditForm();
@@ -261,10 +250,7 @@
     }
   }
 
-  document.getElementById('closeEditModal').addEventListener('click', (e) => { e.preventDefault(); document.getElementById('editModal').style.display = 'none'; });
-  document.getElementById('editModal').addEventListener('click', (e) => { if (e.target.id === 'editModal') document.getElementById('editModal').style.display = 'none'; });
-
-  document.getElementById('saveCustomerBtn').addEventListener('click', async () => {
+  async function saveCustomer() {
     const errorBox = document.getElementById('editError');
     errorBox.style.display = 'none';
     const id = document.getElementById('editCustomerId').value;
@@ -302,7 +288,7 @@
       btn.disabled = false;
       btn.textContent = 'Save Customer';
     }
-  });
+  }
 
   // ---- Detail modal ----
   function switchDetailTab(tab) {
@@ -313,8 +299,6 @@
     if (tab === 'history') loadHistory(currentDetailCustomerId);
     if (tab === 'favorites') loadFavorites(currentDetailCustomerId);
   }
-  document.querySelectorAll('.tabs .tab').forEach((t) => t.addEventListener('click', () => switchDetailTab(t.dataset.tab)));
-
   async function openDetailModal(id) {
     currentDetailCustomerId = id;
     switchDetailTab('info');
@@ -338,15 +322,7 @@
     }
   }
 
-  document.getElementById('closeDetailModal').addEventListener('click', (e) => { e.preventDefault(); document.getElementById('detailModal').style.display = 'none'; });
-  document.getElementById('detailModal').addEventListener('click', (e) => { if (e.target.id === 'detailModal') document.getElementById('detailModal').style.display = 'none'; });
-
-  document.getElementById('editFromDetailBtn').addEventListener('click', () => {
-    document.getElementById('detailModal').style.display = 'none';
-    openEditModal(currentDetailCustomerId);
-  });
-
-  document.getElementById('deleteFromDetailBtn').addEventListener('click', async () => {
+  async function deleteCustomerFromDetail() {
     if (!confirm('Delete this customer? This cannot be undone.')) return;
     try {
       await CasaApi.customers.remove(currentDetailCustomerId);
@@ -356,7 +332,7 @@
     } catch (err) {
       CasaNotify.error(err.message || 'Failed to delete customer.');
     }
-  });
+  }
 
   function moodBoardRowHtml(mb) {
     const date = new Date(mb.createdAt).toLocaleDateString();
@@ -406,7 +382,7 @@
     }
   }
 
-  document.getElementById('addFavoriteBtn').addEventListener('click', async () => {
+  async function addFavorite() {
     const errorBox = document.getElementById('favoriteError');
     errorBox.style.display = 'none';
     const tileId = document.getElementById('newFavoriteTileId').value.trim();
@@ -426,7 +402,7 @@
       errorBox.textContent = err.message || 'Failed to add favorite.';
       errorBox.style.display = 'block';
     }
-  });
+  }
 
   async function removeFavorite(tileId) {
     try {
@@ -440,6 +416,33 @@
 
   (async () => {
     await CasaShell.init({ current: 'customers.html' });
+
+    // Attached here, after CasaShell.init() has rebuilt the DOM — binding
+    // before that point would leave the real on-screen elements inert
+    // (the two modals live outside #casa-main-content and would technically
+    // survive, but everything is wired in one place for consistency).
+    document.getElementById('searchInput').addEventListener('input', (e) => {
+      clearTimeout(searchDebounce);
+      searchDebounce = setTimeout(() => { currentSearch = e.target.value.trim(); loadCustomers(); }, 300);
+    });
+    document.getElementById('addCustomerBtn').addEventListener('click', () => {
+      resetEditForm();
+      document.getElementById('editModalTitle').textContent = 'Add Customer';
+      document.getElementById('editModal').style.display = 'flex';
+    });
+    document.getElementById('closeEditModal').addEventListener('click', (e) => { e.preventDefault(); document.getElementById('editModal').style.display = 'none'; });
+    document.getElementById('editModal').addEventListener('click', (e) => { if (e.target.id === 'editModal') document.getElementById('editModal').style.display = 'none'; });
+    document.getElementById('saveCustomerBtn').addEventListener('click', saveCustomer);
+    document.querySelectorAll('.tabs .tab').forEach((t) => t.addEventListener('click', () => switchDetailTab(t.dataset.tab)));
+    document.getElementById('closeDetailModal').addEventListener('click', (e) => { e.preventDefault(); document.getElementById('detailModal').style.display = 'none'; });
+    document.getElementById('detailModal').addEventListener('click', (e) => { if (e.target.id === 'detailModal') document.getElementById('detailModal').style.display = 'none'; });
+    document.getElementById('editFromDetailBtn').addEventListener('click', () => {
+      document.getElementById('detailModal').style.display = 'none';
+      openEditModal(currentDetailCustomerId);
+    });
+    document.getElementById('deleteFromDetailBtn').addEventListener('click', deleteCustomerFromDetail);
+    document.getElementById('addFavoriteBtn').addEventListener('click', addFavorite);
+
     await loadCustomers();
   })();
 </script>

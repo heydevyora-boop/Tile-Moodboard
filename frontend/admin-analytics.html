@@ -166,15 +166,6 @@
     }
   }
 
-  document.getElementById('rangeRow').querySelectorAll('.rchip').forEach((chip) => {
-    chip.addEventListener('click', () => {
-      document.getElementById('rangeRow').querySelectorAll('.rchip').forEach((c) => c.classList.remove('on'));
-      chip.classList.add('on');
-      currentDays = Number(chip.dataset.range);
-      loadAnalytics();
-    });
-  });
-
   (async () => {
     const currentUser = await CasaShell.init({ current: 'admin-analytics.html', allowedRoles: ['ADMIN','OWNER'] });
 
@@ -183,6 +174,18 @@
       document.getElementById('analyticsContent').style.display = 'none';
       return;
     }
+
+    // Attached here, after CasaShell.init() has rebuilt the DOM — binding
+    // these before that point would attach listeners to elements that get
+    // destroyed and replaced, leaving the real on-screen chips inert.
+    document.getElementById('rangeRow').querySelectorAll('.rchip').forEach((chip) => {
+      chip.addEventListener('click', () => {
+        document.getElementById('rangeRow').querySelectorAll('.rchip').forEach((c) => c.classList.remove('on'));
+        chip.classList.add('on');
+        currentDays = Number(chip.dataset.range);
+        loadAnalytics();
+      });
+    });
 
     await loadAnalytics();
   })();

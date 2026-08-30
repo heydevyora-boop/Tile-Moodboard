@@ -1,3 +1,6 @@
+// Rewritten for the frontend/v2 swap: 06-analytics-usage-stats.html ->
+// admin-analytics.html, wrapped in shell.js (CasaShell.init with
+// allowedRoles: ['ADMIN','OWNER']), real role is a plain string now.
 const { JSDOM } = require('jsdom');
 const fs = require('fs');
 const path = require('path');
@@ -11,23 +14,25 @@ function check(label, cond, extra) {
 
 const frontendDir = path.join(__dirname, '..', '..', 'frontend');
 const notificationsSrc = fs.readFileSync(path.join(frontendDir, 'assets', 'notifications.js'), 'utf8');
+const shellSrc = fs.readFileSync(path.join(frontendDir, 'assets', 'shell.js'), 'utf8');
 
 function loadPage(casaApiStub) {
-  let html = fs.readFileSync(path.join(frontendDir, '06-analytics-usage-stats.html'), 'utf8');
+  let html = fs.readFileSync(path.join(frontendDir, 'admin-analytics.html'), 'utf8');
   html = html.replace(/<script src="assets\/api-client\.js"><\/script>\s*/, '');
   html = html.replace(/<script src="assets\/notifications\.js"><\/script>\s*/, '');
+  html = html.replace(/<script src="assets\/shell\.js"><\/script>\s*/, '');
 
-  const dom = new JSDOM(html, { runScripts: 'outside-only', url: 'http://localhost/06-analytics-usage-stats.html' });
+  const dom = new JSDOM(html, { runScripts: 'outside-only', url: 'http://localhost/admin-analytics.html' });
   const { window } = dom;
   window.requestAnimationFrame = (cb) => cb();
   window.CasaApi = casaApiStub;
   window.alert = () => { throw new Error('alert() should never be called on this page'); };
 
   dom.window.eval(notificationsSrc);
+  dom.window.eval(shellSrc);
   const start = html.indexOf('<script>');
   const end = html.indexOf('</script>', start);
-  const scriptBody = html.slice(start + '<script>'.length, end);
-  dom.window.eval(scriptBody);
+  dom.window.eval(html.slice(start + '<script>'.length, end));
   return dom;
 }
 
@@ -41,21 +46,25 @@ function makeAnalyticsResponse(days) {
   };
 }
 
-async function main() {
+function baseStub(role) {
   let analyticsCalledWith = null;
-
   const stub = {
-    requireAuth: async () => ({ name: 'Store Owner', role: { name: 'OWNER' } }),
+    requireAuth: async () => ({ name: role === 'OWNER' ? 'Store Owner' : role === 'ADMIN' ? 'Shop Admin' : 'Staff Member', role }),
+    initials: (n) => String(n || '?').split(/\s+/).map((p) => p[0]).join('').toUpperCase(),
     auth: { logout: async () => {} },
     admin: {
       analytics: async (days) => { analyticsCalledWith = days; return makeAnalyticsResponse(days); },
     },
   };
+  return { stub, get calledWith() { return analyticsCalledWith; } };
+}
 
-  const dom = loadPage(stub);
+async function main() {
+  const owner = baseStub('OWNER');
+  const dom = loadPage(owner.stub);
   await new Promise((r) => setTimeout(r, 60));
 
-  check('1. Analytics is fetched for the default 30-day range on load', analyticsCalledWith === 30, analyticsCalledWith);
+  check('1. Analytics is fetched for the default 30-day range on load', owner.calledWith === 30, owner.calledWith);
   check('2. KPI "generated" shows the real fetched number', dom.window.document.getElementById('kpiGenerated').textContent === '42');
   check('3. KPI "exported" shows the real printExports.total', dom.window.document.getElementById('kpiExported').textContent === '3');
   check('4. KPI "approval rate" shows the real percentage', dom.window.document.getElementById('kpiApprovalRate').textContent === '60%');
@@ -68,15 +77,25 @@ async function main() {
   chip7d.dispatchEvent(new dom.window.Event('click', { bubbles: true }));
   await new Promise((r) => setTimeout(r, 60));
 
-  check('9a. Clicking the "7d" chip genuinely re-fetches analytics with days=7', analyticsCalledWith === 7, analyticsCalledWith);
+  check('9a. Clicking the "7d" chip genuinely re-fetches analytics with days=7', owner.calledWith === 7, owner.calledWith);
   check("9b. The KPI numbers update to reflect the new range's real data (10, not 42)", dom.window.document.getElementById('kpiGenerated').textContent === '10');
 
-  analyticsCalledWith = null;
-  const staffStub = { ...stub, requireAuth: async () => ({ name: 'Staff Member', role: { name: 'STAFF' } }) };
-  const staffDom = loadPage(staffStub);
+  // Admin (not Owner) passes the shell's allowedRoles gate but this page's
+  // own second-tier check hides the real content — /admin/analytics stays
+  // OWNER-only at the backend (admin.routes.ts's authorize('OWNER')).
+  const admin = baseStub('ADMIN');
+  const adminDom = loadPage(admin.stub);
   await new Promise((r) => setTimeout(r, 60));
-  check('10a. Non-owner sees the restricted banner', staffDom.window.document.getElementById('restrictedBanner').style.display === 'block');
-  check('10b. Non-owner triggers no analytics fetch', analyticsCalledWith === null);
+  check('10a. Admin (non-Owner) sees the restricted banner', adminDom.window.document.getElementById('restrictedBanner').style.display === 'block');
+  check('10b. Admin (non-Owner) triggers no analytics fetch', admin.calledWith === null);
+
+  // Staff never reaches this page's own script — blocked by CasaShell's
+  // allowedRoles gate before anything above runs.
+  const staff = baseStub('STAFF');
+  const staffDom = loadPage(staff.stub);
+  await new Promise((r) => setTimeout(r, 60));
+  check("11. Staff is blocked by the shell's allowedRoles gate", staffDom.window.document.body.textContent.includes("don't have access"));
+  check('12. Staff triggers no analytics fetch either', staff.calledWith === null);
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail > 0 ? 1 : 0);

@@ -105,16 +105,10 @@
   function esc(s) { return CasaShell.escapeHtml(s); }
   const STATUS_PILL = { PENDING: 'neutral', PROCESSING: 'warn', COMPLETED: 'ok', FAILED: 'err' };
 
-  const extractorBrandSelect = document.getElementById('extractorBrand');
-  const newBrandInput = document.getElementById('newBrandName');
-  const pdfFilesInput = document.getElementById('pdfFiles');
-  const fileListEl = document.getElementById('fileList');
-  const runBtn = document.getElementById('runBtn');
-  const terminal = document.getElementById('terminal');
-  const progBar = document.getElementById('progBar');
-  const progLabel = document.getElementById('progLabel');
-  const progCount = document.getElementById('progCount');
-  const resultsBody = document.getElementById('resultsBody');
+  // Looked up after CasaShell.init() (below) instead of here — init()
+  // rebuilds #casa-main-content via innerHTML, which would otherwise leave
+  // these pointing at detached nodes and every listener below inert.
+  let extractorBrandSelect, newBrandInput, pdfFilesInput, fileListEl, runBtn, terminal, progBar, progLabel, progCount, resultsBody;
 
   let extractorRunning = false;
   let selectedPdfFiles = [];
@@ -157,16 +151,6 @@
       tbody.innerHTML = `<tr><td colspan="5" class="casa-error-inline">${esc(err.message || 'Failed to load history.')}</td></tr>`;
     }
   }
-
-  pdfFilesInput.addEventListener('change', () => {
-    selectedPdfFiles = Array.from(pdfFilesInput.files || []);
-    fileListEl.innerHTML = selectedPdfFiles.length
-      ? selectedPdfFiles.map((f) => `<div class="filerow"><span class="tick">📄</span><span class="fn">${esc(f.name)}</span><span class="sz">${(f.size / 1024).toFixed(0)} KB</span></div>`).join('')
-      : '<div class="filerow"><span class="fn" style="color:var(--stone-400);">No files selected yet.</span></div>';
-    refreshRunBtnState();
-  });
-  extractorBrandSelect.addEventListener('change', refreshRunBtnState);
-  newBrandInput.addEventListener('input', refreshRunBtnState);
 
   function renderExtractedTileRow(t) {
     const tr = document.createElement('tr');
@@ -212,7 +196,7 @@
     return finalCatalog.tilesExtracted || 0;
   }
 
-  runBtn.addEventListener('click', async () => {
+  async function runExtraction() {
     if (extractorRunning || !selectedPdfFiles.length) return;
     const newName = newBrandInput.value.trim();
     if (!newName && !extractorBrandSelect.value) return;
@@ -251,10 +235,36 @@
 
     await loadExtractorBrands();
     await loadHistory();
-  });
+  }
 
   (async () => {
     await CasaShell.init({ current: 'admin-catalog-extractor.html', allowedRoles: ['ADMIN','OWNER'] });
+
+    // Looked up here, not at top-level script scope — CasaShell.init()
+    // rebuilds #casa-main-content via innerHTML, so anything captured
+    // before this point would point at detached nodes.
+    extractorBrandSelect = document.getElementById('extractorBrand');
+    newBrandInput = document.getElementById('newBrandName');
+    pdfFilesInput = document.getElementById('pdfFiles');
+    fileListEl = document.getElementById('fileList');
+    runBtn = document.getElementById('runBtn');
+    terminal = document.getElementById('terminal');
+    progBar = document.getElementById('progBar');
+    progLabel = document.getElementById('progLabel');
+    progCount = document.getElementById('progCount');
+    resultsBody = document.getElementById('resultsBody');
+
+    pdfFilesInput.addEventListener('change', () => {
+      selectedPdfFiles = Array.from(pdfFilesInput.files || []);
+      fileListEl.innerHTML = selectedPdfFiles.length
+        ? selectedPdfFiles.map((f) => `<div class="filerow"><span class="tick">📄</span><span class="fn">${esc(f.name)}</span><span class="sz">${(f.size / 1024).toFixed(0)} KB</span></div>`).join('')
+        : '<div class="filerow"><span class="fn" style="color:var(--stone-400);">No files selected yet.</span></div>';
+      refreshRunBtnState();
+    });
+    extractorBrandSelect.addEventListener('change', refreshRunBtnState);
+    newBrandInput.addEventListener('input', refreshRunBtnState);
+    runBtn.addEventListener('click', runExtraction);
+
     await loadExtractorBrands();
     await loadHistory();
   })();

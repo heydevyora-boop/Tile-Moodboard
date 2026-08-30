@@ -169,14 +169,6 @@
     loadLogs();
   }
 
-  document.getElementById('logTypeRow').querySelectorAll('.casa-chip').forEach((chip) => {
-    chip.addEventListener('click', () => {
-      document.getElementById('logTypeRow').querySelectorAll('.casa-chip').forEach((c) => c.classList.remove('on'));
-      chip.classList.add('on');
-      switchLogType(chip.dataset.logtype);
-    });
-  });
-
   async function buildFilterChips() {
     const row = document.getElementById('filterRow');
     try {
@@ -292,6 +284,16 @@
       document.getElementById('queueStatsBody').innerHTML = '<tr><td colspan="5" class="casa-empty">Owner access required.</td></tr>';
       return;
     }
+
+    // Attached here, after CasaShell.init() has rebuilt the DOM — binding
+    // before that point would leave the real on-screen chips inert.
+    document.getElementById('logTypeRow').querySelectorAll('.casa-chip').forEach((chip) => {
+      chip.addEventListener('click', () => {
+        document.getElementById('logTypeRow').querySelectorAll('.casa-chip').forEach((c) => c.classList.remove('on'));
+        chip.classList.add('on');
+        switchLogType(chip.dataset.logtype);
+      });
+    });
 
     await loadIntegrationStatus();
     await buildFilterChips();
