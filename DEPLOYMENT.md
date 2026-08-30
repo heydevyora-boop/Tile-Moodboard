@@ -175,6 +175,29 @@ Point your existing reverse proxy at `http://localhost:5000` (or whatever `PORT`
 - **Its `GEMINI_API_KEY` is independent from the Node backend's** — see the config step above. Set it in both places.
 - **Generated visualizations save under `catalog_processor/output/`** inside the container — that's what the `catalog_processor_output` Docker volume in `docker-compose.yml` persists across restarts/rebuilds.
 
+### Optional: pen-drive auto-detect agent (`usb_agent.py`)
+
+`catalog_processor/usb_agent.py` is a **separate, standalone script**, unrelated to the "upload a PDF from the frontend" flow (`extract.py`/`admin-catalog-extractor.html`) and unrelated to the containerized FastAPI service. It watches for a USB drive being plugged in and automatically runs the same catalog pipeline (`process_drive()` in `main_step6_complete.py`) against it — no browser or upload step involved.
+
+It is **Windows-only** (`ctypes.windll`) and cannot run inside the Linux Docker containers this stack otherwise uses, and it cannot be triggered from a web browser — it must run as its own long-lived process on a Windows machine that has physical access to the pen drive:
+
+```bat
+cd catalog_processor
+:: one-time setup on that machine
+python -m venv .venv
+.venv\Scripts\pip install -r requirements.txt
+copy .env.example .env
+:: edit .env — same GOOGLE_SHEET_ID / Drive-Sheets / Gemini config as the
+:: containerized service (see the two points above)
+
+:: run it (leave this running — it polls every 2s for a newly attached drive)
+.venv\Scripts\python usb_agent.py
+```
+
+Since it imports `main_step6_complete.py` directly (not over HTTP), it needs the *same* Python dependencies as the containerized service (`requirements.txt`) installed locally on that Windows machine, and reads its config from `catalog_processor/.env` — same file, just read from disk instead of an env var passed into a container. It resolves both `.env` and its `output/` write directory relative to its own script location, so it works the same way regardless of what directory it's launched from (double-click, a desktop shortcut, Task Scheduler, etc.).
+
+When it detects a new removable drive, it walks the drive for PDF catalogs and runs the full pipeline — no separate step needed.
+
 ## Health Checks
 
 `GET /health` (also reachable as `GET /api/v1/health`) is the single source of truth every layer of this stack checks against:
