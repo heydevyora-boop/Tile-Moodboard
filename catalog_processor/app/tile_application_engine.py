@@ -347,6 +347,10 @@ Produce one photorealistic finished bathroom visualization.
 The result must look like a professionally photographed
 bathroom with the selected tile physically installed,
 not like a pasted image or flat texture.
+
+It must read as an actual photograph of a real, physically
+built room — not an illustration, rendering, drawing, diagram,
+or CGI-looking image.
 """
 
 

@@ -132,6 +132,76 @@ OUTPUT_IMAGE_SIZE = os.getenv(
 
 
 # ============================================================
+# GENERATE A FRESH PHOTOREALISTIC SCENE (NO REFERENCE PHOTO)
+# ============================================================
+
+def generate_bathroom_scene(
+    output_path: Path,
+    prompt: Optional[str] = None,
+    style: Optional[str] = None,
+    theme: Optional[str] = None,
+    requirements: Optional[Dict[str, Any]] = None,
+    scene_id: Optional[str] = None,
+    **_ignored: Any,
+) -> Path:
+    """
+    Generate a brand-new photorealistic bathroom interior with Gemini
+    when there is no real reference photo to work from ("AI Random
+    Bathroom Scene" in the frontend).
+
+    visualization_api.py's _call_existing_scene_generator() looks up a
+    function by name from a candidate list — this name is first on that
+    list. Before this function existed, the lookup always missed and
+    silently fell back to a flat-colour PIL line drawing (rectangles and
+    ellipses standing in for a vanity/mirror/shower) as the "bathroom
+    photo". That drawing was then fed into the tile-application step,
+    whose prompt is told to preserve the bathroom image's architecture,
+    lighting and existing objects — so the result inherited the flat,
+    illustration-like look of the placeholder no matter how strongly that
+    prompt itself asked for a photorealistic result.
+
+    The `prompt` kwarg (a generic canned prompt from the caller) is
+    accepted for signature compatibility but intentionally not used as
+    the final prompt text — the prompt built below is more specific
+    (styled from the real requirements) and explicitly steers away from
+    an illustration/render look, which the generic one doesn't.
+    """
+
+    requirements = requirements if isinstance(requirements, dict) else {}
+    style_text = str(style or requirements.get("style") or "LUXURY").strip()
+    theme_text = str(theme or requirements.get("combination_name") or "Warm Luxury Sanctuary").strip()
+
+    scene_prompt = (
+        "Generate a single photorealistic photograph of a real, physically "
+        f"built {style_text.lower()} bathroom interior, styled as \"{theme_text}\". "
+        "Shoot it like a professional real-estate or architectural photograph: "
+        "natural and fixture lighting, true-to-life material textures, correct "
+        "perspective and shadows, a real vanity, mirror, sanitaryware and "
+        "fixtures. Include a clear, unobstructed wall area and floor area "
+        "suitable for a tile to be applied to later. "
+        "This must look like an actual photograph of a real room — not an "
+        "illustration, rendering, drawing, diagram, or CGI-looking image — "
+        "and with no text, watermark or logo anywhere in the frame."
+    )
+
+    response = client.models.generate_content(
+        model=IMAGE_MODEL,
+        contents=[scene_prompt],
+        config=types.GenerateContentConfig(
+            response_modalities=["IMAGE"],
+            image_config=types.ImageConfig(
+                aspect_ratio=OUTPUT_ASPECT_RATIO,
+                image_size=OUTPUT_IMAGE_SIZE,
+            ),
+        ),
+    )
+
+    generated_image = extract_generated_image(response)
+    save_generated_image(generated_image, output_path)
+    return Path(output_path).resolve()
+
+
+# ============================================================
 # NORMALIZE ANGLE
 # ============================================================
 
