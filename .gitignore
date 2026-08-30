@@ -1,5 +1,12 @@
 
 backend/.env
+catalog_processor/.env
 .env
 
 backend/logs/
+backend/uploads/
+
+# Python virtualenvs — never committed, unlike backend/node_modules
+backend/python/.venv/
+backend/python/__pycache__/
+catalog_processor/.venv/

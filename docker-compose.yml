@@ -17,6 +17,31 @@ services:
     networks:
       - casa-internal
 
+  catalog_processor:
+    build:
+      context: ./catalog_processor
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      # Optional — this service degrades gracefully without it (no Gemini
+      # key means AI visualization calls fail with a clear error instead
+      # of the container failing to start; no Drive/Sheets config means
+      # generated visualizations save LOCAL_ONLY instead of to Drive).
+      # `env_file` on a missing file is a hard error in Compose, so this
+      # one is still required to exist — cp catalog_processor/.env.example
+      # catalog_processor/.env even if you leave every value blank.
+      - ./catalog_processor/.env
+    volumes:
+      - catalog_processor_output:/app/output
+    healthcheck:
+      test: ['CMD', 'python3', '-c', "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health', timeout=3).status == 200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks:
+      - casa-internal
+
   backend:
     build:
       context: ./backend
@@ -24,6 +49,8 @@ services:
     restart: unless-stopped
     depends_on:
       postgres:
+        condition: service_healthy
+      catalog_processor:
         condition: service_healthy
     env_file:
       - ./backend/.env
@@ -34,7 +61,9 @@ services:
     # container even when Supabase is genuinely configured, which is
     # exactly the wrong behavior for that path. If you're using the
     # bundled Postgres, just make sure backend/.env's host is "postgres"
-    # (the service name below), not "localhost".
+    # (the service name below), not "localhost". Likewise PYTHON_AI_BASE_URL
+    # should be http://catalog_processor:8000 in this stack, not
+    # 127.0.0.1:8000 — that only works when both processes share a host.
     volumes:
       - backend_uploads:/app/uploads
       - backend_logs:/app/logs
@@ -76,3 +105,4 @@ volumes:
   postgres_data:
   backend_uploads:
   backend_logs:
+  catalog_processor_output:
