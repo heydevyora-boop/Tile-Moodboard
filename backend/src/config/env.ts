@@ -330,7 +330,7 @@ const envSchema = z.object({
       .number()
       .int()
       .positive()
-      .default(50),
+      .default(300),
 
   CATALOG_EXTRACTION_CONCURRENCY:
     z
