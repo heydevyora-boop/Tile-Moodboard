@@ -5,7 +5,32 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaFileUpload
+from tenacity import (
+    retry,
+    retry_if_exception,
+    stop_after_attempt,
+    wait_exponential,
+)
+
+
+# ============================================================
+# RETRY -- TRANSIENT GOOGLE SHEETS API ERRORS
+# ============================================================
+# The Sheets API occasionally responds 503 "service is currently
+# unavailable" or 429 rate-limited -- both clear up on their own
+# within seconds. A missing sheet tab or an auth/permission failure
+# is not retried, since retrying won't fix those.
+
+RETRYABLE_HTTP_STATUS_CODES = {429, 500, 502, 503, 504}
+
+
+def _is_retryable_sheets_error(error: BaseException) -> bool:
+    if not isinstance(error, HttpError):
+        return False
+    status = getattr(error.resp, "status", None)
+    return status in RETRYABLE_HTTP_STATUS_CODES
 
 
 # ============================================================
@@ -1129,6 +1154,12 @@ def append_row(
         )
         .execute()
     )
+@retry(
+    retry=retry_if_exception(_is_retryable_sheets_error),
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=2, min=2, max=15),
+    reraise=True,
+)
 def read_sheet_records(
     sheets_service,
     spreadsheet_id,

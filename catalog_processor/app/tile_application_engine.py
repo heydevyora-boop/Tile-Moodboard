@@ -26,8 +26,46 @@ from PIL import Image
 
 from google import genai
 from google.genai import types
+from tenacity import (
+    retry,
+    retry_if_exception,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from app.scene_image_resolver import resolve_scene_image
+
+
+# ============================================================
+# RETRY -- TRANSIENT GEMINI API ERRORS
+# ============================================================
+# Gemini's image model occasionally responds 503 "currently
+# experiencing high demand" or 429 rate-limited -- both clear up on
+# their own within seconds. Retrying those automatically avoids
+# surfacing a failure to the user for what's really a momentary dip
+# in Google's own capacity. Auth/validation errors (4xx other than
+# 429) are not retried, since retrying won't fix them.
+
+RETRYABLE_GEMINI_STATUS_CODES = {429, 500, 502, 503, 504}
+
+
+def _is_retryable_gemini_error(error: BaseException) -> bool:
+    code = getattr(error, "code", None)
+    return code in RETRYABLE_GEMINI_STATUS_CODES
+
+
+@retry(
+    retry=retry_if_exception(_is_retryable_gemini_error),
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=2, min=2, max=15),
+    reraise=True,
+)
+def _generate_content_with_retry(client, model, contents, config):
+    return client.models.generate_content(
+        model=model,
+        contents=contents,
+        config=config,
+    )
 
 
 # ============================================================
@@ -616,10 +654,11 @@ def apply_tile_to_scene(
     try:
 
         response = (
-            client.models.generate_content(
-                model=IMAGE_MODEL,
-                contents=contents,
-                config=types.GenerateContentConfig(
+            _generate_content_with_retry(
+                client,
+                IMAGE_MODEL,
+                contents,
+                types.GenerateContentConfig(
                     response_modalities=[
                         "IMAGE"
                     ],
