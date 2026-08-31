@@ -345,6 +345,8 @@ export async function generateVisualization(
             'application/json',
         },
 
+        signal: AbortSignal.timeout(60000),
+
         body: JSON.stringify(
           payload,
         ),
