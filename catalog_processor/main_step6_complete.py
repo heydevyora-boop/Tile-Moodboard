@@ -1093,6 +1093,15 @@ def process_drive(
             "from .env"
         )
 
+    if not GOOGLE_DRIVE_ROOT_FOLDER_ID:
+
+        raise RuntimeError(
+            "GOOGLE_DRIVE_ROOT_FOLDER_ID is missing from .env. "
+            "Create a Google Drive folder for catalog uploads, "
+            "copy its ID from the URL (https://drive.google.com/drive/folders/[ID]), "
+            "and add it to .env as GOOGLE_DRIVE_ROOT_FOLDER_ID=[ID]"
+        )
+
     print("")
     print("=" * 70)
     print(
