@@ -159,10 +159,22 @@
       renderActivity(overview.recentActivity);
       renderSystem(overview.system, overview.stats);
     } catch (err) {
-      document.getElementById('statGrid').innerHTML =
-        `<div class="casa-stat-card"><div class="label">Error</div><div class="value" style="font-size:15px;color:var(--clay);">${escapeHtml(err.message || 'Could not load dashboard stats.')}</div></div>`;
-      document.getElementById('activityBody').innerHTML = `<div class="err-inline">Could not load activity.</div>`;
-      document.getElementById('systemBody').innerHTML = `<div class="err-inline">Could not load system status.</div>`;
+      if (err.status === 403) {
+        // /dashboard/overview is gated behind logs:read (it includes
+        // per-user activity/IP data), which STAFF never has — every Staff
+        // view of this, their own homepage, hits this by design, not a
+        // misconfiguration. Show a neutral note instead of an alarming
+        // red error box.
+        document.getElementById('statGrid').innerHTML =
+          `<div class="casa-stat-card"><div class="label">Overview</div><div class="value" style="font-size:13px;color:var(--stone-600);">Visible to Admins and the Owner.</div></div>`;
+        document.getElementById('activityBody').innerHTML = `<div class="err-inline" style="color:var(--stone-400);">Visible to Admins and the Owner.</div>`;
+        document.getElementById('systemBody').innerHTML = `<div class="err-inline" style="color:var(--stone-400);">Visible to Admins and the Owner.</div>`;
+      } else {
+        document.getElementById('statGrid').innerHTML =
+          `<div class="casa-stat-card"><div class="label">Error</div><div class="value" style="font-size:15px;color:var(--clay);">${escapeHtml(err.message || 'Could not load dashboard stats.')}</div></div>`;
+        document.getElementById('activityBody').innerHTML = `<div class="err-inline">Could not load activity.</div>`;
+        document.getElementById('systemBody').innerHTML = `<div class="err-inline">Could not load system status.</div>`;
+      }
     }
   })();
 </script>
