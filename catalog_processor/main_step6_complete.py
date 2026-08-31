@@ -1306,7 +1306,7 @@ if __name__ == "__main__":
     drive = input(
         "Enter pen drive path "
         "(example E:\\): "
-    ).strip()
+    ).strip().strip('"').strip("'")
 
     process_drive(
         drive
