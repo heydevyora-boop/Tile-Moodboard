@@ -379,6 +379,7 @@ def generate_product_visualization(
     scene_image: Path,
     surface: str = "FLOOR",
     sheet_name: str = "MASTER",
+    fallback_image_path: Optional[Path] = None,
 ) -> Dict[str, Any]:
     """
     Complete production bridge:
@@ -438,17 +439,50 @@ def generate_product_visualization(
 
     except (KeyError, FileNotFoundError):
 
-        product = _build_synthetic_product(
-            product_id
+        # The MASTER sheet has no row for this product, or the row's
+        # image/crop path doesn't resolve to a real file. Before
+        # falling all the way back to a fabricated placeholder swatch
+        # (which would silently make Gemini paint a fake texture),
+        # prefer the real image already on file for this product in
+        # Postgres -- e.g. the exact tile crop from the catalog PDF
+        # extraction, passed through by the caller as
+        # fallback_image_path. Only give up and synthesize a
+        # placeholder if that isn't available either.
+        resolved_fallback = (
+            Path(fallback_image_path)
+            if fallback_image_path
+            else None
         )
 
-        tile_image = _generate_synthetic_product_swatch(
-            product_id
-        )
+        if (
+            resolved_fallback is not None
+            and resolved_fallback.is_file()
+        ):
 
-        product_name = product["Name"]
+            product = _build_synthetic_product(
+                product_id
+            )
+            product["synthetic"] = False
 
-        master_source = "SYNTHETIC_LOCAL_PLACEHOLDER"
+            tile_image = resolved_fallback
+
+            product_name = product["Name"]
+
+            master_source = "POSTGRES_TILE_IMAGE_FALLBACK"
+
+        else:
+
+            product = _build_synthetic_product(
+                product_id
+            )
+
+            tile_image = _generate_synthetic_product_swatch(
+                product_id
+            )
+
+            product_name = product["Name"]
+
+            master_source = "SYNTHETIC_LOCAL_PLACEHOLDER"
 
     # --------------------------------------------------------
     # GENERATE

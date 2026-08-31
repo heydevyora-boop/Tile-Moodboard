@@ -32,6 +32,12 @@ export interface VisualizationRequest {
   scene_id?: string;
   theme?: string;
   requirements?: Record<string, unknown>;
+  // Real reference image already resolved for this tile in Postgres
+  // (Tile.imageUrl) -- passed as a safety net for Python to fall back
+  // on when its own MASTER-sheet product image is missing or stale.
+  // Local path or absolute URL; relative /static/... paths are
+  // resolved against BACKEND_PUBLIC_URL below before being sent.
+  fallback_image_url?: string;
 }
 
 // ============================================================
@@ -122,6 +128,39 @@ function buildVisualizationImageUrl(
     `/generated-visualizations/` +
     `${encodeURIComponent(fileName)}`
   );
+}
+
+// ============================================================
+// RESOLVE A TILE'S IMAGE TO A URL PYTHON CAN FETCH
+// ============================================================
+
+function toAbsoluteImageUrl(
+  imageUrl: string,
+): string {
+  const trimmed =
+    imageUrl.trim();
+
+  if (!trimmed) {
+    return '';
+  }
+
+  if (
+    /^https?:\/\//i.test(
+      trimmed,
+    )
+  ) {
+    // Already absolute (e.g. a Google Drive URL, DRIVE storage mode).
+    return trimmed;
+  }
+
+  // Relative /static/... path (LOCAL storage mode) -- Python runs as
+  // a separate process/host, so it needs the full URL, not a path
+  // that's only meaningful relative to this Express server.
+  return `${BACKEND_PUBLIC_URL}${
+    trimmed.startsWith('/')
+      ? trimmed
+      : `/${trimmed}`
+  }`;
 }
 
 // ============================================================
@@ -323,6 +362,13 @@ export async function generateVisualization(
 
     requirements:
       request.requirements || {},
+
+    fallback_image_url:
+      request.fallback_image_url?.trim()
+        ? toAbsoluteImageUrl(
+            request.fallback_image_url,
+          )
+        : null,
   };
 
   // ==========================================================

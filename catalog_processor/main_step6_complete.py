@@ -120,6 +120,13 @@ class InternalVisualizationRequest(BaseModel):
 
     requirements: Optional[dict] = None
 
+    # Real reference image for this product from the Node backend's own
+    # Postgres record (Tile.imageUrl) -- used as a safety net when the
+    # MASTER sheet has no row, or no resolvable image, for this
+    # product_id, so Gemini still gets sent a real tile photo instead of
+    # a fabricated placeholder swatch. Local path or HTTP(S) URL.
+    fallback_image_url: Optional[str] = None
+
 
 # ============================================================
 # SCENE IMAGE RESOLUTION
@@ -438,6 +445,20 @@ def internal_visualization(
             )
         )
 
+        # Best-effort: a missing/unreachable fallback image should never
+        # fail the whole visualization request -- it just means the
+        # MASTER-sheet-missing case below falls through to the
+        # synthetic placeholder swatch, same as before this existed.
+        fallback_image_path = None
+        raw_fallback_image = (request.fallback_image_url or "").strip()
+        if raw_fallback_image:
+            try:
+                fallback_image_path = str(
+                    resolve_scene_image(raw_fallback_image)
+                )
+            except Exception:
+                fallback_image_path = None
+
         result = create_visualization(
             {
                 "spreadsheet_id": spreadsheet_id,
@@ -455,6 +476,7 @@ def internal_visualization(
                 "scene_id": request.scene_id,
                 "theme": request.theme,
                 "requirements": request.requirements or {},
+                "fallback_image_path": fallback_image_path,
             }
         )
 
