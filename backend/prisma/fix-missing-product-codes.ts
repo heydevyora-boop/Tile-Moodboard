@@ -13,8 +13,15 @@
 // that already references the tile).
 //
 // Usage: npm run fix-product-codes
+import path from 'path';
+import dotenv from 'dotenv';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
+
+// Run directly via ts-node (not through the Prisma CLI, which auto-loads
+// .env for prisma/seed.ts) — so .env has to be loaded explicitly here,
+// the same way src/config/env.ts does it for the main app.
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) {
