@@ -24,6 +24,7 @@ except ImportError:
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 from typing import Optional
+import uvicorn
 
 from app.visualization_api import (
     create_visualization,
@@ -1298,16 +1299,47 @@ def process_drive(
 
 
 # ============================================================
-# MANUAL RUN
+# APPLICATION ENTRY POINT
+# ============================================================
+#
+# IMPORTANT:
+# - Running this file directly starts the FastAPI AI service.
+# - The Node.js backend should call:
+#       POST http://127.0.0.1:8000/internal/visualizations
+# - The catalog / pen-drive pipeline is still available with:
+#       python main_step6_complete.py --pipeline
+#
+# This prevents "python main_step6_complete.py" from accidentally
+# running the pen-drive pipeline instead of starting the AI API.
 # ============================================================
 
 if __name__ == "__main__":
+    import sys
 
-    drive = input(
-        "Enter pen drive path "
-        "(example E:\\): "
-    ).strip().strip('"').strip("'")
+    if "--pipeline" in sys.argv:
+        drive = input(
+            "Enter pen drive path "
+            "(example E:\): "
+        ).strip().strip('"').strip("'")
 
-    process_drive(
-        drive
-    )
+        process_drive(drive)
+
+    else:
+        print("")
+        print("=" * 70)
+        print("CASA DE AURUM AI SERVICE")
+        print("=" * 70)
+        print("FastAPI endpoint : http://127.0.0.1:8000")
+        print("Swagger docs     : http://127.0.0.1:8000/docs")
+        print("Health check     : http://127.0.0.1:8000/health")
+        print("Visualization    : POST /internal/visualizations")
+        print("")
+        print("Starting Uvicorn...")
+        print("=" * 70)
+
+        uvicorn.run(
+            app,
+            host="127.0.0.1",
+            port=int(os.getenv("AI_SERVICE_PORT", "8000")),
+            reload=False,
+        )
