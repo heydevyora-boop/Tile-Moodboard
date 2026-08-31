@@ -491,7 +491,15 @@ def internal_visualization(
 # ENVIRONMENT
 # ============================================================
 
-load_dotenv()
+script_dir = Path(__file__).parent.absolute()
+env_path = script_dir / ".env"
+load_dotenv(dotenv_path=str(env_path))
+
+# Debug: verify .env was loaded
+if env_path.exists():
+    print(f"✓ Loaded .env from: {env_path}")
+else:
+    print(f"✗ .env file not found at: {env_path}")
 
 
 # ============================================================
