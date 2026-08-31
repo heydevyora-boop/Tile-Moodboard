@@ -391,7 +391,13 @@ export async function generateVisualization(
             'application/json',
         },
 
-        signal: AbortSignal.timeout(60000),
+        // 3 minutes: generous enough for Gemini's own generation time
+        // plus the Python side's retry-with-backoff on transient
+        // 429/503s (up to ~3 attempts x 15s backoff each, for both
+        // the Gemini call and the Sheets MASTER read) -- a request
+        // that's genuinely retrying shouldn't get cut off here before
+        // it has a chance to succeed.
+        signal: AbortSignal.timeout(180000),
 
         body: JSON.stringify(
           payload,
