@@ -6,7 +6,15 @@ catalog_processor/.env
 backend/logs/
 backend/uploads/
 
-# Python virtualenvs — never committed, unlike backend/node_modules
+# Python virtualenvs — never committed
 backend/python/.venv/
 backend/python/__pycache__/
 catalog_processor/.venv/
+
+# node_modules — never committed. Was previously tracked by mistake
+# (tens of thousands of files), which made every git pull/checkout on
+# Windows extremely slow and prone to silently failing partway through
+# on the 260-char MAX_PATH limit deep inside node_modules — masking
+# real code fixes as "not applying" even after a clean pull.
+node_modules/
+**/node_modules/
