@@ -241,7 +241,21 @@ def get_credentials():
         and credentials.refresh_token
     ):
 
-        credentials.refresh(Request())
+        try:
+
+            credentials.refresh(Request())
+
+        except Exception:
+
+            # A revoked/expired refresh_token (e.g. a Testing-mode OAuth
+            # consent screen, whose refresh tokens expire after ~7 days,
+            # or the user revoking access in their Google Account) makes
+            # refresh() raise instead of returning invalid credentials.
+            # Previously this crashed the whole request instead of
+            # falling through to the first-time-authentication flow
+            # below, which is the only thing that can actually fix it —
+            # deleting token.json alone wasn't enough without this.
+            credentials = None
 
     # --------------------------------------------------------
     # First-time authentication
