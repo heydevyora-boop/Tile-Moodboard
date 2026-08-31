@@ -284,27 +284,56 @@ async function runExtractionInner(catalogId: string, catalog: Awaited<ReturnType
     : [];
   const existingCodeSet = new Set(existingByCode.map((t) => t.productCode));
 
-  const namesSizesInBatch = extractedTiles.filter((t) => !t.productCode).map((t) => `${t.name}::${t.size ?? ''}`);
-  const existingByNameSize = namesSizesInBatch.length
-    ? await prisma.tile.findMany({ where: { brandId: catalog.brandId, name: { in: extractedTiles.map((t) => t.name) } }, select: { name: true, size: true } })
+  // Also fetched by name (regardless of whether this extraction found a
+  // product code), keyed by name+size, and carrying each existing tile's
+  // id + productCode. Two things use this: the name+size duplicate check
+  // below for code-less extractions, and the placeholder-correction pass
+  // below it for tiles that were previously stuck with a repair-assigned
+  // `MANUAL-` productCode (see fix-missing-product-codes.ts) — re-running
+  // extraction on the same catalog is how those get their real productCode
+  // and image filled in, instead of leaving the broken placeholder tile in
+  // place while a separate, correct duplicate is created next to it.
+  const existingByName = extractedTiles.length
+    ? await prisma.tile.findMany({
+        where: { brandId: catalog.brandId, name: { in: extractedTiles.map((t) => t.name) } },
+        select: { id: true, name: true, size: true, productCode: true },
+      })
     : [];
-  const existingNameSizeSet = new Set(existingByNameSize.map((t) => `${t.name}::${t.size ?? ''}`));
+  const existingByNameSizeMap = new Map(existingByName.map((t) => [`${t.name}::${t.size ?? ''}`, t]));
+  const existingNameSizeSet = new Set(existingByName.map((t) => `${t.name}::${t.size ?? ''}`));
 
   const seenInThisBatch = new Set<string>();
   let duplicateTilesSkipped = 0;
-  const tilesToInsert = extractedTiles.filter((t) => {
-    const key = t.productCode ? `code:${t.productCode}` : `namesize:${t.name}::${t.size ?? ''}`;
+  const tilesToInsert: ExtractedTile[] = [];
+  const tilesToCorrect: { id: string; tile: ExtractedTile }[] = [];
 
-    const isDuplicateOfExisting = t.productCode ? existingCodeSet.has(t.productCode) : existingNameSizeSet.has(`${t.name}::${t.size ?? ''}`);
+  for (const t of extractedTiles) {
+    const key = t.productCode ? `code:${t.productCode}` : `namesize:${t.name}::${t.size ?? ''}`;
     const isDuplicateWithinBatch = seenInThisBatch.has(key);
 
-    if (isDuplicateOfExisting || isDuplicateWithinBatch) {
+    if (isDuplicateWithinBatch) {
       duplicateTilesSkipped += 1;
-      return false;
+      continue;
     }
+
+    const nameSizeMatch = existingByNameSizeMap.get(`${t.name}::${t.size ?? ''}`);
+    const isPlaceholderToCorrect = !!t.productCode && !!nameSizeMatch && !!nameSizeMatch.productCode?.startsWith('MANUAL-');
+
+    if (isPlaceholderToCorrect && nameSizeMatch) {
+      tilesToCorrect.push({ id: nameSizeMatch.id, tile: t });
+      seenInThisBatch.add(key);
+      continue;
+    }
+
+    const isDuplicateOfExisting = t.productCode ? existingCodeSet.has(t.productCode) : existingNameSizeSet.has(`${t.name}::${t.size ?? ''}`);
+    if (isDuplicateOfExisting) {
+      duplicateTilesSkipped += 1;
+      continue;
+    }
+
     seenInThisBatch.add(key);
-    return true;
-  });
+    tilesToInsert.push(t);
+  }
 
   if (tilesToInsert.length > 0) {
     await prisma.tile.createMany({
@@ -322,6 +351,31 @@ async function runExtractionInner(catalogId: string, catalog: Awaited<ReturnType
         sourcePage: t.sourcePage ?? undefined,
         imageBbox: t.imageBbox ?? undefined,
       })),
+    });
+  }
+
+  for (const { id, tile: t } of tilesToCorrect) {
+    await prisma.tile.update({
+      where: { id },
+      data: {
+        catalogId,
+        size: t.size ?? undefined,
+        finish: t.finish ?? undefined,
+        type: VALID_TILE_TYPES.has(t.type) ? (t.type as never) : undefined,
+        colorTone: t.colorTone ?? undefined,
+        bestRoom: t.bestRoom ?? undefined,
+        productCode: t.productCode ?? undefined,
+        imageUrl: t.imageStorage === 'drive' ? (t.imageUrl ?? undefined) : t.imageLocalPath ? toPublicImagePath(t.imageLocalPath) : undefined,
+        sourcePage: t.sourcePage ?? undefined,
+        imageBbox: t.imageBbox ?? undefined,
+      },
+    });
+    await logActivity({
+      userId: catalog.uploadedById,
+      action: 'tile.corrected',
+      entityType: 'Tile',
+      entityId: id,
+      metadata: { reason: 'placeholder_product_code_replaced', productCode: t.productCode },
     });
   }
 
@@ -346,6 +400,7 @@ async function runExtractionInner(catalogId: string, catalog: Awaited<ReturnType
     entityId: catalogId,
     metadata: {
       tilesExtracted: tilesToInsert.length,
+      tilesCorrected: tilesToCorrect.length,
       duplicateImagesSkipped: result.duplicateImagesSkipped ?? 0,
       duplicateTilesSkipped,
       warnings: result.warnings ?? [],
