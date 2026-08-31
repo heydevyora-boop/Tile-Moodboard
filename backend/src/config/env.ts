@@ -32,6 +32,12 @@ dotenv.config({
   ),
 });
 
+console.log(
+  `[env.ts] cwd=${process.cwd()} ` +
+    `envFile=${envFile} ` +
+    `raw CATALOG_MAX_UPLOAD_MB=${JSON.stringify(process.env.CATALOG_MAX_UPLOAD_MB)}`,
+);
+
 // ============================================================
 // ABSOLUTE PATH HELPER
 // ============================================================
