@@ -141,6 +141,66 @@ def slugify(value):
 
 
 # ---------------------------------------------------------------------------
+# Bounding-box proximity matching -- ties a detected name/attributes to the
+# specific image nearest it on the page, instead of applying one page-wide
+# guess to every image on that page. Catalog pages routinely show more than
+# one tile (e.g. a "Decor & Base" pair side by side); without this, every
+# image on the page was tagged with the same name/type/finish, so the tile
+# a staff member saw under a given name could actually be a different
+# product's photo entirely.
+# ---------------------------------------------------------------------------
+
+MAX_LABEL_DISTANCE_PT = 260  # generous enough for a title above + spec line below a photo
+
+
+def get_text_blocks(page):
+    """Text spans on the page with their bounding boxes, in reading order.
+
+    Deliberately span-level, not block/line-level: PyMuPDF's block grouping
+    merges same-row captions that are far apart horizontally (e.g. a
+    "Decor" label under the left tile and a "Base" label under the right
+    tile end up in one block/line of text) because it groups by vertical
+    proximity, not by column. Spans keep each label's own bbox, which is
+    what lets a caption be matched to the specific image below/above it
+    instead of whichever image happens to be nearest on the page.
+    """
+    raw = page.get_text('dict')
+    spans = []
+    for block in raw.get('blocks', []):
+        if block.get('type') != 0:  # 0 = text block, 1 = image block
+            continue
+        for line in block.get('lines', []):
+            for span in line.get('spans', []):
+                text = span.get('text', '').strip()
+                if text:
+                    spans.append({'bbox': tuple(span['bbox']), 'text': text})
+    return spans
+
+
+def text_near_image(image_rect, text_blocks, max_distance=MAX_LABEL_DISTANCE_PT):
+    """Text blocks near an image's rect, closest first. A block directly
+    above or below the image (a caption/title) ranks ahead of one merely
+    nearby but off to the side, since that's how catalog layouts caption
+    a photo."""
+    ix0, iy0, ix1, iy1 = image_rect
+    scored = []
+    for block in text_blocks:
+        bx0, by0, bx1, by1 = block['bbox']
+        if by0 >= iy1:
+            vgap = by0 - iy1  # block sits below the image
+        elif by1 <= iy0:
+            vgap = iy0 - by1  # block sits above the image
+        else:
+            vgap = 0  # vertically overlapping the image's row
+        if vgap > max_distance:
+            continue
+        horizontally_aligned = min(bx1, ix1) - max(bx0, ix0) > 0
+        scored.append((vgap, 0 if horizontally_aligned else 1, block))
+    scored.sort(key=lambda item: (item[0], item[1]))
+    return [item[2] for item in scored]
+
+
+# ---------------------------------------------------------------------------
 # Google Drive / Sheets (only exercised when credentials are configured)
 # ---------------------------------------------------------------------------
 
@@ -246,12 +306,7 @@ def extract(pdf_path, brand, output_dir, uploader):
 
         log_progress(f"Page {page_num + 1}/{total_pages}: {len(images)} image(s) found")
 
-        detected_size = detect_size(page_text)
-        detected_finish = detect_one_of(page_text, FINISH_KEYWORDS)
-        detected_type = detect_type(page_text)
-        detected_room = detect_room(page_text)
-        detected_color = detect_one_of(page_text, COLOR_KEYWORDS)
-        detected_code = detect_product_code(page_text)
+        text_blocks = get_text_blocks(page)
 
         for image_index, img in enumerate(images, start=1):
             xref = img[0]
@@ -260,6 +315,33 @@ def extract(pdf_path, brand, output_dir, uploader):
             except Exception as e:  # noqa: BLE001 -- a single bad image shouldn't kill the whole run
                 warnings.append(f"Page {page_num + 1} image {image_index}: could not extract ({e})")
                 continue
+
+            # Scope name/attribute detection to the text physically near THIS
+            # image, not the whole page -- a page showing two tiles side by
+            # side (e.g. a "Decor & Base" pair) must not tag both images with
+            # whichever text happened to be first on the page. Falls back to
+            # whole-page text only if nothing is found near the image, which
+            # keeps single-tile-per-page catalogs (the common case) working
+            # exactly as before.
+            try:
+                image_rects = page.get_image_rects(xref)
+            except Exception:  # noqa: BLE001 -- some malformed PDFs raise here
+                image_rects = []
+            image_rect = tuple(image_rects[0]) if image_rects else None
+
+            if image_rect:
+                nearby_blocks = text_near_image(image_rect, text_blocks)
+                scoped_text = '\n'.join(b['text'] for b in nearby_blocks[:8])
+            else:
+                scoped_text = ''
+            detection_text = scoped_text if scoped_text.strip() else page_text
+
+            detected_size = detect_size(detection_text)
+            detected_finish = detect_one_of(detection_text, FINISH_KEYWORDS)
+            detected_type = detect_type(detection_text)
+            detected_room = detect_room(detection_text)
+            detected_color = detect_one_of(detection_text, COLOR_KEYWORDS)
+            detected_code = detect_product_code(detection_text)
 
             image_bytes = base_image['image']
             ext = base_image.get('ext', 'png')
@@ -285,7 +367,7 @@ def extract(pdf_path, brand, output_dir, uploader):
                 continue
             seen_image_hashes[image_hash] = f"page {page_num + 1}"
 
-            name = guess_name(page_text, brand, page_num + 1, image_index)
+            name = guess_name(detection_text, brand, page_num + 1, image_index)
             filename = f"{slugify(brand)}-p{page_num + 1}-{image_index}.{ext}"
             local_path = os.path.join(output_dir, filename)
 
@@ -310,6 +392,7 @@ def extract(pdf_path, brand, output_dir, uploader):
                 'bestRoom': detected_room,
                 'productCode': detected_code,
                 'sourcePage': page_num + 1,
+                'imageBbox': list(image_rect) if image_rect else None,
                 'imageStorage': storage,
                 'imageUrl': image_url,
                 'imageLocalPath': local_path,

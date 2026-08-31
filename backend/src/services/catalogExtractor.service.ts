@@ -28,6 +28,7 @@ interface ExtractedTile {
   bestRoom: string | null;
   productCode: string | null;
   sourcePage: number;
+  imageBbox: [number, number, number, number] | null;
   imageStorage: 'local' | 'drive';
   imageUrl: string | null;
   imageLocalPath: string | null;
@@ -318,6 +319,8 @@ async function runExtractionInner(catalogId: string, catalog: Awaited<ReturnType
         bestRoom: t.bestRoom ?? undefined,
         productCode: t.productCode ?? undefined,
         imageUrl: t.imageStorage === 'drive' ? (t.imageUrl ?? undefined) : t.imageLocalPath ? toPublicImagePath(t.imageLocalPath) : undefined,
+        sourcePage: t.sourcePage ?? undefined,
+        imageBbox: t.imageBbox ?? undefined,
       })),
     });
   }
