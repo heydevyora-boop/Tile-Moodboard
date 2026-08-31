@@ -12,7 +12,7 @@
 // rows via the schema's onDelete: Cascade, corrupting any mood board
 // that already references the tile).
 //
-// Usage: npx ts-node -r tsconfig-paths/register prisma/fix-missing-product-codes.ts
+// Usage: npm run fix-product-codes
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 
