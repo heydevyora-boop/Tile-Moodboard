@@ -407,29 +407,12 @@ def extract(pdf_path, brand, output_dir, uploader):
     duplicate_images_skipped = 0
     seen_image_hashes = {}  # sha256 -> first filename that had it, for the warning message
 
-    # Drive uploads are submitted to this pool as soon as each tile's image
-    # is saved locally -- one page at a time, in reading order -- rather
-    # than either (a) uploading inline and blocking on the network before
-    # moving to the next image/page (the original design: correct but slow,
-    # since a 60-page catalog then spends most of its wall-clock time
-    # waiting on Google's API serially), or (b) collecting every tile from
-    # every page first and only starting uploads once local extraction is
-    # entirely done (a later revision: fast, but silent for the whole
-    # multi-minute local-extraction phase and then silent again during one
-    # big batch upload at the end, so it looks stalled).
-    #
-    # Submitting per-page, non-blockingly, gets both: each page's uploads
-    # start running in the background while the NEXT page's local
-    # extraction (fast, CPU-only) proceeds immediately -- overlapping
-    # network wait time with real work exactly like a fully-deferred batch
-    # would -- while still printing a progress line per page as its uploads
-    # are kicked off, so the run visibly keeps moving instead of going
-    # quiet for a long stretch.
-    upload_pool = None
-    upload_futures = []  # (tile_dict, Future) pairs, in extraction order
-    if uploader.enabled:
-        from concurrent.futures import ThreadPoolExecutor
-        upload_pool = ThreadPoolExecutor(max_workers=8)
+    # Each tile's image is uploaded to Drive synchronously, immediately
+    # after it's extracted, before moving on to the next image -- a
+    # deliberate ordering guarantee (no background pool, no batching): the
+    # tradeoff is that a large catalog's total run time is roughly the sum
+    # of every image's own Drive round-trip, since nothing overlaps.
+    sheet_rows = []
 
     for page_num in range(total_pages):
         page = doc[page_num]
@@ -570,11 +553,6 @@ def extract(pdf_path, brand, output_dir, uploader):
                 with open(local_path, 'wb') as f:
                     f.write(image_bytes)
 
-                # Drive upload + Sheet append are deliberately NOT done here,
-                # inline per image -- see the parallel upload pass below.
-                # Doing them here would mean every image pays its own
-                # network round-trip serially before the next image can even
-                # start being processed.
                 tile = {
                     'name': name,
                     'size': detected_size,
@@ -591,57 +569,37 @@ def extract(pdf_path, brand, output_dir, uploader):
                 }
                 tiles.append(tile)
 
-                # Kick off this tile's Drive upload now, in the background --
-                # doesn't block the rest of this page or the next one.
-                if upload_pool is not None:
-                    future = upload_pool.submit(uploader.upload_image, local_path, filename)
-                    upload_futures.append((tile, future))
-
-        if upload_pool is not None and upload_futures:
-            log_progress(f"Page {page_num + 1}/{total_pages}: {len(upload_futures)} image(s) queued for Drive upload so far")
+                # Upload THIS image to Drive now and wait for it to finish
+                # before moving on to the next image -- a deliberate
+                # ordering guarantee, not an optimization. Each Drive
+                # upload is a real network round-trip (create-file call,
+                # then a second make-public call), so this is the slowest
+                # correct way to do it -- that tradeoff is intentional here.
+                if uploader.enabled:
+                    try:
+                        image_url = uploader.upload_image(local_path, filename)
+                        tile['imageUrl'] = image_url
+                        tile['imageStorage'] = 'drive'
+                        sheet_rows.append([
+                            tile['name'], brand, tile['size'] or '', tile['finish'] or '',
+                            tile['type'], tile['colorTone'] or '', tile['bestRoom'] or '',
+                            tile['productCode'] or '', image_url or '',
+                        ])
+                        log_progress(f"Page {page_num + 1}/{total_pages}: uploaded {filename} to Drive")
+                    except Exception as e:  # noqa: BLE001 -- one failed upload shouldn't lose the rest
+                        warnings.append(f"Drive upload failed for {filename}: {e}")
 
     doc.close()
 
     if pages_with_no_images:
         warnings.append(f"{pages_with_no_images} page(s) had no images and were skipped")
 
-    # -----------------------------------------------------------------
-    # Collect the background uploads submitted per-page above. Local
-    # extraction is fully done by this point, so any upload that hasn't
-    # finished yet just gets waited on here -- but most of them will
-    # already be done or nearly done, since they've been running in the
-    # background since their page was processed rather than starting only
-    # now.
-    # -----------------------------------------------------------------
-
-    if upload_pool is not None:
-        if upload_futures:
-            log_progress(f"Waiting on {len(upload_futures)} Drive upload(s) to finish...")
-
-        sheet_rows = []
-        for tile, future in upload_futures:
-            filename = os.path.basename(tile['imageLocalPath'])
-            try:
-                image_url = future.result()
-            except Exception as e:  # noqa: BLE001 -- one failed upload shouldn't lose the rest
-                warnings.append(f"Drive upload failed for {filename}: {e}")
-                continue
-            tile['imageUrl'] = image_url
-            tile['imageStorage'] = 'drive'
-            sheet_rows.append([
-                tile['name'], brand, tile['size'] or '', tile['finish'] or '',
-                tile['type'], tile['colorTone'] or '', tile['bestRoom'] or '',
-                tile['productCode'] or '', image_url or '',
-            ])
-
-        upload_pool.shutdown(wait=True)
-
-        if sheet_rows:
-            log_progress(f"Appending {len(sheet_rows)} row(s) to Sheet...")
-            try:
-                uploader.append_rows(sheet_rows)
-            except Exception as e:  # noqa: BLE001 -- images are already uploaded either way
-                warnings.append(f"Sheet append failed: {e}")
+    if sheet_rows:
+        log_progress(f"Appending {len(sheet_rows)} row(s) to Sheet...")
+        try:
+            uploader.append_rows(sheet_rows)
+        except Exception as e:  # noqa: BLE001 -- images are already uploaded either way
+            warnings.append(f"Sheet append failed: {e}")
 
     log_progress(f"Done -- {len(tiles)} tile candidate(s) extracted from {total_pages} page(s), {duplicate_images_skipped} duplicate(s) skipped")
 
