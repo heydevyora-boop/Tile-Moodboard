@@ -177,6 +177,31 @@ def get_text_blocks(page):
     return spans
 
 
+def render_image_crop(page, rect, dpi=300):
+    """Rasterizes exactly what's visibly printed inside `rect` on the page --
+    the real tile swatch as the catalog shows it -- rather than the raw
+    embedded PDF image resource.
+
+    This matters because `doc.extract_image(xref)` (the old approach) hands
+    back the ENTIRE embedded image object, byte for byte. Catalog PDFs
+    routinely reuse a single larger image resource (a shared texture sheet,
+    a background pattern) across several different swatch boxes, positioning
+    or clipping different portions of it per box via the page's content
+    stream. Extracting the raw resource ignores that positioning/clipping
+    entirely, so two visually different tiles that happen to share an
+    underlying image resource extract as the exact same bytes -- e.g. a
+    highlighter tile's floral-patterned box extracting as its neighboring
+    base tile's plain surface, because both draw from the same source image.
+    Rendering the page itself at this rect sidesteps that: it's a pixel-exact
+    photo of what a person looking at the catalog page actually sees in that
+    box, independent of how the underlying PDF resources are shared.
+    """
+    zoom = dpi / 72
+    matrix = fitz.Matrix(zoom, zoom)
+    pix = page.get_pixmap(matrix=matrix, clip=fitz.Rect(rect), alpha=False)
+    return pix.tobytes('png'), pix.width, pix.height
+
+
 def text_near_image(image_rect, text_blocks, max_distance=MAX_LABEL_DISTANCE_PT):
     """Text blocks near an image's rect, closest first. A block directly
     above or below the image (a caption/title) ranks ahead of one merely
@@ -308,103 +333,146 @@ def extract(pdf_path, brand, output_dir, uploader):
 
         text_blocks = get_text_blocks(page)
 
-        for image_index, img in enumerate(images, start=1):
+        tile_counter = 0
+
+        for img in images:
             xref = img[0]
             try:
                 base_image = doc.extract_image(xref)
             except Exception as e:  # noqa: BLE001 -- a single bad image shouldn't kill the whole run
-                warnings.append(f"Page {page_num + 1} image {image_index}: could not extract ({e})")
+                warnings.append(f"Page {page_num + 1} image (xref {xref}): could not extract ({e})")
                 continue
 
-            # Scope name/attribute detection to the text physically near THIS
-            # image, not the whole page -- a page showing two tiles side by
-            # side (e.g. a "Decor & Base" pair) must not tag both images with
-            # whichever text happened to be first on the page. Falls back to
-            # whole-page text only if nothing is found near the image, which
-            # keeps single-tile-per-page catalogs (the common case) working
-            # exactly as before.
             try:
                 image_rects = page.get_image_rects(xref)
             except Exception:  # noqa: BLE001 -- some malformed PDFs raise here
                 image_rects = []
-            image_rect = tuple(image_rects[0]) if image_rects else None
 
-            if image_rect:
-                nearby_blocks = text_near_image(image_rect, text_blocks)
-                scoped_text = '\n'.join(b['text'] for b in nearby_blocks[:8])
-            else:
-                scoped_text = ''
-            detection_text = scoped_text if scoped_text.strip() else page_text
+            # Every on-page placement of this image resource is its own tile
+            # candidate, not just the first one. Catalog PDFs commonly reuse
+            # one embedded image resource across several swatch boxes (e.g.
+            # a shared texture sheet), positioning/clipping a different
+            # portion of it per box -- treating only image_rects[0] would
+            # silently drop every other swatch drawn from that same
+            # resource. Falls back to a single placeholder "no known
+            # position" placement when the PDF gives us no rects at all.
+            placements = image_rects if image_rects else [None]
 
-            detected_size = detect_size(detection_text)
-            detected_finish = detect_one_of(detection_text, FINISH_KEYWORDS)
-            detected_type = detect_type(detection_text)
-            detected_room = detect_room(detection_text)
-            detected_color = detect_one_of(detection_text, COLOR_KEYWORDS)
-            detected_code = detect_product_code(detection_text)
+            for placement_rect in placements:
+                tile_counter += 1
+                image_index = tile_counter
+                image_rect = tuple(placement_rect) if placement_rect else None
 
-            image_bytes = base_image['image']
-            ext = base_image.get('ext', 'png')
+                # Scope name/attribute detection to the text physically near
+                # THIS placement, not the whole page -- a page showing two
+                # tiles side by side (e.g. a "Decor & Base" pair) must not
+                # tag both images with whichever text happened to be first
+                # on the page. Falls back to whole-page text only if nothing
+                # is found near the image, which keeps single-tile-per-page
+                # catalogs (the common case) working exactly as before.
+                if image_rect:
+                    nearby_blocks = text_near_image(image_rect, text_blocks)
+                    scoped_text = '\n'.join(b['text'] for b in nearby_blocks[:8])
+                else:
+                    scoped_text = ''
+                detection_text = scoped_text if scoped_text.strip() else page_text
 
-            # Skip tiny images (likely logos/icons, not product photos) --
-            # a real product photo is virtually never under ~120px.
-            if base_image.get('width', 0) < 120 or base_image.get('height', 0) < 120:
-                continue
+                detected_size = detect_size(detection_text)
+                detected_finish = detect_one_of(detection_text, FINISH_KEYWORDS)
+                detected_type = detect_type(detection_text)
+                detected_room = detect_room(detection_text)
+                detected_color = detect_one_of(detection_text, COLOR_KEYWORDS)
+                detected_code = detect_product_code(detection_text)
 
-            # Duplicate detection: the same photo sometimes appears more
-            # than once in a catalog (e.g. reused across a product's
-            # "also available in" section, or a repeated section banner
-            # that slipped past the size filter). An exact byte hash catches
-            # true duplicates without being fooled by similar-but-different
-            # product photos, which a fuzzy/perceptual hash would risk doing.
-            image_hash = hashlib.sha256(image_bytes).hexdigest()
-            if image_hash in seen_image_hashes:
-                duplicate_images_skipped += 1
-                warnings.append(
-                    f"Page {page_num + 1} image {image_index}: identical to an earlier image "
-                    f"({seen_image_hashes[image_hash]}) — skipped as a duplicate"
-                )
-                continue
-            seen_image_hashes[image_hash] = f"page {page_num + 1}"
+                # Prefer rendering exactly what's visibly printed in this
+                # placement's box (see render_image_crop's docstring for why
+                # the raw embedded resource can be the wrong pixels here).
+                # Only falls back to the raw resource when there's no
+                # placement rect to render from, or rendering itself fails.
+                if image_rect:
+                    try:
+                        image_bytes, px_width, px_height = render_image_crop(page, image_rect)
+                        ext = 'png'
+                    except Exception as e:  # noqa: BLE001 -- fall back rather than losing the tile
+                        warnings.append(
+                            f"Page {page_num + 1} image {image_index}: crop render failed, "
+                            f"using raw embedded image instead ({e})"
+                        )
+                        image_bytes = base_image['image']
+                        ext = base_image.get('ext', 'png')
+                        px_width = base_image.get('width', 0)
+                        px_height = base_image.get('height', 0)
+                else:
+                    image_bytes = base_image['image']
+                    ext = base_image.get('ext', 'png')
+                    px_width = base_image.get('width', 0)
+                    px_height = base_image.get('height', 0)
 
-            name = guess_name(detection_text, brand, page_num + 1, image_index)
-            filename = f"{slugify(brand)}-p{page_num + 1}-{image_index}.{ext}"
-            local_path = os.path.join(output_dir, filename)
+                # Skip tiny images (likely logos/icons, not product photos) --
+                # a real product photo is virtually never under ~120px.
+                if px_width < 120 or px_height < 120:
+                    continue
 
-            with open(local_path, 'wb') as f:
-                f.write(image_bytes)
+                # Duplicate detection: the same photo sometimes appears more
+                # than once in a catalog (e.g. reused across a product's
+                # "also available in" section, or a repeated section banner
+                # that slipped past the size filter). An exact byte hash
+                # catches true duplicates without being fooled by
+                # similar-but-different product photos, which a fuzzy/
+                # perceptual hash would risk doing. Hashing the rendered crop
+                # (not the raw resource) means two placements that genuinely
+                # show the same pixels are still caught as duplicates, while
+                # two placements that merely share an underlying resource but
+                # crop different regions of it are correctly kept as distinct
+                # tiles.
+                image_hash = hashlib.sha256(image_bytes).hexdigest()
+                if image_hash in seen_image_hashes:
+                    duplicate_images_skipped += 1
+                    warnings.append(
+                        f"Page {page_num + 1} image {image_index}: identical to an earlier image "
+                        f"({seen_image_hashes[image_hash]}) — skipped as a duplicate"
+                    )
+                    continue
+                seen_image_hashes[image_hash] = f"page {page_num + 1}"
 
-            image_url = None
-            storage = 'local'
-            if uploader.enabled:
-                try:
-                    image_url = uploader.upload_image(local_path, filename)
-                    storage = 'drive'
-                except Exception as e:  # noqa: BLE001
-                    warnings.append(f"Drive upload failed for {filename}: {e}")
+                name = guess_name(detection_text, brand, page_num + 1, image_index)
+                filename = f"{slugify(brand)}-p{page_num + 1}-{image_index}.{ext}"
+                local_path = os.path.join(output_dir, filename)
 
-            tile = {
-                'name': name,
-                'size': detected_size,
-                'finish': detected_finish,
-                'type': detected_type,
-                'colorTone': detected_color,
-                'bestRoom': detected_room,
-                'productCode': detected_code,
-                'sourcePage': page_num + 1,
-                'imageBbox': list(image_rect) if image_rect else None,
-                'imageStorage': storage,
-                'imageUrl': image_url,
-                'imageLocalPath': local_path,
-            }
-            tiles.append(tile)
+                with open(local_path, 'wb') as f:
+                    f.write(image_bytes)
 
-            if uploader.enabled:
-                uploader.append_row([
-                    name, brand, detected_size or '', detected_finish or '',
-                    detected_type, detected_color or '', detected_room or '',
-                    detected_code or '', image_url or '',
-                ])
+                image_url = None
+                storage = 'local'
+                if uploader.enabled:
+                    try:
+                        image_url = uploader.upload_image(local_path, filename)
+                        storage = 'drive'
+                    except Exception as e:  # noqa: BLE001
+                        warnings.append(f"Drive upload failed for {filename}: {e}")
+
+                tile = {
+                    'name': name,
+                    'size': detected_size,
+                    'finish': detected_finish,
+                    'type': detected_type,
+                    'colorTone': detected_color,
+                    'bestRoom': detected_room,
+                    'productCode': detected_code,
+                    'sourcePage': page_num + 1,
+                    'imageBbox': list(image_rect) if image_rect else None,
+                    'imageStorage': storage,
+                    'imageUrl': image_url,
+                    'imageLocalPath': local_path,
+                }
+                tiles.append(tile)
+
+                if uploader.enabled:
+                    uploader.append_row([
+                        name, brand, detected_size or '', detected_finish or '',
+                        detected_type, detected_color or '', detected_room or '',
+                        detected_code or '', image_url or '',
+                    ])
 
     doc.close()
 
