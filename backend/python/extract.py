@@ -293,10 +293,58 @@ class CloudUploader:
         self._drive.permissions().create(fileId=file_id, body={'role': 'reader', 'type': 'anyone'}).execute()
         return f"https://drive.google.com/uc?id={file_id}"
 
+    def upload_images_parallel(self, uploads, max_workers=8):
+        """Uploads many (local_path, filename) pairs to Drive concurrently.
+
+        Each Drive upload is a blocking network round-trip (create the file,
+        then a second call to make it public) -- doing these one at a time,
+        as the original sequential design did, means a 60-page catalog with
+        a couple hundred tiles spends most of its wall-clock time simply
+        waiting on Google's API rather than doing any real work. They're
+        independent of each other, so a thread pool overlaps that network
+        wait time across many uploads at once instead of paying it serially.
+        (Threads, not async/multiprocessing: the googleapiclient client used
+        here is a synchronous, thread-safe-per-call HTTP client, and this is
+        an I/O-bound workload, so threads are the simplest correct fit.)
+
+        Returns a dict of filename -> (url_or_None, error_or_None), so a
+        failed upload for one image doesn't lose the results for the rest.
+        """
+        if not self.enabled or not uploads:
+            return {filename: (None, None) for _, filename in uploads}
+
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        results = {}
+
+        def _upload_one(local_path, filename):
+            return filename, self.upload_image(local_path, filename)
+
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            futures = {pool.submit(_upload_one, local_path, filename): filename for local_path, filename in uploads}
+            for future in as_completed(futures):
+                filename = futures[future]
+                try:
+                    _, url = future.result()
+                    results[filename] = (url, None)
+                except Exception as e:  # noqa: BLE001 -- one failed upload shouldn't lose the rest
+                    results[filename] = (None, str(e))
+
+        return results
+
     def append_row(self, row):
         if not self.enabled or self._sheet is None:
             return
         self._sheet.append_row(row)
+
+    def append_rows(self, rows):
+        """Appends many rows in a single Sheets API call instead of one call
+        per row -- the same overlap-the-network-wait reasoning as
+        upload_images_parallel, but Sheets' own append_rows batch endpoint
+        already does this in one request, so no threading is needed here."""
+        if not self.enabled or self._sheet is None or not rows:
+            return
+        self._sheet.append_rows(rows)
 
 
 # ---------------------------------------------------------------------------
@@ -442,15 +490,11 @@ def extract(pdf_path, brand, output_dir, uploader):
                 with open(local_path, 'wb') as f:
                     f.write(image_bytes)
 
-                image_url = None
-                storage = 'local'
-                if uploader.enabled:
-                    try:
-                        image_url = uploader.upload_image(local_path, filename)
-                        storage = 'drive'
-                    except Exception as e:  # noqa: BLE001
-                        warnings.append(f"Drive upload failed for {filename}: {e}")
-
+                # Drive upload + Sheet append are deliberately NOT done here,
+                # inline per image -- see the parallel upload pass below.
+                # Doing them here would mean every image pays its own
+                # network round-trip serially before the next image can even
+                # start being processed.
                 tile = {
                     'name': name,
                     'size': detected_size,
@@ -461,23 +505,51 @@ def extract(pdf_path, brand, output_dir, uploader):
                     'productCode': detected_code,
                     'sourcePage': page_num + 1,
                     'imageBbox': list(image_rect) if image_rect else None,
-                    'imageStorage': storage,
-                    'imageUrl': image_url,
+                    'imageStorage': 'local',
+                    'imageUrl': None,
                     'imageLocalPath': local_path,
                 }
                 tiles.append(tile)
-
-                if uploader.enabled:
-                    uploader.append_row([
-                        name, brand, detected_size or '', detected_finish or '',
-                        detected_type, detected_color or '', detected_room or '',
-                        detected_code or '', image_url or '',
-                    ])
 
     doc.close()
 
     if pages_with_no_images:
         warnings.append(f"{pages_with_no_images} page(s) had no images and were skipped")
+
+    # -----------------------------------------------------------------
+    # Cloud upload pass -- all at once, in parallel, after local
+    # extraction is fully done. See CloudUploader.upload_images_parallel's
+    # docstring for why this is much faster than uploading (and appending a
+    # Sheet row) inline per image during the extraction loop above.
+    # -----------------------------------------------------------------
+
+    if uploader.enabled and tiles:
+        log_progress(f"Uploading {len(tiles)} image(s) to Drive...")
+
+        uploads = [(t['imageLocalPath'], os.path.basename(t['imageLocalPath'])) for t in tiles]
+        upload_results = uploader.upload_images_parallel(uploads)
+
+        sheet_rows = []
+        for tile in tiles:
+            filename = os.path.basename(tile['imageLocalPath'])
+            image_url, error = upload_results.get(filename, (None, None))
+            if error:
+                warnings.append(f"Drive upload failed for {filename}: {error}")
+                continue
+            tile['imageUrl'] = image_url
+            tile['imageStorage'] = 'drive'
+            sheet_rows.append([
+                tile['name'], brand, tile['size'] or '', tile['finish'] or '',
+                tile['type'], tile['colorTone'] or '', tile['bestRoom'] or '',
+                tile['productCode'] or '', image_url or '',
+            ])
+
+        if sheet_rows:
+            log_progress(f"Appending {len(sheet_rows)} row(s) to Sheet...")
+            try:
+                uploader.append_rows(sheet_rows)
+            except Exception as e:  # noqa: BLE001 -- images are already uploaded either way
+                warnings.append(f"Sheet append failed: {e}")
 
     log_progress(f"Done -- {len(tiles)} tile candidate(s) extracted from {total_pages} page(s), {duplicate_images_skipped} duplicate(s) skipped")
 
