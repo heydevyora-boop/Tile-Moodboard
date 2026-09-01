@@ -40,6 +40,7 @@ import json
 import os
 import re
 import sys
+import threading
 import time
 import traceback
 import unicodedata
@@ -241,6 +242,16 @@ class CloudUploader:
         self._drive = None
         self._sheet = None
         self._folder_id = None
+        self._creds = None
+        # googleapiclient's Resource objects (what build() returns) wrap an
+        # httplib2.Http transport that is documented as NOT thread-safe --
+        # concurrent calls sharing one Resource instance across threads can
+        # silently fail, hang, or interfere with each other's requests.
+        # upload_image runs from a background thread pool (see extract()'s
+        # per-page pipelining), so each worker thread gets its own private
+        # Drive client via this thread-local, built lazily on first use,
+        # instead of every thread sharing self._drive.
+        self._thread_local = threading.local()
 
         if self.enabled:
             self._init_clients(service_account_key_path)
@@ -255,7 +266,8 @@ class CloudUploader:
             'https://www.googleapis.com/auth/spreadsheets',
         ]
         creds = Credentials.from_service_account_file(key_path, scopes=scopes)
-        self._drive = build('drive', 'v3', credentials=creds)
+        self._creds = creds
+        self._drive = build('drive', 'v3', credentials=creds)  # used by the main thread only (folder lookup, Sheets setup)
         gc = gspread.authorize(creds)
 
         try:
@@ -264,6 +276,16 @@ class CloudUploader:
             self._sheet = None  # caller can decide whether to create one
 
         self._folder_id = self._find_or_create_folder(self.drive_folder_name)
+
+    def _drive_for_this_thread(self):
+        """Returns a Drive client private to the calling thread -- see the
+        thread-safety note on self._thread_local above."""
+        client = getattr(self._thread_local, 'drive', None)
+        if client is None:
+            from googleapiclient.discovery import build
+            client = build('drive', 'v3', credentials=self._creds)
+            self._thread_local.drive = client
+        return client
 
     def _find_or_create_folder(self, name):
         query = f"name='{name}' and mimeType='application/vnd.google-apps.folder' and trashed=false"
@@ -278,19 +300,26 @@ class CloudUploader:
         return folder['id']
 
     def upload_image(self, local_path, filename):
-        """Uploads a local image to Drive and returns a shareable URL."""
+        """Uploads a local image to Drive and returns a shareable URL.
+
+        Safe to call concurrently from multiple threads -- uses
+        _drive_for_this_thread() rather than the shared self._drive, since
+        the latter is only safe from a single thread (see the note on
+        self._thread_local in __init__).
+        """
         if not self.enabled:
             return None
         from googleapiclient.http import MediaFileUpload
 
+        drive = self._drive_for_this_thread()
         media = MediaFileUpload(local_path, mimetype='image/png')
-        file = self._drive.files().create(
+        file = drive.files().create(
             body={'name': filename, 'parents': [self._folder_id]},
             media_body=media,
             fields='id',
         ).execute()
         file_id = file['id']
-        self._drive.permissions().create(fileId=file_id, body={'role': 'reader', 'type': 'anyone'}).execute()
+        drive.permissions().create(fileId=file_id, body={'role': 'reader', 'type': 'anyone'}).execute()
         return f"https://drive.google.com/uc?id={file_id}"
 
     def append_row(self, row):
