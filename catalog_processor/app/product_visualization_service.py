@@ -14,6 +14,7 @@ Tile visualization pipeline
 Moodboard-ready visualization result
 """
 
+import hashlib
 import re
 
 from pathlib import Path
@@ -107,6 +108,79 @@ def get_product_for_visualization(
 # PRODUCT IMAGE RESOLUTION
 # ============================================================
 
+DRIVE_FILE_ID_PATTERN = re.compile(r'/d/([a-zA-Z0-9_-]{10,})|[?&]id=([a-zA-Z0-9_-]{10,})')
+
+REMOTE_IMAGE_CACHE_DIR = OUTPUT_ROOT / "remote_image_cache"
+
+
+def _extract_drive_file_id(url: str) -> Optional[str]:
+    match = DRIVE_FILE_ID_PATTERN.search(url)
+    if not match:
+        return None
+    return match.group(1) or match.group(2)
+
+
+def _download_remote_product_image(url: str) -> Path:
+    """
+    Downloads a tile's real reference image from a Drive/HTTP URL and
+    caches it locally.
+
+    Gemini's tile-application call (see tile_application_engine.py) only
+    ever reads reference images as local file bytes -- it has no way to
+    fetch a remote URL itself. The catalog extraction pipeline
+    (catalog_pipeline.py / drive_sheets.py) records each product's real
+    cropped image ONLY as a Drive URL in the "Drive URL" column -- never
+    as a local image_path/crop_path -- so without this, that real image
+    can never actually reach Gemini: resolve_product_image's local-path
+    checks below always miss it, silently falling through to a
+    placeholder or a loose (and possibly wrong-product) crops-folder
+    guess.
+
+    A plain GET against a Drive "view" link (what gets stored, e.g.
+    https://drive.google.com/file/d/<id>/view) returns an HTML preview
+    page, not the image -- so the file ID is pulled out and requested via
+    Drive's direct-download endpoint instead. Downloads are cached by a
+    hash of the URL so repeat visualization requests for the same product
+    don't re-fetch every time.
+    """
+    import requests
+
+    REMOTE_IMAGE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+    cache_key = hashlib.sha256(url.encode('utf-8')).hexdigest()[:24]
+
+    cached_existing = sorted(REMOTE_IMAGE_CACHE_DIR.glob(f"{cache_key}.*"))
+    if cached_existing:
+        return cached_existing[0].resolve()
+
+    fetch_url = url
+    file_id = _extract_drive_file_id(url)
+    if file_id:
+        fetch_url = f"https://drive.google.com/uc?export=download&id={file_id}"
+
+    response = requests.get(fetch_url, timeout=30)
+    response.raise_for_status()
+
+    content_type = response.headers.get('Content-Type', '')
+    if 'text/html' in content_type:
+        # Drive returned a preview/confirmation page instead of the file
+        # itself -- most often means the file isn't actually publicly
+        # readable (permissions), not that it doesn't exist.
+        raise FileNotFoundError(
+            f"Drive URL did not return an image (got an HTML page instead): {url}"
+        )
+
+    extension = '.jpg'
+    if 'png' in content_type:
+        extension = '.png'
+    elif 'webp' in content_type:
+        extension = '.webp'
+
+    cached_path = REMOTE_IMAGE_CACHE_DIR / f"{cache_key}{extension}"
+    cached_path.write_bytes(response.content)
+    return cached_path.resolve()
+
+
 def resolve_product_image(
     product: Dict[str, Any],
 ) -> Path:
@@ -120,7 +194,8 @@ def resolve_product_image(
         4. Crop Path
         5. local_path
         6. Local Path
-        7. output/crops search by Product ID
+        7. Drive URL / Image URL (downloaded + cached locally)
+        8. output/crops search by Product ID
     """
 
     candidate_fields = [
@@ -165,6 +240,34 @@ def resolve_product_image(
             and path.is_file()
         ):
             return path.resolve()
+
+    # --------------------------------------------------------
+    # Remote fallback: Drive URL / Image URL -- this is what the real
+    # extraction pipeline (catalog_pipeline.py / drive_sheets.py)
+    # actually populates for a product's cropped image, so this is the
+    # common case in practice, not an edge case.
+    # --------------------------------------------------------
+
+    url_candidate_fields = [
+        "Drive URL",
+        "Drive Url",
+        "drive_url",
+        "Image URL",
+        "Image Url",
+        "image_url",
+    ]
+
+    for field_name in url_candidate_fields:
+
+        value = str(product.get(field_name, "") or "").strip()
+
+        if not value or not re.match(r'^https?://', value, re.IGNORECASE):
+            continue
+
+        try:
+            return _download_remote_product_image(value)
+        except Exception:  # noqa: BLE001 -- try the next candidate/fallback rather than failing outright
+            continue
 
     # --------------------------------------------------------
     # Fallback: output/crops
