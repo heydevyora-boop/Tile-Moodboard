@@ -203,6 +203,56 @@ def render_image_crop(page, rect, dpi=300):
     return pix.tobytes('png'), pix.width, pix.height
 
 
+LIFESTYLE_PHOTO_AREA_FRACTION = 0.55  # skip images covering more of the page than this
+LIFESTYLE_PHOTO_ASPECT_RATIO = 3.5    # skip images stretched wider/taller than this
+
+
+def looks_like_lifestyle_photo(image_rect, page_rect):
+    """True for images that read as a room/lifestyle photo -- a tile shown
+    installed on a wall or floor as part of a full staged bathroom/interior
+    shot -- rather than a flat, close-up product swatch. Catalog pages
+    routinely carry both: a "here's this finish in a real room" marketing
+    photo alongside the actual product photo tiles get named/matched from,
+    and without this the marketing photo can end up extracted as if it
+    were that tile's own image.
+
+    Two signals, checked independently since either alone can catch what
+    the other misses:
+
+    1. Area: a lifestyle/hero photo is staged to dominate the page --
+       "look at this finished bathroom" -- while product swatches sit in a
+       grid alongside captions, specs, and other swatches, each taking up
+       a modest fraction of the page even on a page with only one product.
+       55% of the page's area is a generous line a normal swatch essentially
+       never crosses.
+    2. Aspect ratio: an interior photograph is shot in a camera's native
+       wide aspect ratio (commonly up to ~16:9, i.e. ~1.8:1) or wider still
+       for a panoramic room shot or a full-width banner strip. This is
+       checked more generously than a camera's own ratio would need,
+       because a real tile product photo can itself be a non-square
+       rectangle -- e.g. a 600x1200mm tile is a legitimate 1:2 (2.0) crop,
+       and large-format plank tiles can run close to 3:1. 3.5:1 stays
+       clear of those while still catching clearly panoramic/banner shots.
+
+    Deliberately does NOT look at file size, color variety, or any
+    ML-ish "is this a photo of a room" classifier -- both signals here are
+    purely about how the image sits on the printed page, which is enough
+    to catch the common case without needing to actually look inside the
+    image.
+    """
+    ix0, iy0, ix1, iy1 = image_rect
+    width, height = ix1 - ix0, iy1 - iy0
+    if width <= 0 or height <= 0:
+        return False
+
+    page_area = page_rect.width * page_rect.height
+    if page_area > 0 and (width * height) / page_area > LIFESTYLE_PHOTO_AREA_FRACTION:
+        return True
+
+    aspect_ratio = max(width, height) / min(width, height)
+    return aspect_ratio > LIFESTYLE_PHOTO_ASPECT_RATIO
+
+
 def text_near_image(image_rect, text_blocks, max_distance=MAX_LABEL_DISTANCE_PT):
     """Text blocks near an image's rect, closest first. A block directly
     above or below the image (a caption/title) ranks ahead of one merely
@@ -423,6 +473,23 @@ def extract(pdf_path, brand, output_dir, uploader):
                 tile_counter += 1
                 image_index = tile_counter
                 image_rect = tuple(placement_rect) if placement_rect else None
+
+                # Skip room/lifestyle photos (a tile shown installed in a
+                # staged bathroom/wall shot) before doing any further work
+                # on this placement -- these commonly sit right alongside a
+                # tile's actual product photo on the same page, and without
+                # this check could get extracted as if they WERE that
+                # tile's photo. See looks_like_lifestyle_photo's docstring
+                # for the two signals used and why they don't false-positive
+                # on legitimately non-square tile photos (e.g. 600x1200mm
+                # planks).
+                if image_rect and looks_like_lifestyle_photo(image_rect, page.rect):
+                    warnings.append(
+                        f"Page {page_num + 1} image {image_index}: skipped as a likely "
+                        f"room/lifestyle photo (not a flat tile swatch), based on its "
+                        f"size/aspect ratio on the page"
+                    )
+                    continue
 
                 # Scope name/attribute detection to the text physically near
                 # THIS placement, not the whole page -- a page showing two
