@@ -587,7 +587,16 @@ def extract(pdf_path, brand, output_dir, uploader):
                         ])
                         log_progress(f"Page {page_num + 1}/{total_pages}: uploaded {filename} to Drive")
                     except Exception as e:  # noqa: BLE001 -- one failed upload shouldn't lose the rest
-                        warnings.append(f"Drive upload failed for {filename}: {e}")
+                        message = f"Drive upload failed for {filename}: {e}"
+                        warnings.append(message)
+                        # Also printed live (not just recorded for the final
+                        # RESULT_JSON) -- a run where every upload is
+                        # silently failing (e.g. the Drive folder was never
+                        # shared with the service account) would otherwise
+                        # look identical, second by second, to one that's
+                        # working, all the way until it finishes 60+ pages
+                        # later.
+                        log_progress(f"ERROR -- {message}")
 
     doc.close()
 
