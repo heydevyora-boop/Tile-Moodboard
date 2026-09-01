@@ -280,42 +280,74 @@ def text_near_image(image_rect, text_blocks, max_distance=MAX_LABEL_DISTANCE_PT)
 # Google Drive / Sheets (only exercised when credentials are configured)
 # ---------------------------------------------------------------------------
 
+DRIVE_SHEETS_SCOPES = [
+    'https://www.googleapis.com/auth/drive',
+    'https://www.googleapis.com/auth/spreadsheets',
+]
+
+
 class CloudUploader:
     """Wraps Drive upload + Sheet append. Falls back to a no-op if no
-    service account key is configured, so the rest of the script doesn't
-    need to branch on credential availability everywhere."""
+    credentials are configured, so the rest of the script doesn't need to
+    branch on credential availability everywhere.
 
-    def __init__(self, service_account_key_path, drive_folder_name, sheet_name):
-        self.enabled = bool(service_account_key_path and os.path.isfile(service_account_key_path))
+    Two auth modes, mutually exclusive -- pass exactly one:
+
+    - service_account_key_path: a service account JSON key. IMPORTANT:
+      service accounts have NO Drive storage quota of their own (this is a
+      Google Cloud platform limitation, not a permissions setting) -- every
+      upload will fail with a 403 "Service Accounts do not have storage
+      quota" UNLESS the destination is a Shared Drive (a Google Workspace
+      feature) or the service account is impersonating a real user via
+      domain-wide delegation (also requires Workspace admin access). On a
+      regular free/personal Google account, this mode cannot work at all.
+    - oauth_client_secret_path: an OAuth 2.0 "Desktop app" client secret
+      JSON (downloaded from Google Cloud Console -> APIs & Services ->
+      Credentials -> Create Credentials -> OAuth client ID -> Desktop app).
+      This opens a one-time browser sign-in as a real Google account, and
+      every file/row created afterward is owned by -- and counted against
+      the storage of -- that real account, exactly like using Drive
+      normally. The resulting token is cached to oauth_token_cache_path so
+      later runs don't need to open a browser again, only refreshing
+      silently in the background until that cached token itself expires or
+      is revoked.
+    """
+
+    def __init__(self, service_account_key_path, drive_folder_name, sheet_name,
+                 oauth_client_secret_path=None, oauth_token_cache_path=None):
         self.drive_folder_name = drive_folder_name
         self.sheet_name = sheet_name
         self._drive = None
         self._sheet = None
         self._folder_id = None
         self._creds = None
+        self._oauth_token_cache_path = oauth_token_cache_path or os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), 'oauth_token.json'
+        )
         # googleapiclient's Resource objects (what build() returns) wrap an
         # httplib2.Http transport that is documented as NOT thread-safe --
         # concurrent calls sharing one Resource instance across threads can
-        # silently fail, hang, or interfere with each other's requests.
-        # upload_image runs from a background thread pool (see extract()'s
-        # per-page pipelining), so each worker thread gets its own private
-        # Drive client via this thread-local, built lazily on first use,
-        # instead of every thread sharing self._drive.
+        # silently fail, hang, or interfere with each other's requests. Kept
+        # even though uploads currently run strictly sequentially (not from
+        # a thread pool) -- see _drive_for_this_thread -- so it's safe if
+        # that ever changes back without anyone having to remember this.
         self._thread_local = threading.local()
 
-        if self.enabled:
-            self._init_clients(service_account_key_path)
+        service_account_enabled = bool(service_account_key_path and os.path.isfile(service_account_key_path))
+        oauth_enabled = bool(oauth_client_secret_path and os.path.isfile(oauth_client_secret_path))
+        self.enabled = service_account_enabled or oauth_enabled
 
-    def _init_clients(self, key_path):
+        if service_account_enabled:
+            self._init_service_account_client(service_account_key_path)
+        elif oauth_enabled:
+            self._init_oauth_client(oauth_client_secret_path)
+
+    def _init_service_account_client(self, key_path):
         from google.oauth2.service_account import Credentials
         from googleapiclient.discovery import build
         import gspread
 
-        scopes = [
-            'https://www.googleapis.com/auth/drive',
-            'https://www.googleapis.com/auth/spreadsheets',
-        ]
-        creds = Credentials.from_service_account_file(key_path, scopes=scopes)
+        creds = Credentials.from_service_account_file(key_path, scopes=DRIVE_SHEETS_SCOPES)
         self._creds = creds
         self._drive = build('drive', 'v3', credentials=creds)  # used by the main thread only (folder lookup, Sheets setup)
         gc = gspread.authorize(creds)
@@ -324,6 +356,44 @@ class CloudUploader:
             self._sheet = gc.open(self.sheet_name).sheet1
         except gspread.SpreadsheetNotFound:
             self._sheet = None  # caller can decide whether to create one
+
+        self._folder_id = self._find_or_create_folder(self.drive_folder_name)
+
+    def _init_oauth_client(self, client_secret_path):
+        from google.oauth2.credentials import Credentials as UserCredentials
+        from google.auth.transport.requests import Request
+        from google_auth_oauthlib.flow import InstalledAppFlow
+        from googleapiclient.discovery import build
+        import gspread
+
+        creds = None
+        if os.path.isfile(self._oauth_token_cache_path):
+            try:
+                creds = UserCredentials.from_authorized_user_file(self._oauth_token_cache_path, DRIVE_SHEETS_SCOPES)
+            except Exception:  # noqa: BLE001 -- a corrupt/stale cache just means signing in again below
+                creds = None
+
+        if not creds or not creds.valid:
+            if creds and creds.expired and creds.refresh_token:
+                creds.refresh(Request())
+            else:
+                log_progress(
+                    "Opening a browser for one-time Google sign-in "
+                    "(needed once -- future runs reuse the cached token)..."
+                )
+                flow = InstalledAppFlow.from_client_secrets_file(client_secret_path, DRIVE_SHEETS_SCOPES)
+                creds = flow.run_local_server(port=0)
+            with open(self._oauth_token_cache_path, 'w') as f:
+                f.write(creds.to_json())
+
+        self._creds = creds
+        self._drive = build('drive', 'v3', credentials=creds)
+        gc = gspread.authorize(creds)
+
+        try:
+            self._sheet = gc.open(self.sheet_name).sheet1
+        except gspread.SpreadsheetNotFound:
+            self._sheet = None
 
         self._folder_id = self._find_or_create_folder(self.drive_folder_name)
 
@@ -628,7 +698,26 @@ def main():
     parser.add_argument('--brand', required=True, help='Brand name (used for naming + Sheet rows)')
     parser.add_argument('--catalog-id', default=None, help='Backend Catalog row id, echoed back for correlation')
     parser.add_argument('--output-dir', default='./extracted', help='Where to save extracted images locally')
-    parser.add_argument('--service-account-key', default=None, help='Path to a Google service account JSON key')
+    parser.add_argument(
+        '--service-account-key', default=None,
+        help='Path to a Google service account JSON key. NOTE: service accounts have no Drive '
+             'storage quota of their own and cannot upload at all unless the destination is a '
+             'Shared Drive (Google Workspace) -- on a regular free/personal Google account, use '
+             '--oauth-client-secret instead.',
+    )
+    parser.add_argument(
+        '--oauth-client-secret', default=None,
+        help='Path to an OAuth 2.0 "Desktop app" client secret JSON (Google Cloud Console -> '
+             'APIs & Services -> Credentials -> Create Credentials -> OAuth client ID -> Desktop '
+             'app). Opens a one-time browser sign-in as a real Google account -- use this on a '
+             'regular free/personal account where --service-account-key cannot work. Mutually '
+             'exclusive with --service-account-key.',
+    )
+    parser.add_argument(
+        '--oauth-token-cache', default=None,
+        help='Where to cache the OAuth token after first sign-in, so later runs reuse it instead '
+             'of opening a browser again (default: oauth_token.json next to this script).',
+    )
     parser.add_argument('--drive-folder', default='CasaDeAurum', help='Google Drive folder name for uploads')
     parser.add_argument('--sheet-name', default='CasaDeAurum Tiles', help='Google Sheet name to append rows to')
     args = parser.parse_args()
@@ -640,10 +729,23 @@ def main():
         print(f"RESULT_JSON: {json.dumps(result)}")
         sys.exit(1)
 
+    if args.service_account_key and args.oauth_client_secret:
+        result = {
+            'success': False, 'catalogId': args.catalog_id,
+            'error': '--service-account-key and --oauth-client-secret are mutually exclusive -- pass at most one.',
+        }
+        print(f"RESULT_JSON: {json.dumps(result)}")
+        sys.exit(1)
+
     try:
-        uploader = CloudUploader(args.service_account_key, args.drive_folder, args.sheet_name)
+        uploader = CloudUploader(
+            args.service_account_key, args.drive_folder, args.sheet_name,
+            oauth_client_secret_path=args.oauth_client_secret,
+            oauth_token_cache_path=args.oauth_token_cache,
+        )
         if uploader.enabled:
-            log_progress("Google credentials found -- uploading to Drive + Sheets")
+            auth_mode = 'OAuth (your Google account)' if args.oauth_client_secret else 'service account'
+            log_progress(f"Google credentials found ({auth_mode}) -- uploading to Drive + Sheets")
         else:
             log_progress("No Google credentials configured -- saving images locally only")
 
