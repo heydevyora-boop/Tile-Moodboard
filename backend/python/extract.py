@@ -293,45 +293,6 @@ class CloudUploader:
         self._drive.permissions().create(fileId=file_id, body={'role': 'reader', 'type': 'anyone'}).execute()
         return f"https://drive.google.com/uc?id={file_id}"
 
-    def upload_images_parallel(self, uploads, max_workers=8):
-        """Uploads many (local_path, filename) pairs to Drive concurrently.
-
-        Each Drive upload is a blocking network round-trip (create the file,
-        then a second call to make it public) -- doing these one at a time,
-        as the original sequential design did, means a 60-page catalog with
-        a couple hundred tiles spends most of its wall-clock time simply
-        waiting on Google's API rather than doing any real work. They're
-        independent of each other, so a thread pool overlaps that network
-        wait time across many uploads at once instead of paying it serially.
-        (Threads, not async/multiprocessing: the googleapiclient client used
-        here is a synchronous, thread-safe-per-call HTTP client, and this is
-        an I/O-bound workload, so threads are the simplest correct fit.)
-
-        Returns a dict of filename -> (url_or_None, error_or_None), so a
-        failed upload for one image doesn't lose the results for the rest.
-        """
-        if not self.enabled or not uploads:
-            return {filename: (None, None) for _, filename in uploads}
-
-        from concurrent.futures import ThreadPoolExecutor, as_completed
-
-        results = {}
-
-        def _upload_one(local_path, filename):
-            return filename, self.upload_image(local_path, filename)
-
-        with ThreadPoolExecutor(max_workers=max_workers) as pool:
-            futures = {pool.submit(_upload_one, local_path, filename): filename for local_path, filename in uploads}
-            for future in as_completed(futures):
-                filename = futures[future]
-                try:
-                    _, url = future.result()
-                    results[filename] = (url, None)
-                except Exception as e:  # noqa: BLE001 -- one failed upload shouldn't lose the rest
-                    results[filename] = (None, str(e))
-
-        return results
-
     def append_row(self, row):
         if not self.enabled or self._sheet is None:
             return
@@ -339,9 +300,8 @@ class CloudUploader:
 
     def append_rows(self, rows):
         """Appends many rows in a single Sheets API call instead of one call
-        per row -- the same overlap-the-network-wait reasoning as
-        upload_images_parallel, but Sheets' own append_rows batch endpoint
-        already does this in one request, so no threading is needed here."""
+        per row -- Sheets' own append_rows batch endpoint does this in one
+        request, avoiding N separate round-trips for N tiles."""
         if not self.enabled or self._sheet is None or not rows:
             return
         self._sheet.append_rows(rows)
@@ -367,6 +327,30 @@ def extract(pdf_path, brand, output_dir, uploader):
     pages_with_no_images = 0
     duplicate_images_skipped = 0
     seen_image_hashes = {}  # sha256 -> first filename that had it, for the warning message
+
+    # Drive uploads are submitted to this pool as soon as each tile's image
+    # is saved locally -- one page at a time, in reading order -- rather
+    # than either (a) uploading inline and blocking on the network before
+    # moving to the next image/page (the original design: correct but slow,
+    # since a 60-page catalog then spends most of its wall-clock time
+    # waiting on Google's API serially), or (b) collecting every tile from
+    # every page first and only starting uploads once local extraction is
+    # entirely done (a later revision: fast, but silent for the whole
+    # multi-minute local-extraction phase and then silent again during one
+    # big batch upload at the end, so it looks stalled).
+    #
+    # Submitting per-page, non-blockingly, gets both: each page's uploads
+    # start running in the background while the NEXT page's local
+    # extraction (fast, CPU-only) proceeds immediately -- overlapping
+    # network wait time with real work exactly like a fully-deferred batch
+    # would -- while still printing a progress line per page as its uploads
+    # are kicked off, so the run visibly keeps moving instead of going
+    # quiet for a long stretch.
+    upload_pool = None
+    upload_futures = []  # (tile_dict, Future) pairs, in extraction order
+    if uploader.enabled:
+        from concurrent.futures import ThreadPoolExecutor
+        upload_pool = ThreadPoolExecutor(max_workers=8)
 
     for page_num in range(total_pages):
         page = doc[page_num]
@@ -511,30 +495,40 @@ def extract(pdf_path, brand, output_dir, uploader):
                 }
                 tiles.append(tile)
 
+                # Kick off this tile's Drive upload now, in the background --
+                # doesn't block the rest of this page or the next one.
+                if upload_pool is not None:
+                    future = upload_pool.submit(uploader.upload_image, local_path, filename)
+                    upload_futures.append((tile, future))
+
+        if upload_pool is not None and upload_futures:
+            log_progress(f"Page {page_num + 1}/{total_pages}: {len(upload_futures)} image(s) queued for Drive upload so far")
+
     doc.close()
 
     if pages_with_no_images:
         warnings.append(f"{pages_with_no_images} page(s) had no images and were skipped")
 
     # -----------------------------------------------------------------
-    # Cloud upload pass -- all at once, in parallel, after local
-    # extraction is fully done. See CloudUploader.upload_images_parallel's
-    # docstring for why this is much faster than uploading (and appending a
-    # Sheet row) inline per image during the extraction loop above.
+    # Collect the background uploads submitted per-page above. Local
+    # extraction is fully done by this point, so any upload that hasn't
+    # finished yet just gets waited on here -- but most of them will
+    # already be done or nearly done, since they've been running in the
+    # background since their page was processed rather than starting only
+    # now.
     # -----------------------------------------------------------------
 
-    if uploader.enabled and tiles:
-        log_progress(f"Uploading {len(tiles)} image(s) to Drive...")
-
-        uploads = [(t['imageLocalPath'], os.path.basename(t['imageLocalPath'])) for t in tiles]
-        upload_results = uploader.upload_images_parallel(uploads)
+    if upload_pool is not None:
+        if upload_futures:
+            log_progress(f"Waiting on {len(upload_futures)} Drive upload(s) to finish...")
 
         sheet_rows = []
-        for tile in tiles:
+        for tile, future in upload_futures:
             filename = os.path.basename(tile['imageLocalPath'])
-            image_url, error = upload_results.get(filename, (None, None))
-            if error:
-                warnings.append(f"Drive upload failed for {filename}: {error}")
+            try:
+                image_url = future.result()
+            except Exception as e:  # noqa: BLE001 -- one failed upload shouldn't lose the rest
+                warnings.append(f"Drive upload failed for {filename}: {e}")
                 continue
             tile['imageUrl'] = image_url
             tile['imageStorage'] = 'drive'
@@ -543,6 +537,8 @@ def extract(pdf_path, brand, output_dir, uploader):
                 tile['type'], tile['colorTone'] or '', tile['bestRoom'] or '',
                 tile['productCode'] or '', image_url or '',
             ])
+
+        upload_pool.shutdown(wait=True)
 
         if sheet_rows:
             log_progress(f"Appending {len(sheet_rows)} row(s) to Sheet...")
