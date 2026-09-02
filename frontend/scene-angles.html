@@ -239,8 +239,14 @@
   let bathroomScenes = [];
   const sceneSelect = document.getElementById('sceneSelect');
 
+  // "AI Random Bathroom Scene" (auto-generated) is intentionally not an
+  // option here anymore -- it generated a brand-new fabricated room on
+  // every angle request, which is what caused "Front" and "Left" to show
+  // two completely unrelated bathrooms instead of one real room seen from
+  // different camera angles. Only real, uploaded reference photos are
+  // offered now, since those have a fixed path/URL that's naturally
+  // identical across every angle request for the same combination.
   async function loadBathroomScenes() {
-    const randomScene = { id: 'AI_RANDOM_BATHROOM', label: 'AI Random Bathroom Scene (generated automatically)', path: '', imageUrl: '', isGenerated: true };
     try {
       const result = await CasaApi.referenceImages.list({ room: 'BATHROOM', limit: 100 });
       bathroomScenes = Array.isArray(result?.images)
@@ -249,10 +255,17 @@
     } catch (err) {
       bathroomScenes = [];
     }
-    bathroomScenes.push(randomScene);
+
+    if (!bathroomScenes.length) {
+      sceneSelect.innerHTML = `<option value="">No bathroom reference photos uploaded yet</option>`;
+      sceneSelect.value = '';
+      sceneSelect.disabled = true;
+      return;
+    }
+
+    sceneSelect.disabled = false;
     sceneSelect.innerHTML = bathroomScenes.map((s) => `<option value="${escapeHtml(String(s.id))}">${escapeHtml(s.label)}</option>`).join('');
-    const firstReal = bathroomScenes.find((s) => s !== randomScene);
-    sceneSelect.value = firstReal ? firstReal.id : randomScene.id;
+    sceneSelect.value = bathroomScenes[0].id;
   }
   await loadBathroomScenes();
 
@@ -331,13 +344,19 @@
     }
 
     const scene = bathroomScenes.find((s) => String(s.id) === String(sceneSelect.value));
-    let sceneImagePath = scene ? (scene.path || scene.imageUrl || '') : '';
+    if (!scene) {
+      CasaNotify.error('No bathroom reference photo selected. Upload one under Reference Images before generating angles.');
+      return;
+    }
 
-    // A real reference scene already has a fixed path/URL, so it's
-    // naturally identical on every angle request. Only the "AI Random"
-    // option resolves to an empty path -- reuse whatever scene got
-    // generated for this session's first angle instead of asking for a
-    // brand new random bathroom each time (see lockedSceneImagePath above).
+    let sceneImagePath = scene.path || scene.imageUrl || '';
+
+    // Every remaining scene option is a real, fixed reference photo, so
+    // sceneImagePath should always be set here. lockedSceneImagePath is
+    // kept only as a safety net for the unlikely case a scene record is
+    // missing its path/URL, so angle generation doesn't accidentally fall
+    // through to Python's random-scene generator (which is what caused
+    // Front/Left to show unrelated bathrooms before this option existed).
     if (!sceneImagePath && lockedSceneImagePath) {
       sceneImagePath = lockedSceneImagePath;
     }
