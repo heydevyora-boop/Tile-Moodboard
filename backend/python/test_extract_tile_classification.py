@@ -404,7 +404,12 @@ def test_real_catalog_colour_spread_values_are_all_kept():
 
 class _FakePage:
     """Stands in for a PyMuPDF Page: only get_images()/get_image_rects()
-    are read by find_repeating_template_rects."""
+    are read by find_repeating_template_rects.
+
+    The xref carried per image matters as much as the rect -- it is what
+    distinguishes one stamped badge reused across pages from a layout slot
+    holding a different product each page.
+    """
 
     def __init__(self, images):
         # images: list of (xref, rect) for this page
@@ -437,11 +442,12 @@ BADGE_RECT = (1020.0, 700.0, 1180.0, 860.0)
 
 def test_badge_repeated_across_many_pages_is_excluded():
     """The real bug: a certification badge stamped at the same spot on 12+
-    pages, alongside a genuine product whose position varies every page."""
+    pages (always the same image resource, xref 2), alongside a genuine
+    product whose position varies every page."""
     pages = []
     for i in range(12):
         product_rect = (40.0 + i * 3, 60.0, 400.0 + i * 3, 500.0)  # moves slightly each page
-        pages.append(_FakePage([(1, product_rect), (2, BADGE_RECT)]))
+        pages.append(_FakePage([(100 + i, product_rect), (2, BADGE_RECT)]))
 
     template_rects = find_repeating_template_rects(_FakeDoc(pages))
 
@@ -455,6 +461,51 @@ def test_badge_repeated_across_many_pages_is_excluded():
             f"page {i}'s genuine, moving product position was wrongly "
             "excluded as a repeating template element"
         )
+
+
+def test_fixed_grid_slots_holding_different_products_are_kept():
+    """The second over-rejection, and the reason position alone is not
+    enough to call something page furniture.
+
+    Catalogs commonly lay products out on a rigid grid: the same four slot
+    coordinates on every page, each holding a DIFFERENT product. A
+    position-only version of the detector classified every one of those
+    slots as a repeating template element and deleted the catalog's whole
+    product range -- 585 tile candidates collapsed to 25 on the real
+    catalog. What distinguishes the two cases is the image resource drawn
+    at the position, not the position itself: a badge is one xref reused;
+    a grid slot is a different xref per page.
+    """
+    slots = [
+        (64.9, 211.2, 312.0, 705.3),
+        (339.6, 211.2, 586.7, 705.3),
+        (686.2, 211.2, 933.3, 705.3),
+        (960.9, 211.2, 1207.9, 705.3),
+    ]
+
+    pages = []
+    next_xref = 100
+    for _page in range(14):
+        images = []
+        for slot in slots:
+            images.append((next_xref, slot))  # a different product in each slot, each page
+            next_xref += 1
+        images.append((2, BADGE_RECT))  # the one genuinely stamped element
+        pages.append(_FakePage(images))
+
+    template_rects = find_repeating_template_rects(_FakeDoc(pages))
+
+    for slot in slots:
+        slot_bucket = tuple(round(c / 2.0) for c in slot)
+        assert slot_bucket not in template_rects, (
+            f"fixed grid slot {slot} was wrongly excluded as page furniture "
+            "-- it holds a different product on every page"
+        )
+
+    badge_bucket = tuple(round(c / 2.0) for c in BADGE_RECT)
+    assert badge_bucket in template_rects, (
+        "the genuinely stamped badge should still be excluded"
+    )
 
 
 def test_badge_position_recurs_with_sub_pixel_float_noise():

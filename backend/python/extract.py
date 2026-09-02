@@ -622,24 +622,41 @@ def find_repeating_template_rects(doc):
     stamp. These are flat, evenly-lit, and low in colour variance --
     exactly what a real tile swatch also looks like -- so no amount of
     tuning classify_image_content's thresholds can separate them from a
-    genuine product photo by content alone. What DOES separate them is
-    behaviour a real product photo does not share: sitting at the exact
-    same position on many different pages. A catalog's product photos move
-    around page to page depending on how many items share that page and
-    where the running text falls; a stamped badge does not -- it is placed
-    at a fixed spot in the page template and printed there every time.
-    Found via a real 139-page catalog: a "COMPANY" badge and a "LUXOTIC
-    PLUS" mark each printed at one exact position on more than a dozen
-    separate pages, both surviving the content classifier and getting
-    inserted as fabricated products.
+    genuine product photo by content alone. Found via a real 139-page
+    catalog: a "COMPANY" badge and a "LUXOTIC PLUS" mark each printed at
+    one exact position on more than a dozen separate pages, both surviving
+    the content classifier and getting inserted as fabricated products.
+
+    TWO conditions are required, and the second one matters as much as the
+    first. Position recurrence ALONE is not evidence of page furniture:
+    catalogs very commonly lay products out on a fixed grid, so a real
+    product slot also lands at the same coordinates page after page. A
+    position-only version of this function deleted an entire catalog's
+    product range for exactly that reason (585 tile candidates down to 25),
+    which is the same class of over-rejection this module has now hit
+    twice. What actually separates the two cases is WHAT is drawn there:
+
+      - a stamped badge is the same image every time, so every page draws
+        it from the same PDF image object (one xref);
+      - a grid slot holds a different product on each page, so each page
+        draws a different xref into it.
+
+    So a position is page furniture only when it recurs across many pages
+    AND every one of those pages draws the identical image resource there.
+    A genuine slot cycling through different products is never excluded,
+    however rigid the layout. (A slot that really does repeat one identical
+    image is a true duplicate anyway, and the rendered-crop hash downstream
+    catches it.)
     """
     position_pages = {}  # bucketed rect -> set of page numbers it appeared on
+    position_xrefs = {}  # bucketed rect -> set of image xrefs drawn there
 
     for page_num in range(doc.page_count):
         page = doc[page_num]
         for img in page.get_images(full=True):
+            xref = img[0]
             try:
-                rects = page.get_image_rects(img[0])
+                rects = page.get_image_rects(xref)
             except Exception:  # noqa: BLE001 -- some malformed PDFs raise here
                 continue
             for rect in rects:
@@ -651,10 +668,12 @@ def find_repeating_template_rects(doc):
                 # recognise the same stamped badge every time it recurs.
                 bucket = tuple(round(c / REPEATING_TEMPLATE_BUCKET_PT) for c in rect)
                 position_pages.setdefault(bucket, set()).add(page_num)
+                position_xrefs.setdefault(bucket, set()).add(xref)
 
     return {
         bucket for bucket, pages in position_pages.items()
         if len(pages) >= REPEATING_TEMPLATE_MIN_PAGES
+        and len(position_xrefs[bucket]) == 1
     }
 
 
