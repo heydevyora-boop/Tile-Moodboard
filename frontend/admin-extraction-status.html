@@ -137,7 +137,7 @@
         <span class="meta" style="text-align:right;">${pct}%</span>
         <span class="meta" style="text-align:right;">${cat.tilesExtracted || 0} tiles</span>
         <span class="catalog-actions" onclick="event.preventDefault();event.stopPropagation();">
-          ${cat.status === 'FAILED' || cat.status === 'PENDING' ? `<a data-retry="${esc(cat.id)}">Retry</a>` : ''}
+          ${cat.status !== 'PROCESSING' ? `<a data-retry="${esc(cat.id)}">Retry</a>` : ''}
           <a data-remove="${esc(cat.id)}" class="danger">Remove</a>
         </span>
       </a>`;
@@ -210,7 +210,7 @@
     document.querySelectorAll('[data-remove]').forEach((a) => {
       a.addEventListener('click', async () => {
         const id = a.dataset.remove;
-        if (!confirm('Remove this catalog? Its tiles will be detached, not deleted.')) return;
+        if (!(await CasaNotify.confirm('Remove this catalog? Its tiles will be detached, not deleted.'))) return;
         const notice = CasaNotify.processing('Removing catalog…');
         try {
           await CasaApi.catalogExtractor.remove(id, false);

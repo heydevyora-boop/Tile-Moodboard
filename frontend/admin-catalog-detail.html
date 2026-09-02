@@ -235,7 +235,7 @@
     });
 
     document.getElementById('removeBtn').addEventListener('click', async () => {
-      if (!confirm('Remove this catalog? Its tiles will be detached, not deleted.')) return;
+      if (!(await CasaNotify.confirm('Remove this catalog? Its tiles will be detached, not deleted.'))) return;
       const notice = CasaNotify.processing('Removing catalog…');
       try {
         await CasaApi.catalogExtractor.remove(catalogId, false);
