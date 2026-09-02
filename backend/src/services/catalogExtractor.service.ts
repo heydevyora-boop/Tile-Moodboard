@@ -104,6 +104,12 @@ function toPublicImagePath(localPath: string): string {
   return `/static/extracted/${relative}`;
 }
 
+/** The image URL a freshly extracted tile should be stored with, if it produced one at all. */
+function resolveExtractedImage(t: ExtractedTile): string | undefined {
+  if (t.imageStorage === 'drive') return t.imageUrl ?? undefined;
+  return t.imageLocalPath ? toPublicImagePath(t.imageLocalPath) : undefined;
+}
+
 export async function uploadAndCreateCatalog(file: Express.Multer.File, input: UploadCatalogInput, userId: string, req?: Request) {
   if (!isRealPdf(file.path)) {
     fs.unlinkSync(file.path); // don't leave a rejected file sitting on disk
@@ -296,7 +302,7 @@ async function runExtractionInner(catalogId: string, catalog: Awaited<ReturnType
   const existingByName = extractedTiles.length
     ? await prisma.tile.findMany({
         where: { brandId: catalog.brandId, name: { in: extractedTiles.map((t) => t.name) } },
-        select: { id: true, name: true, size: true, productCode: true },
+        select: { id: true, name: true, size: true, productCode: true, imageUrl: true },
       })
     : [];
   const existingByNameSizeMap = new Map(existingByName.map((t) => [`${t.name}::${t.size ?? ''}`, t]));
@@ -305,7 +311,7 @@ async function runExtractionInner(catalogId: string, catalog: Awaited<ReturnType
   const seenInThisBatch = new Set<string>();
   let duplicateTilesSkipped = 0;
   const tilesToInsert: ExtractedTile[] = [];
-  const tilesToCorrect: { id: string; tile: ExtractedTile }[] = [];
+  const tilesToCorrect: { id: string; tile: ExtractedTile; reason: string }[] = [];
 
   for (const t of extractedTiles) {
     const key = t.productCode ? `code:${t.productCode}` : `namesize:${t.name}::${t.size ?? ''}`;
@@ -317,10 +323,22 @@ async function runExtractionInner(catalogId: string, catalog: Awaited<ReturnType
     }
 
     const nameSizeMatch = existingByNameSizeMap.get(`${t.name}::${t.size ?? ''}`);
-    const isPlaceholderToCorrect = !!t.productCode && !!nameSizeMatch && !!nameSizeMatch.productCode?.startsWith('MANUAL-');
+    const hasPlaceholderCode = !!t.productCode && !!nameSizeMatch?.productCode?.startsWith('MANUAL-');
+    // A tile that already carries a real product code but no image can
+    // otherwise never be repaired: it matches an existing row, so it's
+    // skipped as a duplicate below and its empty imageUrl stays empty no
+    // matter how many times extraction is re-run. Visualization then has
+    // no real tile photo to send Gemini and falls back to a fabricated
+    // placeholder swatch.
+    const isMissingImage = !!nameSizeMatch && !nameSizeMatch.imageUrl && !!resolveExtractedImage(t);
+    const isPlaceholderToCorrect = hasPlaceholderCode || isMissingImage;
 
     if (isPlaceholderToCorrect && nameSizeMatch) {
-      tilesToCorrect.push({ id: nameSizeMatch.id, tile: t });
+      tilesToCorrect.push({
+        id: nameSizeMatch.id,
+        tile: t,
+        reason: hasPlaceholderCode ? 'placeholder_product_code_replaced' : 'missing_image_filled_in',
+      });
       seenInThisBatch.add(key);
       continue;
     }
@@ -347,14 +365,14 @@ async function runExtractionInner(catalogId: string, catalog: Awaited<ReturnType
         colorTone: t.colorTone ?? undefined,
         bestRoom: t.bestRoom ?? undefined,
         productCode: t.productCode ?? undefined,
-        imageUrl: t.imageStorage === 'drive' ? (t.imageUrl ?? undefined) : t.imageLocalPath ? toPublicImagePath(t.imageLocalPath) : undefined,
+        imageUrl: resolveExtractedImage(t),
         sourcePage: t.sourcePage ?? undefined,
         imageBbox: t.imageBbox ?? undefined,
       })),
     });
   }
 
-  for (const { id, tile: t } of tilesToCorrect) {
+  for (const { id, tile: t, reason } of tilesToCorrect) {
     await prisma.tile.update({
       where: { id },
       data: {
@@ -365,7 +383,7 @@ async function runExtractionInner(catalogId: string, catalog: Awaited<ReturnType
         colorTone: t.colorTone ?? undefined,
         bestRoom: t.bestRoom ?? undefined,
         productCode: t.productCode ?? undefined,
-        imageUrl: t.imageStorage === 'drive' ? (t.imageUrl ?? undefined) : t.imageLocalPath ? toPublicImagePath(t.imageLocalPath) : undefined,
+        imageUrl: resolveExtractedImage(t),
         sourcePage: t.sourcePage ?? undefined,
         imageBbox: t.imageBbox ?? undefined,
       },
@@ -375,7 +393,7 @@ async function runExtractionInner(catalogId: string, catalog: Awaited<ReturnType
       action: 'tile.corrected',
       entityType: 'Tile',
       entityId: id,
-      metadata: { reason: 'placeholder_product_code_replaced', productCode: t.productCode },
+      metadata: { reason, productCode: t.productCode },
     });
   }
 
