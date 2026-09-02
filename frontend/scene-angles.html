@@ -256,10 +256,39 @@
   }
   await loadBathroomScenes();
 
+  // Switching tile or scene invalidates every angle image generated so
+  // far (they were rendered against the previous selection) and the
+  // locked scene from that previous selection.
+  productSelect.addEventListener('change', () => resetAngleSession());
+  sceneSelect.addEventListener('change', () => resetAngleSession());
+
   // ---- Angles ----
   const ANGLES = ['Front', 'Left', 'Right', 'Wide', 'Shower close-up', 'Basin close-up', 'WC area'];
   const doneAngles = {}; // angle -> imageUrl
   let generatingAngle = null;
+
+  // The bathroom scene photo used for the FIRST angle generated this
+  // session, locked in and reused for every angle after it. Without this,
+  // picking "AI Random Bathroom Scene" sends an empty scene reference on
+  // every single angle request, and Python generates a brand-new random
+  // bathroom each time -- so "Front" and "Left" end up as two entirely
+  // different rooms instead of the same room from a different camera
+  // position, even though a real reference scene never had this problem
+  // (its path is already fixed and identical on every request).
+  let lockedSceneImagePath = '';
+
+  // Switching the selected tile or scene reference invalidates every
+  // previously generated angle image (they were rendered against the OLD
+  // selection) -- without this, doneAngles/requestAngle's cache would keep
+  // showing stale images from a different tile/scene after switching.
+  function resetAngleSession() {
+    Object.keys(doneAngles).forEach((key) => delete doneAngles[key]);
+    lockedSceneImagePath = '';
+    generatingAngle = null;
+    renderAngleButtons();
+    renderGenerating();
+    renderGallery();
+  }
 
   function renderAngleButtons() {
     const el = document.getElementById('angleBtns');
@@ -302,7 +331,16 @@
     }
 
     const scene = bathroomScenes.find((s) => String(s.id) === String(sceneSelect.value));
-    const sceneImagePath = scene ? (scene.path || scene.imageUrl || '') : '';
+    let sceneImagePath = scene ? (scene.path || scene.imageUrl || '') : '';
+
+    // A real reference scene already has a fixed path/URL, so it's
+    // naturally identical on every angle request. Only the "AI Random"
+    // option resolves to an empty path -- reuse whatever scene got
+    // generated for this session's first angle instead of asking for a
+    // brand new random bathroom each time (see lockedSceneImagePath above).
+    if (!sceneImagePath && lockedSceneImagePath) {
+      sceneImagePath = lockedSceneImagePath;
+    }
 
     generatingAngle = angle;
     renderAngleButtons();
@@ -333,8 +371,28 @@
 
       if (!imageUrl) throw new Error('The AI completed but no image URL was returned.');
 
+      // Lock in the scene actually used for this first angle (the resolved
+      // local path Python generated/used, exposed as raw_result.source_scene)
+      // so every subsequent angle request reuses this exact same room.
+      if (!lockedSceneImagePath) {
+        const resolvedScenePath = data?.raw_result?.source_scene || data?.raw_result?.sourceScene || '';
+        if (resolvedScenePath) {
+          lockedSceneImagePath = String(resolvedScenePath).trim().replace(/\\/g, '/');
+        }
+      }
+
       doneAngles[angle] = imageUrl;
       notice.success(`${angle} view generated.`);
+
+      // The pipeline falls back to a generic placeholder swatch (always
+      // the same beige/cream color, regardless of the actual product)
+      // when it couldn't resolve this tile's real image from MASTER or
+      // Postgres -- surfaced here so that's never mistaken for the real
+      // tile texture. See master_source in product_visualization_service.py.
+      const masterSource = data?.raw_result?.master_source || data?.raw_result?.masterSource || '';
+      if (masterSource === 'SYNTHETIC_LOCAL_PLACEHOLDER') {
+        CasaNotify.error(`${angle} view used a placeholder swatch, not the real tile image — the selected product's real photo could not be resolved. Check its MASTER sheet row / Drive URL.`);
+      }
     } catch (err) {
       notice.error(`Could not generate ${angle} view: ` + (err?.message || 'Unknown error'));
     } finally {
