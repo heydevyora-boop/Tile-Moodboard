@@ -89,11 +89,24 @@
     const value = String(rawPath).trim();
     if (!value) return '';
     if (/^https?:\/\//i.test(value)) return value;
-    if (typeof window.CASA_API_BASE === 'string' && window.CASA_API_BASE) {
-      const backendRoot = window.CASA_API_BASE.replace(/\/api\/v1\/?$/, '').replace(/\/+$/, '');
-      return value.startsWith('/') ? backendRoot + value : backendRoot + '/' + value;
-    }
-    return value.startsWith('/') ? value : '/' + value;
+    // A relative /static/... path (e.g. a reference image's imageUrl) has
+    // to be turned into a full URL -- the Python visualization backend
+    // needs to actually fetch these bytes over HTTP, and a bare relative
+    // path means nothing to it. window.CASA_API_BASE is normally set by a
+    // small inline script before this page's assets load, but when it
+    // isn't (as in this deployment), every other page in this app
+    // (reference-image-library.html, print-board-designer.html,
+    // owner-ai-test.html) falls back to the same default backend origin
+    // rather than leaving the path unresolved -- this used to be the one
+    // page that didn't, silently turning every reference image's URL into
+    // something the later "must be absolute" check would then reject,
+    // making real uploaded reference photos disappear from the dropdown
+    // entirely.
+    const base = (typeof window.CASA_API_BASE === 'string' && window.CASA_API_BASE)
+      ? window.CASA_API_BASE
+      : 'http://localhost:5000/api/v1';
+    const backendRoot = base.replace(/\/api\/v1\/?$/, '').replace(/\/+$/, '');
+    return value.startsWith('/') ? backendRoot + value : backendRoot + '/' + value;
   }
 
   // ---- Resolve moodBoardId / combinationIndex from session or query params ----
