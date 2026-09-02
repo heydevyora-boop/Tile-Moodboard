@@ -1,3 +1,5 @@
+import re
+import uuid
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -97,7 +99,23 @@ def find_cropped_tile(
 def build_output_path(
     product_id: str,
     surface: str,
+    angle: Optional[str] = None,
 ) -> Path:
+    """
+    Builds a unique output path per generation.
+
+    Previously this was just f"{product_id}_{surface}.png" -- identical
+    for every angle of the same tile/surface, so generating "Front" then
+    "Left" for the same product silently overwrote the exact same file on
+    disk. Since Node serves a visualization's image straight from this
+    local path (not a copy), that meant a URL already handed back to the
+    frontend for "Front" would start showing "Left"'s image the moment
+    "Left" was generated -- on top of (now-fixed separately) the angle
+    never even reaching the Gemini prompt. Including the angle here plus
+    a short random suffix (so regenerating the SAME angle again doesn't
+    also clobber the previous result) makes every generated image its own
+    file.
+    """
 
     safe_product_id = (
         str(product_id)
@@ -113,6 +131,12 @@ def build_output_path(
         .lower()
     )
 
+    safe_angle = re.sub(
+        r"[^a-z0-9]+", "-", str(angle or "").strip().lower()
+    ).strip("-")
+
+    unique_suffix = uuid.uuid4().hex[:8]
+
     output_dir = (
         VISUALIZATION_ROOT
     )
@@ -122,11 +146,16 @@ def build_output_path(
         exist_ok=True,
     )
 
+    name_parts = [safe_product_id, safe_surface]
+    if safe_angle:
+        name_parts.append(safe_angle)
+    name_parts.append(unique_suffix)
+
     return (
         output_dir
         / (
-            f"{safe_product_id}_"
-            f"{safe_surface}.png"
+            "_".join(name_parts)
+            + ".png"
         )
     )
 
@@ -142,6 +171,7 @@ def generate_tile_visualization(
     tile_image: Optional[Path] = None,
     tile_name: str = "Selected Tile",
     scene_id: Optional[str] = None,
+    angle: Optional[str] = None,
 ) -> Dict[str, Any]:
 
     scene_image = resolve_scene_image(
@@ -177,6 +207,7 @@ def generate_tile_visualization(
     output_path = build_output_path(
         product_id=product_id,
         surface=surface,
+        angle=angle,
     )
 
     # --------------------------------------------------------
@@ -190,6 +221,7 @@ def generate_tile_visualization(
         output_path=output_path,
         tile_product_id=product_id,
         tile_name=tile_name,
+        angle=angle,
     )
 
     # --------------------------------------------------------

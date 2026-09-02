@@ -580,6 +580,19 @@ def validate_visualization_request(
         else {}
     )
 
+    # The Scene & Angles frontend sends this inside requirements.angle
+    # (e.g. "Front", "Left", "Shower close-up") so each angle button can
+    # get a genuinely different camera viewpoint of the SAME room/tile.
+    # Previously this was read here and then silently dropped -- the
+    # function's return dict below never included it, so nothing past
+    # this point (the Gemini prompt included) ever knew which angle was
+    # requested, and every angle produced an identical image.
+    angle = str(
+        request.get("angle", "")
+        or requirements.get("angle", "")
+        or ""
+    ).strip()
+
     if not product_id:
         raise ValueError("product_id is required.")
 
@@ -627,6 +640,7 @@ def validate_visualization_request(
             "random" if generate_random_scene else "reference"
         ),
         "fallback_image_path": fallback_image_path,
+        "angle": angle or None,
     }
 
 
@@ -821,6 +835,11 @@ def create_visualization(
                         "fallback_image_path"
                     ]
                 ),
+                angle=(
+                    normalized[
+                        "angle"
+                    ]
+                ),
             )
         )
 
@@ -900,6 +919,11 @@ def create_visualization_strict(
             fallback_image_path=(
                 normalized[
                     "fallback_image_path"
+                ]
+            ),
+            angle=(
+                normalized[
+                    "angle"
                 ]
             ),
         )

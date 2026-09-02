@@ -483,6 +483,7 @@ def generate_product_visualization(
     surface: str = "FLOOR",
     sheet_name: str = "MASTER",
     fallback_image_path: Optional[Path] = None,
+    angle: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Complete production bridge:
@@ -597,6 +598,7 @@ def generate_product_visualization(
         surface=surface,
         tile_image=tile_image,
         tile_name=product_name,
+        angle=angle,
     )
 
     # --------------------------------------------------------
