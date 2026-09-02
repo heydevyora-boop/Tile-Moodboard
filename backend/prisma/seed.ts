@@ -1,7 +1,19 @@
 /* eslint-disable no-console */
+import path from 'path';
+import dotenv from 'dotenv';
 import { PrismaClient, RuleSection } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import bcrypt from 'bcryptjs';
+
+// `npx prisma db seed` auto-loads .env before running this file, but the
+// npm script alias (`npm run prisma:seed` / `npm run seed`) invokes this
+// via plain `ts-node prisma/seed.ts`, bypassing the Prisma CLI entirely --
+// so .env has to be loaded explicitly here too, the same way
+// fix-missing-product-codes.ts already does it and the same way
+// src/config/env.ts does it for the main app. Harmless to call even when
+// something else already loaded it (dotenv.config() is a no-op for
+// variables that are already set).
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
 // Prisma 7's generated client requires an explicit driver adapter — same
 // one the real app uses in src/db/connection.ts. A bare `new PrismaClient()`
