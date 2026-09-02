@@ -203,54 +203,175 @@ def render_image_crop(page, rect, dpi=300):
     return pix.tobytes('png'), pix.width, pix.height
 
 
-LIFESTYLE_PHOTO_AREA_FRACTION = 0.55  # skip images covering more of the page than this
-LIFESTYLE_PHOTO_ASPECT_RATIO = 3.5    # skip images stretched wider/taller than this
+# ---------------------------------------------------------------------------
+# Room/lifestyle photo rejection
+#
+# The goal: keep flat product swatches (the tile surface itself, including
+# highlighter/decor tiles), reject staged photos of finished rooms -- a tile
+# shown installed on a bathroom wall or floor, with fixtures, plants and
+# furniture in frame. Catalog pages routinely carry both.
+#
+# This deliberately looks INSIDE the image rather than only at how it sits
+# on the page. An earlier version judged purely on geometry (skip anything
+# covering >55% of the page, or stretched wider than 3.5:1) and that was
+# wrong in a way worth recording: catalogs very commonly devote a whole page
+# to ONE product, printing the swatch full-bleed. Those pages' swatches are
+# geometrically indistinguishable from a full-page room photo -- both fill
+# the page -- so the area rule discarded the real tile on essentially every
+# such page. On a 139-page catalog of exactly that layout it threw away all
+# but 8 tiles. Page geometry simply does not carry the information needed to
+# make this call; the pixels do.
+# ---------------------------------------------------------------------------
+
+BANNER_ASPECT_RATIO = 4.5       # beyond this it's a rule/banner strip, never a tile photo
+PAGE_DOMINANT_FRACTION = 0.85   # covers essentially the whole page (see classify_image_content)
+
+# What actually separates a tile surface from a photo of a room is how
+# UNIFORM it is across its own area. A tile -- however busy or colourful its
+# pattern -- repeats the same handful of colours everywhere on the swatch;
+# every part of it looks statistically like every other part. A room photo is
+# assembled from unrelated regions: a white basin, a green plant, a wooden
+# stool, daylight through a window, a dark corner. So the test is not "is
+# this image busy or colourful" but "do different parts of it look like
+# different things".
+#
+# Two signals, measured on a coarse grid of regions:
+#
+#   colour_variation -- how much the regions differ in HUE, with brightness
+#     divided out. This is the primary signal and the one that actually
+#     discriminates.
+#   brightness_variation -- how much the regions differ in lighting. On its
+#     own this is not sufficient (a tile with a deliberate dark-to-light
+#     gradient trips it), so it only ever acts as corroboration.
+#
+# Two other signals were measured and deliberately REJECTED, because on real
+# catalog artwork they point the wrong way:
+#
+#   - Edge density: a geometric-patterned highlighter tile measured 0.40,
+#     HIGHER than every room photo tested (0.03-0.09). Filtering on "busy"
+#     would delete precisely the highlighter/decor tiles this extractor most
+#     needs to keep.
+#   - Saturation: a vivid blue decor tile measured 0.74 against ~0.03 for the
+#     room photos. Filtering on "colourful" would delete every coloured
+#     decor tile in the catalog.
+#
+# Both are recorded here so they don't get "helpfully" reintroduced later.
+ROOM_COLOUR_VARIATION = 0.010       # regions differ in hue -> unrelated objects in frame
+ROOM_COLOUR_VARIATION_STRONG = 0.020  # so multi-coloured it needs no corroboration
+ROOM_BRIGHTNESS_VARIATION = 0.050   # regions differ in lighting (corroborating only)
 
 
-def looks_like_lifestyle_photo(image_rect, page_rect):
-    """True for images that read as a room/lifestyle photo -- a tile shown
-    installed on a wall or floor as part of a full staged bathroom/interior
-    shot -- rather than a flat, close-up product swatch. Catalog pages
-    routinely carry both: a "here's this finish in a real room" marketing
-    photo alongside the actual product photo tiles get named/matched from,
-    and without this the marketing photo can end up extracted as if it
-    were that tile's own image.
-
-    Two signals, checked independently since either alone can catch what
-    the other misses:
-
-    1. Area: a lifestyle/hero photo is staged to dominate the page --
-       "look at this finished bathroom" -- while product swatches sit in a
-       grid alongside captions, specs, and other swatches, each taking up
-       a modest fraction of the page even on a page with only one product.
-       55% of the page's area is a generous line a normal swatch essentially
-       never crosses.
-    2. Aspect ratio: an interior photograph is shot in a camera's native
-       wide aspect ratio (commonly up to ~16:9, i.e. ~1.8:1) or wider still
-       for a panoramic room shot or a full-width banner strip. This is
-       checked more generously than a camera's own ratio would need,
-       because a real tile product photo can itself be a non-square
-       rectangle -- e.g. a 600x1200mm tile is a legitimate 1:2 (2.0) crop,
-       and large-format plank tiles can run close to 3:1. 3.5:1 stays
-       clear of those while still catching clearly panoramic/banner shots.
-
-    Deliberately does NOT look at file size, color variety, or any
-    ML-ish "is this a photo of a room" classifier -- both signals here are
-    purely about how the image sits on the printed page, which is enough
-    to catch the common case without needing to actually look inside the
+def measure_image_content(image_bytes):
+    """Region-level uniformity statistics for one rendered image. Returns
+    None if the image can't be read or the optional analysis dependencies
+    aren't importable -- callers treat that as "no opinion" and keep the
     image.
+
+    Analysis runs on a downscaled copy: this is a question about the image's
+    coarse composition, not its fine detail, so bounding the working size
+    keeps the cost flat regardless of how large the rendered crop was.
     """
-    ix0, iy0, ix1, iy1 = image_rect
-    width, height = ix1 - ix0, iy1 - iy0
-    if width <= 0 or height <= 0:
-        return False
+    try:
+        import io
+
+        import numpy as np
+        from PIL import Image
+
+        with Image.open(io.BytesIO(image_bytes)) as source:
+            source = source.convert('RGB')
+            source.thumbnail((256, 256))
+            pixels = np.asarray(source, dtype=np.float32) / 255.0
+    except Exception:  # noqa: BLE001 -- unreadable/undecodable image, or Pillow/numpy missing
+        return None
+
+    if pixels.ndim != 3 or min(pixels.shape[:2]) < 16:
+        return None
+
+    cells = 8
+    height, width = pixels.shape[:2]
+    cell_h, cell_w = height // cells, width // cells
+    if cell_h < 1 or cell_w < 1:
+        return None
+
+    trimmed = pixels[: cell_h * cells, : cell_w * cells, :]
+    # Mean colour of each of the 8x8 regions.
+    region_colours = trimmed.reshape(cells, cell_h, cells, cell_w, 3).mean(axis=(1, 3))
+
+    region_luma = region_colours.mean(axis=2)
+    brightness_variation = float(region_luma.std())
+
+    # Dividing each region's colour by its own brightness leaves only its
+    # hue/chromaticity, so a tile that merely shades from light to dark
+    # doesn't register as "different regions" -- only one that genuinely
+    # changes colour does.
+    chromaticity = region_colours / (region_luma[:, :, None] + 1e-6)
+    colour_variation = float(chromaticity.reshape(-1, 3).std(axis=0).mean())
+
+    return {
+        'colour_variation': colour_variation,
+        'brightness_variation': brightness_variation,
+    }
+
+
+def classify_image_content(image_bytes, image_rect, page_rect):
+    """Decide whether a rendered placement is a room/lifestyle photo rather
+    than a tile surface.
+
+    Returns (is_room_photo, reason) -- reason carries the measured numbers,
+    so a wrong call can be diagnosed from the run's warnings instead of
+    guessed at.
+
+    Errs deliberately towards keeping images. A false reject loses a real
+    product from the catalog silently; a false keep leaves an obvious room
+    photo for staff to delete during the review step that already exists.
+    Those costs are not symmetric, so the thresholds sit well clear of the
+    values measured on real tile artwork.
+    """
+    if image_rect:
+        ix0, iy0, ix1, iy1 = image_rect
+        width, height = ix1 - ix0, iy1 - iy0
+        if width > 0 and height > 0:
+            aspect_ratio = max(width, height) / min(width, height)
+            if aspect_ratio > BANNER_ASPECT_RATIO:
+                return True, f"banner/rule strip (aspect ratio {aspect_ratio:.1f}:1)"
+
+    metrics = measure_image_content(image_bytes)
+    if metrics is None:
+        return False, ''
+
+    colour_variation = metrics['colour_variation']
+    brightness_variation = metrics['brightness_variation']
 
     page_area = page_rect.width * page_rect.height
-    if page_area > 0 and (width * height) / page_area > LIFESTYLE_PHOTO_AREA_FRACTION:
-        return True
+    covers_page = False
+    if image_rect and page_area > 0:
+        ix0, iy0, ix1, iy1 = image_rect
+        covers_page = ((ix1 - ix0) * (iy1 - iy0)) / page_area > PAGE_DOMINANT_FRACTION
 
-    aspect_ratio = max(width, height) / min(width, height)
-    return aspect_ratio > LIFESTYLE_PHOTO_ASPECT_RATIO
+    measured = (
+        f"colour spread {colour_variation:.4f}, "
+        f"lighting spread {brightness_variation:.4f}"
+    )
+
+    # Unmistakably multi-coloured composition -- stands on its own.
+    if colour_variation > ROOM_COLOUR_VARIATION_STRONG:
+        return True, (
+            f"reads as a room/lifestyle photo rather than a tile surface "
+            f"(clearly unrelated colours across the frame; {measured})"
+        )
+
+    # Mildly multi-coloured: needs uneven lighting to agree before rejecting,
+    # unless it's the page's full-bleed hero image, where a single signal is
+    # already enough to make it the likelier reading.
+    if colour_variation > ROOM_COLOUR_VARIATION and (
+        covers_page or brightness_variation > ROOM_BRIGHTNESS_VARIATION
+    ):
+        return True, (
+            f"reads as a room/lifestyle photo rather than a tile surface "
+            f"(varied colours and lighting across the frame; {measured})"
+        )
+
+    return False, measured
 
 
 def text_near_image(image_rect, text_blocks, max_distance=MAX_LABEL_DISTANCE_PT):
@@ -527,44 +648,6 @@ def extract(pdf_path, brand, output_dir, uploader):
                 image_index = tile_counter
                 image_rect = tuple(placement_rect) if placement_rect else None
 
-                # Skip room/lifestyle photos (a tile shown installed in a
-                # staged bathroom/wall shot) before doing any further work
-                # on this placement -- these commonly sit right alongside a
-                # tile's actual product photo on the same page, and without
-                # this check could get extracted as if they WERE that
-                # tile's photo. See looks_like_lifestyle_photo's docstring
-                # for the two signals used and why they don't false-positive
-                # on legitimately non-square tile photos (e.g. 600x1200mm
-                # planks).
-                if image_rect and looks_like_lifestyle_photo(image_rect, page.rect):
-                    warnings.append(
-                        f"Page {page_num + 1} image {image_index}: skipped as a likely "
-                        f"room/lifestyle photo (not a flat tile swatch), based on its "
-                        f"size/aspect ratio on the page"
-                    )
-                    continue
-
-                # Scope name/attribute detection to the text physically near
-                # THIS placement, not the whole page -- a page showing two
-                # tiles side by side (e.g. a "Decor & Base" pair) must not
-                # tag both images with whichever text happened to be first
-                # on the page. Falls back to whole-page text only if nothing
-                # is found near the image, which keeps single-tile-per-page
-                # catalogs (the common case) working exactly as before.
-                if image_rect:
-                    nearby_blocks = text_near_image(image_rect, text_blocks)
-                    scoped_text = '\n'.join(b['text'] for b in nearby_blocks[:8])
-                else:
-                    scoped_text = ''
-                detection_text = scoped_text if scoped_text.strip() else page_text
-
-                detected_size = detect_size(detection_text)
-                detected_finish = detect_one_of(detection_text, FINISH_KEYWORDS)
-                detected_type = detect_type(detection_text)
-                detected_room = detect_room(detection_text)
-                detected_color = detect_one_of(detection_text, COLOR_KEYWORDS)
-                detected_code = detect_product_code(detection_text)
-
                 # Prefer rendering exactly what's visibly printed in this
                 # placement's box (see render_image_crop's docstring for why
                 # the raw embedded resource can be the wrong pixels here).
@@ -593,6 +676,43 @@ def extract(pdf_path, brand, output_dir, uploader):
                 # a real product photo is virtually never under ~120px.
                 if px_width < 120 or px_height < 120:
                     continue
+
+                # Reject staged room/bathroom photos, keeping only flat tile
+                # surfaces (base, highlighter, decor). This runs on the
+                # rendered pixels -- see classify_image_content -- because
+                # the question "is this a tile or a photo of a room?" cannot
+                # be answered from the image's size and position on the page
+                # alone: a catalog page devoted to one product prints that
+                # tile just as large as a hero room shot.
+                is_room_photo, classification_note = classify_image_content(
+                    image_bytes, image_rect, page.rect
+                )
+                if is_room_photo:
+                    warnings.append(
+                        f"Page {page_num + 1} image {image_index}: skipped -- {classification_note}"
+                    )
+                    continue
+
+                # Scope name/attribute detection to the text physically near
+                # THIS placement, not the whole page -- a page showing two
+                # tiles side by side (e.g. a "Decor & Base" pair) must not
+                # tag both images with whichever text happened to be first
+                # on the page. Falls back to whole-page text only if nothing
+                # is found near the image, which keeps single-tile-per-page
+                # catalogs (the common case) working exactly as before.
+                if image_rect:
+                    nearby_blocks = text_near_image(image_rect, text_blocks)
+                    scoped_text = '\n'.join(b['text'] for b in nearby_blocks[:8])
+                else:
+                    scoped_text = ''
+                detection_text = scoped_text if scoped_text.strip() else page_text
+
+                detected_size = detect_size(detection_text)
+                detected_finish = detect_one_of(detection_text, FINISH_KEYWORDS)
+                detected_type = detect_type(detection_text)
+                detected_room = detect_room(detection_text)
+                detected_color = detect_one_of(detection_text, COLOR_KEYWORDS)
+                detected_code = detect_product_code(detection_text)
 
                 # Duplicate detection: the same photo sometimes appears more
                 # than once in a catalog (e.g. reused across a product's
