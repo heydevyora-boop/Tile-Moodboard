@@ -150,7 +150,11 @@
       document.getElementById('logPanel').style.display = 'none';
     }
 
-    document.getElementById('retryBtn').style.display = (cat.status === 'FAILED' || cat.status === 'PENDING') ? '' : 'none';
+    // Retry is allowed for any status except while it's actively running
+    // (re-enqueuing a PROCESSING catalog would start a second concurrent
+    // run against the same catalog id) -- including COMPLETED, so a
+    // finished extraction can be re-run to pick up corrected code/images.
+    document.getElementById('retryBtn').style.display = (cat.status === 'PROCESSING') ? 'none' : '';
   }
 
   function tileRowHtml(t) {
