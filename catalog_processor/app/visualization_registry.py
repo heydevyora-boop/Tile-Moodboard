@@ -80,6 +80,11 @@ ALLOWED_SURFACES = {
     "WALL",
     "BACK_WALL",
     "SHOWER_WALL",
+    # Kept in sync with tile_application_engine.py's ALLOWED_SURFACES --
+    # a Gemini generation with surface="BOTH" would otherwise succeed
+    # (costing a real generation call) and only fail here, afterward, at
+    # registry persistence.
+    "BOTH",
 }
 
 ALLOWED_STATUSES = {

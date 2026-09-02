@@ -116,7 +116,28 @@ ALLOWED_SURFACES = {
     "WALL",
     "BACK_WALL",
     "SHOWER_WALL",
+    # The Scene & Angles frontend's Surface dropdown has always offered
+    # "Wall + Floor" (sent as surface="BOTH"), but this set never
+    # actually included it -- every "Wall + Floor" request 400'd with
+    # "Unsupported surface: BOTH" before it ever reached Gemini.
+    "BOTH",
 }
+
+# Human-readable description of each surface, used in the prompt text
+# below instead of the raw enum value -- "Apply the material ONLY to
+# the requested BOTH." doesn't parse as a coherent instruction, so BOTH
+# specifically needs its own wording naming both real surfaces.
+SURFACE_DESCRIPTIONS = {
+    "WALL": "wall",
+    "FLOOR": "floor",
+    "BACK_WALL": "back wall",
+    "SHOWER_WALL": "shower wall",
+    "BOTH": "wall AND floor surfaces (apply the same tile to both)",
+}
+
+
+def describe_surface(surface: str) -> str:
+    return SURFACE_DESCRIPTIONS.get(surface, surface.lower())
 
 
 # ============================================================
@@ -345,6 +366,10 @@ def build_tile_application_prompt(
         surface
     )
 
+    surface_description = describe_surface(
+        surface
+    )
+
     identity = ""
 
     if tile_product_id:
@@ -404,7 +429,7 @@ You are a professional architectural visualization engine.
 
 TASK:
 Apply the EXACT tile shown in the supplied tile reference image
-to the {surface} of the supplied bathroom/interior image.
+to the {surface_description} of the supplied bathroom/interior image.
 
 {identity}
 {camera_section}
@@ -458,7 +483,7 @@ TILE APPLICATION RULES:
 8. Match shadows.
 9. Match reflections.
 10. Generate realistic grout where appropriate.
-11. Apply the material ONLY to the requested {surface}.
+11. Apply the material ONLY to the requested {surface_description}.
 12. Do not apply it to unrelated surfaces.
 
 OUTPUT:
