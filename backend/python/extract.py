@@ -238,8 +238,7 @@ PAGE_DOMINANT_FRACTION = 0.85   # covers essentially the whole page (see classif
 # Two signals, measured on a coarse grid of regions:
 #
 #   colour_variation -- how much the regions differ in HUE, with brightness
-#     divided out. This is the primary signal and the one that actually
-#     discriminates.
+#     divided out. This is the primary signal.
 #   brightness_variation -- how much the regions differ in lighting. On its
 #     own this is not sufficient (a tile with a deliberate dark-to-light
 #     gradient trips it), so it only ever acts as corroboration.
@@ -256,9 +255,33 @@ PAGE_DOMINANT_FRACTION = 0.85   # covers essentially the whole page (see classif
 #     decor tile in the catalog.
 #
 # Both are recorded here so they don't get "helpfully" reintroduced later.
-ROOM_COLOUR_VARIATION = 0.010       # regions differ in hue -> unrelated objects in frame
-ROOM_COLOUR_VARIATION_STRONG = 0.020  # so multi-coloured it needs no corroboration
-ROOM_BRIGHTNESS_VARIATION = 0.050   # regions differ in lighting (corroborating only)
+#
+# THRESHOLDS BELOW ARE CALIBRATED ON REAL DATA, NOT SYNTHETIC ARTWORK -- this
+# matters and is worth recording in detail. The first version of this
+# function was tuned against tile images drawn by hand for a test suite:
+# clean, flat, computer-generated swatches with none of the shadow,
+# reflection, and lighting falloff a real studio photo of a tile naturally
+# carries. Run against an actual 139-page catalog, that version measured
+# colour_variation across 113 genuine product photos as: min 0.0102, median
+# 0.0295, mean 0.0376, max 0.1744 -- and the "strong, no corroboration
+# needed" cutoff had been set to 0.020. 89% of real product photos exceeded
+# it. The result was not a few misses; it was near-total data loss on a
+# one-product-per-page catalog (pages 1-114 of 139 survived as ~0 tiles).
+#
+# The values below sit above that entire observed real-photo range. This
+# necessarily means the classifier now catches only the most extreme
+# lifestyle/room photos by colour alone -- a deliberate trade given the
+# asymmetry of the two failure modes: a room photo that slips through costs
+# one manual delete in the review step that already exists (Product Data
+# already supports Edit/Delete per tile); a real product wrongly rejected
+# here is silently gone, discovered only much later as a mysteriously
+# missing/placeholder tile, exactly as happened before this recalibration.
+ROOM_COLOUR_VARIATION = 0.10        # regions differ in hue -> unrelated objects in frame
+ROOM_COLOUR_VARIATION_STRONG = 0.20   # so multi-coloured it needs no corroboration
+ROOM_BRIGHTNESS_VARIATION = 0.30    # regions differ in lighting (corroborating only) -- real
+                                     # product photos measured up to 0.2184 here too (a page
+                                     # with pronounced shadow/reflection), so this needs real
+                                     # clearance above that, not just above colour_variation's
 
 
 def measure_image_content(image_bytes):
@@ -585,10 +608,67 @@ def log_progress(message):
     print(f"PROGRESS: {message}", flush=True)
 
 
+REPEATING_TEMPLATE_MIN_PAGES = 5  # same position on this many distinct pages -> page furniture
+REPEATING_TEMPLATE_BUCKET_PT = 2.0  # position tolerance, in points (see find_repeating_template_rects)
+
+
+def find_repeating_template_rects(doc):
+    """Pre-scans every page's image placements (positions only -- no
+    rendering, no pixel work) and returns the set of bucketed positions that
+    recur across many distinct pages.
+
+    Exists to catch a failure mode the pixel-content classifier structurally
+    cannot: a per-page letterhead graphic, brand badge, or certification
+    stamp. These are flat, evenly-lit, and low in colour variance --
+    exactly what a real tile swatch also looks like -- so no amount of
+    tuning classify_image_content's thresholds can separate them from a
+    genuine product photo by content alone. What DOES separate them is
+    behaviour a real product photo does not share: sitting at the exact
+    same position on many different pages. A catalog's product photos move
+    around page to page depending on how many items share that page and
+    where the running text falls; a stamped badge does not -- it is placed
+    at a fixed spot in the page template and printed there every time.
+    Found via a real 139-page catalog: a "COMPANY" badge and a "LUXOTIC
+    PLUS" mark each printed at one exact position on more than a dozen
+    separate pages, both surviving the content classifier and getting
+    inserted as fabricated products.
+    """
+    position_pages = {}  # bucketed rect -> set of page numbers it appeared on
+
+    for page_num in range(doc.page_count):
+        page = doc[page_num]
+        for img in page.get_images(full=True):
+            try:
+                rects = page.get_image_rects(img[0])
+            except Exception:  # noqa: BLE001 -- some malformed PDFs raise here
+                continue
+            for rect in rects:
+                # PyMuPDF's own re-rendering of "the same" placement across
+                # pages can differ by a fraction of a point (floating-point
+                # noise in page content streams), so bucket rather than
+                # comparing exact floats -- tight enough that two distinct
+                # products never coincidentally collide, loose enough to
+                # recognise the same stamped badge every time it recurs.
+                bucket = tuple(round(c / REPEATING_TEMPLATE_BUCKET_PT) for c in rect)
+                position_pages.setdefault(bucket, set()).add(page_num)
+
+    return {
+        bucket for bucket, pages in position_pages.items()
+        if len(pages) >= REPEATING_TEMPLATE_MIN_PAGES
+    }
+
+
 def extract(pdf_path, brand, output_dir, uploader):
     doc = fitz.open(pdf_path)
     total_pages = doc.page_count
     log_progress(f"Opened PDF -- {total_pages} page(s)")
+
+    template_rects = find_repeating_template_rects(doc)
+    if template_rects:
+        log_progress(
+            f"Found {len(template_rects)} page-template position(s) (logo/badge/certification "
+            f"mark repeated across {REPEATING_TEMPLATE_MIN_PAGES}+ pages) -- excluding those"
+        )
 
     os.makedirs(output_dir, exist_ok=True)
 
@@ -647,6 +727,22 @@ def extract(pdf_path, brand, output_dir, uploader):
                 tile_counter += 1
                 image_index = tile_counter
                 image_rect = tuple(placement_rect) if placement_rect else None
+
+                # Page furniture (a logo/badge/certification mark stamped at
+                # the same spot on many pages) -- see find_repeating_template_rects.
+                # Checked before any rendering/classification work, both
+                # because it's nearly free and because it's more reliable
+                # than pixel content for this specific case.
+                if image_rect:
+                    bucket = tuple(round(c / REPEATING_TEMPLATE_BUCKET_PT) for c in image_rect)
+                    if bucket in template_rects:
+                        warnings.append(
+                            f"Page {page_num + 1} image {image_index}: skipped -- this position "
+                            f"repeats across {REPEATING_TEMPLATE_MIN_PAGES}+ pages of the catalog, "
+                            f"reading as a fixed page-template element (logo/badge/certification "
+                            f"mark) rather than a distinct product"
+                        )
+                        continue
 
                 # Prefer rendering exactly what's visibly printed in this
                 # placement's box (see render_image_crop's docstring for why
