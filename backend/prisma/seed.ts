@@ -44,6 +44,11 @@ async function seedRoles() {
       description: 'Store floor staff. Generates mood boards and print boards for customers.',
       permissions: [
         'tiles:read',
+        // Scene & Angles (a Staff-facing tool) needs to list bathroom
+        // reference photos to generate visualizations -- without read
+        // access here, that lookup 403s and silently looks like zero
+        // reference images exist, even when Admin has uploaded some.
+        'reference_images:read',
         'mood_boards:read', 'mood_boards:write',
         'print_boards:read', 'print_boards:write',
         'customers:read', 'customers:write',
