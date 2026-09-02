@@ -44,7 +44,12 @@
     </div>
   </div>
 
-  <div id="notFound" class="casa-error-inline" style="display:none;">No catalog id given — open this page from Extraction Status.</div>
+  <div id="notFound" class="casa-error-inline" style="display:none;">No catalog id given — pick one below, or open this page from Extraction Status.</div>
+
+  <div class="casa-panel" id="pickerPanel" style="display:none;">
+    <div class="panel-head"><h3>Choose a catalog</h3></div>
+    <div class="panel-body" style="padding:0;" id="pickerList"></div>
+  </div>
 
   <div class="detail-grid" id="detailGrid" style="display:none;">
     <div>
@@ -193,6 +198,24 @@
 
     if (!catalogId) {
       document.getElementById('notFound').style.display = '';
+      const pickerPanel = document.getElementById('pickerPanel');
+      const pickerList = document.getElementById('pickerList');
+      pickerPanel.style.display = '';
+      try {
+        const { catalogs } = await CasaApi.catalogExtractor.list({ limit: 100 });
+        if (!catalogs.length) {
+          pickerList.innerHTML = '<div class="casa-empty">No catalogs uploaded yet.</div>';
+        } else {
+          pickerList.innerHTML = catalogs.map((cat) => `
+            <a class="tile-row" style="text-decoration:none;color:inherit;justify-content:space-between;" href="admin-catalog-detail.html?id=${encodeURIComponent(cat.id)}">
+              <span class="nm">${esc(cat.fileName)}</span>
+              <span class="casa-pill ${STATUS_PILL[cat.status] || 'neutral'}">${esc(cat.status)}</span>
+            </a>
+          `).join('');
+        }
+      } catch (err) {
+        pickerList.innerHTML = `<div class="casa-error-inline">${esc(err.message || 'Could not load catalogs.')}</div>`;
+      }
       return;
     }
 
