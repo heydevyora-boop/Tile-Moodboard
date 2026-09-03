@@ -709,6 +709,187 @@ def extract_text_from_pdf(pdf_path):
 # IMAGE EXTRACTION
 # ============================================================
 
+def render_image_crop(page, rect, dpi=300):
+    """Rasterizes exactly what's visibly printed inside `rect` on the page
+    -- the real tile swatch as the catalog shows it -- rather than the raw
+    embedded PDF image resource.
+
+    Catalog PDFs routinely reuse one embedded image resource (a shared
+    texture sheet, a background pattern) across several different swatch
+    boxes, positioning/clipping different portions of it per box via the
+    page's content stream. Extracting the raw resource ignores that
+    positioning entirely, so two visually different tiles that happen to
+    share an underlying image resource extract as the exact same bytes.
+    Rendering the page itself at this rect sidesteps that.
+    """
+    zoom = dpi / 72
+    matrix = fitz.Matrix(zoom, zoom)
+    pix = page.get_pixmap(matrix=matrix, clip=fitz.Rect(rect), alpha=False)
+    return pix.tobytes("png"), pix.width, pix.height
+
+
+# ---------------------------------------------------------------------------
+# Room/lifestyle photo rejection and page-furniture (badge/logo) exclusion.
+#
+# Ported from backend/python/extract.py, where these thresholds were
+# calibrated against a real 139-page tile catalog (not synthetic artwork).
+# Two prior attempts at this exact classification failed against real data
+# in opposite directions -- judging by page geometry alone discarded almost
+# every real product on a one-product-per-page catalog, and thresholds
+# tuned on hand-drawn tile artwork rejected 89% of real photographed tiles
+# (which carry natural shadow/reflection variance clean artwork doesn't).
+# These values sit clear of that entire real-photo range. Do not lower them
+# without re-measuring against real extracted images first.
+# ---------------------------------------------------------------------------
+
+BANNER_ASPECT_RATIO = 4.5
+PAGE_DOMINANT_FRACTION = 0.85
+
+ROOM_COLOUR_VARIATION = 0.10
+ROOM_COLOUR_VARIATION_STRONG = 0.20
+ROOM_BRIGHTNESS_VARIATION = 0.30
+
+REPEATING_TEMPLATE_MIN_PAGES = 5
+REPEATING_TEMPLATE_BUCKET_PT = 2.0
+
+
+def measure_image_content(image_bytes):
+    """Region-level uniformity statistics used to tell a flat tile surface
+    apart from a photograph of a room. A tile -- however busy or colourful
+    its pattern -- repeats the same handful of colours everywhere on the
+    swatch; a room photo is assembled from unrelated regions (a white
+    basin, a green plant, daylight through a window, a dark corner).
+    Returns None if the image can't be read -- callers treat that as "no
+    opinion" and keep the image, since a false reject silently loses a
+    real product.
+    """
+    try:
+        import numpy as np
+
+        with Image.open(BytesIO(image_bytes)) as source:
+            source = source.convert("RGB")
+            source.thumbnail((256, 256))
+            pixels = np.asarray(source, dtype=np.float32) / 255.0
+    except Exception:  # noqa: BLE001
+        return None
+
+    if pixels.ndim != 3 or min(pixels.shape[:2]) < 16:
+        return None
+
+    cells = 8
+    height, width = pixels.shape[:2]
+    cell_h, cell_w = height // cells, width // cells
+    if cell_h < 1 or cell_w < 1:
+        return None
+
+    trimmed = pixels[: cell_h * cells, : cell_w * cells, :]
+    region_colours = trimmed.reshape(cells, cell_h, cells, cell_w, 3).mean(axis=(1, 3))
+
+    region_luma = region_colours.mean(axis=2)
+    brightness_variation = float(region_luma.std())
+
+    chromaticity = region_colours / (region_luma[:, :, None] + 1e-6)
+    colour_variation = float(chromaticity.reshape(-1, 3).std(axis=0).mean())
+
+    return {
+        "colour_variation": colour_variation,
+        "brightness_variation": brightness_variation,
+    }
+
+
+def classify_image_content(image_bytes, image_rect, page_rect):
+    """Decide whether a rendered placement is a room/lifestyle photo rather
+    than a tile surface. Returns (is_room_photo, reason).
+
+    Errs deliberately towards keeping images: a false reject loses a real
+    product from the catalog silently; a false keep leaves an obvious room
+    photo for staff to delete during review.
+    """
+    if image_rect:
+        ix0, iy0, ix1, iy1 = image_rect
+        width, height = ix1 - ix0, iy1 - iy0
+        if width > 0 and height > 0:
+            aspect_ratio = max(width, height) / min(width, height)
+            if aspect_ratio > BANNER_ASPECT_RATIO:
+                return True, f"banner/rule strip (aspect ratio {aspect_ratio:.1f}:1)"
+
+    metrics = measure_image_content(image_bytes)
+    if metrics is None:
+        return False, ""
+
+    colour_variation = metrics["colour_variation"]
+    brightness_variation = metrics["brightness_variation"]
+
+    page_area = page_rect.width * page_rect.height
+    covers_page = False
+    if image_rect and page_area > 0:
+        ix0, iy0, ix1, iy1 = image_rect
+        covers_page = ((ix1 - ix0) * (iy1 - iy0)) / page_area > PAGE_DOMINANT_FRACTION
+
+    measured = f"colour spread {colour_variation:.4f}, lighting spread {brightness_variation:.4f}"
+
+    if colour_variation > ROOM_COLOUR_VARIATION_STRONG:
+        return True, f"reads as a room/lifestyle photo (clearly unrelated colours; {measured})"
+
+    if colour_variation > ROOM_COLOUR_VARIATION and (
+        covers_page or brightness_variation > ROOM_BRIGHTNESS_VARIATION
+    ):
+        return True, f"reads as a room/lifestyle photo (varied colours and lighting; {measured})"
+
+    return False, measured
+
+
+def find_repeating_template_rects(document):
+    """Pre-scans every page's image placements and returns bucketed
+    positions that recur across many pages while always rendering to the
+    SAME pixels -- a stamped badge, letterhead graphic, or repeated
+    background, not a product.
+
+    Position alone is not enough: catalogs commonly lay products out on a
+    fixed grid, so a real product slot also recurs at the same coordinates
+    page after page. What distinguishes a badge from a grid slot is that a
+    badge renders identically every time; a slot shows a different photo.
+
+    This checks the RENDERED CONTENT (a hash of the actual pixels at that
+    position), not the underlying PDF xref. An earlier version compared
+    xrefs instead, on the assumption that a repeated graphic is always
+    embedded once and referenced many times -- true for some PDF authoring
+    tools, but not guaranteed: the same visual content can end up stored as
+    several distinct-but-pixel-identical embedded objects, which a
+    metadata-only, no-render pre-scan cannot tell apart from genuinely
+    different photos. Hashing the actual rendered crop closes that gap at
+    the cost of doing the rendering work twice (once here, once in the main
+    pass) -- worth it since the alternative is uploading the same junk
+    graphic to Drive once per page it appears on.
+    """
+    position_pages = {}
+    position_hashes = {}
+
+    for page_number in range(document.page_count):
+        page = document[page_number]
+        for image_info in page.get_images(full=True):
+            xref = image_info[0]
+            try:
+                rects = page.get_image_rects(xref)
+            except Exception:  # noqa: BLE001
+                continue
+            for rect in rects:
+                bucket = tuple(round(c / REPEATING_TEMPLATE_BUCKET_PT) for c in rect)
+                try:
+                    image_bytes, _width, _height = render_image_crop(page, rect, dpi=72)
+                except Exception:  # noqa: BLE001
+                    continue
+                content_hash = hashlib.sha256(image_bytes).hexdigest()
+                position_pages.setdefault(bucket, set()).add(page_number)
+                position_hashes.setdefault(bucket, set()).add(content_hash)
+
+    return {
+        bucket
+        for bucket, pages in position_pages.items()
+        if len(pages) >= REPEATING_TEMPLATE_MIN_PAGES and len(position_hashes[bucket]) == 1
+    }
+
+
 def extract_images_from_pdf(
     pdf_path,
     output_directory,
@@ -717,8 +898,18 @@ def extract_images_from_pdf(
         pdf_path
     )
 
+    template_rects = find_repeating_template_rects(document)
+    if template_rects:
+        print(
+            f"Found {len(template_rects)} page-template position(s) (logo/badge stamped "
+            f"across {REPEATING_TEMPLATE_MIN_PAGES}+ pages) -- excluding those"
+        )
+
     extracted_images = []
     image_counter = 0
+    seen_hashes = set()
+    duplicates_skipped = 0
+    room_photos_skipped = 0
 
     for page_number, page in enumerate(
         document,
@@ -732,80 +923,123 @@ def extract_images_from_pdf(
             xref = image_info[0]
 
             try:
+                rects = page.get_image_rects(xref)
+            except Exception:  # noqa: BLE001
+                rects = []
 
-                image_data = (
-                    document.extract_image(
-                        xref
+            # Every on-page placement is its own candidate, not just the
+            # first -- a shared texture sheet can be clipped differently
+            # per box. Falls back to a single "no known position"
+            # placement when the PDF gives us no rects at all.
+            placements = rects if rects else [None]
+
+            for image_rect in placements:
+
+                if image_rect:
+                    bucket = tuple(round(c / REPEATING_TEMPLATE_BUCKET_PT) for c in image_rect)
+                    if bucket in template_rects:
+                        continue
+
+                try:
+
+                    if image_rect:
+                        image_bytes, width, height = render_image_crop(page, image_rect)
+                    else:
+                        image_data = document.extract_image(xref)
+                        image_bytes = image_data["image"]
+                        with Image.open(BytesIO(image_bytes)) as probe:
+                            width, height = probe.size
+
+                    # Ignore tiny icons/logos.
+                    if (
+                        width < MIN_IMAGE_WIDTH
+                        or height < MIN_IMAGE_HEIGHT
+                    ):
+                        continue
+
+                    is_room_photo, _reason = classify_image_content(
+                        image_bytes, image_rect, page.rect
                     )
-                )
+                    if is_room_photo:
+                        room_photos_skipped += 1
+                        continue
 
-                image = Image.open(
-                    BytesIO(
-                        image_data["image"]
+                    # Real duplicate detection -- an exact byte hash of the
+                    # rendered crop catches the same photo appearing more
+                    # than once (a repeated section banner, a product shown
+                    # twice) without being fooled by similar-but-different
+                    # products. The filename-based check further down
+                    # (already_processed) cannot do this: it's keyed on a
+                    # per-page/per-index filename that is unique by
+                    # construction, so it never actually catches a repeat
+                    # within a single run.
+                    image_hash = hashlib.sha256(image_bytes).hexdigest()
+                    if image_hash in seen_hashes:
+                        duplicates_skipped += 1
+                        continue
+                    seen_hashes.add(image_hash)
+
+                    image = Image.open(
+                        BytesIO(
+                            image_bytes
+                        )
                     )
-                )
 
-                if image.mode not in (
-                    "RGB",
-                    "RGBA",
-                ):
-                    image = image.convert(
-                        "RGB"
+                    if image.mode not in (
+                        "RGB",
+                        "RGBA",
+                    ):
+                        image = image.convert(
+                            "RGB"
+                        )
+
+                    image_counter += 1
+
+                    output_filename = (
+                        f"{pdf_path.stem}"
+                        f"_page_{page_number}"
+                        f"_image_{image_counter}"
+                        f".webp"
                     )
 
-                width, height = (
-                    image.size
-                )
+                    output_path = (
+                        output_directory
+                        / output_filename
+                    )
 
-                # Ignore tiny icons/logos.
-                if (
-                    width < MIN_IMAGE_WIDTH
-                    or height < MIN_IMAGE_HEIGHT
-                ):
-                    continue
+                    image.save(
+                        output_path,
+                        "WEBP",
+                        quality=IMAGE_QUALITY,
+                        method=6,
+                    )
 
-                image_counter += 1
+                    extracted_images.append(
+                        {
+                            "page": page_number,
+                            "image_index": image_counter,
+                            "filename": output_filename,
+                            "path": str(
+                                output_path
+                            ),
+                            "width": width,
+                            "height": height,
+                        }
+                    )
 
-                output_filename = (
-                    f"{pdf_path.stem}"
-                    f"_page_{page_number}"
-                    f"_image_{image_counter}"
-                    f".webp"
-                )
+                except Exception as exc:
 
-                output_path = (
-                    output_directory
-                    / output_filename
-                )
-
-                image.save(
-                    output_path,
-                    "WEBP",
-                    quality=IMAGE_QUALITY,
-                    method=6,
-                )
-
-                extracted_images.append(
-                    {
-                        "page": page_number,
-                        "image_index": image_counter,
-                        "filename": output_filename,
-                        "path": str(
-                            output_path
-                        ),
-                        "width": width,
-                        "height": height,
-                    }
-                )
-
-            except Exception as exc:
-
-                print(
-                    "Image extraction failed in "
-                    f"{pdf_path.name}: {exc}"
-                )
+                    print(
+                        "Image extraction failed in "
+                        f"{pdf_path.name}: {exc}"
+                    )
 
     document.close()
+
+    print(
+        f"Extracted {len(extracted_images)} image(s), skipped {duplicates_skipped} "
+        f"duplicate(s) and {room_photos_skipped} room/lifestyle photo(s)"
+    )
 
     return extracted_images
 
