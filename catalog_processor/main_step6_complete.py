@@ -664,16 +664,46 @@ def get_catalog_from_pdf(pdf_path):
 # ============================================================
 
 def find_pdfs(source_directory):
+    """
+    Collect real catalog PDFs from the pen drive.
+
+    Files whose name starts with "._" are macOS AppleDouble
+    sidecars: when a Mac copies a file onto a FAT32/exFAT pen
+    drive it writes a small companion "._Name.pdf" holding
+    resource-fork metadata. They end in ".pdf" but contain no
+    PDF, so fitz.open() throws "Failed to open file ... as type
+    pdf" on every one of them and that whole catalog is reported
+    FAILED. They are skipped here, along with other dot-hidden
+    files, so only genuine catalogs are processed.
+    """
+
     pdf_files = []
+    skipped_sidecars = 0
 
     for root, dirs, files in os.walk(
         source_directory
     ):
         for file in files:
-            if file.lower().endswith(".pdf"):
-                pdf_files.append(
-                    Path(root) / file
-                )
+
+            if not file.lower().endswith(".pdf"):
+                continue
+
+            if file.startswith("._"):
+                skipped_sidecars += 1
+                continue
+
+            if file.startswith("."):
+                continue
+
+            pdf_files.append(
+                Path(root) / file
+            )
+
+    if skipped_sidecars:
+        print(
+            f"Ignored {skipped_sidecars} macOS sidecar file(s) "
+            "(._*.pdf) -- these are not real PDFs."
+        )
 
     return sorted(pdf_files)
 
@@ -1234,6 +1264,7 @@ def process_pdf(
 
     uploaded_count = 0
     skipped_count = 0
+    sheet_failed_count = 0
 
     for image in images:
 
@@ -1281,22 +1312,43 @@ def process_pdf(
 
         # Product data intentionally remains
         # unclassified at this extraction stage.
-        append_product(
-            sheets_service=sheets_service,
-            spreadsheet_id=GOOGLE_SHEET_ID,
-            product_id=product_id,
-            brand_id=brand_id,
-            brand=brand,
-            catalog_id=catalog_id,
-            catalog=catalog,
-            pdf_name=pdf_path.name,
-            product_name="",
-            sku="",
-            page=image["page"],
-            image_index=image["image_index"],
-            drive_url=drive_url,
-            image_filename=image["filename"],
-        )
+        #
+        # A failed sheet write must not abort the whole catalog, and
+        # must not be marked processed: the local skip database is
+        # what makes a later re-run pass over this image entirely, so
+        # marking a row that never reached MASTER would strand it
+        # forever -- the image visible in Drive, the product missing
+        # from the sheet, and no way to notice.
+        try:
+
+            append_product(
+                sheets_service=sheets_service,
+                spreadsheet_id=GOOGLE_SHEET_ID,
+                product_id=product_id,
+                brand_id=brand_id,
+                brand=brand,
+                catalog_id=catalog_id,
+                catalog=catalog,
+                pdf_name=pdf_path.name,
+                product_name="",
+                sku="",
+                page=image["page"],
+                image_index=image["image_index"],
+                drive_url=drive_url,
+                image_filename=image["filename"],
+            )
+
+        except Exception as exc:
+
+            sheet_failed_count += 1
+
+            print(
+                f"SHEET WRITE FAILED for {product_id} "
+                f"(image stays in Drive, row NOT written, "
+                f"will retry next run): {exc}"
+            )
+
+            continue
 
         mark_processed(
             file_hash=file_hash,
@@ -1319,6 +1371,10 @@ def process_pdf(
         f"Images skipped   : {skipped_count}"
     )
 
+    print(
+        f"Sheet failures   : {sheet_failed_count}"
+    )
+
     return {
         "brand": brand,
         "catalog": catalog,
@@ -1327,6 +1383,7 @@ def process_pdf(
         "images": len(images),
         "uploaded": uploaded_count,
         "skipped": skipped_count,
+        "sheet_failed": sheet_failed_count,
     }
 
 
@@ -1539,13 +1596,40 @@ def process_drive(
 
     print("")
 
+    total_sheet_failures = sum(
+        result.get("sheet_failed", 0)
+        for result in results
+    )
+
+    total_rows_written = sum(
+        result.get("uploaded", 0)
+        for result in results
+    )
+
+    print(
+        f"Product rows written to MASTER : "
+        f"{total_rows_written}"
+    )
+
+    if total_sheet_failures:
+        print(
+            f"Product rows that FAILED to write : "
+            f"{total_sheet_failures}"
+        )
+
+    print("")
+
     print(
         "Google Sheet tabs updated:"
     )
 
     print("  BRANDS")
     print("  CATALOGS")
-    print("  PRODUCTS")
+    # Extracted products go to the MASTER tab
+    # (google_services.PRODUCT_SHEET_NAME), never a "PRODUCTS" tab --
+    # no such tab exists, and looking for one is why the sheet can
+    # appear empty even on a successful run.
+    print("  MASTER")
     print("  SANITARY")
     print("  FAUCETS")
     print("  BASINS")
