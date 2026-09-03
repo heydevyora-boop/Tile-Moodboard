@@ -468,7 +468,10 @@ def get_sheet_metadata(
 
     return sheets_service.spreadsheets().get(
         spreadsheetId=spreadsheet_id,
-        fields="sheets(properties(sheetId,title,index))",
+        fields=(
+            "sheets(properties(sheetId,title,index,"
+            "gridProperties(rowCount,columnCount)))"
+        ),
     ).execute()
 
 
@@ -509,27 +512,92 @@ def ensure_master_workbook(
     Existing tabs and existing data are NOT deleted.
     """
 
-    existing_titles = get_existing_sheet_titles(
+    metadata = get_sheet_metadata(
         sheets_service,
         spreadsheet_id,
     )
 
+    existing = {
+        sheet["properties"]["title"]: sheet["properties"]
+        for sheet in metadata.get("sheets", [])
+    }
+
     requests = []
 
     # --------------------------------------------------------
-    # Create missing tabs
+    # Create missing tabs -- WIDE ENOUGH FOR THEIR HEADERS
+    #
+    # A tab created without gridProperties gets Google's default
+    # 26 columns. MASTER alone needs 47, so every later read/write
+    # that spans the full schema was rejected by the API with
+    # "exceeds grid limits" and no row ever landed. Creating each
+    # tab at its real width fixes that at the source.
     # --------------------------------------------------------
 
-    for title in MASTER_SHEETS:
+    for title, headers in MASTER_SHEETS.items():
 
-        if title not in existing_titles:
+        required_columns = max(
+            26,
+            len(headers),
+        )
+
+        if title not in existing:
 
             requests.append(
                 {
                     "addSheet": {
                         "properties": {
                             "title": title,
+                            "gridProperties": {
+                                "rowCount": 1000,
+                                "columnCount": (
+                                    required_columns
+                                ),
+                            },
                         }
+                    }
+                }
+            )
+
+            continue
+
+        # --------------------------------------------------------
+        # Widen a tab that already exists but is too narrow
+        # (created by an older version of this pipeline).
+        # Widening only adds empty columns -- no data is touched.
+        # --------------------------------------------------------
+
+        properties = existing[title]
+
+        current_columns = (
+            properties
+            .get("gridProperties", {})
+            .get("columnCount", 0)
+        )
+
+        if current_columns < required_columns:
+
+            print(
+                f"  Widening tab '{title}': "
+                f"{current_columns} -> {required_columns} columns"
+            )
+
+            requests.append(
+                {
+                    "updateSheetProperties": {
+                        "properties": {
+                            "sheetId": (
+                                properties["sheetId"]
+                            ),
+                            "gridProperties": {
+                                "columnCount": (
+                                    required_columns
+                                ),
+                            },
+                        },
+                        "fields": (
+                            "gridProperties.columnCount"
+                        ),
                     }
                 }
             )
@@ -695,7 +763,13 @@ def append_unique_row(
         .values()
         .append(
             spreadsheetId=spreadsheet_id,
-            range=f"'{sheet_name}'!A:ZZ",
+            # Anchor the append at A1 instead of a wide "A:ZZ" span.
+            # values.append resolves its range against the sheet's real
+            # grid, and a tab is only as wide as its columnCount (a new
+            # tab defaults to 26). "A:ZZ" asks for column 702, so every
+            # append was rejected with "exceeds grid limits" -- which is
+            # why no BRAND/CATALOG/MASTER row ever reached the sheet.
+            range=f"'{sheet_name}'!A1",
             valueInputOption="RAW",
             insertDataOption="INSERT_ROWS",
             body={
@@ -1143,7 +1217,7 @@ def append_row(
         .values()
         .append(
             spreadsheetId=spreadsheet_id,
-            range=f"'{PRODUCT_SHEET_NAME}'!A:ZZ",
+            range=f"'{PRODUCT_SHEET_NAME}'!A1",
             valueInputOption="RAW",
             insertDataOption="INSERT_ROWS",
             body={
