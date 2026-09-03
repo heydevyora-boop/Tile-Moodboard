@@ -17,6 +17,8 @@ Moodboard-ready visualization result
 import hashlib
 import re
 
+import requests
+
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -120,6 +122,54 @@ def _extract_drive_file_id(url: str) -> Optional[str]:
     return match.group(1) or match.group(2)
 
 
+def _download_via_drive_api(file_id: str, cache_key: str) -> Path:
+    """
+    Fetch a Drive file's bytes through the SAME authenticated Drive
+    service the rest of this app already uses for uploads
+    (get_drive_service(), from google_services.py), via
+    files().get_media().
+
+    This is the primary resolution path: catalog_pipeline.py's uploader
+    (_drive_upload_file) does not grant "anyone: reader" on the files it
+    creates (unlike drive_sheets.py's uploader, which does), so an
+    anonymous request against the stored "view" link returns Google's
+    HTML login/preview page for every real catalog product, never the
+    image. Authenticated access works regardless, since the app's own
+    Drive account is the one that uploaded the file.
+    """
+    from io import BytesIO
+
+    from googleapiclient.http import MediaIoBaseDownload
+
+    from app.google_services import get_drive_service
+
+    drive_service = get_drive_service()
+
+    metadata = drive_service.files().get(
+        fileId=file_id,
+        fields="mimeType,name",
+    ).execute()
+
+    mime_type = metadata.get("mimeType", "") or ""
+    extension = ".jpg"
+    if "png" in mime_type:
+        extension = ".png"
+    elif "webp" in mime_type:
+        extension = ".webp"
+
+    request = drive_service.files().get_media(fileId=file_id)
+    buffer = BytesIO()
+    downloader = MediaIoBaseDownload(buffer, request)
+
+    done = False
+    while not done:
+        _, done = downloader.next_chunk()
+
+    cached_path = REMOTE_IMAGE_CACHE_DIR / f"{cache_key}{extension}"
+    cached_path.write_bytes(buffer.getvalue())
+    return cached_path.resolve()
+
+
 def _download_remote_product_image(url: str) -> Path:
     """
     Downloads a tile's real reference image from a Drive/HTTP URL and
@@ -136,15 +186,16 @@ def _download_remote_product_image(url: str) -> Path:
     placeholder or a loose (and possibly wrong-product) crops-folder
     guess.
 
-    A plain GET against a Drive "view" link (what gets stored, e.g.
-    https://drive.google.com/file/d/<id>/view) returns an HTML preview
-    page, not the image -- so the file ID is pulled out and requested via
-    Drive's direct-download endpoint instead. Downloads are cached by a
-    hash of the URL so repeat visualization requests for the same product
-    don't re-fetch every time.
-    """
-    import requests
+    Resolution order:
+      1. Authenticated Drive API download (_download_via_drive_api) --
+         works whether or not the file is publicly shared.
+      2. Plain anonymous HTTP GET against Drive's direct-download
+         endpoint -- kept as a fallback for a genuinely public URL, or
+         an environment with no Drive credentials configured.
 
+    Downloads are cached by a hash of the URL so repeat visualization
+    requests for the same product don't re-fetch every time.
+    """
     REMOTE_IMAGE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
     cache_key = hashlib.sha256(url.encode('utf-8')).hexdigest()[:24]
@@ -153,8 +204,15 @@ def _download_remote_product_image(url: str) -> Path:
     if cached_existing:
         return cached_existing[0].resolve()
 
-    fetch_url = url
     file_id = _extract_drive_file_id(url)
+
+    if file_id:
+        try:
+            return _download_via_drive_api(file_id, cache_key)
+        except Exception:  # noqa: BLE001 -- fall through to the anonymous HTTP path below
+            pass
+
+    fetch_url = url
     if file_id:
         fetch_url = f"https://drive.google.com/uc?export=download&id={file_id}"
 
@@ -520,10 +578,15 @@ def generate_product_visualization(
     # --------------------------------------------------------
     # PRODUCT
     # --------------------------------------------------------
-    # Falls back to a synthetic placeholder (see above) when the
-    # product_id has no MASTER row, or the row exists but has no
-    # resolvable image -- either way, that's a data gap, not a
-    # reason to fail the whole visualization request.
+    # A synthetic placeholder is ONLY allowed when product_id has no
+    # MASTER row at all -- a local/demo tile whose Postgres record was
+    # never synced into MASTER (see _build_synthetic_product above).
+    #
+    # A product that DOES have a MASTER row is a real catalog product.
+    # If its image can't be resolved, that is a data-integrity problem
+    # (e.g. a Drive URL that no longer resolves) and must surface as a
+    # clear error -- NEVER a silent synthetic/placeholder substitution,
+    # which would make Gemini paint a fake texture onto a real product.
 
     master_source = "GOOGLE_SHEETS_MASTER"
 
@@ -533,25 +596,14 @@ def generate_product_visualization(
             product_id,
         )
 
-        tile_image = resolve_product_image(
-            product
-        )
+    except KeyError:
 
-        product_name = get_product_name(
-            product
-        )
-
-    except (KeyError, FileNotFoundError):
-
-        # The MASTER sheet has no row for this product, or the row's
-        # image/crop path doesn't resolve to a real file. Before
-        # falling all the way back to a fabricated placeholder swatch
-        # (which would silently make Gemini paint a fake texture),
-        # prefer the real image already on file for this product in
-        # Postgres -- e.g. the exact tile crop from the catalog PDF
-        # extraction, passed through by the caller as
-        # fallback_image_path. Only give up and synthesize a
-        # placeholder if that isn't available either.
+        # No MASTER row for this product_id. Before falling all the way
+        # back to a fabricated placeholder swatch, prefer the real image
+        # already on file for this product in Postgres -- e.g. the exact
+        # tile crop from the catalog PDF extraction, passed through by
+        # the caller as fallback_image_path. Only give up and synthesize
+        # a placeholder if that isn't available either.
         resolved_fallback = (
             Path(fallback_image_path)
             if fallback_image_path
@@ -587,6 +639,29 @@ def generate_product_visualization(
             product_name = product["Name"]
 
             master_source = "SYNTHETIC_LOCAL_PLACEHOLDER"
+
+    else:
+
+        # Real MASTER product. Its catalog image must be resolved for
+        # real -- never silently swapped for a placeholder.
+        try:
+            tile_image = resolve_product_image(
+                product
+            )
+        except FileNotFoundError as error:
+            raise FileNotFoundError(
+                f"MASTER product '{product_id}' exists but its catalog "
+                "image could not be resolved (checked local image/crop "
+                "paths, then the Drive URL "
+                f"{product.get('Drive URL') or product.get('Image URL') or '(missing)'!r} "
+                "via the authenticated Drive API and a plain HTTP fetch, "
+                "then output/crops). Refusing to substitute a synthetic "
+                f"placeholder for a real catalog product.\n{error}"
+            ) from error
+
+        product_name = get_product_name(
+            product
+        )
 
     # --------------------------------------------------------
     # GENERATE
