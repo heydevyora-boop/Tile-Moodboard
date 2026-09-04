@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 from google.oauth2.credentials import Credentials
@@ -42,8 +43,21 @@ SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
 ]
 
-CREDENTIALS_FILE = "credentials.json"
-TOKEN_FILE = "token.json"
+# catalog_processor/ (the folder this app/ package lives inside) --
+# used as the default location so these files are found the same way
+# regardless of which directory a script is launched from. Override
+# with GOOGLE_OAUTH_CREDENTIALS_PATH / GOOGLE_OAUTH_TOKEN_PATH in .env
+# to point at a file kept somewhere else.
+_CATALOG_PROCESSOR_DIR = Path(__file__).resolve().parent.parent
+
+CREDENTIALS_FILE = os.getenv(
+    "GOOGLE_OAUTH_CREDENTIALS_PATH",
+    str(_CATALOG_PROCESSOR_DIR / "credentials.json"),
+)
+TOKEN_FILE = os.getenv(
+    "GOOGLE_OAUTH_TOKEN_PATH",
+    str(_CATALOG_PROCESSOR_DIR / "token.json"),
+)
 
 # Canonical product/master tab used by the catalog pipeline.
 PRODUCT_SHEET_NAME = "MASTER"
