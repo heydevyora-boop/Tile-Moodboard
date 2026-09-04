@@ -5,6 +5,7 @@ catalog_processor/.env
 
 backend/logs/
 backend/uploads/
+backend/secrets/
 
 # Python virtualenvs — never committed
 backend/python/.venv/
