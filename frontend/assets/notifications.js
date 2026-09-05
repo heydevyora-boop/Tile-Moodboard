@@ -176,5 +176,103 @@
     setTimeout(() => removeToast(built.el), 8000); // exports get a longer window since there's an action to click
   }
 
-  window.CasaNotify = { success: success, error: error, processing: processing, exportReady: exportReady };
+  const CONFIRM_STYLE_ID = 'casa-confirm-styles';
+
+  function ensureConfirmStyles() {
+    if (document.getElementById(CONFIRM_STYLE_ID)) return;
+    const style = document.createElement('style');
+    style.id = CONFIRM_STYLE_ID;
+    style.textContent = `
+      .casa-confirm-backdrop {
+        position: fixed; inset: 0; background: rgba(26,22,17,0.45); z-index: 10000;
+        display: flex; align-items: center; justify-content: center;
+        opacity: 0; transition: opacity 0.15s ease;
+      }
+      .casa-confirm-backdrop.casa-confirm-in { opacity: 1; }
+      .casa-confirm-box {
+        background: #fff; border-radius: 3px; box-shadow: 0 20px 50px rgba(26,22,17,0.3);
+        padding: 22px 22px 16px; max-width: 380px; width: calc(100% - 40px);
+        font-family: 'Inter', sans-serif; color: #221D18;
+        transform: translateY(6px); transition: transform 0.15s ease;
+      }
+      .casa-confirm-backdrop.casa-confirm-in .casa-confirm-box { transform: translateY(0); }
+      .casa-confirm-box p { margin: 0 0 18px; font-size: 13.5px; line-height: 1.5; }
+      .casa-confirm-actions { display: flex; justify-content: flex-end; gap: 10px; }
+      .casa-confirm-actions button {
+        font-family: 'Inter', sans-serif; font-size: 12.5px; font-weight: 600; cursor: pointer;
+        padding: 8px 16px; border-radius: 2px; border: 1px solid #E4DCC8; background: #fff; color: #221D18;
+      }
+      .casa-confirm-actions button:hover { border-color: #AD8348; }
+      .casa-confirm-actions button.casa-confirm-danger { background: #9C4B2C; border-color: #9C4B2C; color: #fff; }
+      .casa-confirm-actions button.casa-confirm-danger:hover { background: #83401F; }
+    `;
+    document.head.appendChild(style);
+  }
+
+  /**
+   * In-page replacement for window.confirm(). Chrome (and other browsers)
+   * silently auto-dismiss window.confirm/alert once a page has triggered
+   * several of them, so a native confirm() before a destructive action can
+   * end up returning false with no dialog ever appearing on screen -- the
+   * click looks like it does nothing. This never gets suppressed that way.
+   */
+  function confirm(message, opts) {
+    opts = opts || {};
+    ensureConfirmStyles();
+
+    return new Promise((resolve) => {
+      const backdrop = document.createElement('div');
+      backdrop.className = 'casa-confirm-backdrop';
+
+      const box = document.createElement('div');
+      box.className = 'casa-confirm-box';
+
+      const text = document.createElement('p');
+      text.textContent = message;
+      box.appendChild(text);
+
+      const actions = document.createElement('div');
+      actions.className = 'casa-confirm-actions';
+
+      const cancelBtn = document.createElement('button');
+      cancelBtn.type = 'button';
+      cancelBtn.textContent = opts.cancelLabel || 'Cancel';
+
+      const confirmBtn = document.createElement('button');
+      confirmBtn.type = 'button';
+      confirmBtn.className = opts.danger === false ? '' : 'casa-confirm-danger';
+      confirmBtn.textContent = opts.confirmLabel || 'Confirm';
+
+      function close(result) {
+        backdrop.removeEventListener('click', onBackdropClick);
+        document.removeEventListener('keydown', onKeydown);
+        backdrop.classList.remove('casa-confirm-in');
+        setTimeout(() => backdrop.remove(), 150);
+        resolve(result);
+      }
+
+      function onBackdropClick(e) {
+        if (e.target === backdrop) close(false);
+      }
+
+      function onKeydown(e) {
+        if (e.key === 'Escape') close(false);
+      }
+
+      cancelBtn.addEventListener('click', () => close(false));
+      confirmBtn.addEventListener('click', () => close(true));
+      backdrop.addEventListener('click', onBackdropClick);
+      document.addEventListener('keydown', onKeydown);
+
+      actions.appendChild(cancelBtn);
+      actions.appendChild(confirmBtn);
+      box.appendChild(actions);
+      backdrop.appendChild(box);
+      document.body.appendChild(backdrop);
+      requestAnimationFrame(() => backdrop.classList.add('casa-confirm-in'));
+      confirmBtn.focus();
+    });
+  }
+
+  window.CasaNotify = { success: success, error: error, processing: processing, exportReady: exportReady, confirm: confirm };
 })();

@@ -148,6 +148,88 @@ export interface RecommendationFilter {
   limit?: number;
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// Source diversity — ranking alone decides the whole prompt pool, so once
+// many catalogs are loaded the top N can legitimately all come from a
+// single catalog. That structurally prevents the AI from ever mixing
+// products across catalogs, however good the prompt is.
+// ─────────────────────────────────────────────────────────────────────────
+
+interface TileSource {
+  id: string;
+  brandId: string;
+  catalogId?: string | null;
+  collection?: string | null;
+  productCode?: string | null;
+}
+
+/**
+ * Stable "which catalog did this tile come from" key.
+ *
+ * catalogId covers UI-uploaded tiles. Tiles synced from the MASTER sheet
+ * have no Catalog row at all — masterTileSync.service.ts leaves catalogId
+ * null — so fall back to collection, then to the product code with its
+ * trailing image index stripped: make_product_id() in the extraction
+ * pipeline builds "<BRAND>-<CATALOG>-<INDEX>", making that prefix the
+ * catalog identity. brandId is the last resort, so a tile always lands in
+ * a real group rather than becoming a group of one that dodges the spread.
+ */
+function sourceGroupKey(tile: TileSource): string {
+  if (tile.catalogId) return `catalog:${tile.catalogId}`;
+  if (tile.collection) return `collection:${tile.collection}`;
+
+  const codePrefix = tile.productCode?.match(/^(.+)-\d{3,}$/)?.[1];
+  if (codePrefix) return `code:${codePrefix}`;
+
+  return `brand:${tile.brandId}`;
+}
+
+/**
+ * Fill the pool by taking each source's best tile, then each source's
+ * second best, and so on, instead of taking the global top N.
+ *
+ * Groups are visited in the order their best-ranked tile appeared, so the
+ * strongest catalogs still lead. Spreading this way scales with however
+ * many catalogs exist: with a handful loaded each contributes many tiles,
+ * with a hundred loaded the pool becomes each catalog's top match for this
+ * brief — which is both wider and better than the deep tail of a single
+ * catalog that a plain slice would have taken.
+ *
+ * A single source degenerates to exactly the slice this replaces, and the
+ * pool size never changes — only which tiles fill it.
+ */
+function interleaveBySource(ranked: RankedTile[], sourceOf: (tileId: string) => string, limit: number): RankedTile[] {
+  if (ranked.length <= limit) return ranked;
+
+  const bySource = new Map<string, RankedTile[]>();
+  for (const tile of ranked) {
+    const key = sourceOf(tile.id);
+    const group = bySource.get(key);
+    if (group) group.push(tile);
+    else bySource.set(key, [tile]);
+  }
+
+  const groups = [...bySource.values()];
+  const selected: RankedTile[] = [];
+
+  for (let depth = 0; selected.length < limit; depth += 1) {
+    let progressed = false;
+
+    for (const group of groups) {
+      if (depth >= group.length) continue;
+
+      selected.push(group[depth]);
+      progressed = true;
+
+      if (selected.length >= limit) break;
+    }
+
+    if (!progressed) break;
+  }
+
+  return selected;
+}
+
 /**
  * Tile filtering + ranking, wired to the real database. Filtering
  * (in-stock, brand, type) is a hard SQL WHERE — a red tile that's out of
@@ -158,6 +240,16 @@ export async function getRecommendedTiles(prisma: PrismaTileClient, filter: Reco
   const tiles = await prisma.tile.findMany({
     where: {
       inStock: true,
+      // A tile is only selectable while it is still backed by a real
+      // source: either a MASTER-sheet row (sheetRowRef, written solely by
+      // masterTileSync.service.ts) or a Catalog that still exists.
+      //
+      // Without this, deleting a catalog in the UI has no effect on what
+      // can be combined: deleteCatalog defaults to deleteTiles=false, and
+      // Tile.catalogId is an optional relation (onDelete: SetNull), so its
+      // tiles survive with catalogId=null and inStock=true and stay in
+      // this pool forever.
+      OR: [{ sheetRowRef: { not: null } }, { catalogId: { not: null } }],
       ...(filter.brandId ? { brandId: filter.brandId } : {}),
       ...(filter.type ? { type: filter.type } : {}),
     },
@@ -177,7 +269,9 @@ export async function getRecommendedTiles(prisma: PrismaTileClient, filter: Reco
   }));
 
   const ranked = rankTiles(forRanking, { room: filter.room, style: filter.style, colorTone: filter.colorTone });
-  return ranked.slice(0, filter.limit ?? 20);
+
+  const sourceByTileId = new Map<string, string>(tiles.map((t) => [t.id, sourceGroupKey(t)]));
+  return interleaveBySource(ranked, (id) => sourceByTileId.get(id) ?? `tile:${id}`, filter.limit ?? 20);
 }
 
 // Minimal structural type for the Prisma client's tile delegate — keeps

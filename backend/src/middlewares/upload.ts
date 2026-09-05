@@ -27,6 +27,11 @@ function pdfOnly(_req: Express.Request, file: Express.Multer.File, cb: multer.Fi
   cb(null, true);
 }
 
+console.log(
+  `[upload.ts] Catalog PDF upload limit: ${config.catalog.maxUploadBytes} bytes ` +
+    `(${(config.catalog.maxUploadBytes / (1024 * 1024)).toFixed(0)} MB)`,
+);
+
 // Size-limit violations still come through as a genuine MulterError,
 // which errorHandler.ts already normalizes separately.
 export const uploadCatalogPdf = multer({

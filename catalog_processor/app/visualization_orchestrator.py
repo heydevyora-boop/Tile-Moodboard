@@ -249,6 +249,8 @@ def generate_and_persist_visualization(
     sheet_name: str = "MASTER",
     moodboard: Optional[Dict[str, Any]] = None,
     final_design: Optional[Dict[str, Any]] = None,
+    fallback_image_path: Optional[Path] = None,
+    angle: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Execute the complete backend visualization workflow.
@@ -294,6 +296,8 @@ def generate_and_persist_visualization(
             scene_image=scene_image,
             surface=surface,
             sheet_name=sheet_name,
+            fallback_image_path=fallback_image_path,
+            angle=angle,
         )
     )
 

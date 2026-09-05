@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Casa de Aurum — Product Data</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/shell.css">
+<style>
+  .filter-bar{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;margin-bottom:16px;}
+  .filter-row{display:grid;grid-template-columns:1fr 1fr 160px;gap:10px;margin-bottom:12px;}
+  @media (max-width:760px){.filter-row{grid-template-columns:1fr;}}
+  .filter-row input, .filter-row select{font-family:var(--mono);font-size:12.5px;padding:9px 11px;border:1px solid var(--line);border-radius:2px;background:var(--stone-50);color:var(--ink);}
+  .filter-row input:focus, .filter-row select:focus{outline:2px solid var(--brass);outline-offset:1px;}
+  .swatch-cell{width:34px;height:34px;border-radius:2px;border:1px solid rgba(0,0,0,.08);background-size:cover;background-position:center;background-color:var(--stone-200);flex:none;}
+  .edit-form{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:14px 16px;background:#FAF7F0;border-bottom:1px solid var(--line);}
+  @media (max-width:760px){.edit-form{grid-template-columns:1fr 1fr;}}
+  .edit-form label{display:block;font-family:var(--mono);font-size:10.5px;color:var(--stone-600);margin-bottom:4px;}
+  .edit-form input, .edit-form select{width:100%;font-family:var(--mono);font-size:12.5px;padding:7px 9px;border:1px solid var(--line);border-radius:2px;background:#fff;}
+  .edit-actions{grid-column:1/-1;display:flex;gap:8px;justify-content:flex-end;}
+  .actions-cell{display:flex;gap:10px;justify-content:flex-end;white-space:nowrap;}
+  .actions-cell a{font-family:var(--mono);font-size:11px;color:var(--stone-600);cursor:pointer;}
+  .actions-cell a:hover{color:var(--brass);}
+  .actions-cell a.danger:hover{color:var(--clay);}
+  .pager{padding:14px 18px;display:flex;align-items:center;justify-content:space-between;font-family:var(--mono);font-size:11px;color:var(--stone-600);}
+  .pager button{font-family:var(--mono);font-size:11.5px;padding:6px 11px;border:1px solid var(--line);background:#fff;color:var(--stone-700);border-radius:2px;cursor:pointer;}
+  .pager button:disabled{color:var(--stone-400);cursor:not-allowed;}
+</style>
+</head>
+<body>
+<div id="casa-main-content">
+  <div class="casa-pageheader">
+    <div>
+      <h1>Product Data</h1>
+      <p>Tiles are read per catalog through the real extraction pipeline — pick a brand, then a catalog.</p>
+    </div>
+  </div>
+
+  <div class="filter-bar">
+    <div class="filter-row">
+      <select id="brandSelect"><option value="">Loading brands…</option></select>
+      <select id="catalogSelect"><option value="">Select a brand first</option></select>
+      <input type="text" id="searchInput" placeholder="Filter by name or code…">
+    </div>
+    <div class="casa-hint" id="filterHint"></div>
+  </div>
+
+  <div class="casa-panel">
+    <div class="panel-head"><h3>Tiles<span class="hint" id="tileCountHint"></span></h3></div>
+    <div style="overflow-x:auto;">
+      <table class="casa-table">
+        <thead><tr><th></th><th>Product</th><th>Finish</th><th>Type</th><th>Room</th><th>Stock</th><th style="text-align:right;">Actions</th></tr></thead>
+        <tbody id="tileTbody"><tr><td colspan="7" class="casa-empty">Select a catalog to load its tiles.</td></tr></tbody>
+      </table>
+    </div>
+    <div class="pager" id="pager" style="display:none;">
+      <span id="pagerLabel"></span>
+      <div style="display:flex;gap:6px;">
+        <button id="prevPage">Prev</button>
+        <button id="nextPage">Next</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="assets/api-client.js"></script>
+<script src="assets/notifications.js"></script>
+<script src="assets/shell.js"></script>
+<script>
+  function esc(s) { return CasaShell.escapeHtml(s); }
+  const TILE_TYPES = ['BASE', 'HIGHLIGHTER', 'BORDER', 'ACCENT', 'LARGE_FORMAT_BASE'];
+
+  let currentCatalogId = new URLSearchParams(location.search).get('catalogId') || '';
+  let currentPage = 1;
+  let pageMeta = null;
+  let allTiles = [];
+  let searchText = '';
+  let editingId = null;
+
+  async function loadBrands() {
+    const select = document.getElementById('brandSelect');
+    try {
+      const brands = await CasaApi.catalogExtractor.brands();
+      select.innerHTML = '<option value="">Choose a brand…</option>' + brands.map((b) => `<option value="${esc(b.id)}">${esc(b.name)}</option>`).join('');
+    } catch (err) {
+      select.innerHTML = '<option value="">Could not load brands</option>';
+    }
+  }
+
+  async function loadCatalogsForBrand(brandId) {
+    const select = document.getElementById('catalogSelect');
+    if (!brandId) {
+      select.innerHTML = '<option value="">Select a brand first</option>';
+      return;
+    }
+    select.innerHTML = '<option value="">Loading…</option>';
+    try {
+      const { catalogs } = await CasaApi.catalogExtractor.list({ brandId, limit: 100 });
+      select.innerHTML = '<option value="">Choose a catalog…</option>' + catalogs.map((c) => `<option value="${esc(c.id)}">${esc(c.fileName)} (${c.tilesExtracted || 0} tiles)</option>`).join('');
+      if (currentCatalogId && catalogs.some((c) => c.id === currentCatalogId)) {
+        select.value = currentCatalogId;
+      }
+    } catch (err) {
+      select.innerHTML = '<option value="">Could not load catalogs</option>';
+    }
+  }
+
+  function renderTiles() {
+    const tbody = document.getElementById('tileTbody');
+    const filtered = allTiles.filter((t) => !searchText ||
+      t.name.toLowerCase().includes(searchText.toLowerCase()) ||
+      (t.productCode || '').toLowerCase().includes(searchText.toLowerCase()));
+
+    document.getElementById('tileCountHint').textContent = pageMeta ? `${pageMeta.total} total` : '';
+
+    if (!filtered.length) {
+      tbody.innerHTML = `<tr><td colspan="7" class="casa-empty">${allTiles.length ? 'No tiles match your search on this page.' : 'No tiles in this catalog yet.'}</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = filtered.map((t) => {
+      const bg = t.imageUrl ? `background-image:url('${esc(CasaApi.resolveBackendImageUrl(t.imageUrl))}');` : '';
+      const editRow = editingId === t.id ? `
+        <tr><td colspan="7" style="padding:0;">
+          <div class="edit-form">
+            <div><label>Name</label><input type="text" id="ef-name" value="${esc(t.name)}"></div>
+            <div><label>Size</label><input type="text" id="ef-size" value="${esc(t.size || '')}"></div>
+            <div><label>Finish</label><input type="text" id="ef-finish" value="${esc(t.finish || '')}"></div>
+            <div><label>Type</label><select id="ef-type">${TILE_TYPES.map((tt) => `<option value="${tt}" ${tt === t.type ? 'selected' : ''}>${tt}</option>`).join('')}</select></div>
+            <div><label>Room</label><input type="text" id="ef-room" value="${esc(t.bestRoom || '')}"></div>
+            <div><label>Collection</label><input type="text" id="ef-collection" value="${esc(t.collection || '')}"></div>
+            <div><label>Product code</label><input type="text" id="ef-code" value="${esc(t.productCode || '')}"></div>
+            <div><label>Stock</label><select id="ef-stock"><option value="true" ${t.inStock ? 'selected' : ''}>In stock</option><option value="false" ${!t.inStock ? 'selected' : ''}>Out of stock</option></select></div>
+            <div class="edit-actions">
+              <button class="casa-btn secondary" data-cancel-edit>Cancel</button>
+              <button class="casa-btn" data-save-edit="${esc(t.id)}">Save</button>
+            </div>
+          </div>
+        </td></tr>` : '';
+
+      return `
+        <tr>
+          <td><div class="swatch-cell" style="${bg}"></div></td>
+          <td><div style="font-weight:600;font-size:13px;">${esc(t.name)}</div><div class="casa-hint">${esc(t.productCode || '—')} · ${esc(t.size || '—')}</div></td>
+          <td>${esc(t.finish || '—')}</td>
+          <td><span class="casa-pill neutral">${esc(t.type)}</span></td>
+          <td>${esc(t.bestRoom || '—')}</td>
+          <td>${t.inStock ? '<span class="casa-pill ok">In stock</span>' : '<span class="casa-pill err">Out of stock</span>'}</td>
+          <td class="actions-cell">
+            <a data-edit="${esc(t.id)}">Edit</a>
+            <a data-delete="${esc(t.id)}" class="danger">Delete</a>
+          </td>
+        </tr>${editRow}`;
+    }).join('');
+
+    document.querySelectorAll('[data-edit]').forEach((a) => a.addEventListener('click', () => { editingId = a.dataset.edit; renderTiles(); }));
+    document.querySelectorAll('[data-cancel-edit]').forEach((b) => b.addEventListener('click', () => { editingId = null; renderTiles(); }));
+    document.querySelectorAll('[data-save-edit]').forEach((b) => b.addEventListener('click', () => saveEdit(b.dataset.saveEdit)));
+    document.querySelectorAll('[data-delete]').forEach((a) => a.addEventListener('click', () => deleteTile(a.dataset.delete)));
+  }
+
+  async function saveEdit(tileId) {
+    const payload = {
+      name: document.getElementById('ef-name').value.trim(),
+      size: document.getElementById('ef-size').value.trim() || null,
+      finish: document.getElementById('ef-finish').value.trim() || null,
+      type: document.getElementById('ef-type').value,
+      bestRoom: document.getElementById('ef-room').value.trim() || null,
+      collection: document.getElementById('ef-collection').value.trim() || null,
+      productCode: document.getElementById('ef-code').value.trim() || null,
+      inStock: document.getElementById('ef-stock').value === 'true',
+    };
+    const notice = CasaNotify.processing('Saving tile…');
+    try {
+      const updated = await CasaApi.catalogExtractor.updateTile(tileId, payload);
+      allTiles = allTiles.map((t) => (t.id === tileId ? updated : t));
+      editingId = null;
+      notice.success('Tile updated.');
+      renderTiles();
+    } catch (err) {
+      notice.error(err.message || 'Could not update tile.');
+    }
+  }
+
+  async function deleteTile(tileId) {
+    if (!confirm('Delete this tile permanently?')) return;
+    const notice = CasaNotify.processing('Deleting tile…');
+    try {
+      await CasaApi.catalogExtractor.removeTile(tileId);
+      allTiles = allTiles.filter((t) => t.id !== tileId);
+      notice.success('Tile deleted.');
+      renderTiles();
+    } catch (err) {
+      notice.error(err.message || 'Could not delete tile.');
+    }
+  }
+
+  async function loadTiles() {
+    const tbody = document.getElementById('tileTbody');
+    if (!currentCatalogId) {
+      tbody.innerHTML = '<tr><td colspan="7" class="casa-empty">Select a catalog to load its tiles.</td></tr>';
+      document.getElementById('pager').style.display = 'none';
+      return;
+    }
+    tbody.innerHTML = '<tr><td colspan="7" class="casa-empty">Loading…</td></tr>';
+    try {
+      const { tiles, meta } = await CasaApi.catalogExtractor.tiles(currentCatalogId, { page: currentPage, limit: 50 });
+      allTiles = tiles;
+      pageMeta = meta;
+      renderTiles();
+      const pages = meta.totalPages || Math.max(1, Math.ceil((meta.total || tiles.length) / 50));
+      document.getElementById('pager').style.display = pages > 1 ? '' : 'none';
+      document.getElementById('pagerLabel').textContent = `Page ${currentPage} of ${pages}`;
+      document.getElementById('prevPage').disabled = currentPage <= 1;
+      document.getElementById('nextPage').disabled = currentPage >= pages;
+    } catch (err) {
+      tbody.innerHTML = `<tr><td colspan="7" class="casa-error-inline">${esc(err.message || 'Failed to load tiles.')}</td></tr>`;
+    }
+  }
+
+  (async () => {
+    await CasaShell.init({ current: 'admin-product-data.html', allowedRoles: ['ADMIN','OWNER'] });
+
+    await loadBrands();
+
+    document.getElementById('brandSelect').addEventListener('change', async (e) => {
+      currentCatalogId = '';
+      allTiles = [];
+      renderTiles();
+      await loadCatalogsForBrand(e.target.value);
+    });
+
+    document.getElementById('catalogSelect').addEventListener('change', (e) => {
+      currentCatalogId = e.target.value;
+      currentPage = 1;
+      editingId = null;
+      loadTiles();
+    });
+
+    document.getElementById('searchInput').addEventListener('input', (e) => {
+      searchText = e.target.value;
+      renderTiles();
+    });
+
+    document.getElementById('prevPage').addEventListener('click', () => { if (currentPage > 1) { currentPage--; loadTiles(); } });
+    document.getElementById('nextPage').addEventListener('click', () => { currentPage++; loadTiles(); });
+
+    if (currentCatalogId) {
+      document.getElementById('filterHint').textContent = 'Opened from Catalog Detail — pick the matching brand above to select this catalog.';
+      loadTiles();
+    }
+  })();
+</script>
+</body>
+</html>

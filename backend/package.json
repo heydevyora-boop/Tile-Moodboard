@@ -42,7 +42,8 @@
     "test:roles-danger-zone": "node test-scripts/roles_and_danger_zone_e2e.js",
     "test:staff-matrix-page": "node test-scripts/staff_matrix_wiring_test.js",
     "test:supabase-readiness": "node test-scripts/supabase_readiness_test.js",
-    "test:logging-system": "node test-scripts/logging_system_e2e.js"
+    "test:logging-system": "node test-scripts/logging_system_e2e.js",
+    "fix-product-codes": "ts-node prisma/fix-missing-product-codes.ts"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"

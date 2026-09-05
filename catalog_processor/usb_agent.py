@@ -1,7 +1,16 @@
 import ctypes
+import os
 import time
 
-from main import process_drive
+# main_step6_complete.py resolves .env and OUTPUT_DIR relative to the
+# current working directory, which is unpredictable when this agent is
+# launched by double-click, a desktop shortcut, or Task Scheduler (rather
+# than from a terminal already sitting in catalog_processor/). Anchoring
+# cwd to this script's own directory makes the agent work the same way
+# no matter how it's started.
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
+
+from main_step6_complete import process_drive
 
 
 DRIVE_REMOVABLE = 2

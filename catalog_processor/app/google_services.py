@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 from google.oauth2.credentials import Credentials
@@ -5,7 +6,32 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaFileUpload
+from tenacity import (
+    retry,
+    retry_if_exception,
+    stop_after_attempt,
+    wait_exponential,
+)
+
+
+# ============================================================
+# RETRY -- TRANSIENT GOOGLE SHEETS API ERRORS
+# ============================================================
+# The Sheets API occasionally responds 503 "service is currently
+# unavailable" or 429 rate-limited -- both clear up on their own
+# within seconds. A missing sheet tab or an auth/permission failure
+# is not retried, since retrying won't fix those.
+
+RETRYABLE_HTTP_STATUS_CODES = {429, 500, 502, 503, 504}
+
+
+def _is_retryable_sheets_error(error: BaseException) -> bool:
+    if not isinstance(error, HttpError):
+        return False
+    status = getattr(error.resp, "status", None)
+    return status in RETRYABLE_HTTP_STATUS_CODES
 
 
 # ============================================================
@@ -17,8 +43,21 @@ SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
 ]
 
-CREDENTIALS_FILE = "credentials.json"
-TOKEN_FILE = "token.json"
+# catalog_processor/ (the folder this app/ package lives inside) --
+# used as the default location so these files are found the same way
+# regardless of which directory a script is launched from. Override
+# with GOOGLE_OAUTH_CREDENTIALS_PATH / GOOGLE_OAUTH_TOKEN_PATH in .env
+# to point at a file kept somewhere else.
+_CATALOG_PROCESSOR_DIR = Path(__file__).resolve().parent.parent
+
+CREDENTIALS_FILE = os.getenv(
+    "GOOGLE_OAUTH_CREDENTIALS_PATH",
+    str(_CATALOG_PROCESSOR_DIR / "credentials.json"),
+)
+TOKEN_FILE = os.getenv(
+    "GOOGLE_OAUTH_TOKEN_PATH",
+    str(_CATALOG_PROCESSOR_DIR / "token.json"),
+)
 
 # Canonical product/master tab used by the catalog pipeline.
 PRODUCT_SHEET_NAME = "MASTER"
@@ -241,7 +280,21 @@ def get_credentials():
         and credentials.refresh_token
     ):
 
-        credentials.refresh(Request())
+        try:
+
+            credentials.refresh(Request())
+
+        except Exception:
+
+            # A revoked/expired refresh_token (e.g. a Testing-mode OAuth
+            # consent screen, whose refresh tokens expire after ~7 days,
+            # or the user revoking access in their Google Account) makes
+            # refresh() raise instead of returning invalid credentials.
+            # Previously this crashed the whole request instead of
+            # falling through to the first-time-authentication flow
+            # below, which is the only thing that can actually fix it —
+            # deleting token.json alone wasn't enough without this.
+            credentials = None
 
     # --------------------------------------------------------
     # First-time authentication
@@ -429,7 +482,10 @@ def get_sheet_metadata(
 
     return sheets_service.spreadsheets().get(
         spreadsheetId=spreadsheet_id,
-        fields="sheets(properties(sheetId,title,index))",
+        fields=(
+            "sheets(properties(sheetId,title,index,"
+            "gridProperties(rowCount,columnCount)))"
+        ),
     ).execute()
 
 
@@ -470,27 +526,92 @@ def ensure_master_workbook(
     Existing tabs and existing data are NOT deleted.
     """
 
-    existing_titles = get_existing_sheet_titles(
+    metadata = get_sheet_metadata(
         sheets_service,
         spreadsheet_id,
     )
 
+    existing = {
+        sheet["properties"]["title"]: sheet["properties"]
+        for sheet in metadata.get("sheets", [])
+    }
+
     requests = []
 
     # --------------------------------------------------------
-    # Create missing tabs
+    # Create missing tabs -- WIDE ENOUGH FOR THEIR HEADERS
+    #
+    # A tab created without gridProperties gets Google's default
+    # 26 columns. MASTER alone needs 47, so every later read/write
+    # that spans the full schema was rejected by the API with
+    # "exceeds grid limits" and no row ever landed. Creating each
+    # tab at its real width fixes that at the source.
     # --------------------------------------------------------
 
-    for title in MASTER_SHEETS:
+    for title, headers in MASTER_SHEETS.items():
 
-        if title not in existing_titles:
+        required_columns = max(
+            26,
+            len(headers),
+        )
+
+        if title not in existing:
 
             requests.append(
                 {
                     "addSheet": {
                         "properties": {
                             "title": title,
+                            "gridProperties": {
+                                "rowCount": 1000,
+                                "columnCount": (
+                                    required_columns
+                                ),
+                            },
                         }
+                    }
+                }
+            )
+
+            continue
+
+        # --------------------------------------------------------
+        # Widen a tab that already exists but is too narrow
+        # (created by an older version of this pipeline).
+        # Widening only adds empty columns -- no data is touched.
+        # --------------------------------------------------------
+
+        properties = existing[title]
+
+        current_columns = (
+            properties
+            .get("gridProperties", {})
+            .get("columnCount", 0)
+        )
+
+        if current_columns < required_columns:
+
+            print(
+                f"  Widening tab '{title}': "
+                f"{current_columns} -> {required_columns} columns"
+            )
+
+            requests.append(
+                {
+                    "updateSheetProperties": {
+                        "properties": {
+                            "sheetId": (
+                                properties["sheetId"]
+                            ),
+                            "gridProperties": {
+                                "columnCount": (
+                                    required_columns
+                                ),
+                            },
+                        },
+                        "fields": (
+                            "gridProperties.columnCount"
+                        ),
                     }
                 }
             )
@@ -656,7 +777,13 @@ def append_unique_row(
         .values()
         .append(
             spreadsheetId=spreadsheet_id,
-            range=f"'{sheet_name}'!A:ZZ",
+            # Anchor the append at A1 instead of a wide "A:ZZ" span.
+            # values.append resolves its range against the sheet's real
+            # grid, and a tab is only as wide as its columnCount (a new
+            # tab defaults to 26). "A:ZZ" asks for column 702, so every
+            # append was rejected with "exceeds grid limits" -- which is
+            # why no BRAND/CATALOG/MASTER row ever reached the sheet.
+            range=f"'{sheet_name}'!A1",
             valueInputOption="RAW",
             insertDataOption="INSERT_ROWS",
             body={
@@ -1104,7 +1231,7 @@ def append_row(
         .values()
         .append(
             spreadsheetId=spreadsheet_id,
-            range=f"'{PRODUCT_SHEET_NAME}'!A:ZZ",
+            range=f"'{PRODUCT_SHEET_NAME}'!A1",
             valueInputOption="RAW",
             insertDataOption="INSERT_ROWS",
             body={
@@ -1115,6 +1242,12 @@ def append_row(
         )
         .execute()
     )
+@retry(
+    retry=retry_if_exception(_is_retryable_sheets_error),
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=2, min=2, max=15),
+    reraise=True,
+)
 def read_sheet_records(
     sheets_service,
     spreadsheet_id,
@@ -1189,11 +1322,26 @@ def read_sheet_records(
     # BUILD RANGE
     # ------------------------------------------------------------
 
-    range_name = (
-        f"'{actual_sheet_name}'!"
-        f"{start_column}{start_row}:"
-        f"{end_column}{end_row}"
-    )
+    # end_row=None means "every populated row". An open-ended range
+    # ("'MASTER'!A1:ZZ") is how the Sheets API expresses that. A numeric
+    # bound silently truncates the tab instead of erroring, so any row
+    # past it is invisible to every lookup built on this data -- which
+    # reads as "the product does not exist" rather than as a read limit.
+    if end_row is None:
+
+        range_name = (
+            f"'{actual_sheet_name}'!"
+            f"{start_column}{start_row}:"
+            f"{end_column}"
+        )
+
+    else:
+
+        range_name = (
+            f"'{actual_sheet_name}'!"
+            f"{start_column}{start_row}:"
+            f"{end_column}{end_row}"
+        )
 
     print(
         f"Reading Google Sheet range: {range_name}"

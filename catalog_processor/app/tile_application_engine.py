@@ -26,8 +26,46 @@ from PIL import Image
 
 from google import genai
 from google.genai import types
+from tenacity import (
+    retry,
+    retry_if_exception,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from app.scene_image_resolver import resolve_scene_image
+
+
+# ============================================================
+# RETRY -- TRANSIENT GEMINI API ERRORS
+# ============================================================
+# Gemini's image model occasionally responds 503 "currently
+# experiencing high demand" or 429 rate-limited -- both clear up on
+# their own within seconds. Retrying those automatically avoids
+# surfacing a failure to the user for what's really a momentary dip
+# in Google's own capacity. Auth/validation errors (4xx other than
+# 429) are not retried, since retrying won't fix them.
+
+RETRYABLE_GEMINI_STATUS_CODES = {429, 500, 502, 503, 504}
+
+
+def _is_retryable_gemini_error(error: BaseException) -> bool:
+    code = getattr(error, "code", None)
+    return code in RETRYABLE_GEMINI_STATUS_CODES
+
+
+@retry(
+    retry=retry_if_exception(_is_retryable_gemini_error),
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=2, min=2, max=15),
+    reraise=True,
+)
+def _generate_content_with_retry(client, model, contents, config):
+    return client.models.generate_content(
+        model=model,
+        contents=contents,
+        config=config,
+    )
 
 
 # ============================================================
@@ -78,7 +116,28 @@ ALLOWED_SURFACES = {
     "WALL",
     "BACK_WALL",
     "SHOWER_WALL",
+    # The Scene & Angles frontend's Surface dropdown has always offered
+    # "Wall + Floor" (sent as surface="BOTH"), but this set never
+    # actually included it -- every "Wall + Floor" request 400'd with
+    # "Unsupported surface: BOTH" before it ever reached Gemini.
+    "BOTH",
 }
+
+# Human-readable description of each surface, used in the prompt text
+# below instead of the raw enum value -- "Apply the material ONLY to
+# the requested BOTH." doesn't parse as a coherent instruction, so BOTH
+# specifically needs its own wording naming both real surfaces.
+SURFACE_DESCRIPTIONS = {
+    "WALL": "wall",
+    "FLOOR": "floor",
+    "BACK_WALL": "back wall",
+    "SHOWER_WALL": "shower wall",
+    "BOTH": "wall AND floor surfaces (apply the same tile to both)",
+}
+
+
+def describe_surface(surface: str) -> str:
+    return SURFACE_DESCRIPTIONS.get(surface, surface.lower())
 
 
 # ============================================================
@@ -250,13 +309,64 @@ def _get_mime_type(
 # PROMPT
 # ============================================================
 
+# Camera-angle instructions for Scene & Angles. Keyed by the exact angle
+# labels the frontend sends (frontend/scene-angles.html's ANGLES list),
+# lowercased. This is what actually differentiates "Front" from "Left"
+# from "Shower close-up" -- without it, every angle produced an identical
+# prompt (and therefore effectively the same image) even after angle
+# started reaching this far, because nothing here described what a
+# different camera position should look like.
+ANGLE_CAMERA_INSTRUCTIONS = {
+    "front": (
+        "Frame the room in a straight-on establishing shot facing into "
+        "the room, as if standing at the entrance/doorway looking "
+        "forward -- the default reference view."
+    ),
+    "left": (
+        "Rotate the camera to look toward the LEFT side of the room "
+        "from roughly the same standing position as the front view, "
+        "revealing whatever is on that side (e.g. the left wall, the "
+        "vanity end, adjacent fixtures)."
+    ),
+    "right": (
+        "Rotate the camera to look toward the RIGHT side of the room "
+        "from roughly the same standing position as the front view, "
+        "revealing whatever is on that side."
+    ),
+    "wide": (
+        "Pull back to a wider-angle establishing shot with a larger "
+        "field of view, showing more of the room at once than a "
+        "standard front view."
+    ),
+    "shower close-up": (
+        "Move the camera close to the shower enclosure for a tight, "
+        "detail-focused shot of the shower area, its fixtures, and the "
+        "surrounding surface."
+    ),
+    "basin close-up": (
+        "Move the camera close to the basin/vanity area for a tight, "
+        "detail-focused shot of the basin, countertop, and the "
+        "surrounding surface."
+    ),
+    "wc area": (
+        "Move and reframe the camera so the WC/toilet area of the room "
+        "is clearly and directly in frame."
+    ),
+}
+
+
 def build_tile_application_prompt(
     surface: str,
     tile_product_id: Optional[str] = None,
     tile_name: Optional[str] = None,
+    angle: Optional[str] = None,
 ) -> str:
 
     surface = validate_surface(
+        surface
+    )
+
+    surface_description = describe_surface(
         surface
     )
 
@@ -276,20 +386,57 @@ def build_tile_application_prompt(
             f"{tile_name}\n"
         )
 
+    # Angle handling is intentionally an either/or against the room's
+    # camera: most callers (single-shot generation elsewhere in the app)
+    # never pass an angle and get the original "camera stays exactly as
+    # supplied" behavior. Scene & Angles passes one, and for that request
+    # the camera is exactly what's SUPPOSED to move -- the DO NOT list
+    # below normally forbids that, so it has to be lifted specifically
+    # (and only) when an angle was actually requested, or this section and
+    # that one would tell Gemini to do contradictory things.
+    normalized_angle = str(angle or "").strip()
+
+    if normalized_angle:
+
+        angle_instruction = ANGLE_CAMERA_INSTRUCTIONS.get(
+            normalized_angle.lower(),
+            (
+                f"Adjust the camera position/framing to match a "
+                f"\"{normalized_angle}\" view of this room."
+            ),
+        )
+
+        camera_section = f"""
+CAMERA ANGLE FOR THIS REQUEST: "{normalized_angle}"
+
+{angle_instruction}
+
+This is the ONE thing about the room that should change from a
+default/front view. Everything else about the room -- architecture,
+room dimensions, doors, windows, sanitary fixtures, vanity, mirrors,
+lighting, existing objects, and the tile/material itself -- MUST stay
+exactly the same as it would for any other angle of this same room.
+"""
+        camera_do_not_line = ""
+
+    else:
+
+        camera_section = ""
+        camera_do_not_line = "- change camera\n"
+
     return f"""
 You are a professional architectural visualization engine.
 
 TASK:
 Apply the EXACT tile shown in the supplied tile reference image
-to the {surface} of the supplied bathroom/interior image.
+to the {surface_description} of the supplied bathroom/interior image.
 
 {identity}
-
+{camera_section}
 REFERENCE PRIORITY:
 
 1. The bathroom image is the source of truth for:
    - architecture
-   - camera position
    - room dimensions
    - doors
    - windows
@@ -319,8 +466,7 @@ DO NOT:
 - change shower
 - change mirrors
 - change lighting
-- change camera
-- change room proportions
+{camera_do_not_line}- change room proportions
 - add furniture
 - add decoration
 - remove objects
@@ -337,7 +483,7 @@ TILE APPLICATION RULES:
 8. Match shadows.
 9. Match reflections.
 10. Generate realistic grout where appropriate.
-11. Apply the material ONLY to the requested {surface}.
+11. Apply the material ONLY to the requested {surface_description}.
 12. Do not apply it to unrelated surfaces.
 
 OUTPUT:
@@ -347,6 +493,10 @@ Produce one photorealistic finished bathroom visualization.
 The result must look like a professionally photographed
 bathroom with the selected tile physically installed,
 not like a pasted image or flat texture.
+
+It must read as an actual photograph of a real, physically
+built room — not an illustration, rendering, drawing, diagram,
+or CGI-looking image.
 """
 
 
@@ -497,6 +647,7 @@ def apply_tile_to_scene(
     output_path: Optional[Path] = None,
     tile_product_id: Optional[str] = None,
     tile_name: Optional[str] = None,
+    angle: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Apply selected tile to bathroom/interior image using Gemini.
@@ -552,6 +703,7 @@ def apply_tile_to_scene(
         surface=surface,
         tile_product_id=tile_product_id,
         tile_name=tile_name,
+        angle=angle,
     )
 
     # --------------------------------------------------------
@@ -612,10 +764,11 @@ def apply_tile_to_scene(
     try:
 
         response = (
-            client.models.generate_content(
-                model=IMAGE_MODEL,
-                contents=contents,
-                config=types.GenerateContentConfig(
+            _generate_content_with_retry(
+                client,
+                IMAGE_MODEL,
+                contents,
+                types.GenerateContentConfig(
                     response_modalities=[
                         "IMAGE"
                     ],
@@ -682,4 +835,6 @@ def apply_tile_to_scene(
         ),
 
         "model": IMAGE_MODEL,
+
+        "angle": angle,
     }

@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Casa de Aurum — System Logs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/shell.css">
+<style>
+  .status-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
+  @media (max-width:820px){.status-grid{grid-template-columns:1fr 1fr;}}
+  @media (max-width:520px){.status-grid{grid-template-columns:1fr;}}
+  .status-card{border:1px solid var(--line);border-radius:5px;padding:13px 14px;}
+  .status-card .top{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
+  .status-card .t{font-size:13px;font-weight:700;color:var(--ink);}
+  .status-card .val{font-family:var(--mono);font-size:16px;font-weight:500;color:var(--ink);line-height:1;margin-bottom:4px;}
+  .status-card .sub{font-family:var(--mono);font-size:10.5px;color:var(--stone-600);}
+  .filters{display:flex;flex-wrap:wrap;gap:7px;}
+  table.log{width:100%;border-collapse:collapse;font-size:12.5px;font-family:var(--mono);}
+  table.log th{text-align:left;font-weight:500;color:var(--stone-600);text-transform:uppercase;font-size:10px;letter-spacing:.06em;padding:9px 12px;border-bottom:1px solid var(--line);}
+  table.log td{padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:middle;}
+  table.log tr:last-child td{border-bottom:none;}
+  .jobname{font-weight:600;color:var(--ink);}
+  .jobname .sub{display:block;font-weight:400;font-size:11px;color:var(--stone-600);font-family:var(--mono);margin-top:2px;}
+</style>
+</head>
+<body>
+<div id="casa-main-content">
+  <div class="casa-pageheader">
+    <div>
+      <h1>System Logs &amp; Monitoring</h1>
+      <p>Every run, generation, export and sign-in across the toolkit, in one place.</p>
+    </div>
+  </div>
+
+  <div id="restrictedBanner" class="casa-restricted" style="display:none;">Owner access required to view system logs.</div>
+
+  <div class="casa-panel" id="statusPanel">
+    <div class="panel-head"><h3>Integration Status<span class="hint">Real Gemini / Drive connection checks</span></h3></div>
+    <div class="panel-body">
+      <div class="status-grid" id="statusGrid"><div class="casa-empty">Loading…</div></div>
+    </div>
+  </div>
+
+  <div class="casa-panel">
+    <div class="panel-head">
+      <h3>Activity Log<span class="hint" id="logTypeHint">User Activity</span></h3>
+    </div>
+    <div class="panel-body" style="padding-bottom:12px;">
+      <div class="filters" id="logTypeRow">
+        <div class="casa-chip on" data-logtype="activity">User Activity</div>
+        <div class="casa-chip" data-logtype="login">Login History</div>
+        <div class="casa-chip" data-logtype="errors">Errors</div>
+        <div class="casa-chip" data-logtype="catalog">Catalog</div>
+        <div class="casa-chip" data-logtype="moodboards">Mood Boards</div>
+        <div class="casa-chip" data-logtype="printboards">Print Boards</div>
+      </div>
+      <div class="filters" id="filterRow" style="margin-top:8px;">
+        <div class="casa-chip on" data-filter="">All</div>
+      </div>
+    </div>
+    <div style="overflow-x:auto;">
+      <table class="log" id="logTable">
+        <thead id="logTableHead"><tr><th>Time</th><th>Action</th><th>Entity</th><th>Actor</th></tr></thead>
+        <tbody id="logTableBody"><tr><td colspan="4" class="casa-empty">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="casa-panel" style="margin-bottom:0;">
+    <div class="panel-head"><h3>Background Queues</h3></div>
+    <div style="overflow-x:auto;">
+      <table class="log" id="queueTable">
+        <thead><tr><th>Queue</th><th>Pending</th><th>Processing</th><th>Completed</th><th>Failed</th></tr></thead>
+        <tbody id="queueStatsBody"><tr><td colspan="5" class="casa-empty">Loading…</td></tr></tbody>
+      </table>
+    </div>
+    <div style="overflow-x:auto;">
+      <table class="log" id="failedJobsTable" style="display:none;">
+        <thead><tr><th>Failed Job</th><th>Error</th><th>Attempts</th><th></th></tr></thead>
+        <tbody id="failedJobsBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script src="assets/api-client.js"></script>
+<script src="assets/notifications.js"></script>
+<script src="assets/shell.js"></script>
+<script>
+  function esc(s) { return CasaShell.escapeHtml(s); }
+
+  let currentLogType = 'activity';
+  let currentEntityFilter = '';
+
+  const LOG_TYPE_LABEL = { activity: 'User Activity', login: 'Login History', errors: 'Errors', catalog: 'Catalog', moodboards: 'Mood Boards', printboards: 'Print Boards' };
+  const LOG_TYPE_HEAD = {
+    activity: ['Time', 'Action', 'Entity', 'Actor'],
+    login: ['Time', 'Email', 'Result', 'IP'],
+    errors: ['Time', 'Status', 'Message', 'Path'],
+    catalog: ['Uploaded', 'File', 'Status', 'Result'],
+    moodboards: ['Time', 'Action', 'Entity', 'Actor'],
+    printboards: ['Time', 'Action', 'Entity', 'Actor'],
+  };
+
+  function setLogTableHead(type) {
+    document.getElementById('logTableHead').innerHTML = `<tr>${LOG_TYPE_HEAD[type].map((h) => `<th>${h}</th>`).join('')}</tr>`;
+  }
+
+  function formatActivityRow(log) {
+    const time = new Date(log.createdAt).toLocaleString();
+    const actor = log.user ? log.user.name : 'System';
+    const entity = log.entityType ? `${log.entityType}${log.entityId ? ` · ${log.entityId.slice(0, 8)}` : ''}` : '—';
+    return `<tr><td>${time}</td><td>${esc(log.action)}</td><td>${esc(entity)}</td><td>${esc(actor)}</td></tr>`;
+  }
+  function formatLoginRow(a) {
+    const time = new Date(a.createdAt).toLocaleString();
+    const result = a.success ? `<span class="casa-pill ok">Success</span>` : `<span class="casa-pill err">${esc(a.failureReason || 'Failed')}</span>`;
+    return `<tr><td>${time}</td><td>${esc(a.email)}</td><td>${result}</td><td>${esc(a.ipAddress) || '—'}</td></tr>`;
+  }
+  function formatErrorRow(e) {
+    const time = new Date(e.createdAt).toLocaleString();
+    return `<tr><td>${time}</td><td><span class="casa-pill err">${esc(e.statusCode)}</span></td><td>${esc(e.message)}</td><td>${esc(e.method)} ${esc(e.path)}</td></tr>`;
+  }
+  function formatCatalogRow(c) {
+    const time = new Date(c.createdAt).toLocaleString();
+    const cls = c.status === 'COMPLETED' ? 'ok' : c.status === 'FAILED' ? 'err' : 'warn';
+    const result = c.status === 'FAILED' ? esc(c.errorMessage || 'Failed') : `${c.tilesExtracted || 0} tiles extracted`;
+    return `<tr><td>${time}</td><td>${esc(c.fileName)}</td><td><span class="casa-pill ${cls}">${c.status}</span></td><td>${result}</td></tr>`;
+  }
+
+  async function loadLogs() {
+    const tbody = document.getElementById('logTableBody');
+    const colspan = LOG_TYPE_HEAD[currentLogType].length;
+    tbody.innerHTML = `<tr><td colspan="${colspan}" class="casa-empty">Loading…</td></tr>`;
+    try {
+      if (currentLogType === 'activity') {
+        const params = { limit: 100 };
+        if (currentEntityFilter) params.entityType = currentEntityFilter;
+        const { logs } = await CasaApi.admin.logs(params);
+        tbody.innerHTML = logs.length ? logs.map(formatActivityRow).join('') : `<tr><td colspan="${colspan}" class="casa-empty">No activity recorded yet.</td></tr>`;
+      } else if (currentLogType === 'login') {
+        const { attempts } = await CasaApi.admin.loginHistory({ limit: 100 });
+        tbody.innerHTML = attempts.length ? attempts.map(formatLoginRow).join('') : `<tr><td colspan="${colspan}" class="casa-empty">No login attempts recorded yet.</td></tr>`;
+      } else if (currentLogType === 'errors') {
+        const { errors } = await CasaApi.admin.errorLogs({ limit: 100 });
+        tbody.innerHTML = errors.length ? errors.map(formatErrorRow).join('') : `<tr><td colspan="${colspan}" class="casa-empty">No server errors recorded — good sign.</td></tr>`;
+      } else if (currentLogType === 'catalog') {
+        const { catalogs } = await CasaApi.admin.catalogLogs({ limit: 100 });
+        tbody.innerHTML = catalogs.length ? catalogs.map(formatCatalogRow).join('') : `<tr><td colspan="${colspan}" class="casa-empty">No catalog runs yet.</td></tr>`;
+      } else if (currentLogType === 'moodboards') {
+        const { logs } = await CasaApi.admin.moodBoardLogs({ limit: 100 });
+        tbody.innerHTML = logs.length ? logs.map(formatActivityRow).join('') : `<tr><td colspan="${colspan}" class="casa-empty">No mood board activity yet.</td></tr>`;
+      } else if (currentLogType === 'printboards') {
+        const { logs } = await CasaApi.admin.printBoardLogs({ limit: 100 });
+        tbody.innerHTML = logs.length ? logs.map(formatActivityRow).join('') : `<tr><td colspan="${colspan}" class="casa-empty">No print board activity yet.</td></tr>`;
+      }
+    } catch (err) {
+      tbody.innerHTML = `<tr><td colspan="${colspan}" class="casa-error-inline">${esc(err.message || 'Failed to load logs.')}</td></tr>`;
+    }
+  }
+
+  function switchLogType(type) {
+    currentLogType = type;
+    document.getElementById('logTypeHint').textContent = LOG_TYPE_LABEL[type];
+    setLogTableHead(type);
+    document.getElementById('filterRow').style.display = type === 'activity' ? 'flex' : 'none';
+    loadLogs();
+  }
+
+  async function buildFilterChips() {
+    const row = document.getElementById('filterRow');
+    try {
+      const actions = await CasaApi.admin.logActions();
+      const entityTypes = [...new Set(actions.map((a) => a.split('.')[0]))].filter(Boolean);
+      for (const type of entityTypes.slice(0, 8)) {
+        const chip = document.createElement('div');
+        chip.className = 'casa-chip';
+        chip.dataset.filter = type;
+        chip.textContent = type.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+        row.appendChild(chip);
+      }
+      row.querySelectorAll('.casa-chip').forEach((chip) => {
+        chip.addEventListener('click', () => {
+          row.querySelectorAll('.casa-chip').forEach((c) => c.classList.remove('on'));
+          chip.classList.add('on');
+          currentEntityFilter = chip.dataset.filter || '';
+          loadLogs();
+        });
+      });
+    } catch { /* the "All" chip still works without the extras */ }
+  }
+
+  async function loadIntegrationStatus() {
+    const grid = document.getElementById('statusGrid');
+    const cards = [];
+    try {
+      const gemini = await CasaApi.geminiStatus();
+      cards.push({ t: 'Gemini API', ok: !!gemini.connected, val: gemini.connected ? 'Online' : 'Offline', sub: gemini.model || gemini.message || '' });
+    } catch { cards.push({ t: 'Gemini API', ok: false, val: 'Unavailable', sub: '' }); }
+    try {
+      const drive = await CasaApi.driveStatus();
+      cards.push({ t: 'Google Drive', ok: !!drive.connected, val: drive.connected ? 'Online' : 'Offline', sub: drive.message || '' });
+    } catch { cards.push({ t: 'Google Drive', ok: false, val: 'Unavailable', sub: '' }); }
+    try {
+      const overview = await CasaApi.dashboard.overview();
+      cards.push({ t: 'Database', ok: overview.system.db === 'up', val: overview.system.db === 'up' ? 'Online' : 'Down', sub: overview.system.env });
+    } catch { cards.push({ t: 'Database', ok: false, val: 'Unavailable', sub: '' }); }
+
+    grid.innerHTML = cards.map((c) => `
+      <div class="status-card">
+        <div class="top"><span class="t">${esc(c.t)}</span><span class="casa-dot ${c.ok ? 'ok' : 'err'}"></span></div>
+        <div class="val">${esc(c.val)}</div>
+        <div class="sub">${esc(c.sub)}</div>
+      </div>`).join('');
+  }
+
+  const QUEUE_LABEL = { catalog: 'Catalog Processing', imageProcessing: 'Image Processing', export: 'Export' };
+
+  function renderQueueStats(data) {
+    const rows = [
+      { label: QUEUE_LABEL.catalog, ...data.catalog.counts },
+      { label: QUEUE_LABEL.imageProcessing, ...data.imageProcessing },
+      { label: QUEUE_LABEL.export, ...data.export },
+    ];
+    document.getElementById('queueStatsBody').innerHTML = rows.map((r) => `
+      <tr>
+        <td><div class="jobname">${r.label}</div></td>
+        <td>${r.PENDING}</td><td>${r.PROCESSING}</td><td>${r.COMPLETED}</td>
+        <td style="${r.FAILED > 0 ? 'color:var(--clay);' : ''}">${r.FAILED}</td>
+      </tr>`).join('');
+  }
+
+  async function loadFailedJobs() {
+    const table = document.getElementById('failedJobsTable');
+    const tbody = document.getElementById('failedJobsBody');
+    try {
+      const [imgResult, exportResult] = await Promise.all([
+        CasaApi.admin.queueJobs({ type: 'IMAGE_PROCESSING', status: 'FAILED', limit: 20 }),
+        CasaApi.admin.queueJobs({ type: 'EXPORT', status: 'FAILED', limit: 20 }),
+      ]);
+      const failed = [...imgResult.jobs, ...exportResult.jobs];
+      if (!failed.length) { table.style.display = 'none'; return; }
+      table.style.display = '';
+      tbody.innerHTML = failed.map((j) => `
+        <tr data-job-id="${j.id}">
+          <td><div class="jobname">${j.type === 'IMAGE_PROCESSING' ? 'Image Processing' : 'Export'}<span class="sub">${esc(j.id)}</span></div></td>
+          <td style="color:var(--clay);font-family:var(--sans);">${esc(j.error || 'Unknown error')}</td>
+          <td>${j.attempts}/${j.maxAttempts}</td>
+          <td><a class="retry-job" data-id="${j.id}" style="cursor:pointer;">Retry</a></td>
+        </tr>`).join('');
+      tbody.querySelectorAll('.retry-job').forEach((el) => el.addEventListener('click', () => retryFailedJob(el.dataset.id)));
+    } catch { table.style.display = 'none'; }
+  }
+
+  async function retryFailedJob(id) {
+    try {
+      await CasaApi.admin.retryJob(id);
+      CasaNotify.success('Job re-queued for retry.');
+      await loadQueues();
+    } catch (err) {
+      CasaNotify.error(err.message || 'Failed to retry job.');
+    }
+  }
+
+  async function loadQueues() {
+    try {
+      const data = await CasaApi.admin.queueStats();
+      renderQueueStats(data);
+      await loadFailedJobs();
+    } catch (err) {
+      document.getElementById('queueStatsBody').innerHTML = `<tr><td colspan="5" class="casa-error-inline">${esc(err.message || 'Failed to load queue stats.')}</td></tr>`;
+    }
+  }
+
+  (async () => {
+    const currentUser = await CasaShell.init({ current: 'admin-logs.html', allowedRoles: ['ADMIN','OWNER'] });
+
+    if (currentUser.role !== 'OWNER') {
+      document.getElementById('restrictedBanner').style.display = 'block';
+      document.getElementById('statusPanel').style.display = 'none';
+      document.getElementById('logTableBody').innerHTML = '<tr><td colspan="4" class="casa-empty">Owner access required.</td></tr>';
+      document.getElementById('queueStatsBody').innerHTML = '<tr><td colspan="5" class="casa-empty">Owner access required.</td></tr>';
+      return;
+    }
+
+    // Attached here, after CasaShell.init() has rebuilt the DOM — binding
+    // before that point would leave the real on-screen chips inert.
+    document.getElementById('logTypeRow').querySelectorAll('.casa-chip').forEach((chip) => {
+      chip.addEventListener('click', () => {
+        document.getElementById('logTypeRow').querySelectorAll('.casa-chip').forEach((c) => c.classList.remove('on'));
+        chip.classList.add('on');
+        switchLogType(chip.dataset.logtype);
+      });
+    });
+
+    await loadIntegrationStatus();
+    await buildFilterChips();
+    await loadLogs();
+    await loadQueues();
+  })();
+</script>
+</body>
+</html>

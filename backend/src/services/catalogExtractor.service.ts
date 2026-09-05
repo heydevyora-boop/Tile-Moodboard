@@ -28,6 +28,7 @@ interface ExtractedTile {
   bestRoom: string | null;
   productCode: string | null;
   sourcePage: number;
+  imageBbox: [number, number, number, number] | null;
   imageStorage: 'local' | 'drive';
   imageUrl: string | null;
   imageLocalPath: string | null;
@@ -101,6 +102,12 @@ export function parseProgressLine(line: string): { totalPages?: number; currentP
 function toPublicImagePath(localPath: string): string {
   const relative = path.relative(config.catalog.extractedDir, localPath).split(path.sep).join('/');
   return `/static/extracted/${relative}`;
+}
+
+/** The image URL a freshly extracted tile should be stored with, if it produced one at all. */
+function resolveExtractedImage(t: ExtractedTile): string | undefined {
+  if (t.imageStorage === 'drive') return t.imageUrl ?? undefined;
+  return t.imageLocalPath ? toPublicImagePath(t.imageLocalPath) : undefined;
 }
 
 export async function uploadAndCreateCatalog(file: Express.Multer.File, input: UploadCatalogInput, userId: string, req?: Request) {
@@ -283,27 +290,68 @@ async function runExtractionInner(catalogId: string, catalog: Awaited<ReturnType
     : [];
   const existingCodeSet = new Set(existingByCode.map((t) => t.productCode));
 
-  const namesSizesInBatch = extractedTiles.filter((t) => !t.productCode).map((t) => `${t.name}::${t.size ?? ''}`);
-  const existingByNameSize = namesSizesInBatch.length
-    ? await prisma.tile.findMany({ where: { brandId: catalog.brandId, name: { in: extractedTiles.map((t) => t.name) } }, select: { name: true, size: true } })
+  // Also fetched by name (regardless of whether this extraction found a
+  // product code), keyed by name+size, and carrying each existing tile's
+  // id + productCode. Two things use this: the name+size duplicate check
+  // below for code-less extractions, and the placeholder-correction pass
+  // below it for tiles that were previously stuck with a repair-assigned
+  // `MANUAL-` productCode (see fix-missing-product-codes.ts) — re-running
+  // extraction on the same catalog is how those get their real productCode
+  // and image filled in, instead of leaving the broken placeholder tile in
+  // place while a separate, correct duplicate is created next to it.
+  const existingByName = extractedTiles.length
+    ? await prisma.tile.findMany({
+        where: { brandId: catalog.brandId, name: { in: extractedTiles.map((t) => t.name) } },
+        select: { id: true, name: true, size: true, productCode: true, imageUrl: true },
+      })
     : [];
-  const existingNameSizeSet = new Set(existingByNameSize.map((t) => `${t.name}::${t.size ?? ''}`));
+  const existingByNameSizeMap = new Map(existingByName.map((t) => [`${t.name}::${t.size ?? ''}`, t]));
+  const existingNameSizeSet = new Set(existingByName.map((t) => `${t.name}::${t.size ?? ''}`));
 
   const seenInThisBatch = new Set<string>();
   let duplicateTilesSkipped = 0;
-  const tilesToInsert = extractedTiles.filter((t) => {
-    const key = t.productCode ? `code:${t.productCode}` : `namesize:${t.name}::${t.size ?? ''}`;
+  const tilesToInsert: ExtractedTile[] = [];
+  const tilesToCorrect: { id: string; tile: ExtractedTile; reason: string }[] = [];
 
-    const isDuplicateOfExisting = t.productCode ? existingCodeSet.has(t.productCode) : existingNameSizeSet.has(`${t.name}::${t.size ?? ''}`);
+  for (const t of extractedTiles) {
+    const key = t.productCode ? `code:${t.productCode}` : `namesize:${t.name}::${t.size ?? ''}`;
     const isDuplicateWithinBatch = seenInThisBatch.has(key);
 
-    if (isDuplicateOfExisting || isDuplicateWithinBatch) {
+    if (isDuplicateWithinBatch) {
       duplicateTilesSkipped += 1;
-      return false;
+      continue;
     }
+
+    const nameSizeMatch = existingByNameSizeMap.get(`${t.name}::${t.size ?? ''}`);
+    const hasPlaceholderCode = !!t.productCode && !!nameSizeMatch?.productCode?.startsWith('MANUAL-');
+    // A tile that already carries a real product code but no image can
+    // otherwise never be repaired: it matches an existing row, so it's
+    // skipped as a duplicate below and its empty imageUrl stays empty no
+    // matter how many times extraction is re-run. Visualization then has
+    // no real tile photo to send Gemini and falls back to a fabricated
+    // placeholder swatch.
+    const isMissingImage = !!nameSizeMatch && !nameSizeMatch.imageUrl && !!resolveExtractedImage(t);
+    const isPlaceholderToCorrect = hasPlaceholderCode || isMissingImage;
+
+    if (isPlaceholderToCorrect && nameSizeMatch) {
+      tilesToCorrect.push({
+        id: nameSizeMatch.id,
+        tile: t,
+        reason: hasPlaceholderCode ? 'placeholder_product_code_replaced' : 'missing_image_filled_in',
+      });
+      seenInThisBatch.add(key);
+      continue;
+    }
+
+    const isDuplicateOfExisting = t.productCode ? existingCodeSet.has(t.productCode) : existingNameSizeSet.has(`${t.name}::${t.size ?? ''}`);
+    if (isDuplicateOfExisting) {
+      duplicateTilesSkipped += 1;
+      continue;
+    }
+
     seenInThisBatch.add(key);
-    return true;
-  });
+    tilesToInsert.push(t);
+  }
 
   if (tilesToInsert.length > 0) {
     await prisma.tile.createMany({
@@ -317,8 +365,35 @@ async function runExtractionInner(catalogId: string, catalog: Awaited<ReturnType
         colorTone: t.colorTone ?? undefined,
         bestRoom: t.bestRoom ?? undefined,
         productCode: t.productCode ?? undefined,
-        imageUrl: t.imageStorage === 'drive' ? (t.imageUrl ?? undefined) : t.imageLocalPath ? toPublicImagePath(t.imageLocalPath) : undefined,
+        imageUrl: resolveExtractedImage(t),
+        sourcePage: t.sourcePage ?? undefined,
+        imageBbox: t.imageBbox ?? undefined,
       })),
+    });
+  }
+
+  for (const { id, tile: t, reason } of tilesToCorrect) {
+    await prisma.tile.update({
+      where: { id },
+      data: {
+        catalogId,
+        size: t.size ?? undefined,
+        finish: t.finish ?? undefined,
+        type: VALID_TILE_TYPES.has(t.type) ? (t.type as never) : undefined,
+        colorTone: t.colorTone ?? undefined,
+        bestRoom: t.bestRoom ?? undefined,
+        productCode: t.productCode ?? undefined,
+        imageUrl: resolveExtractedImage(t),
+        sourcePage: t.sourcePage ?? undefined,
+        imageBbox: t.imageBbox ?? undefined,
+      },
+    });
+    await logActivity({
+      userId: catalog.uploadedById,
+      action: 'tile.corrected',
+      entityType: 'Tile',
+      entityId: id,
+      metadata: { reason, productCode: t.productCode },
     });
   }
 
@@ -343,6 +418,7 @@ async function runExtractionInner(catalogId: string, catalog: Awaited<ReturnType
     entityId: catalogId,
     metadata: {
       tilesExtracted: tilesToInsert.length,
+      tilesCorrected: tilesToCorrect.length,
       duplicateImagesSkipped: result.duplicateImagesSkipped ?? 0,
       duplicateTilesSkipped,
       warnings: result.warnings ?? [],

@@ -137,8 +137,7 @@ def _normalize_master_record(record):
        -> Product ID = the original reference when empty
        -> Record ID = the original reference when empty
 
-    4. Record Type empty but Product ID contains a recognized
-       product identifier/reference
+    4. Record Type empty but Product ID present
        -> Record Type = PRODUCT
        -> Record ID = Product ID when Record ID is empty
 
@@ -232,12 +231,19 @@ def _normalize_master_record(record):
     # populated correctly.
     # --------------------------------------------------------
 
+    # The MASTER tab is the product tab (google_services.PRODUCT_SHEET_NAME
+    # == "MASTER") and its header row carries no Record Type / Record ID
+    # column at all, so EVERY row append_product() writes arrives here with
+    # an empty Record Type. Requiring the Product ID to additionally look
+    # like "PROD-XXXX" or "...-P0007-I002" dropped every pen-drive-extracted
+    # product on the floor, because make_product_id() builds a third shape:
+    # "<BRAND>-<CATALOG>-<INDEX>" (e.g. URVI-...-SUBWAY-TILES-01022024-0001).
+    # A non-empty Product ID on a row that declares no Record Type is a
+    # product row whatever shape that ID takes. Rows that DO declare a
+    # Record Type are still left exactly as they are by the guard below.
     if (
         not record_type
-        and (
-            _is_product_id(product_id)
-            or _is_product_record_reference(product_id)
-        )
+        and product_id
     ):
 
         normalized["Record Type"] = "PRODUCT"
@@ -367,12 +373,18 @@ def load_master_records(
     The MASTER records are normalized before being returned.
     """
 
+    # No row bound: MASTER is the source of truth for product lookup, and
+    # it grows by one row per extracted product image. A fixed cap of 5000
+    # meant that once enough catalogs had been extracted, every later
+    # product became unfindable -- generate_product_visualization reports
+    # that as "does not exist in MASTER", indistinguishable from a product
+    # that was genuinely never written.
     records = load_sheet(
         spreadsheet_id=spreadsheet_id,
         sheet_name=sheet_name,
         start_column="A",
         end_column="ZZ",
-        end_row=5000,
+        end_row=None,
     )
 
     return _normalize_master_records(records)

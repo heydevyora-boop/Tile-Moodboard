@@ -1,5 +1,23 @@
-
+# Environment files — never commit secrets
 backend/.env
+catalog_processor/.env
 .env
 
+# Backend runtime files
 backend/logs/
+backend/uploads/
+
+# Python virtual environments — never committed
+backend/python/.venv/
+backend/python/__pycache__/
+catalog_processor/.venv/
+catalog_processor/__pycache__/
+
+# Node modules — never committed
+# These were previously tracked by mistake and caused extremely slow
+# Git operations on Windows because of deep paths / MAX_PATH issues.
+node_modules/
+**/node_modules/
+
+# Google service-account credentials — never commit
+backend/secrets/

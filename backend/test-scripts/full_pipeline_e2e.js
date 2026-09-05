@@ -52,6 +52,29 @@ async function main() {
   };
   prisma.user.update = async ({ where, data }) => { const row = users.get(where.id); Object.assign(row, data); return row; };
 
+  // loginAttempt is real-DB-backed and unmocked in the version of this
+  // script written before Module 25 (login attempt tracking) landed —
+  // recordLoginAttempt() hit the real login_attempts table with a userId
+  // FK pointing at an in-memory-only user (e.g. "user-1") that was never
+  // actually inserted into the real users table, so every login attempt
+  // failed its FK check.
+  const loginAttempts = new Map();
+  let loginAttemptId = 0;
+  prisma.loginAttempt.create = async ({ data }) => { const id = `la-${++loginAttemptId}`; const row = { id, createdAt: new Date(), ...data }; loginAttempts.set(id, row); return row; };
+  prisma.loginAttempt.findMany = async ({ where = {}, include, skip = 0, take } = {}) => {
+    let list = [...loginAttempts.values()].sort((a, b) => b.createdAt - a.createdAt);
+    if (where.email) list = list.filter((a) => a.email.includes(where.email.contains ?? where.email));
+    if (where.userId) list = list.filter((a) => a.userId === where.userId);
+    if (where.success !== undefined) list = list.filter((a) => a.success === where.success);
+    list = list.slice(skip, take ? skip + take : undefined);
+    return include?.user ? list.map((a) => ({ ...a, user: a.userId ? withRole(users.get(a.userId)) : null })) : list;
+  };
+  prisma.loginAttempt.count = async ({ where = {} } = {}) => {
+    let list = [...loginAttempts.values()];
+    if (where.success !== undefined) list = list.filter((a) => a.success === where.success);
+    return list.length;
+  };
+
   const brands = new Map();
   brands.set('b-1', { id: 'b-1', name: 'Somany' });
   prisma.brand.findFirst = async ({ where }) => [...brands.values()].find((b) => b.name.toLowerCase() === (where?.name?.equals || '').toLowerCase()) || (where?.id ? brands.get(where.id) : null);
@@ -106,6 +129,13 @@ async function main() {
     }
     return [];
   };
+
+  // Same gap as loginAttempt above: moodBoardTile.createMany() is real-DB
+  // and was never mocked, so it 400'd every save with a foreign-key
+  // error against the in-memory-only mood board id from the mock above.
+  const moodBoardTiles = [];
+  prisma.moodBoardTile.createMany = async ({ data }) => { moodBoardTiles.push(...data); return { count: data.length }; };
+  prisma.moodBoardTile.findMany = async ({ where = {} } = {}) => moodBoardTiles.filter((t) => !where.moodBoardId || t.moodBoardId === where.moodBoardId);
 
   const customers = new Map();
   customers.set('c-1', { id: 'c-1', name: 'Anita Kulkarni', phone: '9876543210', createdAt: new Date() });

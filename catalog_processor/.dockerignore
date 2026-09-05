@@ -1,0 +1,16 @@
+.venv/
+venv/
+__pycache__/
+*.pyc
+.env
+credentials.json
+token.json
+catalog_agent.db
+test_gemini.jpg
+output/
+data/
+usb_agent.py
+v2_test.py
+test_google.py
+extract_page.py
+.gitignore

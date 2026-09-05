@@ -210,6 +210,11 @@ model Tile {
   productCode    String?
   inStock        Boolean            @default(true)
   sheetRowRef    Int?
+  // Traces imageUrl back to its exact origin in the source catalog PDF
+  // (page number + [x0,y0,x1,y1] bbox), so a mismatch can be diagnosed
+  // against the original page instead of guessed at.
+  sourcePage     Int?
+  imageBbox      Json?
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
   favoritedBy    CustomerFavorite[]

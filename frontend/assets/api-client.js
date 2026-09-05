@@ -2736,15 +2736,21 @@ const ai = {
     if (
       allowedRoles &&
       !allowedRoles.includes(
-        user.role?.name
+        user.role
       )
     ) {
       alert(
         "You don't have permission to view this page."
       );
 
+      // Route staff back to the actual tool (their only real home) and
+      // everyone else to the dashboard — never back into another
+      // admin-only page, or a STAFF user denied on any admin page would
+      // bounce endlessly between two pages that both reject them.
       location.href =
-        '03-user-staff-management.html';
+        user.role === 'STAFF'
+          ? 'tool-dashboard.html'
+          : 'admin-dashboard.html';
 
       return new Promise(
         () => {}
@@ -2889,6 +2895,31 @@ const ai = {
   }
 
   // ============================================================
+  // PYTHON AI SERVICE
+  // ============================================================
+
+  function pythonAiStatus() {
+    return apiFetch(
+      '/integrations/python-ai/status'
+    ).then(
+      (r) =>
+        r.data
+    );
+  }
+
+  function testPythonAiConnection() {
+    return apiFetch(
+      '/integrations/python-ai/test',
+      {
+        method: 'POST'
+      }
+    ).then(
+      (r) =>
+        r.data
+    );
+  }
+
+  // ============================================================
   // FINAL PUBLIC API
   // ============================================================
 
@@ -2936,6 +2967,10 @@ const ai = {
     driveStatus,
 
     testDriveConnection,
+
+    pythonAiStatus,
+
+    testPythonAiConnection,
 
     requireAuth,
 

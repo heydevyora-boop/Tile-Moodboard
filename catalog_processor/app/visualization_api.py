@@ -560,11 +560,38 @@ def validate_visualization_request(
     moodboard = request.get("moodboard")
     final_design = request.get("final_design")
 
+    # Already resolved to a local file path by the HTTP adapter (which
+    # downloads it if the caller sent a URL) -- just check it's real
+    # here rather than re-resolving it, since a missing/invalid value
+    # should fall back silently, not fail the whole request.
+    fallback_image_path_raw = str(
+        request.get("fallback_image_path", "") or ""
+    ).strip()
+    fallback_image_path = (
+        Path(fallback_image_path_raw)
+        if fallback_image_path_raw
+        and Path(fallback_image_path_raw).is_file()
+        else None
+    )
+
     requirements = (
         request.get("requirements")
         if isinstance(request.get("requirements"), dict)
         else {}
     )
+
+    # The Scene & Angles frontend sends this inside requirements.angle
+    # (e.g. "Front", "Left", "Shower close-up") so each angle button can
+    # get a genuinely different camera viewpoint of the SAME room/tile.
+    # Previously this was read here and then silently dropped -- the
+    # function's return dict below never included it, so nothing past
+    # this point (the Gemini prompt included) ever knew which angle was
+    # requested, and every angle produced an identical image.
+    angle = str(
+        request.get("angle", "")
+        or requirements.get("angle", "")
+        or ""
+    ).strip()
 
     if not product_id:
         raise ValueError("product_id is required.")
@@ -612,6 +639,8 @@ def validate_visualization_request(
         "scene_image_mode": (
             "random" if generate_random_scene else "reference"
         ),
+        "fallback_image_path": fallback_image_path,
+        "angle": angle or None,
     }
 
 
@@ -801,6 +830,16 @@ def create_visualization(
                         "final_design"
                     ]
                 ),
+                fallback_image_path=(
+                    normalized[
+                        "fallback_image_path"
+                    ]
+                ),
+                angle=(
+                    normalized[
+                        "angle"
+                    ]
+                ),
             )
         )
 
@@ -875,6 +914,16 @@ def create_visualization_strict(
             final_design=(
                 normalized[
                     "final_design"
+                ]
+            ),
+            fallback_image_path=(
+                normalized[
+                    "fallback_image_path"
+                ]
+            ),
+            angle=(
+                normalized[
+                    "angle"
                 ]
             ),
         )

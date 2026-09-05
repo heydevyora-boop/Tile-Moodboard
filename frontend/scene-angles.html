@@ -1,0 +1,444 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Casa de Aurum — Scene &amp; Angles</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/shell.css">
+<style>
+  @keyframes casaPulse2 { 0%,100%{opacity:1;} 50%{opacity:.4;} }
+  .crumb { font-family: var(--mono); font-size: 11px; color: var(--stone-600); margin-bottom: 16px; display: flex; align-items: center; gap: 7px; }
+  .crumb .sep { color: var(--stone-400); }
+  .crumb .now { color: var(--ink); }
+
+  .sa-grid { display: grid; grid-template-columns: minmax(0,1fr) 320px; gap: 20px; align-items: start; }
+  @media (max-width: 1000px) { .sa-grid { grid-template-columns: 1fr; } }
+
+  .angle-btns { padding: 16px 18px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .angle-btn { font-size: 12.5px; font-weight: 600; padding: 9px 15px; border-radius: 14px; border: 1px solid var(--line); background: #fff; color: #4B443A; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; }
+  .angle-btn:hover { border-color: var(--brass); }
+  .angle-btn.done { background: var(--charcoal); color: var(--stone-50); border-color: var(--charcoal); }
+  .angle-btn.busy { background: #FBF6EC; color: var(--brass); border-color: var(--brass); cursor: wait; }
+  .angle-btn .tick { color: var(--sage); font-size: 10px; }
+
+  .generating-row { background: #fff; border: 1px solid var(--brass); border-radius: 4px; padding: 20px; display: flex; align-items: center; gap: 14px; margin-top: 18px; }
+  .generating-row .gdot { width: 8px; height: 8px; border-radius: 50%; background: var(--brass); animation: casaPulse2 1s ease infinite; flex: none; }
+  .generating-row .gt { font-size: 13.5px; font-weight: 600; color: var(--ink); margin-bottom: 3px; }
+  .generating-row .gs { font-family: var(--mono); font-size: 11px; color: var(--stone-600); }
+
+  .gallery { display: grid; grid-template-columns: repeat(2,1fr); gap: 14px; margin-top: 18px; }
+  @media (max-width: 600px) { .gallery { grid-template-columns: 1fr; } }
+  .gal-card { background: #fff; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+  .gal-card .frame { aspect-ratio: 4/3; position: relative; background: var(--stone-100); display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  .gal-card .frame img { width: 100%; height: 100%; object-fit: cover; }
+  .gal-card .frame .lbl { position: absolute; top: 11px; left: 13px; font-family: var(--mono); font-size: 9.5px; letter-spacing: .08em; text-transform: uppercase; color: rgba(255,255,255,0.85); background: rgba(26,22,17,0.45); padding: 3px 8px; border-radius: 8px; }
+  .gal-card .meta { padding: 11px 14px; display: flex; align-items: center; justify-content: space-between; }
+  .gal-card .meta .f { font-family: var(--mono); font-size: 11px; color: var(--stone-600); }
+  .gal-card .meta a { font-family: var(--mono); font-size: 10.5px; }
+
+  .ai-instr { background: var(--charcoal); border: 1px solid rgba(216,182,119,0.25); border-radius: 4px; padding: 18px 20px; margin-top: 18px; }
+  .ai-instr .lbl { font-family: var(--mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--brass-light); margin-bottom: 10px; }
+  .ai-instr .body { font-family: var(--mono); font-size: 11.5px; color: var(--stone-400); line-height: 1.7; }
+
+  .lp-row { padding: 10px 18px; border-bottom: 1px solid rgba(34,29,24,0.06); display: flex; align-items: center; gap: 10px; }
+  .lp-row:last-child { border-bottom: none; }
+  .lp-row .sw { width: 26px; height: 26px; border-radius: 2px; background: var(--stone-200); border: 1px solid rgba(0,0,0,0.08); flex: none; }
+  .lp-row .nm { font-size: 12px; font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .lp-row .id { font-family: var(--mono); font-size: 10px; color: var(--stone-600); }
+
+  .field { margin-bottom: 12px; }
+  .field:last-child { margin-bottom: 0; }
+  .field label { display: block; font-size: 11.5px; color: var(--stone-600); margin-bottom: 5px; font-family: var(--mono); }
+  .field select { width: 100%; font-family: var(--mono); font-size: 12.5px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 2px; background: var(--stone-50); color: var(--ink); }
+
+  .state-box { text-align: center; padding: 60px 20px; color: var(--stone-600); font-family: var(--mono); font-size: 13px; }
+</style>
+</head>
+<body>
+<div id="casa-main-content">
+
+  <div class="crumb"><a href="moodboard-results.html">Results</a><span class="sep">/</span><span class="now" id="crumbNow">Scene</span></div>
+
+  <div class="casa-pageheader">
+    <div>
+      <h1 id="sceneTitle">Scene &amp; angles</h1>
+      <p id="sceneSub">Loading…</p>
+    </div>
+    <div><a class="casa-btn" id="toPrintBtn" href="#">Send to Print Board →</a></div>
+  </div>
+
+  <div id="pageBody" class="state-box">Loading approved combination…</div>
+
+</div>
+
+<script src="assets/api-client.js"></script>
+<script src="assets/notifications.js"></script>
+<script src="assets/shell.js"></script>
+<script>
+(async () => {
+  await CasaShell.init({ current: 'scene-angles.html' });
+
+  function escapeHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  function resolveAiImageUrl(rawPath) {
+    if (!rawPath) return '';
+    const value = String(rawPath).trim();
+    if (!value) return '';
+    if (/^https?:\/\//i.test(value)) return value;
+    // A relative /static/... path (e.g. a reference image's imageUrl) has
+    // to be turned into a full URL -- the Python visualization backend
+    // needs to actually fetch these bytes over HTTP, and a bare relative
+    // path means nothing to it. window.CASA_API_BASE is normally set by a
+    // small inline script before this page's assets load, but when it
+    // isn't (as in this deployment), every other page in this app
+    // (reference-image-library.html, print-board-designer.html,
+    // owner-ai-test.html) falls back to the same default backend origin
+    // rather than leaving the path unresolved -- this used to be the one
+    // page that didn't, silently turning every reference image's URL into
+    // something the later "must be absolute" check would then reject,
+    // making real uploaded reference photos disappear from the dropdown
+    // entirely.
+    const base = (typeof window.CASA_API_BASE === 'string' && window.CASA_API_BASE)
+      ? window.CASA_API_BASE
+      : 'http://localhost:5000/api/v1';
+    const backendRoot = base.replace(/\/api\/v1\/?$/, '').replace(/\/+$/, '');
+    return value.startsWith('/') ? backendRoot + value : backendRoot + '/' + value;
+  }
+
+  // ---- Resolve moodBoardId / combinationIndex from session or query params ----
+  const params = new URLSearchParams(location.search);
+  let moodBoardId = params.get('moodBoardId');
+  let combinationIndex = params.get('combinationIndex');
+
+  if (!moodBoardId || combinationIndex === null) {
+    const raw = sessionStorage.getItem('casaApprovedCombination');
+    if (raw) {
+      try {
+        const stored = JSON.parse(raw);
+        moodBoardId = moodBoardId || stored.moodBoardId;
+        combinationIndex = combinationIndex === null ? stored.combinationIndex : combinationIndex;
+      } catch (_) { /* ignore */ }
+    }
+  }
+  combinationIndex = combinationIndex !== null && combinationIndex !== undefined ? Number(combinationIndex) : null;
+
+  const body = document.getElementById('pageBody');
+
+  if (!moodBoardId || combinationIndex === null || Number.isNaN(combinationIndex)) {
+    body.innerHTML = `No approved combination selected yet. <a href="moodboard-results.html">Go to results and approve one →</a>`;
+    document.getElementById('sceneSub').textContent = 'Nothing locked yet';
+    return;
+  }
+
+  document.getElementById('toPrintBtn').href = `print-board-designer.html?moodBoardId=${encodeURIComponent(moodBoardId)}&combinationIndex=${combinationIndex}`;
+
+  let board;
+  try {
+    board = await CasaApi.moodBoards.get(moodBoardId);
+  } catch (err) {
+    body.innerHTML = `<span style="color:var(--clay);">${escapeHtml(err.message || 'Could not load this mood board.')}</span>`;
+    return;
+  }
+
+  const combo = Array.isArray(board.combinations) ? board.combinations[combinationIndex] : null;
+  if (!combo) {
+    body.innerHTML = `That combination could not be found on this mood board. <a href="moodboard-results.html">Back to results →</a>`;
+    return;
+  }
+
+  document.getElementById('crumbNow').textContent = board.id;
+  document.getElementById('sceneTitle').textContent = combo.board_name || `Combination ${combinationIndex + 1}`;
+  document.getElementById('sceneSub').textContent = `${board.id} · combination ${combinationIndex + 1} · ${board.style || ''} ${board.room || ''}`;
+
+  // ---- Layout ----
+  body.className = '';
+  body.innerHTML = `
+    <div class="sa-grid">
+      <div>
+        <div class="casa-panel">
+          <div class="panel-head"><h3>View Angle</h3><span class="casa-hint">Camera only — scene is fixed</span></div>
+          <div class="angle-btns" id="angleBtns"></div>
+        </div>
+        <div id="generatingArea"></div>
+        <div class="gallery" id="gallery"></div>
+        <div class="ai-instr">
+          <div class="lbl">Angle instruction sent with every request</div>
+          <div class="body">"Preserve the exact same scene, products, materials, colours, finishes, sanitary fixtures, layout, shower configuration and architectural elements. Do not replace, redesign or invent any product. Only change the camera viewpoint according to the requested angle."</div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:16px;">
+        <div class="casa-panel">
+          <div class="panel-head"><h3>Generation Inputs</h3></div>
+          <div class="panel-body">
+            <div class="field"><label>Selected tile</label><select id="productSelect"></select></div>
+            <div class="field"><label>Bathroom reference scene</label><select id="sceneSelect"><option value="">Loading…</option></select></div>
+            <div class="field"><label>Surface</label><select id="surfaceSelect"><option value="WALL">Wall</option><option value="FLOOR">Floor</option><option value="BOTH">Wall + Floor</option></select></div>
+          </div>
+        </div>
+        <div class="casa-panel">
+          <div class="panel-head"><h3>Locked Products</h3><span style="font-size:11px;color:var(--sage);">🔒</span></div>
+          <div id="lockedProducts"></div>
+        </div>
+      </div>
+    </div>`;
+
+  // ---- Locked products ----
+  const tiles = Array.isArray(combo.tiles) ? combo.tiles : [];
+  document.getElementById('lockedProducts').innerHTML = tiles.length
+    ? tiles.map((t) => `<div class="lp-row"><div class="sw"></div><div style="flex:1;min-width:0;"><div class="nm">${escapeHtml(t.name || t.product_name || 'Selected tile')}</div><div class="id">${escapeHtml((t.role || '').replace(/_/g, ' '))} · ${escapeHtml(String(t.product_id || t.tile_id || t.id || '—'))}</div></div></div>`).join('')
+    : `<div class="lp-row"><span class="id">No tile data on this combination.</span></div>`;
+
+  // ---- Product select ----
+  function comboTileId(tile) {
+    if (!tile) return '';
+    return String(tile.product_id || tile.productId || tile.tile_id || tile.tileId || tile.id || '').trim();
+  }
+  function comboTileName(tile) {
+    if (!tile) return '—';
+    return String(tile.name || tile.product_name || tile.productName || tile.tile_name || tile.title || tile.code || 'Selected tile');
+  }
+
+  const productSelect = document.getElementById('productSelect');
+  const validTiles = tiles.filter((t) => comboTileId(t));
+  productSelect.innerHTML = validTiles.length
+    ? validTiles.map((t) => `<option value="${escapeHtml(comboTileId(t))}">${escapeHtml((t.role || 'tile').toUpperCase())} — ${escapeHtml(comboTileName(t))}</option>`).join('')
+    : `<option value="">No product ID on this combination</option>`;
+
+  // ---- Bathroom reference scenes (ported verbatim from 00's placeholder-detection logic) ----
+  function isPlaceholderSceneValue(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return false;
+    const driveIdMatch = raw.match(/[?&]id=([^&]+)/i) || raw.match(/\/d\/([^/]+)/i);
+    const candidate = driveIdMatch ? driveIdMatch[1] : raw;
+    return (
+      /^(SEED_|feminine_|masculine_|bathroom-|scene-)/i.test(candidate) &&
+      !/\.(png|jpe?g|webp|bmp)$/i.test(candidate)
+    );
+  }
+
+  function normalizeScene(scene, index) {
+    const id = scene?.id || scene?.referenceId || scene?.reference_id || scene?.scene_id || `bathroom-${index + 1}`;
+    const label = scene?.styleTag || scene?.style || scene?.description || scene?.name || `Bathroom Scene ${index + 1}`;
+
+    const rawPath = scene?.scene_image_path || scene?.sceneImagePath || scene?.filePath || scene?.file_path ||
+      scene?.localPath || scene?.local_path || scene?.imagePath || scene?.image_path || scene?.path || '';
+    const imageUrl = scene?.imageUrl || scene?.image_url || scene?.url || scene?.fileUrl || scene?.file_url || '';
+
+    const path = String(rawPath || '').trim().replace(/\\/g, '/');
+    const isPlaceholderId = isPlaceholderSceneValue(path);
+
+    const usablePath = !isPlaceholderId && (
+      /^(https?:\/\/|file:\/\/)/i.test(path) ||
+      /^[A-Za-z]:\//.test(path) ||
+      path.startsWith('/')
+    );
+
+    const resolvedImageUrl = !isPlaceholderSceneValue(imageUrl) ? resolveAiImageUrl(imageUrl) : '';
+    const usableImageUrl = /^https?:\/\//i.test(resolvedImageUrl) ? resolvedImageUrl : '';
+
+    return {
+      ...scene,
+      id, label,
+      path: usablePath ? path : '',
+      imageUrl: usableImageUrl,
+      isGenerated: !usablePath && !usableImageUrl,
+    };
+  }
+
+  let bathroomScenes = [];
+  const sceneSelect = document.getElementById('sceneSelect');
+
+  // "AI Random Bathroom Scene" (auto-generated) is intentionally not an
+  // option here anymore -- it generated a brand-new fabricated room on
+  // every angle request, which is what caused "Front" and "Left" to show
+  // two completely unrelated bathrooms instead of one real room seen from
+  // different camera angles. Only real, uploaded reference photos are
+  // offered now, since those have a fixed path/URL that's naturally
+  // identical across every angle request for the same combination.
+  async function loadBathroomScenes() {
+    try {
+      const result = await CasaApi.referenceImages.list({ room: 'BATHROOM', limit: 100 });
+      bathroomScenes = Array.isArray(result?.images)
+        ? result.images.map(normalizeScene).filter((s) => s.path || s.imageUrl)
+        : [];
+    } catch (err) {
+      bathroomScenes = [];
+    }
+
+    if (!bathroomScenes.length) {
+      sceneSelect.innerHTML = `<option value="">No bathroom reference photos uploaded yet</option>`;
+      sceneSelect.value = '';
+      sceneSelect.disabled = true;
+      return;
+    }
+
+    sceneSelect.disabled = false;
+    sceneSelect.innerHTML = bathroomScenes.map((s) => `<option value="${escapeHtml(String(s.id))}">${escapeHtml(s.label)}</option>`).join('');
+    sceneSelect.value = bathroomScenes[0].id;
+  }
+  await loadBathroomScenes();
+
+  // Switching tile or scene invalidates every angle image generated so
+  // far (they were rendered against the previous selection) and the
+  // locked scene from that previous selection.
+  productSelect.addEventListener('change', () => resetAngleSession());
+  sceneSelect.addEventListener('change', () => resetAngleSession());
+
+  // ---- Angles ----
+  const ANGLES = ['Front', 'Left', 'Right', 'Wide', 'Shower close-up', 'Basin close-up', 'WC area'];
+  const doneAngles = {}; // angle -> imageUrl
+  let generatingAngle = null;
+
+  // The bathroom scene photo used for the FIRST angle generated this
+  // session, locked in and reused for every angle after it. Without this,
+  // picking "AI Random Bathroom Scene" sends an empty scene reference on
+  // every single angle request, and Python generates a brand-new random
+  // bathroom each time -- so "Front" and "Left" end up as two entirely
+  // different rooms instead of the same room from a different camera
+  // position, even though a real reference scene never had this problem
+  // (its path is already fixed and identical on every request).
+  let lockedSceneImagePath = '';
+
+  // Switching the selected tile or scene reference invalidates every
+  // previously generated angle image (they were rendered against the OLD
+  // selection) -- without this, doneAngles/requestAngle's cache would keep
+  // showing stale images from a different tile/scene after switching.
+  function resetAngleSession() {
+    Object.keys(doneAngles).forEach((key) => delete doneAngles[key]);
+    lockedSceneImagePath = '';
+    generatingAngle = null;
+    renderAngleButtons();
+    renderGenerating();
+    renderGallery();
+  }
+
+  function renderAngleButtons() {
+    const el = document.getElementById('angleBtns');
+    el.innerHTML = ANGLES.map((a) => {
+      const done = !!doneAngles[a];
+      const busy = generatingAngle === a;
+      return `<button type="button" class="angle-btn${done ? ' done' : ''}${busy ? ' busy' : ''}" data-angle="${escapeHtml(a)}">${escapeHtml(a)}${done ? ' <span class="tick">✓</span>' : ''}</button>`;
+    }).join('');
+    el.querySelectorAll('[data-angle]').forEach((btn) => {
+      btn.addEventListener('click', () => requestAngle(btn.dataset.angle));
+    });
+  }
+
+  function renderGenerating() {
+    const el = document.getElementById('generatingArea');
+    if (!generatingAngle) { el.innerHTML = ''; return; }
+    el.innerHTML = `<div class="generating-row">
+      <div class="gdot"></div>
+      <div><div class="gt">Generating ${escapeHtml(generatingAngle)} view</div><div class="gs">Same products, same materials, same layout — only the camera moves.</div></div>
+    </div>`;
+  }
+
+  function renderGallery() {
+    const el = document.getElementById('gallery');
+    const items = ANGLES.filter((a) => doneAngles[a]);
+    el.innerHTML = items.map((a) => `
+      <div class="gal-card">
+        <div class="frame"><img src="${escapeHtml(doneAngles[a])}" alt="${escapeHtml(a)} view" onerror="this.parentElement.innerHTML='<span style=color:var(--clay);font-family:var(--mono);font-size:11px;>Image failed to load</span>';"><span class="lbl">${escapeHtml(a)}</span></div>
+        <div class="meta"><span class="f">${escapeHtml(a.toLowerCase().replace(/\s+/g, '_').replace(/-/g, ''))}.jpg</span><a href="${escapeHtml(doneAngles[a])}" target="_blank">Open</a></div>
+      </div>`).join('');
+  }
+
+  async function requestAngle(angle) {
+    if (generatingAngle || doneAngles[angle]) return;
+
+    const productId = String(productSelect.value || '').trim();
+    if (!productId) {
+      CasaNotify.error('This combination does not contain a usable product ID.');
+      return;
+    }
+
+    const scene = bathroomScenes.find((s) => String(s.id) === String(sceneSelect.value));
+    if (!scene) {
+      CasaNotify.error('No bathroom reference photo selected. Upload one under Reference Images before generating angles.');
+      return;
+    }
+
+    let sceneImagePath = scene.path || scene.imageUrl || '';
+
+    // Every remaining scene option is a real, fixed reference photo, so
+    // sceneImagePath should always be set here. lockedSceneImagePath is
+    // kept only as a safety net for the unlikely case a scene record is
+    // missing its path/URL, so angle generation doesn't accidentally fall
+    // through to Python's random-scene generator (which is what caused
+    // Front/Left to show unrelated bathrooms before this option existed).
+    if (!sceneImagePath && lockedSceneImagePath) {
+      sceneImagePath = lockedSceneImagePath;
+    }
+
+    generatingAngle = angle;
+    renderAngleButtons();
+    renderGenerating();
+
+    const notice = CasaNotify.processing(`Generating ${angle} view...`);
+
+    try {
+      const result = await CasaApi.ai.generateVisualization({
+        product_id: productId,
+        surface: document.getElementById('surfaceSelect').value || 'WALL',
+        scene_image_path: String(sceneImagePath || '').trim().replace(/\\/g, '/'),
+        scene_image_mode: sceneImagePath ? 'reference' : 'random',
+        generate_random_scene: !sceneImagePath,
+        scene_id: scene?.id || undefined,
+        theme: `${combo.board_name || board.style || 'Bathroom'} — ${angle} angle`,
+        requirements: {
+          room: (board.room || 'BATHROOM').toUpperCase(),
+          style: (board.style || '').toUpperCase(),
+          combination_name: combo.board_name || '',
+          grout: combo.grout_recommendation || '',
+          angle,
+        },
+      });
+
+      const data = result?.data || result;
+      const imageUrl = data?.image?.url || data?.image_url || data?.imageUrl || data?.visualization?.image_url || data?.visualization?.imageUrl || '';
+
+      if (!imageUrl) throw new Error('The AI completed but no image URL was returned.');
+
+      // Lock in the scene actually used for this first angle (the resolved
+      // local path Python generated/used, exposed as raw_result.source_scene)
+      // so every subsequent angle request reuses this exact same room.
+      if (!lockedSceneImagePath) {
+        const resolvedScenePath = data?.raw_result?.source_scene || data?.raw_result?.sourceScene || '';
+        if (resolvedScenePath) {
+          lockedSceneImagePath = String(resolvedScenePath).trim().replace(/\\/g, '/');
+        }
+      }
+
+      doneAngles[angle] = imageUrl;
+      notice.success(`${angle} view generated.`);
+
+      // The pipeline falls back to a generic placeholder swatch (always
+      // the same beige/cream color, regardless of the actual product)
+      // when it couldn't resolve this tile's real image from MASTER or
+      // Postgres -- surfaced here so that's never mistaken for the real
+      // tile texture. See master_source in product_visualization_service.py.
+      const masterSource = data?.raw_result?.master_source || data?.raw_result?.masterSource || '';
+      if (masterSource === 'SYNTHETIC_LOCAL_PLACEHOLDER') {
+        CasaNotify.error(`${angle} view used a placeholder swatch, not the real tile image — the selected product's real photo could not be resolved. Check its MASTER sheet row / Drive URL.`);
+      }
+    } catch (err) {
+      notice.error(`Could not generate ${angle} view: ` + (err?.message || 'Unknown error'));
+    } finally {
+      generatingAngle = null;
+      renderAngleButtons();
+      renderGenerating();
+      renderGallery();
+    }
+  }
+
+  renderAngleButtons();
+  renderGenerating();
+  renderGallery();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,221 @@
+/* Casa de Aurum v2 — shared app shell (sidebar + topbar) */
+:root {
+  --ink: #221d18;
+  --charcoal: #1a1611;
+  --stone-50: #f1ece1;
+  --stone-100: #e9e2d3;
+  --stone-200: #dfd5bf;
+  --stone-400: #b7ab94;
+  --stone-600: #78705f;
+  --stone-700: #4b443a;
+  --brass: #ad8348;
+  --brass-light: #d8b677;
+  --clay: #9c4b2c;
+  --sage: #7a9165;
+  --line: rgba(34, 29, 24, 0.14);
+  --shadow: 0 12px 30px rgba(26, 22, 17, 0.14);
+  --radius: 3px;
+  --display: "Fraunces", serif;
+  --sans: "Inter", sans-serif;
+  --mono: "IBM Plex Mono", monospace;
+  --sidebar-w: 260px;
+  --ok-bg: #E8F5E0;
+  --ok-color: #4A7A2E;
+  --warn-bg: #FBF6EC;
+  --warn-color: #AD8348;
+  --err-bg: #FBF3EE;
+  --err-color: #9C4B2C;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; height: 100%; }
+body {
+  background: var(--stone-50);
+  color: var(--ink);
+  font-family: var(--sans);
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--brass); text-decoration: none; }
+a:hover { color: #7a5b2c; }
+
+.casa-shell { display: flex; min-height: 100vh; }
+
+.casa-sidebar {
+  width: 260px;
+  background: var(--charcoal);
+  color: #e9e2d3;
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  top: 0; left: 0; bottom: 0;
+  z-index: 20;
+}
+.casa-sidebar .brand {
+  padding: 24px 22px 20px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+.casa-sidebar .brand .name {
+  font-family: var(--display); font-weight: 600; font-size: 18px;
+  letter-spacing: .04em; color: #e9e2d3;
+}
+.casa-sidebar .brand .name em { font-style: normal; color: var(--brass-light); }
+.casa-sidebar .brand .panel {
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--stone-600); margin-top: 3px;
+}
+.casa-sidebar nav { flex: 1; padding: 10px 10px 20px; display: flex; flex-direction: column; gap: 2px; overflow-y: auto; }
+.casa-sidebar .navgroup {
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--stone-600); padding: 16px 12px 6px;
+}
+.casa-sidebar a.navlink {
+  display: flex; align-items: center; gap: 9px; padding: 10px 12px; border-radius: 3px;
+  color: #b7ab94; font-size: 13px; font-weight: 500; text-decoration: none;
+  transition: all .12s ease; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.casa-sidebar a.navlink:hover { background: rgba(255,255,255,0.05); color: #e9e2d3; }
+.casa-sidebar a.navlink.active { background: rgba(173,131,72,0.14); color: var(--brass-light); font-weight: 600; }
+.casa-sidebar .userbox {
+  padding: 16px 22px; border-top: 1px solid rgba(255,255,255,0.08);
+  display: flex; align-items: center; gap: 10px;
+}
+.casa-sidebar .userbox .avatar {
+  width: 32px; height: 32px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--brass), var(--brass-light));
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 12px; color: #fff; flex: none;
+}
+.casa-sidebar .userbox .who { min-width: 0; flex: 1; }
+.casa-sidebar .userbox .who .n { font-size: 12.5px; font-weight: 600; color: #e9e2d3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.casa-sidebar .userbox .who .r { font-family: var(--mono); font-size: 10px; color: var(--stone-600); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.casa-sidebar .userbox .signout {
+  font-family: var(--mono); font-size: 10.5px; color: var(--stone-400); background: none; border: none;
+  cursor: pointer; padding: 0; flex: none;
+}
+.casa-sidebar .userbox .signout:hover { color: var(--clay); }
+
+.casa-main { flex: 1; margin-left: 260px; min-height: 100vh; }
+.casa-main-inner { padding: 32px 40px 60px; animation: casa-fade .35s ease; }
+@keyframes casa-fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+.casa-pageheader { display: flex; align-items: center; justify-content: space-between; margin-bottom: 28px; flex-wrap: wrap; gap: 12px; }
+.casa-pageheader h1 { font-family: var(--display); font-weight: 600; font-size: 26px; margin: 0 0 4px; color: var(--charcoal); }
+.casa-pageheader p { margin: 0; font-family: var(--mono); font-size: 12px; color: var(--stone-600); }
+
+.casa-panel { background: #fff; border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 20px; }
+.casa-panel .panel-head { padding: 14px 18px; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; }
+.casa-panel .panel-head h3 { margin: 0; font-size: 12.5px; letter-spacing: .1em; text-transform: uppercase; font-family: var(--mono); color: var(--stone-700); font-weight: 500; }
+.casa-panel .panel-body { padding: 16px 18px; }
+
+.casa-stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 24px; }
+.casa-stat-card { background: #fff; border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; }
+.casa-stat-card .label { font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--stone-600); margin-bottom: 8px; }
+.casa-stat-card .value { font-family: var(--display); font-size: 26px; font-weight: 600; color: var(--charcoal); line-height: 1; }
+.casa-stat-card .delta { font-family: var(--mono); font-size: 11px; color: var(--sage); margin-top: 6px; }
+
+.casa-btn {
+  font-family: var(--sans); font-weight: 600; font-size: 13px; background: var(--charcoal); color: var(--stone-50);
+  border: none; padding: 10px 18px; border-radius: 2px; cursor: pointer; letter-spacing: .01em; transition: background .15s ease;
+}
+.casa-btn:hover { background: #000; }
+.casa-btn:disabled { opacity: .6; cursor: not-allowed; }
+.casa-btn.secondary { background: #fff; color: var(--ink); border: 1px solid var(--line); }
+.casa-btn.secondary:hover { border-color: var(--brass); color: var(--brass); }
+
+table.casa-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.casa-table th { text-align: left; font-weight: 500; color: var(--stone-600); text-transform: uppercase; font-size: 10.5px; letter-spacing: .06em; padding: 9px 18px; border-bottom: 1px solid var(--line); font-family: var(--mono); }
+table.casa-table td { padding: 11px 18px; border-bottom: 1px solid rgba(34,29,24,0.06); vertical-align: top; }
+table.casa-table tr:last-child td { border-bottom: none; }
+
+.casa-hint { font-family: var(--mono); font-size: 10.5px; color: var(--stone-400); font-style: normal; }
+
+/* ============================================================
+   EXTRA — badges, pills, chips, fields, savebar (used by the
+   admin config/monitoring pages)
+   ============================================================ */
+.casa-pageheader .casa-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+.casa-btn.danger { background: none; color: var(--clay); border: 1px dashed var(--clay); }
+.casa-btn.danger:hover { background: var(--err-bg); }
+.casa-btn.brass { background: var(--brass); color: #fff; }
+.casa-btn.brass:hover { background: #96703A; }
+
+.casa-badge {
+  font-family: var(--mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase;
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 1px solid var(--brass); color: var(--brass); padding: 5px 10px; border-radius: 2px; white-space: nowrap;
+}
+.casa-badge.ok { border-color: var(--sage); color: var(--sage); }
+.casa-badge.err { border-color: var(--clay); color: var(--clay); }
+
+.casa-pill {
+  display: inline-block; font-size: 10px; padding: 2px 8px; border-radius: 8px; font-weight: 600;
+  font-family: var(--sans); white-space: nowrap;
+}
+.casa-pill.ok { background: var(--ok-bg); color: var(--ok-color); }
+.casa-pill.warn { background: var(--warn-bg); color: var(--warn-color); }
+.casa-pill.err { background: var(--err-bg); color: var(--err-color); }
+.casa-pill.neutral { background: var(--stone-100); color: var(--stone-600); }
+
+.casa-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; display: inline-block; }
+.casa-dot.ok { background: var(--sage); }
+.casa-dot.warn { background: var(--brass); }
+.casa-dot.err { background: var(--clay); }
+.casa-dot.neutral { background: var(--stone-400); }
+
+.casa-chip {
+  font-family: var(--sans); font-size: 11.5px; font-weight: 600;
+  padding: 6px 12px; border-radius: 14px; border: 1px solid var(--line);
+  background: #fff; color: var(--stone-700); cursor: pointer; user-select: none; white-space: nowrap;
+}
+.casa-chip.on { background: var(--charcoal); border-color: var(--charcoal); color: var(--stone-50); }
+
+.casa-field { margin-bottom: 14px; }
+.casa-field:last-child { margin-bottom: 0; }
+.casa-field label {
+  display: block; font-size: 12px; color: var(--stone-600); margin-bottom: 6px;
+  font-family: var(--mono); letter-spacing: .03em;
+}
+.casa-field input, .casa-field select, .casa-field textarea {
+  width: 100%; font-family: var(--mono); font-size: 13px; padding: 10px 11px;
+  border: 1px solid var(--line); border-radius: 2px; background: var(--stone-50); color: var(--ink);
+}
+.casa-field input:focus, .casa-field select:focus, .casa-field textarea:focus { outline: 2px solid var(--brass); outline-offset: 1px; }
+.casa-field .desc { font-size: 12px; color: var(--stone-600); margin-top: 5px; line-height: 1.45; }
+
+.casa-switch {
+  position: relative; width: 38px; height: 22px; flex: none; background: var(--stone-200);
+  border-radius: 12px; cursor: pointer; border: 1px solid var(--line); transition: background .15s ease;
+}
+.casa-switch::after {
+  content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.25); transition: left .15s ease;
+}
+.casa-switch.on { background: var(--brass); border-color: var(--brass); }
+.casa-switch.on::after { left: 18px; }
+
+.casa-empty { padding: 24px; text-align: center; color: var(--stone-400); font-family: var(--mono); font-size: 12.5px; }
+.casa-error-inline { padding: 24px; text-align: center; color: var(--clay); font-family: var(--mono); font-size: 12.5px; }
+
+.casa-restricted {
+  background: #FBF3E8; border: 1px solid var(--brass); color: var(--stone-700);
+  font-family: var(--mono); font-size: 12px; padding: 12px 16px; margin-bottom: 20px; border-radius: 2px;
+}
+
+.casa-savebar { position: fixed; left: var(--sidebar-w); right: 0; bottom: 0; z-index: 10; background: var(--charcoal); border-top: 1px solid rgba(216,182,119,.25); }
+.casa-savebar-inner {
+  max-width: 1180px; margin: 0 auto; padding: 14px 40px;
+  display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+}
+.casa-savebar-meta { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; font-family: var(--mono); font-size: 11.5px; color: var(--stone-400); }
+.casa-savebar-meta strong { color: var(--stone-100); font-weight: 500; }
+.casa-savebar-actions { display: flex; gap: 10px; }
+
+@media (max-width: 900px) {
+  .casa-sidebar { transform: translateX(-100%); transition: transform .2s ease; }
+  .casa-sidebar.open { transform: translateX(0); }
+  .casa-main { margin-left: 0; }
+  .casa-savebar { left: 0; }
+}
+@media (max-width: 640px) {
+  .casa-main-inner { padding: 24px 16px 50px; }
+}

@@ -94,7 +94,7 @@ router.post(
       const tile =
         await prisma.tile.findUnique({
           where: { id: product_id.trim() },
-          select: { productCode: true, name: true },
+          select: { productCode: true, name: true, imageUrl: true },
         });
 
       if (!tile) {
@@ -190,6 +190,14 @@ router.post(
               'object'
               ? requirements
               : {},
+
+          // The tile's own extracted catalog image, sent as a safety
+          // net so Python can fall back to it when the MASTER sheet
+          // has no product row (or no resolvable image) for this
+          // product code, instead of fabricating a placeholder swatch.
+          fallback_image_url:
+            tile.imageUrl ??
+            undefined,
         });
 
       // ========================================================

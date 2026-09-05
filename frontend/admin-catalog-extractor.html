@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Casa de Aurum — Catalog Extractor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/shell.css">
+<style>
+  .console-grid{display:grid;grid-template-columns:1.1fr 1.6fr;gap:20px;}
+  @media (max-width:880px){.console-grid{grid-template-columns:1fr;}}
+  .filelist{border:1px solid var(--line);border-radius:2px;overflow:hidden;margin-bottom:14px;}
+  .filerow{display:flex;align-items:center;gap:10px;padding:9px 11px;font-family:var(--mono);font-size:12.5px;border-bottom:1px solid var(--line);background:#fff;}
+  .filerow:last-child{border-bottom:none;}
+  .filerow .tick{width:14px;flex:none;text-align:center;}
+  .filerow .fn{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .filerow .sz{color:var(--stone-600);font-size:11px;}
+  .terminal{background:var(--charcoal);color:#D9D2C2;font-family:var(--mono);font-size:12.5px;line-height:1.65;padding:16px 18px;height:260px;overflow-y:auto;border-radius:2px;}
+  .terminal .ok{color:#B9CBA6;} .terminal .warn{color:#E0A96D;} .terminal .dim{color:#7C7568;} .terminal .brand-line{color:var(--brass-light);}
+  .progress-wrap{margin-top:14px;background:var(--stone-100);border-radius:2px;overflow:hidden;height:6px;}
+  .progress-bar{height:100%;width:0%;background:linear-gradient(90deg,var(--brass),var(--brass-light));transition:width .3s ease;}
+  .progress-label{font-family:var(--mono);font-size:11.5px;color:var(--stone-600);display:flex;justify-content:space-between;margin-top:6px;}
+  table.results{width:100%;border-collapse:collapse;font-size:12.5px;font-family:var(--mono);}
+  table.results th{text-align:left;font-weight:500;color:var(--stone-600);text-transform:uppercase;font-size:10.5px;letter-spacing:.06em;padding:8px 10px;border-bottom:1px solid var(--line);}
+  table.results td{padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:middle;}
+  .mini-sw{width:26px;height:26px;border-radius:2px;flex:none;border:1px solid rgba(0,0,0,.08);background-size:cover;background-position:center;background-color:var(--stone-200);}
+</style>
+</head>
+<body>
+<div id="casa-main-content">
+  <div class="casa-pageheader">
+    <div>
+      <h1>Catalog Extractor</h1>
+      <p>Upload catalog PDFs and the backend extracts every tile straight into the product database — the real pipeline used store-wide.</p>
+    </div>
+    <span class="casa-badge">Runs on the backend</span>
+  </div>
+
+  <div class="console-grid">
+    <div>
+      <div class="casa-panel">
+        <div class="panel-head"><h3>Source &amp; Destination</h3></div>
+        <div class="panel-body">
+          <div class="casa-field">
+            <label>Brand</label>
+            <select id="extractorBrand"><option value="">Loading brands…</option></select>
+          </div>
+          <div class="casa-field">
+            <label>Or add a new brand</label>
+            <input type="text" id="newBrandName" placeholder="New brand name (optional)">
+            <div class="desc">If filled, this uploads under a brand created on the fly instead of the selection above.</div>
+          </div>
+          <div class="casa-field">
+            <label>Catalog PDFs</label>
+            <input id="pdfFiles" type="file" accept="application/pdf" multiple>
+          </div>
+        </div>
+      </div>
+
+      <div class="casa-panel">
+        <div class="panel-head"><h3>Selected Files</h3></div>
+        <div class="panel-body">
+          <div class="filelist" id="fileList"><div class="filerow"><span class="fn" style="color:var(--stone-400);">No files selected yet.</span></div></div>
+          <button class="casa-btn" id="runBtn" style="width:100%;" disabled>Upload &amp; extract</button>
+          <div class="progress-wrap"><div class="progress-bar" id="progBar"></div></div>
+          <div class="progress-label"><span id="progLabel">Idle</span><span id="progCount">0 / 0 files</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="casa-panel">
+        <div class="panel-head"><h3>Extraction Log</h3></div>
+        <div class="panel-body" style="padding:0;"><div class="terminal" id="terminal"><div class="dim">Waiting for files…</div></div></div>
+      </div>
+
+      <div class="casa-panel">
+        <div class="panel-head"><h3>Extracted Tiles</h3></div>
+        <div class="panel-body" style="padding:8px 0;overflow-x:auto;">
+          <table class="results">
+            <thead><tr><th>Tile</th><th>Brand</th><th>Size</th><th>Finish</th><th>Type</th><th>Image</th></tr></thead>
+            <tbody id="resultsBody"><tr><td colspan="6" style="text-align:center;color:var(--stone-400);padding:24px;">No rows yet — upload catalogs to extract</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="casa-panel">
+    <div class="panel-head"><h3>Extraction History<span class="hint">Most recent uploads, all brands</span></h3></div>
+    <div style="overflow-x:auto;">
+      <table class="casa-table">
+        <thead><tr><th>Catalog</th><th>Brand</th><th>Status</th><th>Tiles</th><th>Uploaded</th></tr></thead>
+        <tbody id="historyBody"><tr><td colspan="5" class="casa-empty">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script src="assets/api-client.js"></script>
+<script src="assets/notifications.js"></script>
+<script src="assets/shell.js"></script>
+<script>
+  function esc(s) { return CasaShell.escapeHtml(s); }
+  const STATUS_PILL = { PENDING: 'neutral', PROCESSING: 'warn', COMPLETED: 'ok', FAILED: 'err' };
+
+  // Looked up after CasaShell.init() (below) instead of here — init()
+  // rebuilds #casa-main-content via innerHTML, which would otherwise leave
+  // these pointing at detached nodes and every listener below inert.
+  let extractorBrandSelect, newBrandInput, pdfFilesInput, fileListEl, runBtn, terminal, progBar, progLabel, progCount, resultsBody;
+
+  let extractorRunning = false;
+  let selectedPdfFiles = [];
+
+  function termLine(html) {
+    const d = document.createElement('div');
+    d.innerHTML = html;
+    terminal.appendChild(d);
+    terminal.scrollTop = terminal.scrollHeight;
+  }
+
+  function refreshRunBtnState() {
+    runBtn.disabled = extractorRunning || !selectedPdfFiles.length || (!extractorBrandSelect.value && !newBrandInput.value.trim());
+  }
+
+  async function loadExtractorBrands() {
+    try {
+      const brands = await CasaApi.catalogExtractor.brands();
+      extractorBrandSelect.innerHTML = '<option value="">Choose a brand…</option>' +
+        (Array.isArray(brands) ? brands : []).map((b) => `<option value="${esc(b.id)}">${esc(b.name)}</option>`).join('');
+    } catch (err) {
+      extractorBrandSelect.innerHTML = '<option value="">Could not load brands</option>';
+    }
+    refreshRunBtnState();
+  }
+
+  async function loadHistory() {
+    const tbody = document.getElementById('historyBody');
+    try {
+      const { catalogs } = await CasaApi.catalogExtractor.list({ limit: 20 });
+      tbody.innerHTML = catalogs.length ? catalogs.map((c) => `
+        <tr>
+          <td><a href="admin-catalog-detail.html?id=${encodeURIComponent(c.id)}">${esc(c.fileName)}</a></td>
+          <td>${esc(c.brand?.name || '—')}</td>
+          <td><span class="casa-pill ${STATUS_PILL[c.status] || 'neutral'}">${esc(c.status)}</span></td>
+          <td>${c.tilesExtracted || 0}</td>
+          <td class="casa-hint">${CasaApi.relativeTime(c.createdAt)}</td>
+        </tr>`).join('') : '<tr><td colspan="5" class="casa-empty">No catalogs uploaded yet.</td></tr>';
+    } catch (err) {
+      tbody.innerHTML = `<tr><td colspan="5" class="casa-error-inline">${esc(err.message || 'Failed to load history.')}</td></tr>`;
+    }
+  }
+
+  function renderExtractedTileRow(t) {
+    const tr = document.createElement('tr');
+    const imageUrl = t.imageUrl ? CasaApi.resolveBackendImageUrl(t.imageUrl) : '';
+    tr.innerHTML = `
+      <td>${esc(t.name || '')}</td>
+      <td>${esc(t.brandName || '')}</td>
+      <td>${esc(t.size || '—')}</td>
+      <td>${esc(t.finish || '—')}</td>
+      <td><span class="casa-pill neutral">${esc(t.type || 'BASE')}</span></td>
+      <td>${imageUrl ? `<div class="mini-sw" style="background-image:url('${esc(imageUrl)}');"></div>` : `<div class="mini-sw"></div>`}</td>`;
+    resultsBody.appendChild(tr);
+  }
+
+  async function extractOneFile(file, brandId, brandName, newName, fileIndex, totalFiles) {
+    termLine(`<span class="brand-line">${esc(file.name)}:</span> uploading…`);
+
+    const opts = newName ? { brandName: newName } : { brandId };
+    const catalog = await CasaApi.catalogExtractor.upload(file, opts);
+    const resolvedBrandName = newName || brandName;
+
+    const finalCatalog = await CasaApi.catalogExtractor.pollUntilDone(
+      catalog.id,
+      (updated) => {
+        const pageInfo = updated.totalPages ? ` (page ${updated.currentPage || 0}/${updated.totalPages})` : '';
+        progLabel.textContent = `${file.name}: ${updated.status}${pageInfo}`;
+      },
+      { intervalMs: 1500, maxAttempts: 240 },
+    );
+
+    if (finalCatalog.status === 'FAILED') {
+      termLine(`&nbsp;&nbsp;→ <span class="warn">Failed: ${esc(finalCatalog.errorMessage || 'Unknown error')}</span>`);
+      return 0;
+    }
+
+    termLine(`&nbsp;&nbsp;→ <span class="ok">${finalCatalog.tilesExtracted || 0} tiles</span> extracted`);
+
+    const { tiles } = await CasaApi.catalogExtractor.tiles(catalog.id, { limit: 200 });
+    tiles.forEach((t) => renderExtractedTileRow({ ...t, brandName: resolvedBrandName }));
+
+    const pct = Math.round(((fileIndex + 1) / totalFiles) * 100);
+    progBar.style.width = pct + '%';
+    return finalCatalog.tilesExtracted || 0;
+  }
+
+  async function runExtraction() {
+    if (extractorRunning || !selectedPdfFiles.length) return;
+    const newName = newBrandInput.value.trim();
+    if (!newName && !extractorBrandSelect.value) return;
+
+    extractorRunning = true;
+    runBtn.disabled = true;
+    runBtn.textContent = 'Extracting…';
+    terminal.innerHTML = '';
+    resultsBody.innerHTML = '';
+    progBar.style.width = '0%';
+    progLabel.textContent = 'Starting…';
+    progCount.textContent = `0 / ${selectedPdfFiles.length} files`;
+
+    const brandId = extractorBrandSelect.value;
+    const brandName = extractorBrandSelect.selectedOptions[0]?.textContent || '';
+
+    termLine(`Uploading ${selectedPdfFiles.length} file(s) for ${esc(newName || brandName)}…`);
+
+    let totalTiles = 0;
+    for (let i = 0; i < selectedPdfFiles.length; i++) {
+      try {
+        totalTiles += await extractOneFile(selectedPdfFiles[i], brandId, brandName, newName, i, selectedPdfFiles.length);
+      } catch (err) {
+        termLine(`&nbsp;&nbsp;→ <span class="warn">${esc(err instanceof Error ? err.message : 'Upload failed')}</span>`);
+      }
+      progCount.textContent = `${i + 1} / ${selectedPdfFiles.length} files`;
+    }
+
+    termLine(`<br><span class="ok">Done. ${totalTiles} tiles saved.</span>`);
+    progLabel.textContent = 'Complete';
+    progBar.style.width = '100%';
+
+    extractorRunning = false;
+    runBtn.textContent = 'Upload & extract';
+    refreshRunBtnState();
+
+    await loadExtractorBrands();
+    await loadHistory();
+  }
+
+  (async () => {
+    await CasaShell.init({ current: 'admin-catalog-extractor.html', allowedRoles: ['ADMIN','OWNER'] });
+
+    // Looked up here, not at top-level script scope — CasaShell.init()
+    // rebuilds #casa-main-content via innerHTML, so anything captured
+    // before this point would point at detached nodes.
+    extractorBrandSelect = document.getElementById('extractorBrand');
+    newBrandInput = document.getElementById('newBrandName');
+    pdfFilesInput = document.getElementById('pdfFiles');
+    fileListEl = document.getElementById('fileList');
+    runBtn = document.getElementById('runBtn');
+    terminal = document.getElementById('terminal');
+    progBar = document.getElementById('progBar');
+    progLabel = document.getElementById('progLabel');
+    progCount = document.getElementById('progCount');
+    resultsBody = document.getElementById('resultsBody');
+
+    pdfFilesInput.addEventListener('change', () => {
+      selectedPdfFiles = Array.from(pdfFilesInput.files || []);
+      fileListEl.innerHTML = selectedPdfFiles.length
+        ? selectedPdfFiles.map((f) => `<div class="filerow"><span class="tick">📄</span><span class="fn">${esc(f.name)}</span><span class="sz">${(f.size / 1024).toFixed(0)} KB</span></div>`).join('')
+        : '<div class="filerow"><span class="fn" style="color:var(--stone-400);">No files selected yet.</span></div>';
+      refreshRunBtnState();
+    });
+    extractorBrandSelect.addEventListener('change', refreshRunBtnState);
+    newBrandInput.addEventListener('input', refreshRunBtnState);
+    runBtn.addEventListener('click', runExtraction);
+
+    await loadExtractorBrands();
+    await loadHistory();
+  })();
+</script>
+</body>
+</html>
