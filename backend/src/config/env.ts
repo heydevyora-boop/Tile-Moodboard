@@ -293,6 +293,19 @@ const envSchema = z.object({
       .default(2048),
 
   // ==========================================================
+  // INTERNAL SERVICE-TO-SERVICE AUTH
+  // ==========================================================
+
+  // Shared secret the Python catalog_processor presents (as the
+  // x-internal-key header) on the internal /master-sync route, which
+  // has no user session to authenticate against. Optional so an
+  // existing .env still boots; when unset the route refuses every
+  // request rather than running unauthenticated (see internalAuth.ts).
+
+  INTERNAL_SYNC_API_KEY:
+    z.string().optional(),
+
+  // ==========================================================
   // PYTHON BRIDGE
   // ==========================================================
 

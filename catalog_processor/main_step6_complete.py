@@ -47,6 +47,10 @@ from app.google_services import (
     append_product,
 )
 
+from app.backend_sync import (
+    sync_master_product_to_backend,
+)
+
 
 # ============================================================
 # FASTAPI APPLICATION
@@ -1349,6 +1353,20 @@ def process_pdf(
             )
 
             continue
+
+        # The MASTER row exists now. Mirror it into the Node backend's
+        # Tile table so this product is actually selectable when
+        # combinations are generated -- that generator reads only from
+        # Postgres, never from Sheets/Drive, so a product that stops here
+        # would be visible in MASTER but unusable in a mood board.
+        #
+        # Deliberately best-effort and AFTER the sheet write: it must
+        # never abort a catalog whose row and image already landed.
+        sync_master_product_to_backend(
+            product_code=product_id,
+            brand=brand,
+            image_url=drive_url,
+        )
 
         mark_processed(
             file_hash=file_hash,

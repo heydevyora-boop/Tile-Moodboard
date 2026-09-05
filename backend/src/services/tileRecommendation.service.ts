@@ -158,6 +158,16 @@ export async function getRecommendedTiles(prisma: PrismaTileClient, filter: Reco
   const tiles = await prisma.tile.findMany({
     where: {
       inStock: true,
+      // A tile is only selectable while it is still backed by a real
+      // source: either a MASTER-sheet row (sheetRowRef, written solely by
+      // masterTileSync.service.ts) or a Catalog that still exists.
+      //
+      // Without this, deleting a catalog in the UI has no effect on what
+      // can be combined: deleteCatalog defaults to deleteTiles=false, and
+      // Tile.catalogId is an optional relation (onDelete: SetNull), so its
+      // tiles survive with catalogId=null and inStock=true and stay in
+      // this pool forever.
+      OR: [{ sheetRowRef: { not: null } }, { catalogId: { not: null } }],
       ...(filter.brandId ? { brandId: filter.brandId } : {}),
       ...(filter.type ? { type: filter.type } : {}),
     },

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import * as catalogExtractorController from '@controllers/catalogExtractor.controller';
 import { authenticate, requirePermission } from '@middlewares/auth';
+import { internalAuth } from '@middlewares/internalAuth';
 import { validate } from '@middlewares/validate';
 import { uploadCatalogPdf } from '@middlewares/upload';
 import {
@@ -8,9 +9,16 @@ import {
   listCatalogsQuerySchema,
   listCatalogTilesQuerySchema,
   updateExtractedTileSchema,
+  masterTileSyncSchema,
 } from '@validators/catalogExtractor.validators';
 
 const router = Router();
+
+// Internal service-to-service route. Declared ABOVE router.use(authenticate)
+// deliberately: the Python catalog_processor is a standalone script with no
+// login and no JWT, so it authenticates with a shared secret header instead.
+// Moving this below the authenticate line would break pen-drive syncing.
+router.post('/master-sync', internalAuth, validate(masterTileSyncSchema), catalogExtractorController.syncMasterTile);
 
 router.use(authenticate);
 

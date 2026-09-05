@@ -3,11 +3,13 @@ import { catchAsync } from '@utils/catchAsync';
 import { AppError } from '@utils/AppError';
 import * as catalogExtractorService from '@services/catalogExtractor.service';
 import * as brandService from '@services/brand.service';
+import * as masterTileSyncService from '@services/masterTileSync.service';
 import {
   UploadCatalogInput,
   ListCatalogsQuery,
   ListCatalogTilesQuery,
   UpdateExtractedTileInput,
+  MasterTileSyncInput,
 } from '@validators/catalogExtractor.validators';
 
 function requireActorId(req: Request): string {
@@ -66,4 +68,20 @@ export const updateExtractedTile = catchAsync(async (req: Request, res: Response
 export const deleteExtractedTile = catchAsync(async (req: Request, res: Response) => {
   await catalogExtractorService.deleteExtractedTile(req.params.tileId, requireActorId(req), req);
   res.status(200).json({ success: true, message: 'Tile deleted' });
+});
+
+/**
+ * Internal, service-to-service only (x-internal-key, no user session).
+ * Called once per product by the Python catalog_processor right after it
+ * appends that product to the Google Sheets MASTER tab.
+ */
+export const syncMasterTile = catchAsync(async (req: Request, res: Response) => {
+  const input = req.body as MasterTileSyncInput;
+  const { tile, created } = await masterTileSyncService.syncMasterTile(input, req);
+
+  res.status(created ? 201 : 200).json({
+    success: true,
+    data: { tile: { id: tile.id, productCode: tile.productCode, name: tile.name, brandId: tile.brandId, imageUrl: tile.imageUrl } },
+    message: created ? 'Tile created from MASTER' : 'Tile updated from MASTER',
+  });
 });
