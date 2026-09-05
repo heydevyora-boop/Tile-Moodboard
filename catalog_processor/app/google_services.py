@@ -1322,11 +1322,26 @@ def read_sheet_records(
     # BUILD RANGE
     # ------------------------------------------------------------
 
-    range_name = (
-        f"'{actual_sheet_name}'!"
-        f"{start_column}{start_row}:"
-        f"{end_column}{end_row}"
-    )
+    # end_row=None means "every populated row". An open-ended range
+    # ("'MASTER'!A1:ZZ") is how the Sheets API expresses that. A numeric
+    # bound silently truncates the tab instead of erroring, so any row
+    # past it is invisible to every lookup built on this data -- which
+    # reads as "the product does not exist" rather than as a read limit.
+    if end_row is None:
+
+        range_name = (
+            f"'{actual_sheet_name}'!"
+            f"{start_column}{start_row}:"
+            f"{end_column}"
+        )
+
+    else:
+
+        range_name = (
+            f"'{actual_sheet_name}'!"
+            f"{start_column}{start_row}:"
+            f"{end_column}{end_row}"
+        )
 
     print(
         f"Reading Google Sheet range: {range_name}"

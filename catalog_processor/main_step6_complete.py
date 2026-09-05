@@ -483,14 +483,31 @@ def internal_visualization(
 
             fallback_resolvers.append(resolve_scene_image)
 
+            fallback_errors = []
+
             for resolve_fallback in fallback_resolvers:
                 try:
                     fallback_image_path = str(
                         resolve_fallback(raw_fallback_image)
                     )
                     break
-                except Exception:
+                except Exception as fallback_error:
                     fallback_image_path = None
+                    fallback_errors.append(
+                        f"{getattr(resolve_fallback, '__name__', 'resolver')}"
+                        f": {fallback_error}"
+                    )
+
+            # Swallowing every failure silently is what made this so hard
+            # to diagnose: the request went on to fail with the generic
+            # "does not exist in MASTER" message, giving no hint that a
+            # fallback had been attempted at all, let alone why it failed.
+            if fallback_image_path is None:
+                print(
+                    "  [visualization] fallback product image unusable for "
+                    f"{raw_fallback_image!r} -- "
+                    + " | ".join(fallback_errors)
+                )
 
         result = create_visualization(
             {

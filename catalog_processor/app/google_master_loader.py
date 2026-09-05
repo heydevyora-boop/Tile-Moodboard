@@ -373,12 +373,18 @@ def load_master_records(
     The MASTER records are normalized before being returned.
     """
 
+    # No row bound: MASTER is the source of truth for product lookup, and
+    # it grows by one row per extracted product image. A fixed cap of 5000
+    # meant that once enough catalogs had been extracted, every later
+    # product became unfindable -- generate_product_visualization reports
+    # that as "does not exist in MASTER", indistinguishable from a product
+    # that was genuinely never written.
     records = load_sheet(
         spreadsheet_id=spreadsheet_id,
         sheet_name=sheet_name,
         start_column="A",
         end_column="ZZ",
-        end_row=5000,
+        end_row=None,
     )
 
     return _normalize_master_records(records)
