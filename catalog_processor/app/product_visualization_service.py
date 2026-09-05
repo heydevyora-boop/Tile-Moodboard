@@ -603,6 +603,43 @@ def get_product_name(
 
 
 # ============================================================
+# POSTGRES FALLBACK IMAGE
+# ============================================================
+
+def _usable_fallback_image(
+    fallback_image_path: Optional[Path],
+) -> Optional[Path]:
+    """
+    Return the caller-supplied fallback image only when it is a real,
+    readable file on disk.
+
+    This is NOT a placeholder and NOT a different product: the Node
+    route passes Tile.imageUrl for the very product that was requested
+    (see ai_visualization.routes.ts), which is the same extracted
+    catalog image the MASTER row would have pointed at via its Drive
+    URL. It is only reached for products that have no MASTER row.
+
+    Anything unusable resolves to None so the caller falls back to the
+    original hard failure rather than proceeding with a broken image.
+    """
+
+    if not fallback_image_path:
+        return None
+
+    candidate = Path(
+        fallback_image_path
+    )
+
+    if (
+        not candidate.exists()
+        or not candidate.is_file()
+    ):
+        return None
+
+    return candidate.resolve()
+
+
+# ============================================================
 # GENERATE VISUALIZATION
 # ============================================================
 
@@ -630,10 +667,18 @@ def generate_product_visualization(
 
     IMPORTANT:
 
-    fallback_image_path is intentionally NOT used as a
-    substitute for the requested catalog product.
+    fallback_image_path is never a substitute for a DIFFERENT
+    product, and never a synthetic placeholder swatch. It is the
+    requested product's own extracted catalog image, passed in by
+    the caller (Tile.imageUrl).
 
-    If the exact image cannot be resolved, the request fails.
+    It is used only when MASTER cannot supply that product's image
+    -- either the product has no MASTER row at all (UI-uploaded
+    catalogs never write to the sheet) or its MASTER Drive image is
+    unreachable.
+
+    With no usable fallback, the request still fails rather than
+    inventing an image.
     """
 
     # --------------------------------------------------------
@@ -677,6 +722,18 @@ def generate_product_visualization(
     # EXACT PRODUCT LOOKUP
     # --------------------------------------------------------
 
+    # A tile can legitimately exist in Postgres with no MASTER row:
+    # only the pen-drive extraction path writes to the MASTER sheet,
+    # while UI-uploaded catalogs insert straight into Postgres via
+    # catalogExtractor.service.ts. Failing closed there made every
+    # UI-uploaded tile unrenderable. The Node route already sends this
+    # product's own Tile.imageUrl for exactly that case, so use it
+    # rather than cancelling. A different product is still never
+    # substituted, and no synthetic swatch is ever generated.
+    resolved_fallback = _usable_fallback_image(
+        fallback_image_path
+    )
+
     try:
 
         product = get_product_for_visualization(
@@ -686,65 +743,85 @@ def generate_product_visualization(
 
     except KeyError as error:
 
-        raise KeyError(
-            f"Product '{requested_product_id}' does not exist "
-            "in MASTER.\n\n"
-            "Visualization cancelled.\n"
-            "The application will NOT use a different product, "
-            "Postgres fallback image, or generated placeholder."
-        ) from error
+        if resolved_fallback is None:
+
+            raise KeyError(
+                f"Product '{requested_product_id}' does not exist "
+                "in MASTER.\n\n"
+                "Visualization cancelled.\n"
+                "The application will NOT use a different product, "
+                "Postgres fallback image, or generated placeholder."
+            ) from error
+
+        product = None
 
     # --------------------------------------------------------
     # VERIFY MASTER PRODUCT ID
     # --------------------------------------------------------
 
-    master_product_id = str(
-        product.get(
-            "Product ID",
-            "",
-        )
-    ).strip()
+    if product is None:
 
-    if not master_product_id:
+        # No MASTER row for this product. The image used below is this
+        # same product's own extracted catalog image, supplied by the
+        # caller, so there is nothing to cross-check against MASTER.
+        tile_image = resolved_fallback
+
+    else:
 
         master_product_id = str(
             product.get(
-                "Record ID",
+                "Product ID",
                 "",
             )
         ).strip()
 
-    if (
-        master_product_id.upper()
-        != requested_product_id.upper()
-    ):
+        if not master_product_id:
 
-        raise ValueError(
-            "PRODUCT ID MISMATCH.\n\n"
-            f"Requested: {requested_product_id}\n"
-            f"MASTER: {master_product_id or '(missing)'}\n\n"
-            "Visualization cancelled."
-        )
+            master_product_id = str(
+                product.get(
+                    "Record ID",
+                    "",
+                )
+            ).strip()
 
-    # --------------------------------------------------------
-    # RESOLVE EXACT PRODUCT IMAGE
-    # --------------------------------------------------------
+        if (
+            master_product_id.upper()
+            != requested_product_id.upper()
+        ):
 
-    try:
+            raise ValueError(
+                "PRODUCT ID MISMATCH.\n\n"
+                f"Requested: {requested_product_id}\n"
+                f"MASTER: {master_product_id or '(missing)'}\n\n"
+                "Visualization cancelled."
+            )
 
-        tile_image = resolve_product_image(
-            product
-        )
+        # ----------------------------------------------------
+        # RESOLVE EXACT PRODUCT IMAGE
+        # ----------------------------------------------------
 
-    except FileNotFoundError as error:
+        try:
 
-        raise FileNotFoundError(
-            f"MASTER product '{requested_product_id}' exists, "
-            "but its exact catalog image could not be resolved.\n\n"
-            "The system will NOT substitute another product, "
-            "Postgres fallback image, or synthetic placeholder.\n\n"
-            f"{error}"
-        ) from error
+            tile_image = resolve_product_image(
+                product
+            )
+
+        except FileNotFoundError as error:
+
+            # The MASTER row exists but its Drive image is unreachable.
+            # The caller's copy of this same product's catalog image is
+            # still the correct image, so prefer it over cancelling.
+            if resolved_fallback is None:
+
+                raise FileNotFoundError(
+                    f"MASTER product '{requested_product_id}' exists, "
+                    "but its exact catalog image could not be resolved.\n\n"
+                    "The system will NOT substitute another product, "
+                    "Postgres fallback image, or synthetic placeholder.\n\n"
+                    f"{error}"
+                ) from error
+
+            tile_image = resolved_fallback
 
     # --------------------------------------------------------
     # VERIFY IMAGE FILE
@@ -762,12 +839,19 @@ def generate_product_visualization(
             "Visualization cancelled."
         )
 
+    used_fallback_image = (
+        resolved_fallback is not None
+        and tile_image == resolved_fallback
+    )
+
     # --------------------------------------------------------
     # PRODUCT NAME
     # --------------------------------------------------------
 
-    product_name = get_product_name(
-        product
+    product_name = (
+        get_product_name(product)
+        if product is not None
+        else ""
     )
 
     if not product_name:
@@ -809,10 +893,16 @@ def generate_product_visualization(
 
     result["master_source"] = (
         "GOOGLE_SHEETS_MASTER"
+        if product is not None
+        else "POSTGRES_TILE"
     )
 
+    # Still the exact catalog image for the requested product -- only the
+    # route it was resolved through differs.
     result["image_source"] = (
-        "EXACT_CATALOG_PRODUCT_IMAGE"
+        "EXACT_CATALOG_PRODUCT_IMAGE_VIA_POSTGRES"
+        if used_fallback_image
+        else "EXACT_CATALOG_PRODUCT_IMAGE"
     )
 
     result["placeholder_used"] = (
