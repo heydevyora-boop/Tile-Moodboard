@@ -449,19 +449,48 @@ def internal_visualization(
             )
         )
 
-        # Best-effort: a missing/unreachable fallback image should never
-        # fail the whole visualization request -- it just means the
-        # MASTER-sheet-missing case below falls through to the
-        # synthetic placeholder swatch, same as before this existed.
+        # Best-effort: a missing/unreachable fallback image must never fail
+        # the whole visualization request -- it just means the
+        # MASTER-sheet-missing case below raises its own original error.
+        #
+        # This value is a PRODUCT image (Tile.imageUrl), not a scene image.
+        # Catalog images live in a private Drive folder, and
+        # resolve_scene_image fetches over plain unauthenticated HTTP --
+        # which Drive answers with an HTML login page for a private file.
+        # It therefore raised every time here, was swallowed below, and
+        # left no fallback at all, so the MASTER-missing product still
+        # failed. _download_remote_product_image authenticates through the
+        # Drive API first, so prefer it for remote URLs and keep
+        # resolve_scene_image for the inputs it already handled (local
+        # paths, data URLs, raw base64) and as a second chance.
         fallback_image_path = None
         raw_fallback_image = (request.fallback_image_url or "").strip()
+
         if raw_fallback_image:
-            try:
-                fallback_image_path = str(
-                    resolve_scene_image(raw_fallback_image)
+
+            fallback_resolvers = []
+
+            if raw_fallback_image.lower().startswith(
+                ("http://", "https://")
+            ):
+                from app.product_visualization_service import (
+                    _download_remote_product_image,
                 )
-            except Exception:
-                fallback_image_path = None
+
+                fallback_resolvers.append(
+                    _download_remote_product_image
+                )
+
+            fallback_resolvers.append(resolve_scene_image)
+
+            for resolve_fallback in fallback_resolvers:
+                try:
+                    fallback_image_path = str(
+                        resolve_fallback(raw_fallback_image)
+                    )
+                    break
+                except Exception:
+                    fallback_image_path = None
 
         result = create_visualization(
             {
