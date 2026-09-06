@@ -98,7 +98,7 @@ export const settingsPaths = {
     put: {
       tags: ['Settings'],
       summary: 'Update a settings category — Owner only',
-      description: "The 'rules' category is not just storage — promptBuilder.service.ts reads defaultMinTiles/defaultMaxCombinations/defaultRoomType/defaultStyleTag from here and uses them whenever a mood board brief doesn't specify its own values.",
+      description: "The 'rules' category is not just storage — promptBuilder.service.ts reads defaultMinTiles/defaultMaxCombinations/defaultMinCatalogs/defaultRoomType/defaultStyleTag from here and uses them whenever a mood board brief doesn't specify its own values.",
       security: [{ bearerAuth: [] }],
       parameters: [{ name: 'category', in: 'path', required: true, schema: { type: 'string', enum: ['company', 'print', 'rules', 'general'] } }],
       requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' }, example: { defaultDpi: 300, defaultFormat: 'CASSETTE_PANEL', defaultFileFormat: 'PDF', defaultUnit: 'FT' } } } },
