@@ -156,4 +156,18 @@ def mark_processed(file_hash, filename):
     connection.close()
 
 
-initialize_database()
+# This file runs at import time (main_step6_complete.py -> catalog_processor/
+# api/index.py, the FastAPI entrypoint Vercel loads), so a failure here used
+# to take the whole Python service down before it could route a single
+# request -- every endpoint, including /health, returned Vercel's opaque
+# "A server error has occurred" 500. Vercel/Lambda mount the deployment
+# bundle read-only (only /tmp is writable), and DATABASE_FILE is a relative
+# path that resolves against that bundle, so sqlite3.connect() always threw
+# here on that platform. Any code that still calls get_connection() directly
+# (scene_manager.py, already_processed/mark_processed) will raise the same
+# error at that later call site instead; unlike here, those are inside
+# request handlers with their own error handling.
+try:
+    initialize_database()
+except sqlite3.OperationalError:
+    pass
