@@ -6,7 +6,7 @@
   "private": true,
   "scripts": {
     "dev": "nodemon --watch src --ext ts,json --exec ts-node -r tsconfig-paths/register src/server.ts",
-    "build": "prisma generate && tsc -p tsconfig.json"
+    "build": "prisma generate && tsc -p tsconfig.json",
     "start": "node dist/server.js",
     "lint": "eslint \"src/**/*.ts\"",
     "typecheck": "tsc --noEmit",
