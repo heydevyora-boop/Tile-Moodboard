@@ -1,0 +1,28 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "backend/api/index.ts",
+      "use": "@vercel/node",
+      "config": { "maxDuration": 60 }
+    },
+    {
+      "src": "catalog_processor/api/index.py",
+      "use": "@vercel/python",
+      "config": { "maxDuration": 60 }
+    },
+    {
+      "src": "frontend/**",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "index.html",
+      "use": "@vercel/static"
+    }
+  ],
+  "routes": [
+    { "src": "/api/v1/(.*)", "dest": "backend/api/index.ts" },
+    { "src": "/pyapi/(.*)", "dest": "catalog_processor/api/index.py" },
+    { "handle": "filesystem" }
+  ]
+}
