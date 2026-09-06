@@ -19,6 +19,7 @@ export const printSettingsSchema = z.object({
 export const rulesSettingsSchema = z.object({
   defaultMinTiles: z.coerce.number().int().min(1).max(50).default(3),
   defaultMaxCombinations: z.coerce.number().int().min(1).max(20).default(4),
+  defaultMinCatalogs: z.coerce.number().int().min(1).max(20).default(3),
   defaultRoomType: z.string().trim().max(100).optional().default(''),
   defaultStyleTag: z.string().trim().max(100).optional().default(''),
 });

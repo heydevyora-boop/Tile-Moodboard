@@ -14,8 +14,8 @@ function check(label: string, cond: boolean, extra?: unknown) {
 }
 
 const sampleTiles: TileSummary[] = [
-  { id: 'tile-1', name: 'Calacatta Grey', brandName: 'Somany', size: '600x600mm', finish: 'Matte', type: 'BASE', colorTone: 'Grey', bestRoom: 'Bathroom', productCode: 'SOM-1042' },
-  { id: 'tile-2', name: 'Bronze Highlighter Strip', brandName: 'Somany', size: '100x600mm', finish: 'Glossy', type: 'HIGHLIGHTER', colorTone: 'Bronze', bestRoom: 'Kitchen', productCode: 'SOM-2087' },
+  { id: 'tile-1', name: 'Calacatta Grey', brandName: 'Somany', size: '600x600mm', finish: 'Matte', type: 'BASE', colorTone: 'Grey', bestRoom: 'Bathroom', productCode: 'SOM-1042', catalogGroup: 'catalog:somany-1' },
+  { id: 'tile-2', name: 'Bronze Highlighter Strip', brandName: 'Somany', size: '100x600mm', finish: 'Glossy', type: 'HIGHLIGHTER', colorTone: 'Bronze', bestRoom: 'Kitchen', productCode: 'SOM-2087', catalogGroup: 'catalog:somany-2' },
 ];
 
 const sampleBrief: ClientBriefContext = { text: 'Pink washroom, female client, subtle style, mid budget', style: 'SUBTLE', room: 'BATHROOM', budget: 'Mid', customerName: 'Anjali Mehta' };

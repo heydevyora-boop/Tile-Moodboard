@@ -39,6 +39,7 @@ export interface TileSummary {
   colorTone: string | null;
   bestRoom: string | null;
   productCode: string | null;
+  catalogGroup: string;
 }
 
 const MAX_TILES_IN_PROMPT = 80;
@@ -75,6 +76,7 @@ export async function getAvailableTiles(filter: { brandId?: string; room?: strin
     colorTone: t.colorTone ?? null,
     bestRoom: t.bestRoom ?? null,
     productCode: t.productCode ?? null,
+    catalogGroup: t.catalogGroup ?? `tile:${t.id}`,
   }));
 }
 
@@ -319,6 +321,24 @@ export async function generateCombinations(input: GenerateBriefInput, actorId: s
 
   if (tiles.length < rulesSettings.defaultMinTiles) {
     warnings.push(`Only ${tiles.length} tile(s) matched this brief — fewer than the configured minimum of ${rulesSettings.defaultMinTiles} (Settings > Default Rules).`);
+  }
+
+  // Best-effort catalog diversity check: the prompt pool itself is already
+  // interleaved across catalogs (getRecommendedTiles), but Gemini's own
+  // picks across the returned boards could still land on just one or two
+  // of them. This doesn't reshuffle Gemini's picks -- it only flags it,
+  // the same way the tile-count check above does, so a store with
+  // genuinely few matching catalogs for this brief isn't blocked outright.
+  const catalogGroupByTileId = new Map(tiles.map((t) => [t.id, t.catalogGroup]));
+  const usedCatalogGroups = new Set<string>();
+  for (const combo of combinations) {
+    for (const tileRef of combo.tiles) {
+      const group = catalogGroupByTileId.get(tileRef.tileId);
+      if (group) usedCatalogGroups.add(group);
+    }
+  }
+  if (usedCatalogGroups.size < rulesSettings.defaultMinCatalogs) {
+    warnings.push(`Only ${usedCatalogGroups.size} distinct catalog(s) represented across the generated boards — fewer than the configured minimum of ${rulesSettings.defaultMinCatalogs} (Settings > Default Rules).`);
   }
 
   await logActivity({

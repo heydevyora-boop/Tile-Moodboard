@@ -67,6 +67,9 @@ export interface RankingCriteria {
 export interface RankedTile extends TileForRanking {
   score: number;
   matchReasons: string[];
+  // Only populated by getRecommendedTiles() (rankTiles() alone has no
+  // notion of catalogs) -- see sourceGroupKey() below.
+  catalogGroup?: string;
 }
 
 function scoreRoom(tile: TileForRanking, room: string | undefined): { points: number; reasons: string[] } {
@@ -271,7 +274,9 @@ export async function getRecommendedTiles(prisma: PrismaTileClient, filter: Reco
   const ranked = rankTiles(forRanking, { room: filter.room, style: filter.style, colorTone: filter.colorTone });
 
   const sourceByTileId = new Map<string, string>(tiles.map((t) => [t.id, sourceGroupKey(t)]));
-  return interleaveBySource(ranked, (id) => sourceByTileId.get(id) ?? `tile:${id}`, filter.limit ?? 20);
+  const selected = interleaveBySource(ranked, (id) => sourceByTileId.get(id) ?? `tile:${id}`, filter.limit ?? 20);
+
+  return selected.map((t) => ({ ...t, catalogGroup: sourceByTileId.get(t.id) ?? `tile:${t.id}` }));
 }
 
 // Minimal structural type for the Prisma client's tile delegate — keeps
