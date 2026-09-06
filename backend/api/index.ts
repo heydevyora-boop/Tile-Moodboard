@@ -6,6 +6,7 @@
 // wiring but hand the request/response straight to Express instead of
 // calling server.listen().
 import 'tsconfig-paths/register';
+import '@prisma/client';
 
 import { createApp } from '../src/app';
 import { connectDatabase } from '../src/db/connection';
