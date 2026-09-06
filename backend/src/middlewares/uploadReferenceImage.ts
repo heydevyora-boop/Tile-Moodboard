@@ -3,8 +3,17 @@ import multer from 'multer';
 import { config } from '@config/index';
 import { AppError } from '@utils/AppError';
 
-if (!fs.existsSync(config.referenceImages.uploadsDir)) {
-  fs.mkdirSync(config.referenceImages.uploadsDir, { recursive: true });
+// routes/index.ts pulls this middleware in, so this runs on every request --
+// including auth. On Vercel/Lambda the bundle is read-only (only /tmp is
+// writable) and the mkdir throws ENOENT at import time, which crashed the
+// whole API. Failing here must not take unrelated routes down; a disk upload
+// on a read-only deployment still fails, but only when one is attempted.
+try {
+  if (!fs.existsSync(config.referenceImages.uploadsDir)) {
+    fs.mkdirSync(config.referenceImages.uploadsDir, { recursive: true });
+  }
+} catch {
+  // Left for the upload request to surface; see comment above.
 }
 
 const ALLOWED_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
