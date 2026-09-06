@@ -8,6 +8,7 @@
 import 'tsconfig-paths/register';
 import '@prisma/client';
 
+
 // When this function throws while loading its modules, Vercel replaces the
 // response with its own opaque page ("A server error has occurred" /
 // FUNCTION_INVOCATION_FAILED) and the real cause is only visible in the
