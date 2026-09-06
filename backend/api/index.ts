@@ -8,10 +8,28 @@
 import { register } from 'tsconfig-paths';
 import * as path from 'path';
 
-// Explicitly register path aliases with tsconfig file
-// (auto-discovery fails in serverless environment where working directory differs)
+// The compiled src/*.js still contain require('@config/...') etc, so the
+// tsconfig path aliases have to be registered before anything under src/ is
+// loaded. Auto-discovery cannot be used here: it resolves tsconfig.json from
+// process.cwd(), which is /var/task on Vercel while the config lives at
+// /var/task/backend/tsconfig.json -- registration then silently no-ops and
+// every alias fails with "Cannot find module '@config/index'". Passing
+// baseUrl/paths explicitly keeps resolution anchored to this file's own
+// location and needs no tsconfig.json inside the deployed bundle.
+// These entries mirror compilerOptions.paths in backend/tsconfig.json.
 register({
-  project: path.resolve(__dirname, '../tsconfig.json'),
+  baseUrl: path.resolve(__dirname, '../src'),
+  paths: {
+    '@config/*': ['config/*'],
+    '@db/*': ['db/*'],
+    '@middlewares/*': ['middlewares/*'],
+    '@utils/*': ['utils/*'],
+    '@routes/*': ['routes/*'],
+    '@controllers/*': ['controllers/*'],
+    '@services/*': ['services/*'],
+    '@validators/*': ['validators/*'],
+    '@types/*': ['types/*'],
+  },
 });
 
 // When this function throws while loading its modules, Vercel replaces the
