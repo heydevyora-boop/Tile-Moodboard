@@ -19,9 +19,9 @@
   // API CONFIGURATION
   // ============================================================
 
-  const API_BASE =
-    window.CASA_API_BASE ||
-    'http://localhost:5000/api/v1';
+ const API_BASE =
+  window.CASA_API_BASE ||
+  '/api/v1';
 
   const ACCESS_TOKEN_KEY = 'casa_access_token';
   const USER_KEY = 'casa_user';
