@@ -6,6 +6,7 @@
 // wiring but hand the request/response straight to Express instead of
 // calling server.listen().
 import 'tsconfig-paths/register';
+import '@prisma/client';
 
 // When this function throws while loading its modules, Vercel replaces the
 // response with its own opaque page ("A server error has occurred" /
