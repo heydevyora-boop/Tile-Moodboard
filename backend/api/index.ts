@@ -5,7 +5,14 @@
 // each request invokes this function, so we reuse the same createApp()
 // wiring but hand the request/response straight to Express instead of
 // calling server.listen().
-import 'tsconfig-paths/register';
+import { register } from 'tsconfig-paths';
+import * as path from 'path';
+
+// Explicitly register path aliases with tsconfig file
+// (auto-discovery fails in serverless environment where working directory differs)
+register({
+  project: path.resolve(__dirname, '../tsconfig.json'),
+});
 
 // When this function throws while loading its modules, Vercel replaces the
 // response with its own opaque page ("A server error has occurred" /
