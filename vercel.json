@@ -1,5 +1,6 @@
 {
   "version": 2,
+  "buildCommand": "cd backend && npx prisma generate",
   "builds": [
     {
       "src": "backend/api/index.ts",
