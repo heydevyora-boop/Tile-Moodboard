@@ -228,19 +228,34 @@ function normalizeVisualizationResponse(
     driveImage?.webContentLink ||
     driveImage?.webViewLink;
 
+  // Python already reads the file it just wrote -- in its own process,
+  // immediately after writing it -- and embeds it here as a data: URL
+  // (_build_success_response in visualization_api.py). That is the only
+  // image reference in this response both sides can actually use: Node
+  // and Python run as separate serverless functions on Vercel with no
+  // shared disk, so image_path (Python's own local path, turned into
+  // /generated-visualizations/<file> below) points at a file that exists
+  // only inside Python's container -- unreachable from this Express
+  // server -- which is what made every generated visualization fail to
+  // load once the underlying scene-image fetch itself was fixed.
+  const embeddedImageUrl =
+    result.image?.url;
+
   /*
-   * Prefer local Express-served image.
+   * Prefer the image Python already embedded.
    *
-   * Fall back to Google Drive URL if the
-   * local path isn't available.
+   * Fall back to reconstructing a local Express-served URL, then to
+   * Google Drive, only if Python didn't already supply one (an older
+   * Python build, or a save that produced no bytes).
    */
 
   const imageUrl =
-    imagePath
+    embeddedImageUrl ||
+    (imagePath
       ? buildVisualizationImageUrl(
           imagePath,
         )
-      : driveUrl || '';
+      : driveUrl || '');
 
   result.image = {
     url:
