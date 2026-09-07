@@ -50,12 +50,21 @@ function driveFileIdFromUrl(imageUrl: string | null): string | null {
 /**
  * Persists the uploaded bytes and returns the URL to record.
  *
- * Drive is used whenever it's configured, because a serverless host has no
+ * Drive is preferred when it's configured, because a serverless host has no
  * durable disk: an image written to the bundle (read-only) or /tmp
  * (per-invocation) is gone by the time the Python service tries to fetch
  * it, which is what made every generation fail with a connection error or
- * a 404. Without Drive configured this writes to disk exactly as multer's
- * diskStorage used to, so local/Docker behaviour is unchanged.
+ * a 404.
+ *
+ * A Drive failure falls back to local disk rather than failing the upload.
+ * A plain service account owns no storage quota, so uploading into its own
+ * My Drive is rejected outright ("Service Accounts do not have storage
+ * quota") -- that needs a Shared Drive or OAuth delegation to fix, which is
+ * a Google-side setup matter, and until it's done a developer running
+ * locally must still be able to add reference images. Local disk is a
+ * perfectly good store there; it is only on a read-only serverless host
+ * that it isn't, and there this write throws and surfaces the real error
+ * rather than silently appearing to succeed.
  */
 async function storeUploadedImage(file: Express.Multer.File): Promise<{ imageUrl: string; localFilename: string | null }> {
   if (!isRealImageBuffer(file.buffer)) {
@@ -65,16 +74,22 @@ async function storeUploadedImage(file: Express.Multer.File): Promise<{ imageUrl
   const filename = buildStoredFilename(file.originalname);
 
   if (googleDriveClient.isConfigured()) {
-    const uploaded = await googleDriveClient.uploadFile({
-      name: filename,
-      mimeType: file.mimetype,
-      content: file.buffer,
-      parentFolderId: await getDriveFolderId(),
-    });
-    // Anyone-with-link reader: the Python service fetches this URL
-    // unauthenticated, so a private file would 403.
-    await googleDriveClient.generatePublicLink(uploaded.id);
-    return { imageUrl: toDriveDownloadUrl(uploaded.id), localFilename: null };
+    try {
+      const uploaded = await googleDriveClient.uploadFile({
+        name: filename,
+        mimeType: file.mimetype,
+        content: file.buffer,
+        parentFolderId: await getDriveFolderId(),
+      });
+      // Anyone-with-link reader: the Python service fetches this URL
+      // unauthenticated, so a private file would 403.
+      await googleDriveClient.generatePublicLink(uploaded.id);
+      return { imageUrl: toDriveDownloadUrl(uploaded.id), localFilename: null };
+    } catch (err) {
+      logger.warn(
+        `Reference image could not be stored in Google Drive, falling back to local disk: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
   }
 
   fs.mkdirSync(config.referenceImages.uploadsDir, { recursive: true });
