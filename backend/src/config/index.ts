@@ -122,6 +122,9 @@ export const config = {
     serviceAccountKeyPath:
       env.GOOGLE_SERVICE_ACCOUNT_KEY_PATH,
 
+    serviceAccountJson:
+      env.GOOGLE_SERVICE_ACCOUNT_JSON,
+
     sheetName:
       env.GOOGLE_SHEET_NAME,
 

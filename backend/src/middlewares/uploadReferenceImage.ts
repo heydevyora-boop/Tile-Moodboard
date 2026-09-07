@@ -18,13 +18,18 @@ try {
 
 const ALLOWED_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, config.referenceImages.uploadsDir),
-  filename: (_req, file, cb) => {
-    const safeName = file.originalname.replace(/[^a-zA-Z0-9.\-_]/g, '_');
-    cb(null, `${Date.now()}-${safeName}`);
-  },
-});
+// memoryStorage, not diskStorage: on Vercel/Lambda the uploads directory is
+// on the read-only bundle, so multer's own write failed before the request
+// ever reached the service layer. Holding the bytes in file.buffer lets the
+// service push them straight to Drive; the local-disk fallback (used when
+// Drive isn't configured) writes them itself. maxUploadBytes already bounds
+// how much can be held in memory.
+const storage = multer.memoryStorage();
+
+/** Same collision-resistant, path-safe name diskStorage used to generate. */
+export function buildStoredFilename(originalname: string): string {
+  return `${Date.now()}-${originalname.replace(/[^a-zA-Z0-9.\-_]/g, '_')}`;
+}
 
 function imageOnly(_req: Express.Request, file: Express.Multer.File, cb: multer.FileFilterCallback) {
   if (!ALLOWED_MIME_TYPES.has(file.mimetype)) {

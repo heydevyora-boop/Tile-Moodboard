@@ -229,6 +229,14 @@ const envSchema = z.object({
   GOOGLE_SERVICE_ACCOUNT_KEY_PATH:
     z.string().optional(),
 
+  // Serverless platforms (Vercel/Lambda) mount the bundle read-only and
+  // have nowhere safe to put a key file -- committing one would publish
+  // the private key. This holds the same service-account JSON as the file
+  // above, pasted into an env var instead. KEY_PATH still takes
+  // precedence, so existing Docker/local setups are unaffected.
+  GOOGLE_SERVICE_ACCOUNT_JSON:
+    z.string().optional(),
+
   GOOGLE_SHEET_NAME: z
     .string()
     .default(
