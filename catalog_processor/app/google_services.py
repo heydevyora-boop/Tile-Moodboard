@@ -298,6 +298,31 @@ def _load_service_account_credentials():
             "(paste the whole service-account key file, or its base64)."
         ) from error
 
+    # A service account key JSON always has "client_email" and
+    # "private_key" at the top level. An "installed" or "web" key instead
+    # means an OAuth client-secrets file (credentials.json, downloaded from
+    # Google Cloud Console -> APIs & Services -> Credentials -> OAuth 2.0
+    # Client IDs) was pasted by mistake -- that file authenticates a
+    # different, interactive flow and has no client_email/private_key at
+    # all, which otherwise surfaces only as google-auth's generic
+    # "Service account info was not in the expected format" error.
+    if "installed" in info or "web" in info:
+        raise RuntimeError(
+            "GOOGLE_SERVICE_ACCOUNT_JSON contains an OAuth client-secrets "
+            "file (has an \"installed\"/\"web\" key), not a service "
+            "account key. Go to Google Cloud Console -> APIs & Services -> "
+            "Credentials -> Service Accounts -> your service account -> "
+            "Keys -> Add Key -> Create new key -> JSON, and paste that "
+            "file's contents instead."
+        )
+
+    if "client_email" not in info or "private_key" not in info:
+        raise RuntimeError(
+            "GOOGLE_SERVICE_ACCOUNT_JSON is missing client_email or "
+            "private_key -- paste the complete service-account key JSON "
+            "file downloaded from Google Cloud Console."
+        )
+
     return (
         service_account.Credentials
         .from_service_account_info(
