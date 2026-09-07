@@ -272,15 +272,31 @@ def _load_service_account_credentials():
     GOOGLE_SERVICE_ACCOUNT_JSON parsing uses, for the same reason.
     """
 
-    raw = GOOGLE_SERVICE_ACCOUNT_JSON.strip()
+    # Strip a UTF-8 BOM some editors/dashboards prepend when the value is
+    # pasted from a file -- without this, raw.startswith("{") is False even
+    # for valid raw JSON, sending it down the base64 branch where decoding
+    # plain JSON text as base64 produces garbage bytes and an opaque
+    # "'utf-8' codec can't decode byte ..." error instead of a usable one.
+    raw = GOOGLE_SERVICE_ACCOUNT_JSON.strip().lstrip("﻿")
 
-    decoded = (
-        raw
-        if raw.startswith("{")
-        else base64.b64decode(raw).decode("utf-8")
-    )
+    if raw.startswith("{"):
+        decoded = raw
+    else:
+        try:
+            decoded = base64.b64decode(raw).decode("utf-8")
+        except Exception as error:
+            raise RuntimeError(
+                "GOOGLE_SERVICE_ACCOUNT_JSON is not valid JSON or base64 "
+                "(paste the whole service-account key file, or its base64)."
+            ) from error
 
-    info = json.loads(decoded)
+    try:
+        info = json.loads(decoded)
+    except Exception as error:
+        raise RuntimeError(
+            "GOOGLE_SERVICE_ACCOUNT_JSON is not valid JSON "
+            "(paste the whole service-account key file, or its base64)."
+        ) from error
 
     return (
         service_account.Credentials
