@@ -250,6 +250,12 @@
   document.getElementById('runBtn').addEventListener('click', runTest);
 
   function refImgUrl(path) {
+    // path is already a full URL when the image is stored in Vercel Blob
+    // or Google Drive (both return an absolute https:// URL); prepending
+    // this host's own origin to that produced a malformed
+    // https://this-app.example<https://blob-host>/... URL. Only a
+    // /static/... path (local disk storage) needs the origin added.
+    if (/^https?:\/\//i.test(path)) return path;
     const base = (window.CASA_API_BASE || (window.location.hostname === 'localhost' ? 'http://localhost:5000/api/v1' : `${window.location.protocol}//${window.location.host}/api/v1`)).replace(/\/api\/v1\/?$/, '');
     return base + path;
   }

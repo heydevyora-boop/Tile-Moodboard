@@ -85,14 +85,26 @@ async function storeUploadedImage(file: Express.Multer.File): Promise<{ imageUrl
   // needs no /static route, no BACKEND_PUBLIC_URL, and no local disk --
   // the three things that made a deployed reference image unfetchable.
   if (config.referenceImages.blobToken) {
-    const { put } = await import('@vercel/blob');
-    const stored = await put(`${BLOB_PREFIX}/${filename}`, file.buffer, {
-      access: 'public',
-      contentType: file.mimetype,
-      token: config.referenceImages.blobToken,
-      addRandomSuffix: false,
-    });
-    return { imageUrl: stored.url, localFilename: null };
+    try {
+      const { put } = await import('@vercel/blob');
+      const stored = await put(`${BLOB_PREFIX}/${filename}`, file.buffer, {
+        access: 'public',
+        contentType: file.mimetype,
+        token: config.referenceImages.blobToken,
+        addRandomSuffix: false,
+      });
+      return { imageUrl: stored.url, localFilename: null };
+    } catch (err) {
+      // Not left to fall through to Drive/disk: on Vercel, Drive fails on
+      // the same service-account quota limitation documented above and
+      // disk is read-only, so a silent fallback would just replace this
+      // error with a less informative one instead of actually succeeding.
+      // Re-thrown as an AppError so the real message reaches the response
+      // instead of being replaced by errorHandler.ts's generic "Something
+      // went wrong" for an unrecognized thrown value in production.
+      const message = err instanceof Error ? err.message : String(err);
+      throw AppError.internal(`Reference image could not be stored in Vercel Blob: ${message}`);
+    }
   }
 
   if (googleDriveClient.isConfigured()) {
