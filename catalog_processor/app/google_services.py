@@ -1,7 +1,10 @@
+import base64
+import json
 import os
 from pathlib import Path
 
 from google.oauth2.credentials import Credentials
+from google.oauth2 import service_account
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 
@@ -57,6 +60,19 @@ CREDENTIALS_FILE = os.getenv(
 TOKEN_FILE = os.getenv(
     "GOOGLE_OAUTH_TOKEN_PATH",
     str(_CATALOG_PROCESSOR_DIR / "token.json"),
+)
+
+# Vercel/Lambda has no interactive browser for the OAuth flow below (it
+# calls flow.run_local_server(), which opens one), and its read-only
+# bundle never had credentials.json/token.json deployed to it in the
+# first place -- every Sheets/Drive call here failed with
+# "[Errno 2] No such file or directory: '.../credentials.json'" before a
+# single request could be served. Same env var name and JSON shape as the
+# Node backend's GOOGLE_SERVICE_ACCOUNT_JSON, so the identical value can
+# be set for both. Local/interactive use is unaffected: unset, this is
+# skipped and get_credentials() behaves exactly as before.
+GOOGLE_SERVICE_ACCOUNT_JSON = os.getenv(
+    "GOOGLE_SERVICE_ACCOUNT_JSON"
 )
 
 # Canonical product/master tab used by the catalog pipeline.
@@ -246,14 +262,50 @@ MASTER_SHEETS = {
 # GOOGLE AUTHENTICATION
 # ============================================================
 
+def _load_service_account_credentials():
+    """
+    Build service-account credentials from GOOGLE_SERVICE_ACCOUNT_JSON.
+
+    Accepts either the raw JSON or a base64 blob of it, since pasting raw
+    JSON into a dashboard env var commonly mangles the private key's
+    newlines -- the same acceptance rule the Node backend's
+    GOOGLE_SERVICE_ACCOUNT_JSON parsing uses, for the same reason.
+    """
+
+    raw = GOOGLE_SERVICE_ACCOUNT_JSON.strip()
+
+    decoded = (
+        raw
+        if raw.startswith("{")
+        else base64.b64decode(raw).decode("utf-8")
+    )
+
+    info = json.loads(decoded)
+
+    return (
+        service_account.Credentials
+        .from_service_account_info(
+            info,
+            scopes=SCOPES,
+        )
+    )
+
+
 def get_credentials():
     """
-    Get Google OAuth credentials.
+    Get Google credentials.
+
+    A service account (GOOGLE_SERVICE_ACCOUNT_JSON) is used when set --
+    required on a serverless host, since the OAuth flow below needs a
+    browser. Unset, behaviour is exactly as before:
 
     Reuses token.json if available.
     Refreshes expired credentials when possible.
     Opens browser authentication on first run.
     """
+
+    if GOOGLE_SERVICE_ACCOUNT_JSON:
+        return _load_service_account_credentials()
 
     credentials = None
 
