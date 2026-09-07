@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Casa de Aurum — Generation History</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/shell.css">
+<style>
+  .filters-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;align-items:center;}
+  .filters-row input[type=text]{font-family:var(--mono);font-size:12px;padding:8px 11px;border:1px solid var(--line);border-radius:2px;background:#fff;color:var(--stone-700);width:240px;}
+  .gen-row{padding:12px 16px;display:grid;grid-template-columns:160px 1fr 130px 26px;gap:12px;align-items:center;cursor:pointer;border-bottom:1px solid rgba(34,29,24,0.08);}
+  .gen-row:hover{background:#FAF7F0;}
+  .gen-row .id{font-family:var(--mono);font-size:11.5px;color:var(--stone-600);}
+  .gen-row .action{font-weight:600;font-size:13px;color:var(--ink);}
+  .gen-row .entity{font-family:var(--mono);font-size:11px;color:var(--stone-600);}
+  .gen-row .chev{font-size:10px;color:var(--stone-400);transition:transform .15s ease;text-align:center;}
+  .gen-row .chev.open{transform:rotate(0deg);}
+  .gen-row .chev.closed{transform:rotate(-90deg);}
+  .gen-detail{background:#FAF7F0;border-bottom:1px solid rgba(34,29,24,0.08);padding:14px 16px;}
+  .gen-detail pre{margin:0;font-family:var(--mono);font-size:11.5px;color:var(--stone-700);white-space:pre-wrap;word-break:break-word;background:#fff;border:1px solid var(--line);border-radius:2px;padding:12px;}
+  .pager{padding:14px 18px;display:flex;align-items:center;justify-content:space-between;font-family:var(--mono);font-size:11px;color:var(--stone-600);}
+  .pager button{font-family:var(--mono);font-size:11.5px;padding:6px 11px;border:1px solid var(--line);background:#fff;color:var(--stone-700);border-radius:2px;cursor:pointer;}
+  .pager button:disabled{color:var(--stone-400);cursor:not-allowed;}
+</style>
+</head>
+<body>
+<div id="casa-main-content">
+  <div class="casa-pageheader">
+    <div>
+      <h1>Generation History</h1>
+      <p>Every mood-board create / update / approve / delete action, straight from the activity log.</p>
+    </div>
+    <div class="casa-actions">
+      <button class="casa-btn secondary" id="exportBtn">Export page as CSV</button>
+    </div>
+  </div>
+
+  <div class="casa-stat-grid" id="statGrid">
+    <div class="casa-stat-card"><div class="label">Loading…</div><div class="value">—</div></div>
+  </div>
+
+  <div class="filters-row">
+    <input type="text" id="entitySearch" placeholder="Search brief text…">
+    <div id="actionFilters" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
+  </div>
+
+  <div class="casa-panel">
+    <div class="panel-head"><h3>Activity<span class="hint" id="rowsHint"></span></h3></div>
+    <div id="rowsBody"><div class="casa-empty">Loading…</div></div>
+    <div class="pager" id="pager" style="display:none;">
+      <span id="pagerLabel"></span>
+      <div style="display:flex;gap:6px;"><button id="prevPage">Prev</button><button id="nextPage">Next</button></div>
+    </div>
+  </div>
+</div>
+
+<script src="assets/api-client.js"></script>
+<script src="assets/notifications.js"></script>
+<script src="assets/shell.js"></script>
+<script>
+  function esc(s) { return CasaShell.escapeHtml(s); }
+
+  const ACTIONS = [
+    { v: '', l: 'All' },
+    { v: 'mood_board.saved', l: 'Saved' },
+    { v: 'mood_board.approved', l: 'Approved' },
+    { v: 'mood_board.updated', l: 'Updated' },
+    { v: 'mood_board.deleted', l: 'Deleted' },
+  ];
+
+  let currentPage = 1;
+  let actionFilter = '';
+  let searchText = '';
+  let rows = [];
+  let pageMeta = null;
+  const openRows = {};
+
+  function renderActionFilters() {
+    document.getElementById('actionFilters').innerHTML = ACTIONS.map((a) => `
+      <div class="casa-chip ${actionFilter === a.v ? 'on' : ''}" data-v="${esc(a.v)}">${esc(a.l)}</div>
+    `).join('');
+    document.querySelectorAll('#actionFilters .casa-chip').forEach((chip) => {
+      chip.addEventListener('click', () => {
+        actionFilter = chip.dataset.v;
+        currentPage = 1;
+        renderActionFilters();
+        loadLogs();
+      });
+    });
+  }
+
+  function metadataLine(meta) {
+    if (!meta || typeof meta !== 'object') return '';
+    return Object.entries(meta).map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : v}`).join(' · ');
+  }
+
+  function renderStats() {
+    const uniqueUsers = new Set(rows.map((r) => r.user?.id).filter(Boolean)).size;
+    const byAction = {};
+    rows.forEach((r) => { byAction[r.action] = (byAction[r.action] || 0) + 1; });
+    const topAction = Object.entries(byAction).sort((a, b) => b[1] - a[1])[0];
+
+    document.getElementById('statGrid').innerHTML = [
+      `<div class="casa-stat-card"><div class="label">Logged (this page)</div><div class="value">${rows.length}</div><div class="sub">${pageMeta ? `of ${pageMeta.total} total` : ''}</div></div>`,
+      `<div class="casa-stat-card"><div class="label">Unique staff</div><div class="value">${uniqueUsers}</div></div>`,
+      `<div class="casa-stat-card"><div class="label">Most common action</div><div class="value" style="font-size:15px;">${topAction ? esc(topAction[0]) : '—'}</div><div class="sub">${topAction ? `${topAction[1]}× on this page` : ''}</div></div>`,
+    ].join('');
+  }
+
+  function renderRows() {
+    const container = document.getElementById('rowsBody');
+    const filtered = rows.filter((r) => !searchText ||
+      (r.entityType || '').toLowerCase().includes(searchText.toLowerCase()) ||
+      metadataLine(r.metadata).toLowerCase().includes(searchText.toLowerCase()));
+
+    document.getElementById('rowsHint').textContent = pageMeta ? `${pageMeta.total} total` : '';
+
+    if (!filtered.length) {
+      container.innerHTML = '<div class="casa-empty">No mood board activity matches.</div>';
+      return;
+    }
+
+    container.innerHTML = filtered.map((r) => {
+      const isOpen = !!openRows[r.id];
+      const detail = isOpen ? `
+        <div class="gen-detail">
+          <pre>${esc(JSON.stringify({ action: r.action, entityType: r.entityType, entityId: r.entityId, metadata: r.metadata, ipAddress: r.ipAddress }, null, 2))}</pre>
+        </div>` : '';
+      return `
+        <div>
+          <div class="gen-row" data-id="${esc(r.id)}">
+            <div class="id">${esc(new Date(r.createdAt).toLocaleString())}</div>
+            <div>
+              <div class="action">${esc(r.action)}</div>
+              <div class="entity">${esc(metadataLine(r.metadata) || (r.entityId ? `${r.entityType} · ${r.entityId.slice(0, 8)}` : '—'))}</div>
+            </div>
+            <div class="entity" style="text-align:right;">${r.user ? esc(r.user.name) : 'System'}</div>
+            <div class="chev ${isOpen ? 'open' : 'closed'}">▾</div>
+          </div>
+          ${detail}
+        </div>`;
+    }).join('');
+
+    document.querySelectorAll('.gen-row').forEach((row) => {
+      row.addEventListener('click', () => {
+        const id = row.dataset.id;
+        openRows[id] = !openRows[id];
+        renderRows();
+      });
+    });
+  }
+
+  async function loadLogs() {
+    document.getElementById('rowsBody').innerHTML = '<div class="casa-empty">Loading…</div>';
+    try {
+      const params = { page: currentPage, limit: 25 };
+      if (actionFilter) params.action = actionFilter;
+      const { logs, meta } = await CasaApi.admin.moodBoardLogs(params);
+      rows = logs;
+      pageMeta = meta;
+      renderStats();
+      renderRows();
+
+      const pages = meta.totalPages || Math.max(1, Math.ceil((meta.total || logs.length) / 25));
+      document.getElementById('pager').style.display = pages > 1 ? '' : 'none';
+      document.getElementById('pagerLabel').textContent = `Page ${currentPage} of ${pages}`;
+      document.getElementById('prevPage').disabled = currentPage <= 1;
+      document.getElementById('nextPage').disabled = currentPage >= pages;
+    } catch (err) {
+      document.getElementById('rowsBody').innerHTML = `<div class="casa-error-inline">${esc(err.message || 'Failed to load generation history.')}</div>`;
+    }
+  }
+
+  function exportCsv() {
+    if (!rows.length) { CasaNotify.error('Nothing to export on this page.'); return; }
+    const header = ['Time', 'Action', 'EntityType', 'EntityId', 'Actor', 'Metadata'];
+    const lines = rows.map((r) => [
+      new Date(r.createdAt).toISOString(),
+      r.action,
+      r.entityType || '',
+      r.entityId || '',
+      r.user?.name || 'System',
+      JSON.stringify(r.metadata || {}),
+    ].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(','));
+    const csv = [header.join(','), ...lines].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `generation-history-page-${currentPage}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  (async () => {
+    await CasaShell.init({ current: 'admin-generation-history.html', allowedRoles: ['ADMIN','OWNER'] });
+
+    renderActionFilters();
+    document.getElementById('entitySearch').addEventListener('input', (e) => { searchText = e.target.value; renderRows(); });
+    document.getElementById('prevPage').addEventListener('click', () => { if (currentPage > 1) { currentPage--; loadLogs(); } });
+    document.getElementById('nextPage').addEventListener('click', () => { currentPage++; loadLogs(); });
+    document.getElementById('exportBtn').addEventListener('click', exportCsv);
+
+    await loadLogs();
+  })();
+</script>
+</body>
+</html>

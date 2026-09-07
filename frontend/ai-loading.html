@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Casa de Aurum — Generating</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/shell.css">
+<style>
+  @keyframes casaPulse { 0%,100%{opacity:1;} 50%{opacity:.35;} }
+  @keyframes casaSpin { 0%{transform:rotate(0deg);} 100%{transform:rotate(360deg);} }
+
+  .load-grid { display: grid; grid-template-columns: 380px 1fr; gap: 34px; align-items: start; }
+  @media (max-width: 900px) { .load-grid { grid-template-columns: 1fr; } }
+
+  .phone { background: var(--charcoal); border-radius: 34px; padding: 14px; box-shadow: var(--shadow); width: 100%; max-width: 380px; margin: 0 auto; }
+  .phone-screen { background: var(--stone-50); border-radius: 22px; padding: 22px 18px 26px; min-height: 560px; position: relative; overflow: hidden; display: flex; flex-direction: column; }
+  .phone-notch { width: 70px; height: 5px; background: rgba(0,0,0,0.1); border-radius: 4px; margin: 0 auto 24px; }
+  .phone-center { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 12px; }
+  .spinner { width: 48px; height: 48px; border: 2.5px solid var(--stone-100); border-top-color: var(--brass); border-radius: 50%; animation: casaSpin 1s linear infinite; margin-bottom: 24px; }
+  .step-label { font-family: var(--display); font-weight: 600; font-size: 18px; color: var(--charcoal); margin-bottom: 4px; text-align: center; }
+  .step-sub { font-family: var(--mono); font-size: 11px; color: var(--stone-600); margin-bottom: 24px; text-align: center; }
+  .pbar { width: 100%; background: var(--stone-100); border-radius: 2px; overflow: hidden; height: 6px; margin-bottom: 8px; }
+  .pbar-fill { height: 100%; background: linear-gradient(90deg,var(--brass),var(--brass-light)); border-radius: 2px; transition: width .5s ease; }
+  .pbar-meta { display: flex; justify-content: space-between; width: 100%; margin-bottom: 28px; font-family: var(--mono); font-size: 10.5px; color: var(--stone-600); }
+  .steplist { width: 100%; display: flex; flex-direction: column; gap: 10px; }
+  .steplist .srow { display: flex; align-items: center; gap: 10px; }
+  .steplist .sicon { width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex: none; transition: all .3s ease; background: var(--stone-100); }
+  .steplist .sicon.active { background: var(--brass); }
+  .steplist .sicon.done { background: var(--sage); }
+  .steplist .sicon .beat { width: 6px; height: 6px; border-radius: 50%; background: #fff; animation: casaPulse 1s ease infinite; }
+  .steplist .stext { font-family: var(--mono); font-size: 12px; color: var(--stone-400); transition: color .3s ease; }
+  .steplist .stext.active { color: var(--charcoal); }
+  .steplist .stext.done { color: var(--sage); }
+  .cancel-row { text-align: center; margin-top: 20px; }
+  .cancel-row a { font-family: var(--mono); font-size: 11.5px; color: var(--brass); padding: 8px 16px; }
+
+  .side-col { display: flex; flex-direction: column; gap: 16px; }
+  .kv-row { display: flex; justify-content: space-between; padding: 10px 0; }
+  .kv-row + .kv-row { border-top: 1px solid rgba(34,29,24,0.08); }
+  .kv-row span.k { font-family: var(--mono); font-size: 12px; color: var(--stone-600); }
+  .kv-row span.v { font-family: var(--mono); font-size: 12px; color: var(--ink); text-align: right; max-width: 200px; }
+
+  .terminal { background: var(--charcoal); color: #D9D2C2; font-family: var(--mono); font-size: 12px; line-height: 1.7; padding: 16px 18px; max-height: 260px; overflow-y: auto; }
+  .terminal .line.ok { color: #B9CBA6; }
+  .terminal .line.info { color: #D8B677; }
+  .terminal .line.err { color: #D48A73; }
+  .cursor-blink { color: var(--stone-600); animation: casaPulse 1s ease infinite; }
+
+  .error-panel { background: #fff; border: 1px solid var(--clay); border-radius: 4px; padding: 20px; text-align: center; }
+  .error-panel .t { font-weight: 700; color: var(--clay); margin-bottom: 8px; }
+  .error-panel .m { font-family: var(--mono); font-size: 12px; color: var(--stone-700); margin-bottom: 16px; }
+</style>
+</head>
+<body>
+<div id="casa-main-content">
+  <div class="load-grid">
+    <div class="phone">
+      <div class="phone-screen">
+        <div class="phone-notch"></div>
+        <div class="phone-center" id="phoneCenter">
+          <div class="spinner" id="spinnerEl"></div>
+          <div class="step-label" id="stepLabel">Sending brief to AI</div>
+          <div class="step-sub" id="stepSub">Reading your client brief and preparing the request</div>
+          <div class="pbar"><div class="pbar-fill" id="pbarFill" style="width:8%;"></div></div>
+          <div class="pbar-meta"><span id="pbarLabel">Step 1 of 3</span><span id="pbarPct">8%</span></div>
+          <div class="steplist" id="stepList"></div>
+        </div>
+        <div class="cancel-row"><a href="moodboard-results.html">Skip to results →</a></div>
+      </div>
+    </div>
+
+    <div class="side-col">
+      <div class="casa-panel">
+        <div class="panel-head"><h3>Current Request</h3></div>
+        <div class="panel-body" id="requestBody"></div>
+      </div>
+      <div class="casa-panel">
+        <div class="panel-head" style="display:flex;align-items:center;justify-content:space-between;">
+          <h3>Process Log</h3>
+          <span style="display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10.5px;color:var(--brass);"><span style="width:7px;height:7px;border-radius:50%;background:var(--brass);animation:casaPulse 1.2s ease infinite;"></span>Processing</span>
+        </div>
+        <div class="terminal" id="terminalLog"><span class="cursor-blink">▌</span></div>
+      </div>
+      <div class="casa-panel">
+        <div class="panel-body">
+          <div class="kv-row"><span class="k">Elapsed</span><span class="v" id="elapsedEl">0s</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="assets/api-client.js"></script>
+<script src="assets/notifications.js"></script>
+<script src="assets/shell.js"></script>
+<script>
+(async () => {
+  await CasaShell.init({ current: 'ai-loading.html' });
+
+  function escapeHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  const raw = sessionStorage.getItem('casaMoodboardBrief');
+  if (!raw) {
+    location.href = 'moodboard-wizard.html';
+    return;
+  }
+
+  let stored;
+  try {
+    stored = JSON.parse(raw);
+  } catch (_) {
+    location.href = 'moodboard-wizard.html';
+    return;
+  }
+
+  const payload = stored.payload || {};
+  const answers = stored.answers || {};
+
+  const requestBody = document.getElementById('requestBody');
+  const rows = [
+    ['Space', answers.space || payload.room || '—'],
+    ['Style', answers.style || payload.style || '—'],
+    ['Budget', answers.budget || '—'],
+    ['Colour', answers.color || '—'],
+  ];
+  requestBody.innerHTML = rows.map(([k, v]) => `<div class="kv-row"><span class="k">${escapeHtml(k)}</span><span class="v">${escapeHtml(v)}</span></div>`).join('');
+
+  const STEPS = [
+    { label: 'Sending brief to AI', sub: 'Reading your client brief and preparing the request' },
+    { label: 'Generating combinations', sub: 'Gemini is building mood board options from the tile catalog' },
+    { label: 'Saving mood board', sub: 'Persisting the generated combinations to your account' },
+  ];
+
+  const stepListEl = document.getElementById('stepList');
+  function renderSteps(activeIndex, doneUpTo) {
+    stepListEl.innerHTML = STEPS.map((s, i) => {
+      const done = i <= doneUpTo;
+      const active = i === activeIndex && !done;
+      return `<div class="srow">
+        <div class="sicon ${done ? 'done' : active ? 'active' : ''}">${done ? '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"></polyline></svg>' : active ? '<div class="beat"></div>' : ''}</div>
+        <span class="stext ${done ? 'done' : active ? 'active' : ''}">${escapeHtml(s.label)}</span>
+      </div>`;
+    }).join('');
+  }
+
+  let currentStepIndex = 0;
+  let doneUpTo = -1;
+  renderSteps(currentStepIndex, doneUpTo);
+
+  function setStep(i) {
+    currentStepIndex = i;
+    document.getElementById('stepLabel').textContent = STEPS[i].label;
+    document.getElementById('stepSub').textContent = STEPS[i].sub;
+    const pct = Math.round(((i + 0.5) / STEPS.length) * 100);
+    document.getElementById('pbarFill').style.width = pct + '%';
+    document.getElementById('pbarLabel').textContent = `Step ${i + 1} of ${STEPS.length}`;
+    document.getElementById('pbarPct').textContent = pct + '%';
+    renderSteps(i, doneUpTo);
+  }
+
+  function completeStep(i) {
+    doneUpTo = Math.max(doneUpTo, i);
+    renderSteps(currentStepIndex, doneUpTo);
+  }
+
+  const termEl = document.getElementById('terminalLog');
+  function log(text, cls) {
+    const cursor = termEl.querySelector('.cursor-blink');
+    const d = document.createElement('div');
+    d.className = 'line' + (cls ? ' ' + cls : '');
+    d.textContent = text;
+    if (cursor) termEl.insertBefore(d, cursor);
+    else termEl.appendChild(d);
+    termEl.scrollTop = termEl.scrollHeight;
+  }
+
+  let elapsedSeconds = 0;
+  const elapsedTimer = setInterval(() => {
+    elapsedSeconds += 1;
+    const mins = Math.floor(elapsedSeconds / 60);
+    const secs = elapsedSeconds % 60;
+    document.getElementById('elapsedEl').textContent = (mins > 0 ? mins + 'm ' : '') + secs + 's';
+  }, 1000);
+
+  function showError(message) {
+    clearInterval(elapsedTimer);
+    document.getElementById('spinnerEl').style.display = 'none';
+    document.getElementById('phoneCenter').innerHTML = `
+      <div class="error-panel">
+        <div class="t">Generation failed</div>
+        <div class="m">${escapeHtml(message)}</div>
+        <a href="moodboard-wizard.html" class="casa-btn secondary" style="display:inline-block;text-decoration:none;">Back to brief</a>
+      </div>`;
+    log(message, 'err');
+  }
+
+  setStep(0);
+  log('Sending client brief to the AI mood board engine…', 'info');
+
+  let result;
+  try {
+    result = await CasaApi.moodBoards.generate(payload);
+  } catch (err) {
+    showError(err.message || 'Could not generate mood board combinations.');
+    return;
+  }
+
+  completeStep(0);
+  setStep(1);
+
+  const combinations = Array.isArray(result?.combinations)
+    ? result.combinations
+    : (Array.isArray(result?.data?.combinations) ? result.data.combinations : []);
+
+  if (!combinations.length) {
+    showError('No combinations came back — try broadening the brief or check tile stock for this room.');
+    return;
+  }
+
+  log(`Received ${combinations.length} combination(s) from the AI engine.`, 'ok');
+  completeStep(1);
+  setStep(2);
+  log('Saving mood board…', 'info');
+
+  let board;
+  try {
+    board = await CasaApi.moodBoards.save({
+      clientBrief: payload.text,
+      style: payload.style,
+      room: payload.room,
+      combinations,
+    });
+  } catch (err) {
+    showError(err.message || 'Combinations were generated but could not be saved.');
+    return;
+  }
+
+  completeStep(2);
+  log(`Mood board saved (${board.id}). Redirecting to results…`, 'ok');
+  clearInterval(elapsedTimer);
+
+  sessionStorage.setItem('casaMoodboardId', board.id);
+  sessionStorage.removeItem('casaMoodboardBrief');
+
+  setTimeout(() => { location.href = 'moodboard-results.html'; }, 400);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Casa de Aurum — Mood Board Config</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/shell.css">
+<style>
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.35;}}
+  .casa-main-inner{padding-bottom:110px;}
+  .cfg-grid{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:22px;align-items:start;}
+  @media (max-width:900px){.cfg-grid{grid-template-columns:1fr;}}
+  .stepper{display:flex;align-items:stretch;border:1px solid var(--line);border-radius:2px;overflow:hidden;width:150px;}
+  .stepper button{width:36px;background:var(--stone-100);border:none;cursor:pointer;font-family:var(--mono);font-size:15px;color:var(--stone-700);}
+  .stepper button:hover{background:var(--stone-200);color:var(--brass);}
+  .stepper .val{flex:1;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:14px;font-weight:500;color:var(--ink);background:#fff;border-left:1px solid var(--line);border-right:1px solid var(--line);}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  @media (max-width:520px){.row2{grid-template-columns:1fr;}}
+  .preview-sticky{position:sticky;top:20px;}
+  .preview-label{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--stone-600);margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;}
+  .preview-label .live{display:inline-flex;align-items:center;gap:5px;color:var(--brass);}
+  .preview-label .live::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--brass);animation:pulse 1.8s ease-in-out infinite;}
+  .phone{background:var(--charcoal);border-radius:34px;padding:14px;box-shadow:var(--shadow);width:100%;max-width:320px;margin:0 auto;}
+  .phone-screen{background:var(--stone-50);border-radius:22px;padding:22px 18px 26px;min-height:400px;}
+  .phone-notch{width:70px;height:5px;background:rgba(0,0,0,.1);border-radius:4px;margin:0 auto 18px;}
+  .phone-title{font-family:var(--display);font-weight:600;font-size:18px;color:var(--charcoal);margin:0 0 3px;}
+  .phone-sub{font-family:var(--mono);font-size:10px;color:var(--stone-600);text-transform:uppercase;letter-spacing:.08em;margin-bottom:16px;}
+  .phone-field{background:#fff;border:1px solid var(--line);border-radius:6px;padding:10px 11px;font-size:13px;color:var(--stone-600);margin-bottom:14px;}
+  button.phone-generate{width:100%;font-weight:700;font-size:13.5px;background:var(--brass);color:#fff;border:none;padding:13px;border-radius:8px;letter-spacing:.01em;cursor:default;}
+  .preview-foot{margin-top:14px;text-align:center;font-family:var(--mono);font-size:10.5px;color:var(--stone-400);}
+</style>
+</head>
+<body>
+<div id="casa-main-content">
+  <div class="casa-pageheader">
+    <div>
+      <h1>Mood Board Generator Config</h1>
+      <p>Real settings that control every staff generation — stored under the <code>rules</code> settings category.</p>
+    </div>
+    <span class="casa-badge">Feeds staff phones</span>
+  </div>
+
+  <div class="cfg-grid">
+    <div>
+      <div class="casa-panel">
+        <div class="panel-head"><h3>Combination Output</h3></div>
+        <div class="panel-body">
+          <div class="row2">
+            <div class="casa-field">
+              <label>Combinations returned (defaultMaxCombinations)</label>
+              <div class="stepper">
+                <button type="button" id="stepDown">–</button>
+                <div class="val" id="comboCount">4</div>
+                <button type="button" id="stepUp">+</button>
+              </div>
+              <div class="desc">1–20 · how many boards /mood-boards/generate returns per brief.</div>
+            </div>
+            <div class="casa-field">
+              <label>Minimum tiles in stock (defaultMinTiles)</label>
+              <input type="number" id="minTiles" min="1" max="50" value="3">
+              <div class="desc">Below this, the generator returns fewer boards rather than force a match.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="casa-panel">
+        <div class="panel-head"><h3>Default Brief Values</h3></div>
+        <div class="panel-body">
+          <div class="casa-field">
+            <label>Default room type (defaultRoomType)</label>
+            <input type="text" id="defaultRoom" placeholder="e.g. BATHROOM">
+            <div class="desc">Pre-filled when staff open a brief without picking a room chip.</div>
+          </div>
+          <div class="casa-field">
+            <label>Default style tag (defaultStyleTag)</label>
+            <input type="text" id="defaultStyle" placeholder="e.g. SUBTLE">
+            <div class="desc">Pre-filled when staff open a brief without picking a style chip.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="casa-panel">
+        <div class="panel-head"><h3>Connections</h3></div>
+        <div class="panel-body" id="statusLines">
+          <div class="casa-empty">Checking…</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="preview-sticky">
+      <div class="preview-label"><span>Staff phone preview</span><span class="live">Live</span></div>
+      <div class="phone">
+        <div class="phone-screen">
+          <div class="phone-notch"></div>
+          <div class="phone-title">New client brief</div>
+          <div class="phone-sub">Store floor · no login needed</div>
+          <div class="phone-field" id="previewRoom">Room: —</div>
+          <div class="phone-field" id="previewStyle">Style: —</div>
+          <button class="phone-generate">Generate <span id="previewCount">4</span> combinations</button>
+        </div>
+      </div>
+      <div class="preview-foot">Reflects the fields on this page — not yet saved</div>
+    </div>
+  </div>
+</div>
+
+<div class="casa-savebar">
+  <div class="casa-savebar-inner">
+    <div class="casa-savebar-meta">
+      <span id="saveStatus">Not yet loaded</span>
+    </div>
+    <div class="casa-savebar-actions">
+      <button class="casa-btn secondary" id="resetBtn">Reset</button>
+      <button class="casa-btn brass" id="saveBtn">Save Config</button>
+    </div>
+  </div>
+</div>
+
+<script src="assets/api-client.js"></script>
+<script src="assets/notifications.js"></script>
+<script src="assets/shell.js"></script>
+<script>
+  function esc(s) { return CasaShell.escapeHtml(s); }
+
+  let comboCount = 4;
+  let loaded = null;
+
+  function updatePreview() {
+    document.getElementById('comboCount').textContent = comboCount;
+    document.getElementById('previewCount').textContent = comboCount;
+    document.getElementById('previewRoom').textContent = `Room: ${document.getElementById('defaultRoom').value || '—'}`;
+    document.getElementById('previewStyle').textContent = `Style: ${document.getElementById('defaultStyle').value || '—'}`;
+  }
+
+  function applySettings(s) {
+    loaded = s;
+    comboCount = s.defaultMaxCombinations;
+    document.getElementById('minTiles').value = s.defaultMinTiles;
+    document.getElementById('defaultRoom').value = s.defaultRoomType || '';
+    document.getElementById('defaultStyle').value = s.defaultStyleTag || '';
+    updatePreview();
+    document.getElementById('saveStatus').textContent = 'Loaded from /settings/rules';
+  }
+
+  async function loadStatusLines() {
+    const el = document.getElementById('statusLines');
+    const lines = [];
+    try {
+      const gemini = await CasaApi.geminiStatus();
+      lines.push({ ok: !!gemini.connected, text: gemini.connected ? 'Connected to Gemini API' : (gemini.message || 'Gemini API not connected') });
+    } catch { lines.push({ ok: false, text: 'Gemini status unavailable' }); }
+    try {
+      const live = await CasaApi.designRules.live();
+      lines.push({ ok: !!live, text: live ? `Design Rules loaded — v${live.versionNumber}` : 'No design rules published yet' });
+    } catch { lines.push({ ok: false, text: 'No design rules published yet' }); }
+    try {
+      const { images } = await CasaApi.referenceImages.list({ limit: 1 });
+      lines.push({ ok: true, text: `Reference Image Library reachable` });
+    } catch { lines.push({ ok: false, text: 'Reference Image Library unavailable' }); }
+
+    el.innerHTML = lines.map((l) => `
+      <div style="display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px dashed var(--line);">
+        <span class="casa-dot ${l.ok ? 'ok' : 'warn'}"></span>
+        <span style="font-family:var(--mono);font-size:12.5px;color:var(--stone-700);">${esc(l.text)}</span>
+      </div>`).join('');
+  }
+
+  async function save() {
+    const payload = {
+      defaultMaxCombinations: comboCount,
+      defaultMinTiles: Number(document.getElementById('minTiles').value) || 1,
+      defaultRoomType: document.getElementById('defaultRoom').value.trim(),
+      defaultStyleTag: document.getElementById('defaultStyle').value.trim(),
+    };
+    const notice = CasaNotify.processing('Saving config…');
+    try {
+      const updated = await CasaApi.settings.updateCategory('rules', payload);
+      applySettings(updated);
+      notice.success('Mood Board config saved.');
+    } catch (err) {
+      notice.error(err.message || 'Could not save config.');
+    }
+  }
+
+  (async () => {
+    const user = await CasaShell.init({ current: 'admin-mood-board.html', allowedRoles: ['ADMIN','OWNER'] });
+
+    document.getElementById('stepUp').addEventListener('click', () => { if (comboCount < 20) { comboCount++; updatePreview(); } });
+    document.getElementById('stepDown').addEventListener('click', () => { if (comboCount > 1) { comboCount--; updatePreview(); } });
+    document.getElementById('defaultRoom').addEventListener('input', updatePreview);
+    document.getElementById('defaultStyle').addEventListener('input', updatePreview);
+    document.getElementById('resetBtn').addEventListener('click', () => { if (loaded) applySettings(loaded); });
+    document.getElementById('saveBtn').addEventListener('click', save);
+
+    try {
+      const settings = await CasaApi.settings.getCategory('rules');
+      applySettings(settings);
+    } catch (err) {
+      if (err.status === 403) {
+        document.getElementById('saveStatus').textContent = "You don't have permission to view this.";
+        document.getElementById('saveBtn').disabled = true;
+      } else {
+        document.getElementById('saveStatus').textContent = err.message || 'Could not load settings.';
+      }
+    }
+
+    await loadStatusLines();
+  })();
+</script>
+</body>
+</html>
