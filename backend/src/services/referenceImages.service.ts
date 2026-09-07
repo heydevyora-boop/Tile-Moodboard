@@ -19,6 +19,14 @@ function toPublicPath(filename: string): string {
 
 const DRIVE_SUBFOLDER = 'reference-images';
 
+/** Key prefix for reference images inside the Vercel Blob store. */
+const BLOB_PREFIX = 'reference-images';
+
+/** Vercel Blob serves every public object from this host. */
+function isBlobUrl(imageUrl: string | null): boolean {
+  return !!imageUrl && imageUrl.includes('.public.blob.vercel-storage.com');
+}
+
 /** Resolved once per process — the folder lookup is two Drive round-trips we don't want on every upload. */
 let cachedDriveFolderId: string | null = null;
 
@@ -73,6 +81,20 @@ async function storeUploadedImage(file: Express.Multer.File): Promise<{ imageUrl
 
   const filename = buildStoredFilename(file.originalname);
 
+  // Preferred on Vercel: the returned URL is public and absolute, so it
+  // needs no /static route, no BACKEND_PUBLIC_URL, and no local disk --
+  // the three things that made a deployed reference image unfetchable.
+  if (config.referenceImages.blobToken) {
+    const { put } = await import('@vercel/blob');
+    const stored = await put(`${BLOB_PREFIX}/${filename}`, file.buffer, {
+      access: 'public',
+      contentType: file.mimetype,
+      token: config.referenceImages.blobToken,
+      addRandomSuffix: false,
+    });
+    return { imageUrl: stored.url, localFilename: null };
+  }
+
   if (googleDriveClient.isConfigured()) {
     try {
       const uploaded = await googleDriveClient.uploadFile({
@@ -99,6 +121,13 @@ async function storeUploadedImage(file: Express.Multer.File): Promise<{ imageUrl
 
 /** Best-effort removal of the stored original — never blocks or fails the caller over a leftover file. */
 function deleteStoredImage(imageUrl: string | null) {
+  if (isBlobUrl(imageUrl) && config.referenceImages.blobToken) {
+    void import('@vercel/blob')
+      .then(({ del }) => del(imageUrl as string, { token: config.referenceImages.blobToken }))
+      .catch((err) => logger.warn(`Could not delete reference image from Vercel Blob: ${err instanceof Error ? err.message : String(err)}`));
+    return;
+  }
+
   const driveFileId = driveFileIdFromUrl(imageUrl);
   if (driveFileId) {
     void googleDriveClient

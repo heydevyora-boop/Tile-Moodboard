@@ -211,6 +211,9 @@ export const config = {
     uploadsDir:
       env.REFERENCE_IMAGES_DIR,
 
+    blobToken:
+      env.BLOB_READ_WRITE_TOKEN,
+
     maxUploadBytes:
       env.REFERENCE_IMAGE_MAX_MB *
       1024 *

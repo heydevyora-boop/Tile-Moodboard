@@ -386,6 +386,14 @@ const envSchema = z.object({
       .positive()
       .default(10),
 
+  // Vercel injects this automatically once a Blob store is connected to
+  // the project. Set, reference images are stored there and the recorded
+  // imageUrl is a public https URL the Python service can fetch directly;
+  // a serverless host keeps no disk of its own, so an uploaded file had
+  // nowhere durable to live. Unset (local/Docker), storage is unchanged.
+  BLOB_READ_WRITE_TOKEN:
+    z.string().optional(),
+
   // ==========================================================
   // PRINT BOARDS
   // ==========================================================

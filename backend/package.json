@@ -53,6 +53,7 @@
     "@napi-rs/canvas": "^1.0.5",
     "@prisma/adapter-pg": "^7.9.1",
     "@prisma/client": "^7.9.1",
+    "@vercel/blob": "^2.8.0",
     "bcryptjs": "^2.4.3",
     "compression": "^1.7.4",
     "cookie-parser": "^1.4.6",
