@@ -250,7 +250,7 @@
   document.getElementById('runBtn').addEventListener('click', runTest);
 
   function refImgUrl(path) {
-    const base = (window.CASA_API_BASE || 'http://localhost:5000/api/v1').replace(/\/api\/v1\/?$/, '');
+    const base = (window.CASA_API_BASE || (window.location.hostname === 'localhost' ? 'http://localhost:5000/api/v1' : `${window.location.protocol}//${window.location.host}/api/v1`)).replace(/\/api\/v1\/?$/, '');
     return base + path;
   }
 

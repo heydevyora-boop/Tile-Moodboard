@@ -8,14 +8,133 @@ import { getPagination, buildPaginationMeta, PaginationMeta } from '@utils/pagin
 import { logActivity } from './activityLog.service';
 import { UploadReferenceImageInput, UpdateReferenceImageInput, ListReferenceImagesQuery } from '@validators/referenceImages.validators';
 import { enqueueJob } from './jobQueue.service';
-import { isRealImage } from '@utils/fileSignature';
+import { isRealImageBuffer } from '@utils/fileSignature';
+import { buildStoredFilename } from '@middlewares/uploadReferenceImage';
+import { googleDriveClient } from './googleDrive.service';
+import { logger } from '@utils/logger';
 
 function toPublicPath(filename: string): string {
   return `/static/reference-images/${filename}`;
 }
 
-/** Best-effort local file removal — never blocks or fails the caller over a leftover file on disk. */
-function deleteLocalFile(imageUrl: string | null) {
+const DRIVE_SUBFOLDER = 'reference-images';
+
+/** Key prefix for reference images inside the Vercel Blob store. */
+const BLOB_PREFIX = 'reference-images';
+
+/** Vercel Blob serves every public object from this host. */
+function isBlobUrl(imageUrl: string | null): boolean {
+  return !!imageUrl && imageUrl.includes('.public.blob.vercel-storage.com');
+}
+
+/** Resolved once per process — the folder lookup is two Drive round-trips we don't want on every upload. */
+let cachedDriveFolderId: string | null = null;
+
+async function getDriveFolderId(): Promise<string> {
+  if (cachedDriveFolderId) return cachedDriveFolderId;
+  const root = await googleDriveClient.getOrCreateFolder(config.google.driveRootFolder);
+  const folder = await googleDriveClient.getOrCreateFolder(DRIVE_SUBFOLDER, root.id);
+  cachedDriveFolderId = folder.id;
+  return folder.id;
+}
+
+/**
+ * The download form, not webViewLink. webViewLink points at Drive's HTML
+ * viewer page, and the Python visualization service explicitly rejects an
+ * image URL that answers with HTML ("returned HTML/JSON instead of an
+ * image"). This is also the exact shape main_step6_complete.py normalizes
+ * Drive URLs into, so it round-trips unchanged.
+ */
+function toDriveDownloadUrl(fileId: string): string {
+  return `https://drive.google.com/uc?export=download&id=${fileId}`;
+}
+
+/** Recovers the Drive file id from a URL built by toDriveDownloadUrl — lets deletes work without adding a column to store it. */
+function driveFileIdFromUrl(imageUrl: string | null): string | null {
+  if (!imageUrl || !imageUrl.includes('drive.google.com')) return null;
+  return /[?&]id=([^&]+)/.exec(imageUrl)?.[1] ?? /\/d\/([^/]+)/.exec(imageUrl)?.[1] ?? null;
+}
+
+/**
+ * Persists the uploaded bytes and returns the URL to record.
+ *
+ * Drive is preferred when it's configured, because a serverless host has no
+ * durable disk: an image written to the bundle (read-only) or /tmp
+ * (per-invocation) is gone by the time the Python service tries to fetch
+ * it, which is what made every generation fail with a connection error or
+ * a 404.
+ *
+ * A Drive failure falls back to local disk rather than failing the upload.
+ * A plain service account owns no storage quota, so uploading into its own
+ * My Drive is rejected outright ("Service Accounts do not have storage
+ * quota") -- that needs a Shared Drive or OAuth delegation to fix, which is
+ * a Google-side setup matter, and until it's done a developer running
+ * locally must still be able to add reference images. Local disk is a
+ * perfectly good store there; it is only on a read-only serverless host
+ * that it isn't, and there this write throws and surfaces the real error
+ * rather than silently appearing to succeed.
+ */
+async function storeUploadedImage(file: Express.Multer.File): Promise<{ imageUrl: string; localFilename: string | null }> {
+  if (!isRealImageBuffer(file.buffer)) {
+    throw AppError.badRequest('This file is not actually a valid JPEG, PNG, or WebP image (failed content verification)');
+  }
+
+  const filename = buildStoredFilename(file.originalname);
+
+  // Preferred on Vercel: the returned URL is public and absolute, so it
+  // needs no /static route, no BACKEND_PUBLIC_URL, and no local disk --
+  // the three things that made a deployed reference image unfetchable.
+  if (config.referenceImages.blobToken) {
+    const { put } = await import('@vercel/blob');
+    const stored = await put(`${BLOB_PREFIX}/${filename}`, file.buffer, {
+      access: 'public',
+      contentType: file.mimetype,
+      token: config.referenceImages.blobToken,
+      addRandomSuffix: false,
+    });
+    return { imageUrl: stored.url, localFilename: null };
+  }
+
+  if (googleDriveClient.isConfigured()) {
+    try {
+      const uploaded = await googleDriveClient.uploadFile({
+        name: filename,
+        mimeType: file.mimetype,
+        content: file.buffer,
+        parentFolderId: await getDriveFolderId(),
+      });
+      // Anyone-with-link reader: the Python service fetches this URL
+      // unauthenticated, so a private file would 403.
+      await googleDriveClient.generatePublicLink(uploaded.id);
+      return { imageUrl: toDriveDownloadUrl(uploaded.id), localFilename: null };
+    } catch (err) {
+      logger.warn(
+        `Reference image could not be stored in Google Drive, falling back to local disk: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  fs.mkdirSync(config.referenceImages.uploadsDir, { recursive: true });
+  fs.writeFileSync(path.join(config.referenceImages.uploadsDir, filename), file.buffer);
+  return { imageUrl: toPublicPath(filename), localFilename: filename };
+}
+
+/** Best-effort removal of the stored original — never blocks or fails the caller over a leftover file. */
+function deleteStoredImage(imageUrl: string | null) {
+  if (isBlobUrl(imageUrl) && config.referenceImages.blobToken) {
+    void import('@vercel/blob')
+      .then(({ del }) => del(imageUrl as string, { token: config.referenceImages.blobToken }))
+      .catch((err) => logger.warn(`Could not delete reference image from Vercel Blob: ${err instanceof Error ? err.message : String(err)}`));
+    return;
+  }
+
+  const driveFileId = driveFileIdFromUrl(imageUrl);
+  if (driveFileId) {
+    void googleDriveClient
+      .deleteFile(driveFileId)
+      .catch((err) => logger.warn(`Could not delete reference image ${driveFileId} from Drive: ${err instanceof Error ? err.message : String(err)}`));
+    return;
+  }
   if (!imageUrl || !imageUrl.startsWith('/static/reference-images/')) return;
   const filename = imageUrl.replace('/static/reference-images/', '');
   const filePath = path.join(config.referenceImages.uploadsDir, filename);
@@ -23,10 +142,7 @@ function deleteLocalFile(imageUrl: string | null) {
 }
 
 export async function uploadReferenceImage(file: Express.Multer.File, input: UploadReferenceImageInput, userId: string, req?: Request) {
-  if (!isRealImage(file.path)) {
-    fs.unlinkSync(file.path);
-    throw AppError.badRequest('This file is not actually a valid JPEG, PNG, or WebP image (failed content verification)');
-  }
+  const { imageUrl, localFilename } = await storeUploadedImage(file);
 
   const image = await prisma.referenceImage.create({
     data: {
@@ -34,7 +150,7 @@ export async function uploadReferenceImage(file: Express.Multer.File, input: Upl
       description: input.description,
       style: input.style,
       room: input.room,
-      imageUrl: toPublicPath(file.filename),
+      imageUrl,
       uploadedById: userId,
     },
   });
@@ -52,7 +168,14 @@ export async function uploadReferenceImage(file: Express.Multer.File, input: Upl
   // null; the Image Processing Queue fills it in shortly after. A failed
   // thumbnail job never blocks or fails the upload itself — the original
   // full-size imageUrl is always usable on its own.
-  void enqueueJob('IMAGE_PROCESSING', { referenceImageId: image.id, sourceFilename: file.filename }, { createdById: userId });
+  //
+  // Only for disk-stored images: the thumbnailer reads its source from
+  // uploadsDir, which holds nothing when the original went to Drive. Such a
+  // record simply keeps thumbnailUrl null, the same already-handled state
+  // every upload is in between responding and the job finishing.
+  if (localFilename) {
+    void enqueueJob('IMAGE_PROCESSING', { referenceImageId: image.id, sourceFilename: localFilename }, { createdById: userId });
+  }
 
   return image;
 }
@@ -121,18 +244,14 @@ export async function updateReferenceImage(id: string, input: UpdateReferenceIma
 
 /** Swaps the underlying image file without touching styleTag/description/style/room or the record's id. */
 export async function replaceReferenceImage(id: string, file: Express.Multer.File, userId: string, req?: Request) {
-  if (!isRealImage(file.path)) {
-    fs.unlinkSync(file.path);
-    throw AppError.badRequest('This file is not actually a valid JPEG, PNG, or WebP image (failed content verification)');
-  }
-
   const existing = await prisma.referenceImage.findUnique({ where: { id } });
   if (!existing) throw AppError.notFound('Reference image not found');
 
   const oldImageUrl = existing.imageUrl;
-  const updated = await prisma.referenceImage.update({ where: { id }, data: { imageUrl: toPublicPath(file.filename) } });
+  const { imageUrl } = await storeUploadedImage(file);
+  const updated = await prisma.referenceImage.update({ where: { id }, data: { imageUrl } });
 
-  deleteLocalFile(oldImageUrl);
+  deleteStoredImage(oldImageUrl);
 
   await logActivity({ userId, action: 'reference_image.replaced', entityType: 'ReferenceImage', entityId: id, req });
 
@@ -144,7 +263,7 @@ export async function deleteReferenceImage(id: string, userId: string, req?: Req
   if (!existing) throw AppError.notFound('Reference image not found');
 
   await prisma.referenceImage.delete({ where: { id } });
-  deleteLocalFile(existing.imageUrl);
+  deleteStoredImage(existing.imageUrl);
 
   await logActivity({
     userId,

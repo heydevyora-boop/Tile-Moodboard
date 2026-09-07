@@ -229,6 +229,14 @@ const envSchema = z.object({
   GOOGLE_SERVICE_ACCOUNT_KEY_PATH:
     z.string().optional(),
 
+  // Serverless platforms (Vercel/Lambda) mount the bundle read-only and
+  // have nowhere safe to put a key file -- committing one would publish
+  // the private key. This holds the same service-account JSON as the file
+  // above, pasted into an env var instead. KEY_PATH still takes
+  // precedence, so existing Docker/local setups are unaffected.
+  GOOGLE_SERVICE_ACCOUNT_JSON:
+    z.string().optional(),
+
   GOOGLE_SHEET_NAME: z
     .string()
     .default(
@@ -377,6 +385,14 @@ const envSchema = z.object({
       .int()
       .positive()
       .default(10),
+
+  // Vercel injects this automatically once a Blob store is connected to
+  // the project. Set, reference images are stored there and the recorded
+  // imageUrl is a public https URL the Python service can fetch directly;
+  // a serverless host keeps no disk of its own, so an uploaded file had
+  // nowhere durable to live. Unset (local/Docker), storage is unchanged.
+  BLOB_READ_WRITE_TOKEN:
+    z.string().optional(),
 
   // ==========================================================
   // PRINT BOARDS

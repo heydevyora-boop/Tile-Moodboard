@@ -122,6 +122,9 @@ export const config = {
     serviceAccountKeyPath:
       env.GOOGLE_SERVICE_ACCOUNT_KEY_PATH,
 
+    serviceAccountJson:
+      env.GOOGLE_SERVICE_ACCOUNT_JSON,
+
     sheetName:
       env.GOOGLE_SHEET_NAME,
 
@@ -207,6 +210,9 @@ export const config = {
   referenceImages: {
     uploadsDir:
       env.REFERENCE_IMAGES_DIR,
+
+    blobToken:
+      env.BLOB_READ_WRITE_TOKEN,
 
     maxUploadBytes:
       env.REFERENCE_IMAGE_MAX_MB *

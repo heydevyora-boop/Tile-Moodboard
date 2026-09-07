@@ -38,6 +38,32 @@ function classifyError(err: unknown): DriveError {
   return new DriveError(`Google Drive: ${message}`, 400, false);
 }
 
+/**
+ * Reads the service-account credentials out of GOOGLE_SERVICE_ACCOUNT_JSON.
+ * Accepts either the raw JSON or a base64 blob of it, because pasting raw
+ * JSON into a dashboard env var frequently mangles the private key's
+ * newlines; literal "\n" sequences are restored for the same reason.
+ */
+function parseServiceAccountJson(raw: string): { client_email: string; private_key: string } {
+  const trimmed = raw.trim();
+  const decoded = trimmed.startsWith('{')
+    ? trimmed
+    : Buffer.from(trimmed, 'base64').toString('utf8');
+
+  let parsed: { client_email?: string; private_key?: string };
+  try {
+    parsed = JSON.parse(decoded);
+  } catch {
+    throw AppError.internal('GOOGLE_SERVICE_ACCOUNT_JSON is not valid JSON (paste the whole service-account key file, or its base64)');
+  }
+
+  if (!parsed.client_email || !parsed.private_key) {
+    throw AppError.internal('GOOGLE_SERVICE_ACCOUNT_JSON is missing client_email or private_key');
+  }
+
+  return { client_email: parsed.client_email, private_key: parsed.private_key.replace(/\\n/g, '\n') };
+}
+
 export interface UploadFileInput {
   name: string;
   mimeType: string;
@@ -73,18 +99,24 @@ export class GoogleDriveClient {
   }
 
   isConfigured(): boolean {
-    return !!this.driveOverride || !!config.google.serviceAccountKeyPath;
+    return !!this.driveOverride || !!config.google.serviceAccountKeyPath || !!config.google.serviceAccountJson;
   }
 
   private getDrive(): DriveApiClient {
     if (this.cachedDrive) return this.cachedDrive;
-    if (!config.google.serviceAccountKeyPath) {
-      throw AppError.internal('Google Drive is not configured (set GOOGLE_SERVICE_ACCOUNT_KEY_PATH)');
+    if (!config.google.serviceAccountKeyPath && !config.google.serviceAccountJson) {
+      throw AppError.internal(
+        'Google Drive is not configured (set GOOGLE_SERVICE_ACCOUNT_KEY_PATH, or GOOGLE_SERVICE_ACCOUNT_JSON on a read-only/serverless host)',
+      );
     }
-    const auth = new google.auth.GoogleAuth({
-      keyFile: config.google.serviceAccountKeyPath,
-      scopes: ['https://www.googleapis.com/auth/drive'],
-    });
+    const scopes = ['https://www.googleapis.com/auth/drive'];
+
+    // keyFile stays first so existing Docker/local deployments keep the
+    // exact behaviour they had. The JSON variant is only consulted when no
+    // key path is set -- see GOOGLE_SERVICE_ACCOUNT_JSON in config/env.ts.
+    const auth = config.google.serviceAccountKeyPath
+      ? new google.auth.GoogleAuth({ keyFile: config.google.serviceAccountKeyPath, scopes })
+      : new google.auth.GoogleAuth({ credentials: parseServiceAccountJson(config.google.serviceAccountJson as string), scopes });
     this.cachedDrive = google.drive({ version: 'v3', auth }) as unknown as DriveApiClient;
     return this.cachedDrive;
   }
@@ -200,7 +232,7 @@ export class GoogleDriveClient {
   async testConnection(): Promise<{ ok: boolean; latencyMs: number; message?: string }> {
     const start = Date.now();
     if (!this.isConfigured()) {
-      return { ok: false, latencyMs: 0, message: 'GOOGLE_SERVICE_ACCOUNT_KEY_PATH is not set' };
+      return { ok: false, latencyMs: 0, message: 'Neither GOOGLE_SERVICE_ACCOUNT_KEY_PATH nor GOOGLE_SERVICE_ACCOUNT_JSON is set' };
     }
     try {
       await this.getOrCreateFolder(config.google.driveRootFolder);

@@ -134,6 +134,49 @@ function buildVisualizationImageUrl(
 // RESOLVE A TILE'S IMAGE TO A URL PYTHON CAN FETCH
 // ============================================================
 
+const LOOPBACK_HOSTNAMES = new Set([
+  'localhost',
+  '127.0.0.1',
+  '0.0.0.0',
+  '::1',
+  '[::1]',
+]);
+
+/**
+ * Repoints a loopback URL at this deployment's own public origin.
+ *
+ * The browser sends scene_image_url, and a page still served from cache
+ * builds it against http://localhost:5000 -- a host that exists only on a
+ * developer's machine. Handing that to the Python service produced
+ * "Unable to download scene image ... [Errno 111] Connection refused",
+ * because Python is a different process on a different machine and there
+ * is nothing on its port 5000. Only the origin is swapped; the path is
+ * untouched. When BACKEND_PUBLIC_URL is itself localhost (local
+ * development) this rewrites localhost to localhost, i.e. does nothing.
+ */
+function rewriteLoopbackUrl(
+  url: string,
+): string {
+  try {
+    const parsed = new URL(url);
+
+    if (!LOOPBACK_HOSTNAMES.has(parsed.hostname)) {
+      return url;
+    }
+
+    // Rebuilt against the public origin rather than assigning .host:
+    // assigning a host without a port leaves any existing port in place,
+    // which turned localhost:5000 into casa-de-aurum.vercel.app:5000.
+    return new URL(
+      parsed.pathname + parsed.search + parsed.hash,
+      BACKEND_PUBLIC_URL,
+    ).toString();
+  } catch {
+    // Not a parseable absolute URL -- leave it exactly as supplied.
+    return url;
+  }
+}
+
 function toAbsoluteImageUrl(
   imageUrl: string,
 ): string {
@@ -150,7 +193,7 @@ function toAbsoluteImageUrl(
     )
   ) {
     // Already absolute (e.g. a Google Drive URL, DRIVE storage mode).
-    return trimmed;
+    return rewriteLoopbackUrl(trimmed);
   }
 
   // Relative /static/... path (LOCAL storage mode) -- Python runs as
@@ -310,9 +353,14 @@ export async function generateVisualization(
     request.scene_image_path?.trim() ||
     '';
 
+  // Rewritten, not trusted as-is: this value comes straight from the
+  // browser, so a cached page pointing at localhost would otherwise be
+  // forwarded to Python verbatim. See rewriteLoopbackUrl above.
   const sceneImageUrl =
-    request.scene_image_url?.trim() ||
-    '';
+    rewriteLoopbackUrl(
+      request.scene_image_url?.trim() ||
+        '',
+    );
 
   const wantsRandomScene =
     request.generate_random_scene ===

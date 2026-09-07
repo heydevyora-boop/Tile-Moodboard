@@ -104,7 +104,7 @@
     // entirely.
     const base = (typeof window.CASA_API_BASE === 'string' && window.CASA_API_BASE)
       ? window.CASA_API_BASE
-      : 'http://localhost:5000/api/v1';
+      : (window.location.hostname === 'localhost' ? 'http://localhost:5000/api/v1' : `${window.location.protocol}//${window.location.host}/api/v1`);
     const backendRoot = base.replace(/\/api\/v1\/?$/, '').replace(/\/+$/, '');
     return value.startsWith('/') ? backendRoot + value : backendRoot + '/' + value;
   }

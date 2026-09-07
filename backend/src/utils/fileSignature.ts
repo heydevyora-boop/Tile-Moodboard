@@ -38,9 +38,8 @@ export function isRealPdf(filePath: string): boolean {
   return matchesSignature(header, SIGNATURES.PDF);
 }
 
-/** True if the file at filePath genuinely is a JPEG, PNG, or WebP by magic bytes — same reasoning as isRealPdf. */
-export function isRealImage(filePath: string): boolean {
-  const header = readHeader(filePath, 16);
+/** Shared by the path- and buffer-based image checks below. */
+function headerIsImage(header: Buffer): boolean {
   if (matchesSignature(header, SIGNATURES.JPEG)) return true;
   if (matchesSignature(header, SIGNATURES.PNG)) return true;
   // WebP: "RIFF" at 0-3, then 4 bytes of file size, then "WEBP" at 8-11
@@ -48,4 +47,18 @@ export function isRealImage(filePath: string): boolean {
     return header[8] === 0x57 && header[9] === 0x45 && header[10] === 0x42 && header[11] === 0x50; // "WEBP"
   }
   return false;
+}
+
+/** True if the file at filePath genuinely is a JPEG, PNG, or WebP by magic bytes — same reasoning as isRealPdf. */
+export function isRealImage(filePath: string): boolean {
+  return headerIsImage(readHeader(filePath, 16));
+}
+
+/**
+ * Buffer-taking counterpart to isRealImage, for uploads held in memory
+ * rather than written to disk — multer uses memoryStorage for reference
+ * images so they can go straight to Drive on a read-only host.
+ */
+export function isRealImageBuffer(buffer: Buffer): boolean {
+  return headerIsImage(buffer.subarray(0, 16));
 }
