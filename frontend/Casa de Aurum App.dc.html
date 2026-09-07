@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+@keyframes fade{from{opacity:0;}to{opacity:1;}}
+html,body{margin:0;padding:0;height:100%;overflow:hidden;}
+body{background:#F1ECE1;color:#221D18;font-family:'Inter',sans-serif;-webkit-font-smoothing:antialiased;}
+a{color:#AD8348;text-decoration:none;}a:hover{color:#7A5B2C;}
+@media (max-width:860px){
+  .cda-rail{position:fixed!important;left:0;top:0;bottom:0;z-index:40;transform:translateX(-100%);width:250px!important;transition:transform .2s ease;box-shadow:2px 0 24px rgba(0,0,0,0.25);}
+  .cda-rail.open{transform:translateX(0)!important;}
+  .cda-topbar-label{display:none!important;}
+}
+</style>
+</helmet>
+
+<div style="display:flex;height:100vh;overflow:hidden;position:relative;">
+
+  <!-- MOBILE SCRIM -->
+  <sc-if value="{{ mobileOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ onScrimClick }}" style="position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:30;"></div>
+  </sc-if>
+
+  <!-- SIDEBAR -->
+  <aside class="cda-rail {{ mobileOpenClass }}" style="width:{{ sidebarWidth }};background:#1A1611;color:#E9E2D3;display:flex;flex-direction:column;flex:none;height:100vh;overflow:hidden;transition:width .18s ease;">
+    <div style="padding:{{ brandPad }};border-bottom:1px solid rgba(255,255,255,0.08);display:flex;align-items:center;justify-content:space-between;gap:8px;">
+      <sc-if value="{{ showLabels }}" hint-placeholder-val="{{ true }}">
+        <div style="min-width:0;overflow:hidden;">
+          <div style="font-family:'Fraunces',serif;font-weight:600;font-size:18px;letter-spacing:.04em;color:#E9E2D3;white-space:nowrap;">CASA DE A<span style="color:#D8B677;">U</span>RUM</div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:#78705F;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ panelLabel }}</div>
+        </div>
+      </sc-if>
+      <sc-if value="{{ collapsed }}" hint-placeholder-val="{{ false }}">
+        <div style="font-family:'Fraunces',serif;font-weight:700;font-size:15px;color:#D8B677;flex:none;">{{ brandInitial }}</div>
+      </sc-if>
+      <button onClick="{{ onToggle }}" title="Toggle sidebar" style="flex:none;width:30px;height:30px;border-radius:4px;border:1px solid rgba(255,255,255,0.12);background:transparent;color:#B7AB94;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;" style-hover="background:rgba(255,255,255,0.06);color:#E9E2D3">☰</button>
+    </div>
+
+    <!-- ROLE SWITCHER -->
+    <div style="padding:{{ rolePad }};border-bottom:1px solid rgba(255,255,255,0.08);">
+      <sc-if value="{{ showLabels }}" hint-placeholder-val="{{ true }}">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:#5E574B;padding:0 2px 7px;">Signed in as</div>
+      </sc-if>
+      <div style="display:flex;gap:3px;flex-direction:{{ roleDir }};">
+        <sc-for list="{{ roleTabs }}" as="rt" hint-placeholder-count="3">
+          <button style="flex:1;font-size:11px;font-weight:600;padding:7px 0;border-radius:3px;border:1px solid {{ rt.border }};background:{{ rt.bg }};color:{{ rt.color }};cursor:pointer;white-space:nowrap;" onClick="{{ rt.onClick }}" title="{{ rt.label }}" style-hover="border-color:#AD8348">
+            <sc-if value="{{ showLabels }}" hint-placeholder-val="{{ true }}">{{ rt.label }}</sc-if>
+            <sc-if value="{{ collapsed }}" hint-placeholder-val="{{ false }}">{{ rt.shortLabel }}</sc-if>
+          </button>
+        </sc-for>
+      </div>
+    </div>
+
+    <!-- NAV -->
+    <nav style="flex:1;padding:8px 8px 20px;display:flex;flex-direction:column;gap:2px;overflow-y:auto;">
+      <sc-for list="{{ nav }}" as="nv" hint-placeholder-count="12">
+        <div>
+          <sc-if value="{{ nv.isGroup }}" hint-placeholder-val="{{ false }}">
+            <sc-if value="{{ showLabels }}" hint-placeholder-val="{{ true }}">
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:#78705F;padding:15px 12px 6px;white-space:nowrap;overflow:hidden;">{{ nv.label }}</div>
+            </sc-if>
+            <sc-if value="{{ collapsed }}" hint-placeholder-val="{{ false }}">
+              <div style="height:1px;background:rgba(255,255,255,0.08);margin:10px 8px;"></div>
+            </sc-if>
+          </sc-if>
+          <sc-if value="{{ nv.isLink }}" hint-placeholder-val="{{ true }}">
+            <button title="{{ nv.label }}" style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-radius:3px;border:none;background:{{ nv.bg }};color:{{ nv.color }};font-family:'Inter',sans-serif;font-size:13px;font-weight:{{ nv.weight }};cursor:pointer;text-align:left;width:100%;transition:all .12s ease;white-space:nowrap;overflow:hidden;justify-content:{{ nv.justify }};" onClick="{{ nv.onClick }}" style-hover="background:rgba(255,255,255,0.06);color:#E9E2D3">
+              <span style="font-size:14px;flex:none;width:16px;text-align:center;">{{ nv.icon }}</span>
+              <sc-if value="{{ showLabels }}" hint-placeholder-val="{{ true }}">
+                <span style="overflow:hidden;text-overflow:ellipsis;">{{ nv.label }}</span>
+              </sc-if>
+            </button>
+          </sc-if>
+        </div>
+      </sc-for>
+    </nav>
+
+    <div style="padding:{{ footPad }};border-top:1px solid rgba(255,255,255,0.08);display:flex;align-items:center;gap:10px;justify-content:{{ footJustify }};">
+      <div style="width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,#AD8348,#D8B677);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11.5px;color:#fff;flex:none;" title="{{ userName }}">{{ userIni }}</div>
+      <sc-if value="{{ showLabels }}" hint-placeholder-val="{{ true }}">
+        <div style="min-width:0;">
+          <div style="font-size:12.5px;font-weight:600;color:#E9E2D3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ userName }}</div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#78705F;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ userRole }}</div>
+        </div>
+      </sc-if>
+    </div>
+  </aside>
+
+  <!-- CONTENT -->
+  <div style="flex:1;min-width:0;display:flex;flex-direction:column;height:100vh;">
+    <div style="padding:11px 16px;background:#F1ECE1;border-bottom:1px solid rgba(34,29,24,0.14);display:flex;align-items:center;justify-content:space-between;gap:14px;flex:none;">
+      <div style="display:flex;align-items:center;gap:9px;min-width:0;">
+        <button onClick="{{ onMobileToggle }}" title="Menu" style="display:none;flex:none;width:32px;height:32px;border-radius:4px;border:1px solid rgba(34,29,24,0.14);background:#fff;color:#4B443A;cursor:pointer;font-size:14px;align-items:center;justify-content:center;" class="cda-hamburger">☰</button>
+        <span class="cda-topbar-label" style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:#B7AB94;white-space:nowrap;">{{ panelLabel }}</span>
+        <span class="cda-topbar-label" style="color:#B7AB94;font-size:11px;">/</span>
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:#221D18;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ currentLabel }}</span>
+      </div>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#B7AB94;white-space:nowrap;" class="cda-topbar-label">{{ pageCount }}</span>
+    </div>
+    <iframe src="{{ currentSrc }}" title="{{ currentLabel }}" style="flex:1;width:100%;border:none;background:#F1ECE1;animation:fade .25s ease;"></iframe>
+  </div>
+</div>
+
+<style>
+@media (max-width:860px){
+  .cda-hamburger{display:flex!important;}
+}
+</style>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  panels = {
+    user: {
+      label: 'User Panel', ini: 'RS', name: 'Rohit S.', role: 'Sales Staff', tab: 'Staff',
+      nav: [
+        { g: 'Moodboard' },
+        { f: 'Tool Dashboard.dc.html', l: 'Dashboard' },
+        { f: 'Moodboard Wizard.dc.html', l: 'New Moodboard' },
+        { f: 'AI Loading Screen.dc.html', l: 'Generating' },
+        { f: 'Moodboard Results.dc.html', l: 'Results' },
+        { f: 'Scene Angles.dc.html', l: 'Scene & Angles' },
+        { f: 'Print Board Designer.dc.html', l: 'Print Board' },
+      ],
+    },
+    admin: {
+      label: 'Admin Panel', ini: 'AK', name: 'Anita K.', role: 'Admin · Operations', tab: 'Admin',
+      nav: [
+        { g: 'Overview' },
+        { f: 'Admin Dashboard.dc.html', l: 'Dashboard' },
+        { g: 'Catalog Pipeline' },
+        { f: 'Admin Extraction Status.dc.html', l: 'Extraction Status' },
+        { f: 'Admin Catalog Detail.dc.html', l: 'Catalog Detail' },
+        { f: 'Admin Product Data.dc.html', l: 'Product Data' },
+        { f: 'Admin Catalog Extractor.dc.html', l: 'Extractor Settings' },
+        { g: 'Generations' },
+        { f: 'Admin Generation History.dc.html', l: 'Generation History' },
+        { f: 'Admin Generated Scenes.dc.html', l: 'Generated Scenes' },
+        { g: 'Tool Config' },
+        { f: 'Admin Mood Board.dc.html', l: 'Mood Board Config' },
+        { f: 'Admin Print Board.dc.html', l: 'Print Board Config' },
+        { g: 'Monitoring' },
+        { f: 'Admin Logs.dc.html', l: 'System Logs' },
+        { f: 'Admin Analytics.dc.html', l: 'Analytics' },
+      ],
+    },
+    owner: {
+      label: 'Owner Panel', ini: 'AM', name: 'Arjun M.', role: 'Owner · Full control', tab: 'Owner',
+      nav: [
+        { g: 'Overview' },
+        { f: 'Owner Dashboard.dc.html', l: 'Dashboard' },
+        { g: 'AI Control' },
+        { f: 'Design Rules Setup.dc.html', l: 'System Instructions' },
+        { f: 'Reference Image Library.dc.html', l: 'Reference Library' },
+        { f: 'Version History.dc.html', l: 'Prompt Versions' },
+        { f: 'Admin Design Rules.dc.html', l: 'Rules & Filters' },
+        { f: 'Owner AI Test.dc.html', l: 'AI Test Mode' },
+        { g: 'Governance' },
+        { f: 'Admin Users.dc.html', l: 'Users & Staff' },
+        { f: 'Admin API Keys.dc.html', l: 'API & Integrations' },
+      ],
+    },
+  };
+
+  order = ['user', 'admin', 'owner'];
+  icons = {
+    'Dashboard': '⌂', 'New Moodboard': '✦', 'Generating': '◔', 'Results': '▦', 'Scene & Angles': '◈', 'Print Board': '⎙',
+    'Extraction Status': '⇪', 'Catalog Detail': '▤', 'Product Data': '▥', 'Extractor Settings': '⚙',
+    'Generation History': '☰', 'Generated Scenes': '▦', 'Mood Board Config': '✎', 'Print Board Config': '⎙',
+    'System Logs': '▤', 'Analytics': '◔',
+    'System Instructions': '✎', 'Reference Library': '▦', 'Prompt Versions': '⏱', 'Rules & Filters': '⚑',
+    'AI Test Mode': '◈', 'Users & Staff': '◍', 'API & Integrations': '⚙',
+  };
+
+  state = { panel: 'user', current: 'Tool Dashboard.dc.html', collapsed: true, mobileOpen: false };
+
+  switchPanel(key) {
+    const first = this.panels[key].nav.find(n => n.f);
+    this.setState({ panel: key, current: first.f, mobileOpen: false });
+  }
+
+  renderVals() {
+    const s = this.state;
+    const p = this.panels[s.panel];
+    const links = p.nav.filter(n => n.f);
+    const active = links.find(n => n.f === s.current) || links[0];
+
+    const collapsed = s.collapsed;
+
+    return {
+      panelLabel: p.label,
+      userIni: p.ini,
+      userName: p.name,
+      userRole: p.role,
+      currentSrc: s.current,
+      currentLabel: active.l,
+      pageCount: links.length + ' screens',
+
+      collapsed,
+      sidebarWidth: collapsed ? '64px' : '260px',
+      mobileOpen: s.mobileOpen,
+      mobileOpenClass: s.mobileOpen ? 'open' : '',
+      showLabels: !collapsed,
+      onToggle: () => this.setState(p2 => ({ collapsed: !p2.collapsed })),
+      onMobileToggle: () => this.setState(p2 => ({ mobileOpen: !p2.mobileOpen })),
+      onScrimClick: () => this.setState({ mobileOpen: false }),
+      brandInitial: 'CA',
+      brandPad: collapsed ? '16px 10px' : '22px 22px 16px',
+      rolePad: collapsed ? '10px 6px' : '12px 10px',
+      roleDir: collapsed ? 'column' : 'row',
+      footPad: collapsed ? '12px 10px' : '14px 22px',
+      footJustify: collapsed ? 'center' : 'flex-start',
+
+      roleTabs: this.order.map(k => {
+        const on = s.panel === k;
+        return {
+          label: this.panels[k].tab,
+          shortLabel: this.panels[k].tab[0],
+          bg: on ? '#AD8348' : 'transparent',
+          color: on ? '#fff' : '#B7AB94',
+          border: on ? '#AD8348' : 'rgba(255,255,255,0.14)',
+          onClick: () => this.switchPanel(k),
+        };
+      }),
+
+      nav: p.nav.map(n => {
+        if (n.g) return { isGroup: true, isLink: false, label: n.g, hideGroup: collapsed };
+        const on = n.f === s.current;
+        return {
+          isGroup: false, isLink: true, label: n.l,
+          icon: this.icons[n.l] || '•',
+          justify: collapsed ? 'center' : 'flex-start',
+          bg: on ? 'rgba(173,131,72,0.14)' : 'transparent',
+          color: on ? '#D8B677' : '#B7AB94',
+          weight: on ? '600' : '500',
+          onClick: () => this.setState({ current: n.f, mobileOpen: false }),
+        };
+      }),
+    };
+  }
+}
+</script>
+</body>
+</html>
