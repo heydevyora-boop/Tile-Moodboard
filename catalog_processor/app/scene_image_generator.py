@@ -47,10 +47,19 @@ IMAGE_MODEL = os.getenv(
 # OUTPUT DIRECTORY
 # ============================================================
 
+# The default here is relative, so it resolved against the process working
+# directory -- the read-only bundle on Vercel -- and mkdir failed with
+# "[Errno 30] Read-only file system: 'output'". SCENE_OUTPUT_ROOT still wins
+# where it is already set; CATALOG_OUTPUT_ROOT is the shared fallback. With
+# neither set the path is exactly as before.
+_CATALOG_OUTPUT_ROOT = os.getenv("CATALOG_OUTPUT_ROOT")
+
 OUTPUT_ROOT = Path(
-    os.getenv(
-        "SCENE_OUTPUT_ROOT",
-        "output/scenes"
+    os.getenv("SCENE_OUTPUT_ROOT")
+    or (
+        str(Path(_CATALOG_OUTPUT_ROOT) / "scenes")
+        if _CATALOG_OUTPUT_ROOT
+        else "output/scenes"
     )
 )
 

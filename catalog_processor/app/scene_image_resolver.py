@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any, Optional
 import base64
@@ -15,8 +16,14 @@ import urllib.parse
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
-OUTPUT_ROOT = (
-    PROJECT_ROOT / "output"
+# Vercel/Lambda mount the deployment bundle read-only (only /tmp is writable),
+# so the default below -- which sits inside the code directory -- cannot be
+# written to there, and every generated artefact failed with
+# "[Errno 30] Read-only file system". CATALOG_OUTPUT_ROOT redirects the whole
+# output tree to a writable location. Unset, the path is exactly as before.
+OUTPUT_ROOT = Path(
+    os.getenv("CATALOG_OUTPUT_ROOT")
+    or (PROJECT_ROOT / "output")
 )
 
 SCENE_IMAGE_ROOT = (

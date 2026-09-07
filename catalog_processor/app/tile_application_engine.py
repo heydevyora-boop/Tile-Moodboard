@@ -104,11 +104,13 @@ IMAGE_MODEL = (
     or "gemini-3.1-flash-image"
 )
 
+# CATALOG_OUTPUT_ROOT is the shared fallback for every output tree; the
+# pre-existing OUTPUT_ROOT override still wins where it is already set, and
+# with neither set the path is exactly as before.
 OUTPUT_ROOT = Path(
-    os.getenv(
-        "OUTPUT_ROOT",
-        str(PROJECT_ROOT / "output"),
-    )
+    os.getenv("OUTPUT_ROOT")
+    or os.getenv("CATALOG_OUTPUT_ROOT")
+    or str(PROJECT_ROOT / "output")
 )
 
 ALLOWED_SURFACES = {

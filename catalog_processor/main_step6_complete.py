@@ -579,7 +579,10 @@ else:
 # CONFIGURATION
 # ============================================================
 
-OUTPUT_DIR = Path("output")
+OUTPUT_DIR = Path(
+    os.getenv("CATALOG_OUTPUT_ROOT")
+    or "output"
+)
 
 IMAGE_QUALITY = 85
 MIN_IMAGE_WIDTH = 200

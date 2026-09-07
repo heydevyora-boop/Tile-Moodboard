@@ -298,7 +298,13 @@ def _generate_random_bathroom_scene(
     root = (
         Path(output_root)
         if output_root is not None
-        else Path(__file__).resolve().parent.parent / "output"
+        # CATALOG_OUTPUT_ROOT redirects the output tree to a writable location;
+        # the deployment bundle this otherwise points into is read-only on
+        # Vercel. Unset, the path is exactly as before.
+        else Path(
+            os.getenv("CATALOG_OUTPUT_ROOT")
+            or (Path(__file__).resolve().parent.parent / "output")
+        )
     )
 
     scene_dir = root / "scene_images"
@@ -459,7 +465,13 @@ def resolve_scene_image(
     root = (
         Path(output_root)
         if output_root is not None
-        else Path(__file__).resolve().parent.parent / "output"
+        # CATALOG_OUTPUT_ROOT redirects the output tree to a writable location;
+        # the deployment bundle this otherwise points into is read-only on
+        # Vercel. Unset, the path is exactly as before.
+        else Path(
+            os.getenv("CATALOG_OUTPUT_ROOT")
+            or (Path(__file__).resolve().parent.parent / "output")
+        )
     )
 
     should_generate = (
