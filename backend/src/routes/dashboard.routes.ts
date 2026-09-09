@@ -2,7 +2,7 @@ import { Router } from 'express';
 import * as dashboardController from '@controllers/dashboard.controller';
 import { authenticate, requirePermission } from '@middlewares/auth';
 import { validate } from '@middlewares/validate';
-import { recentActivityQuerySchema } from '@validators/dashboard.validators';
+import { recentActivityQuerySchema, collectionsQuerySchema } from '@validators/dashboard.validators';
 
 const router = Router();
 
@@ -14,7 +14,7 @@ router.get('/stats', requirePermission('analytics:read'), dashboardController.ge
 // Distinct Tile.collection groupings with a representative image, for the Dashboard's
 // "Design Ideas & Collections" preview card. Same gating as /stats — aggregate product
 // data only, no PII.
-router.get('/collections', requirePermission('analytics:read'), dashboardController.getCollections);
+router.get('/collections', requirePermission('analytics:read'), validate(collectionsQuerySchema, 'query'), dashboardController.getCollections);
 
 // Includes per-event user/IP/user-agent, so it's gated the same as the Logs module.
 router.get('/recent-activity', requirePermission('logs:read'), validate(recentActivityQuerySchema, 'query'), dashboardController.getRecentActivity);

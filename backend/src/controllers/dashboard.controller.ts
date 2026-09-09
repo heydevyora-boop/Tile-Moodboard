@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { catchAsync } from '@utils/catchAsync';
 import * as dashboardService from '@services/dashboard.service';
-import { RecentActivityQuery } from '@validators/dashboard.validators';
+import { RecentActivityQuery, CollectionsQuery } from '@validators/dashboard.validators';
 
 export const getStats = catchAsync(async (_req: Request, res: Response) => {
   const stats = await dashboardService.getStats();
@@ -19,7 +19,8 @@ export const getOverview = catchAsync(async (_req: Request, res: Response) => {
   res.status(200).json({ success: true, data: overview });
 });
 
-export const getCollections = catchAsync(async (_req: Request, res: Response) => {
-  const result = await dashboardService.getTopCollections(3);
+export const getCollections = catchAsync(async (req: Request, res: Response) => {
+  const { limit } = req.query as unknown as CollectionsQuery;
+  const result = await dashboardService.getTopCollections(limit);
   res.status(200).json({ success: true, data: result });
 });

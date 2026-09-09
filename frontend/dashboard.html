@@ -236,7 +236,7 @@
     { id: 'dashboard', label: 'Dashboard', href: 'dashboard.html', ready: true },
     { id: 'moodboard', label: 'Mood Board', href: 'mood-board.html', ready: true },
     { id: 'projects', label: 'Projects', href: null, ready: false },
-    { id: 'catalog', label: 'Catalog', href: null, ready: false },
+    { id: 'catalog', label: 'Catalog', href: 'catalog.html', ready: true },
   ];
 
   function notReady() {
@@ -313,7 +313,7 @@
       result.collections.forEach((c) => {
         const btn = document.createElement('button');
         btn.className = 'coll-tile';
-        btn.addEventListener('click', notReady);
+        btn.addEventListener('click', () => { location.href = 'catalog.html'; });
         const img = c.imageUrl ? '<img src="' + c.imageUrl + '" alt="' + c.name + '" loading="lazy">' : '';
         btn.innerHTML = img + '<span class="coll-tag mono">' + c.name + ' (' + c.tileCount + ')</span>';
         grid.appendChild(btn);
@@ -374,7 +374,7 @@
     renderNav();
 
     document.getElementById('startWizardBtn').addEventListener('click', () => { location.href = 'mood-board.html'; });
-    document.getElementById('exploreCatalogBtn').addEventListener('click', notReady);
+    document.getElementById('exploreCatalogBtn').addEventListener('click', () => { location.href = 'catalog.html'; });
     document.getElementById('viewSavedBtn').addEventListener('click', notReady);
     document.getElementById('viewAllSessionsBtn').addEventListener('click', notReady);
     document.getElementById('logoutBtn').addEventListener('click', async () => {

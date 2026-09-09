@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Catalog · Casa de Aurum</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500&family=DM+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root { --ink:#1A1512; --paper:#F7F3EC; --card:#fff; --line:#E7DFD1; --sand:#F4EEE3; --gold:#8A6A3B; --gold-light:#E3C58E; --muted:#8B8177; --text2:#5B5147; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--paper); color:var(--ink); font-family:'DM Sans',sans-serif; -webkit-font-smoothing:antialiased; }
+  a { color:var(--gold); text-decoration:none; }
+  .mono { font-family:'JetBrains Mono',monospace; }
+  .serif { font-family:'Playfair Display',serif; }
+  button { font-family:inherit; }
+  img { max-width:100%; }
+  ::-webkit-scrollbar { width:10px; height:10px; }
+  ::-webkit-scrollbar-thumb { background:#DED3C0; border-radius:8px; border:3px solid var(--paper); }
+  @keyframes fadeIn { from{opacity:0} to{opacity:1} }
+  @keyframes rise { from{opacity:0; transform:translateY(14px)} to{opacity:1; transform:none} }
+  @keyframes shimmer { from{background-position:180% 0} to{background-position:-180% 0} }
+
+  .layout { display:flex; height:100vh; overflow:hidden; }
+  .sidebar { flex:0 0 auto; width:266px; height:100%; display:flex; flex-direction:column; background:#FCFAF6; border-right:1px solid var(--line); overflow-y:auto; }
+  .brand { padding:26px 22px 20px; border-bottom:1px solid #EFE7DA; }
+  .brand .name { font-size:19px; letter-spacing:.14em; line-height:1.1; }
+  .brand .tag { font-size:9px; letter-spacing:.22em; color:var(--muted); margin-top:6px; }
+  .nav { padding:20px 14px 8px; }
+  .nav-label { font-size:9.5px; letter-spacing:.2em; color:#A0968A; padding:0 8px 10px; }
+  .nav-items { display:flex; flex-direction:column; gap:3px; }
+  .nav-item { display:flex; align-items:center; gap:12px; width:100%; min-height:48px; padding:0 12px; border:none; border-radius:12px; cursor:pointer; font-size:14px; text-align:left; background:transparent; color:#4A4038; }
+  .nav-item.active { background:var(--ink); color:#FBF6EC; font-weight:500; }
+  .nav-item:not(.active):hover { background:#F1EADD; }
+  .nav-item .lbl { flex:1; }
+  .nav-item .badge { font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:.08em; padding:3px 7px; border-radius:100px; background:#F1EADD; color:var(--muted); }
+  .nav-item.active .badge { background:rgba(227,197,142,.2); color:var(--gold-light); }
+  .profile-wrap { margin-top:auto; padding:18px 16px; }
+  .profile { display:flex; align-items:center; gap:11px; padding:12px; background:var(--sand); border:1px solid var(--line); border-radius:14px; }
+  .avatar-circle { width:36px; height:36px; flex:0 0 auto; border-radius:50%; background:linear-gradient(150deg,#C09A5E,var(--gold)); display:grid; place-items:center; font-size:13px; color:#FFF8EC; }
+  .profile .name { font-size:13px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .profile .role { font-size:9px; letter-spacing:.14em; color:var(--muted); }
+  .logout-btn { margin-top:10px; width:100%; padding:8px; background:transparent; border:1px solid var(--line); border-radius:10px; cursor:pointer; font-size:10px; letter-spacing:.1em; color:var(--muted); }
+  .logout-btn:hover { color:var(--ink); border-color:#C7B393; }
+
+  .main { flex:1; min-width:0; overflow-y:auto; padding:clamp(22px,3vw,44px); }
+  .stage { animation:fadeIn .35s ease both; max-width:1200px; }
+
+  .eyebrow { display:flex; align-items:center; gap:9px; font-size:10px; letter-spacing:.2em; color:var(--gold); }
+  .dot { width:6px; height:6px; border-radius:50%; background:var(--gold); flex:0 0 auto; }
+  h1.page-h1 { font-weight:600; font-size:clamp(28px,3.8vw,44px); line-height:1.08; margin:12px 0 0; }
+  .page-sub { max-width:660px; margin:12px 0 0; font-size:clamp(14px,1.1vw,16px); line-height:1.55; color:var(--text2); }
+
+  .search-box { display:flex; align-items:center; gap:9px; padding:0 14px; height:46px; max-width:420px; background:#fff; border:1px solid var(--line); border-radius:12px; margin-top:20px; }
+  .search-box input { flex:1; min-width:0; border:none; outline:none; background:transparent; font-size:12px; letter-spacing:.02em; color:var(--ink); }
+
+  .empty-state { padding:clamp(28px,4vw,48px) clamp(20px,3vw,32px); background:#fff; border:1px dashed #D8C9AE; border-radius:20px; text-align:center; }
+  .empty-icon { width:58px; height:58px; margin:0 auto; border-radius:16px; background:var(--sand); display:grid; place-items:center; }
+  .empty-title { font-weight:600; font-size:clamp(20px,2.2vw,26px); margin:18px 0 0; }
+  .empty-desc { max-width:380px; margin:10px auto 0; font-size:14px; line-height:1.55; color:var(--text2); }
+  .btn-primary { min-height:52px; padding:0 22px; margin-top:20px; background:var(--ink); color:#FBF6EC; border:none; border-radius:13px; cursor:pointer; font-size:10.5px; letter-spacing:.14em; }
+  .btn-primary:hover { background:#33291F; }
+
+  .skeleton-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr)); gap:16px; margin-top:24px; }
+  .skeleton { height:220px; border-radius:16px; background:linear-gradient(90deg,#F1EADD 20%,#F8F3E9 50%,#F1EADD 80%); background-size:200% 100%; animation:shimmer 1.4s linear infinite; }
+
+  .collections-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr)); gap:clamp(14px,1.6vw,20px); margin-top:clamp(20px,2.4vw,30px); }
+  .coll-card { background:var(--card); border:1px solid var(--line); border-radius:20px; overflow:hidden; display:flex; flex-direction:column; animation:rise .4s ease both; }
+  .coll-img { position:relative; height:clamp(170px,18vw,220px); overflow:hidden; background:var(--sand); }
+  .coll-img img { width:100%; height:100%; object-fit:cover; display:block; }
+  .coll-tag { position:absolute; left:14px; top:14px; font-size:9px; letter-spacing:.14em; background:#FBF7EF; color:var(--ink); padding:7px 10px; border-radius:7px; border:1px solid var(--line); }
+  .coll-body { padding:clamp(18px,1.8vw,24px); display:flex; flex-direction:column; gap:11px; flex:1; }
+  .coll-body h3 { font-weight:600; font-size:clamp(20px,2vw,26px); margin:0; line-height:1.15; }
+  .coll-foot { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:auto; padding-top:12px; }
+  .coll-count { font-size:10px; letter-spacing:.1em; color:var(--muted); }
+  .use-palette-btn { display:flex; align-items:center; gap:9px; min-height:44px; background:transparent; border:none; padding:0; cursor:pointer; font-size:10.5px; letter-spacing:.14em; color:#6E5228; }
+  .use-palette-btn:hover { color:var(--ink); }
+
+  .section-title { font-weight:600; font-size:clamp(22px,2.3vw,30px); margin:clamp(30px,3.4vw,44px) 0 0; }
+  .section-sub { margin:8px 0 0; font-size:14px; color:var(--text2); }
+
+  .surface-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(190px,100%),1fr)); gap:clamp(10px,1.2vw,14px); margin-top:18px; }
+  .surface-card { display:flex; gap:12px; align-items:center; padding:14px; background:var(--card); border:1px solid var(--line); border-radius:14px; }
+  .surface-card img { width:44px; height:44px; flex:0 0 auto; border-radius:11px; object-fit:cover; background:var(--sand); }
+  .surface-card .sn { display:block; font-size:13.5px; font-weight:500; line-height:1.3; }
+  .surface-card .ss { display:block; font-size:9.5px; letter-spacing:.08em; color:var(--muted); margin-top:5px; }
+  .stock-dot { display:inline-block; width:6px; height:6px; border-radius:50%; margin-right:5px; }
+  .stock-dot.yes { background:#6E5228; }
+  .stock-dot.no { background:#A8552A; }
+
+  .load-more-row { display:flex; justify-content:center; margin-top:22px; }
+  .btn-secondary { min-height:48px; padding:0 22px; background:#fff; color:var(--ink); border:1px solid var(--line); border-radius:13px; cursor:pointer; font-size:10.5px; letter-spacing:.14em; }
+  .btn-secondary:hover:not(:disabled) { background:#F1EADD; }
+  .btn-secondary:disabled { opacity:.5; cursor:not-allowed; }
+
+  @media (max-width: 860px) {
+    .sidebar { display:none; }
+    .main { padding:18px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="layout">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand name serif">CASA DE AURUM</div>
+      <div class="brand tag mono">STUDIO &amp; SHOWROOM</div>
+    </div>
+    <div class="nav">
+      <div class="nav-label mono">WORKSPACE</div>
+      <nav class="nav-items" id="navItems"></nav>
+    </div>
+    <div class="profile-wrap">
+      <div class="profile">
+        <div class="avatar-circle serif" id="profileInitials">··</div>
+        <div style="min-width:0; display:flex; flex-direction:column; gap:2px">
+          <span class="name" id="profileName">—</span>
+          <span class="role mono" id="profileRole">—</span>
+        </div>
+      </div>
+      <button class="logout-btn mono" id="logoutBtn">SIGN OUT</button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="stage">
+      <div class="eyebrow mono"><span class="dot"></span>CURATED ARCHIVES</div>
+      <h1 class="page-h1 serif">Design Ideas &amp; Collections</h1>
+      <p class="page-sub" id="catalogSub">Loading the surface archive…</p>
+
+      <div class="search-box">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#A0968A" stroke-width="1.7" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.6-3.6"></path></svg>
+        <input id="searchInput" type="text" placeholder="Search collections and surfaces">
+      </div>
+
+      <div id="collectionsSection"></div>
+
+      <h2 class="section-title serif">Surface Archive</h2>
+      <p class="section-sub" id="archiveSub">All surfaces currently in the catalog.</p>
+      <div id="surfaceSection"></div>
+      <div class="load-more-row" id="loadMoreRow" style="display:none">
+        <button class="btn-secondary mono" id="loadMoreBtn">LOAD MORE</button>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="assets/api-client.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  const NAV_ITEMS = [
+    { id: 'dashboard', label: 'Dashboard', href: 'dashboard.html', ready: true },
+    { id: 'moodboard', label: 'Mood Board', href: 'mood-board.html', ready: true },
+    { id: 'projects', label: 'Projects', href: null, ready: false },
+    { id: 'catalog', label: 'Catalog', href: 'catalog.html', ready: true },
+  ];
+
+  function notReady() {
+    alert('This section of the new design is still being rebuilt — coming soon.');
+  }
+
+  function renderNav() {
+    const nav = document.getElementById('navItems');
+    nav.innerHTML = '';
+    NAV_ITEMS.forEach((item) => {
+      const btn = document.createElement('button');
+      btn.className = 'nav-item' + (item.id === 'catalog' ? ' active' : '');
+      btn.innerHTML = '<span class="lbl">' + item.label + '</span>' + (item.ready ? '' : '<span class="badge mono">SOON</span>');
+      btn.addEventListener('click', () => {
+        if (item.href) location.href = item.href;
+        else notReady();
+      });
+      nav.appendChild(btn);
+    });
+  }
+
+  function escapeHtml(s) {
+    const div = document.createElement('div');
+    div.textContent = s == null ? '' : s;
+    return div.innerHTML;
+  }
+
+  // ============================================================
+  // STATE
+  // ============================================================
+
+  const state = {
+    query: '',
+    collections: [],
+    collectionsLoading: true,
+    collectionsError: null,
+    surfaces: [],
+    surfacesLoading: true,
+    surfacesError: null,
+    page: 1,
+    meta: null,
+  };
+
+  let searchDebounce = null;
+
+  // ============================================================
+  // COLLECTIONS
+  // ============================================================
+
+  async function loadCollections() {
+    state.collectionsLoading = true;
+    state.collectionsError = null;
+    renderCollections();
+    try {
+      const result = await CasaApi.dashboard.collections({ limit: 24 });
+      state.collections = result.collections || [];
+      document.getElementById('catalogSub').textContent =
+        state.collections.length
+          ? 'Explore ' + state.collections.length + ' curated collection' + (state.collections.length === 1 ? '' : 's') + ' from the live archive.'
+          : 'Every surface currently in the catalog, grouped and searchable.';
+    } catch (err) {
+      state.collectionsError = (err && err.message) || 'Could not load collections.';
+    } finally {
+      state.collectionsLoading = false;
+      renderCollections();
+    }
+  }
+
+  function filteredCollections() {
+    const q = state.query.trim().toLowerCase();
+    if (!q) return state.collections;
+    return state.collections.filter((c) => c.name.toLowerCase().includes(q));
+  }
+
+  function renderCollections() {
+    const host = document.getElementById('collectionsSection');
+
+    if (state.collectionsLoading) {
+      host.innerHTML = '<div class="skeleton-grid"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div></div>';
+      return;
+    }
+
+    if (state.collectionsError) {
+      host.innerHTML = '<div class="empty-state" style="margin-top:24px"><p class="empty-desc" style="color:#A8552A">' + escapeHtml(state.collectionsError) + '</p></div>';
+      return;
+    }
+
+    const list = filteredCollections();
+
+    if (state.collections.length === 0) {
+      host.innerHTML =
+        '<div class="empty-state" style="margin-top:24px">' +
+        '<div class="empty-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#8A6A3B" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 3 8l9 5 9-5-9-5M3 14l9 5 9-5"></path></svg></div>' +
+        '<h3 class="empty-title serif">No curated collections yet</h3>' +
+        '<p class="empty-desc">Tag tiles with a collection name in the catalog extractor to populate this.</p>' +
+        '</div>';
+      return;
+    }
+
+    if (list.length === 0) {
+      host.innerHTML =
+        '<div class="empty-state" style="margin-top:24px">' +
+        '<div class="empty-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#8A6A3B" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.6-3.6"></path></svg></div>' +
+        '<h3 class="empty-title serif">Nothing in the archive matches</h3>' +
+        '<p class="empty-desc">Clear the search to browse all curated palettes and the full surface archive.</p>' +
+        '<button class="btn-primary mono" id="clearSearchBtn">CLEAR SEARCH</button>' +
+        '</div>';
+      document.getElementById('clearSearchBtn').addEventListener('click', clearSearch);
+      return;
+    }
+
+    host.innerHTML = '<div class="collections-grid" id="collectionsGrid"></div>';
+    const grid = document.getElementById('collectionsGrid');
+    list.forEach((c) => {
+      const card = document.createElement('article');
+      card.className = 'coll-card';
+      const img = c.imageUrl ? '<img src="' + c.imageUrl + '" alt="' + escapeHtml(c.name) + '">' : '';
+      card.innerHTML =
+        '<div class="coll-img">' + img + '<span class="coll-tag mono">' + escapeHtml(c.name) + '</span></div>' +
+        '<div class="coll-body">' +
+        '<h3 class="serif">' + escapeHtml(c.name) + '</h3>' +
+        '<div class="coll-foot"><span class="coll-count mono">' + c.tileCount + ' SURFACE' + (c.tileCount === 1 ? '' : 'S') + '</span><button class="use-palette-btn mono" data-use-palette>USE PALETTE →</button></div>' +
+        '</div>';
+      card.querySelector('[data-use-palette]').addEventListener('click', () => { location.href = 'mood-board.html'; });
+      grid.appendChild(card);
+    });
+  }
+
+  // ============================================================
+  // SURFACE ARCHIVE
+  // ============================================================
+
+  async function loadSurfaces(reset) {
+    if (reset) {
+      state.page = 1;
+      state.surfaces = [];
+    }
+    state.surfacesLoading = true;
+    state.surfacesError = null;
+    renderSurfaces();
+
+    try {
+      const result = await CasaApi.tiles.list({ page: state.page, limit: 24, search: state.query || undefined });
+      state.surfaces = reset ? result.tiles : state.surfaces.concat(result.tiles);
+      state.meta = result.meta;
+      document.getElementById('archiveSub').textContent =
+        state.meta && typeof state.meta.total === 'number'
+          ? state.meta.total + ' surface' + (state.meta.total === 1 ? '' : 's') + ' currently in the catalog.'
+          : 'All surfaces currently in the catalog.';
+    } catch (err) {
+      state.surfacesError = (err && err.message) || 'Could not load the surface archive.';
+    } finally {
+      state.surfacesLoading = false;
+      renderSurfaces();
+    }
+  }
+
+  function renderSurfaces() {
+    const host = document.getElementById('surfaceSection');
+    const loadMoreRow = document.getElementById('loadMoreRow');
+
+    if (state.surfacesLoading && state.surfaces.length === 0) {
+      host.innerHTML = '<div class="skeleton-grid"><div class="skeleton" style="height:74px"></div><div class="skeleton" style="height:74px"></div><div class="skeleton" style="height:74px"></div><div class="skeleton" style="height:74px"></div></div>';
+      loadMoreRow.style.display = 'none';
+      return;
+    }
+
+    if (state.surfacesError) {
+      host.innerHTML = '<div class="empty-state" style="margin-top:18px"><p class="empty-desc" style="color:#A8552A">' + escapeHtml(state.surfacesError) + '</p></div>';
+      loadMoreRow.style.display = 'none';
+      return;
+    }
+
+    if (state.surfaces.length === 0) {
+      host.innerHTML =
+        '<div class="empty-state" style="margin-top:18px">' +
+        '<h3 class="empty-title serif">No surfaces found</h3>' +
+        '<p class="empty-desc">' + (state.query ? 'Nothing matches "' + escapeHtml(state.query) + '".' : 'No tiles have been extracted into the catalog yet.') + '</p>' +
+        '</div>';
+      loadMoreRow.style.display = 'none';
+      return;
+    }
+
+    host.innerHTML = '<div class="surface-grid" id="surfaceGrid"></div>';
+    const grid = document.getElementById('surfaceGrid');
+    state.surfaces.forEach((s) => {
+      const card = document.createElement('article');
+      card.className = 'surface-card';
+      const img = s.imageUrl ? '<img src="' + s.imageUrl + '" alt="' + escapeHtml(s.name) + '">' : '<span style="width:44px;height:44px;flex:0 0 auto;border-radius:11px;background:var(--sand)"></span>';
+      const spec = [s.brand ? s.brand.name : null, s.size, s.finish].filter(Boolean).join(' · ');
+      card.innerHTML =
+        img +
+        '<span style="min-width:0">' +
+        '<span class="sn">' + escapeHtml(s.name) + '</span>' +
+        '<span class="ss mono">' + (spec ? escapeHtml(spec) : '—') + '</span>' +
+        '<span class="ss mono"><span class="stock-dot ' + (s.inStock ? 'yes' : 'no') + '"></span>' + (s.inStock ? 'IN STOCK' : 'OUT OF STOCK') + '</span>' +
+        '</span>';
+      grid.appendChild(card);
+    });
+
+    const hasMore = !!(state.meta && state.meta.hasNextPage);
+    loadMoreRow.style.display = hasMore ? 'flex' : 'none';
+    document.getElementById('loadMoreBtn').disabled = state.surfacesLoading;
+  }
+
+  function clearSearch() {
+    state.query = '';
+    document.getElementById('searchInput').value = '';
+    renderCollections();
+    loadSurfaces(true);
+  }
+
+  // ============================================================
+  // INIT
+  // ============================================================
+
+  async function init() {
+    const user = await CasaApi.requireAuth();
+
+    document.getElementById('profileInitials').textContent = CasaApi.initials(user.name);
+    document.getElementById('profileName').textContent = user.name || user.email;
+    document.getElementById('profileRole').textContent = (user.role || '').toUpperCase();
+
+    renderNav();
+    document.getElementById('logoutBtn').addEventListener('click', async () => {
+      await CasaApi.auth.logout();
+      location.href = 'login.html';
+    });
+
+    document.getElementById('searchInput').addEventListener('input', (e) => {
+      state.query = e.target.value;
+      renderCollections();
+      clearTimeout(searchDebounce);
+      searchDebounce = setTimeout(() => loadSurfaces(true), 300);
+    });
+
+    document.getElementById('loadMoreBtn').addEventListener('click', () => {
+      state.page += 1;
+      loadSurfaces(false);
+    });
+
+    await Promise.all([loadCollections(), loadSurfaces(true)]);
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>

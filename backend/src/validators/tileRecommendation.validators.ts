@@ -10,3 +10,16 @@ export const tileRecommendationsQuerySchema = z.object({
 });
 
 export type TileRecommendationsQuery = z.infer<typeof tileRecommendationsQuerySchema>;
+
+// Plain paginated/searchable browse of the tile archive, distinct from the
+// style-scored /recommendations above -- the Catalog page's "Surface
+// Archive" just needs every tile, optionally filtered, not a ranked match.
+export const listTilesQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(24),
+  search: z.string().trim().max(100).optional(),
+  collection: z.string().trim().max(100).optional(),
+  brandId: z.string().optional(),
+});
+
+export type ListTilesQuery = z.infer<typeof listTilesQuerySchema>;

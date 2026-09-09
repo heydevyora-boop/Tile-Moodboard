@@ -10,6 +10,15 @@ export const tileRecommendationPaths = {
       responses: { 200: { description: 'Ranked tiles.', content: { 'application/json': { schema: { type: 'object', properties: { success: { type: 'boolean' }, data: { type: 'object', properties: { tiles: { type: 'array', items: { $ref: '#/components/schemas/Tile' } } } } } } } } }, ...standardErrors(422) },
     },
   },
+  '/tiles': {
+    get: {
+      tags: ['Tile Recommendations'],
+      summary: 'Plain paginated/searchable tile browse (Catalog page Surface Archive)',
+      security: [{ bearerAuth: [] }],
+      parameters: [{ name: 'search', in: 'query', schema: { type: 'string' } }, { name: 'collection', in: 'query', schema: { type: 'string' } }, { name: 'brandId', in: 'query', schema: { type: 'string' } }, { name: 'page', in: 'query', schema: { type: 'integer' } }, { name: 'limit', in: 'query', schema: { type: 'integer', default: 24 } }],
+      responses: { 200: { description: 'A page of tiles.', content: { 'application/json': { schema: { type: 'object', properties: { success: { type: 'boolean' }, data: { type: 'object', properties: { tiles: { type: 'array', items: { $ref: '#/components/schemas/Tile' } } } }, meta: { $ref: '#/components/schemas/PaginationMeta' } } } } } }, ...standardErrors() },
+    },
+  },
 };
 
 export const apiKeyPaths = {

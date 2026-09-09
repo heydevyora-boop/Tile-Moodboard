@@ -587,9 +587,11 @@
       );
     },
 
-    collections() {
+    collections(params) {
       return apiFetch(
-        '/dashboard/collections'
+        `/dashboard/collections${qs(
+          params
+        )}`
       ).then(
         (r) =>
           r.data
@@ -1254,6 +1256,27 @@
         (r) =>
           r.data.tiles
       );
+    }
+  };
+
+  // ============================================================
+  // TILES (plain browse/search — Catalog page's Surface Archive.
+  // Distinct from moodBoards.tiles() above, which resolves specific
+  // ids referenced by a generated combination.)
+  // ============================================================
+
+  const tiles = {
+    list(params) {
+      return apiFetch(
+        `/tiles${qs(
+          params
+        )}`
+      ).then((r) => ({
+        tiles:
+          r.data.tiles,
+        meta:
+          r.meta
+      }));
     }
   };
 
@@ -2963,6 +2986,8 @@ const ai = {
     referenceImages,
 
     moodBoards,
+
+    tiles,
 
     printBoards,
 

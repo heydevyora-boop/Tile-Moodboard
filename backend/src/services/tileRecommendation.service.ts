@@ -1,3 +1,7 @@
+import { prisma } from '@db/connection';
+import { getPagination, buildPaginationMeta, PaginationMeta } from '@utils/pagination';
+import { ListTilesQuery } from '@validators/tileRecommendation.validators';
+
 // ─────────────────────────────────────────────────────────────────────────
 // Style profiles — styles (LUXURY, SUBTLE, etc.) aren't a field on Tile;
 // they're a taste profile that maps onto real tile attributes (finish,
@@ -277,6 +281,46 @@ export async function getRecommendedTiles(prisma: PrismaTileClient, filter: Reco
   const selected = interleaveBySource(ranked, (id) => sourceByTileId.get(id) ?? `tile:${id}`, filter.limit ?? 20);
 
   return selected.map((t) => ({ ...t, catalogGroup: sourceByTileId.get(t.id) ?? `tile:${t.id}` }));
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Plain browse — the Catalog page's "Surface Archive" needs every tile
+// (in and out of stock, shown with an honest status badge each), not a
+// style-ranked subset, so this is a straightforward paginated/searchable
+// list rather than a call into rankTiles() above.
+// ─────────────────────────────────────────────────────────────────────────
+
+export async function listAllTiles(query: ListTilesQuery) {
+  const { page, limit, skip, take } = getPagination(query);
+  const where = {
+    ...(query.search ? { name: { contains: query.search, mode: 'insensitive' as const } } : {}),
+    ...(query.collection ? { collection: query.collection } : {}),
+    ...(query.brandId ? { brandId: query.brandId } : {}),
+  };
+
+  const [tiles, total] = await Promise.all([
+    prisma.tile.findMany({
+      where,
+      skip,
+      take,
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        name: true,
+        imageUrl: true,
+        size: true,
+        finish: true,
+        colorTone: true,
+        collection: true,
+        inStock: true,
+        productCode: true,
+        brand: { select: { id: true, name: true } },
+      },
+    }),
+    prisma.tile.count({ where }),
+  ]);
+
+  return { tiles, meta: buildPaginationMeta(total, page, limit) as PaginationMeta };
 }
 
 // Minimal structural type for the Prisma client's tile delegate — keeps
