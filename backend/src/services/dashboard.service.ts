@@ -11,7 +11,7 @@ interface StatusBreakdown {
 export interface DashboardStats {
   users: { total: number; active: number };
   brands: { total: number };
-  tiles: { total: number };
+  tiles: { total: number; inStock: number };
   catalogs: { total: number; newThisWeek: number; byStatus: StatusBreakdown[] };
   moodBoards: { total: number; newThisWeek: number; byStatus: StatusBreakdown[] };
   printBoards: { total: number; newThisWeek: number };
@@ -42,6 +42,7 @@ export async function getStats(): Promise<DashboardStats> {
     activeUsers,
     totalBrands,
     totalTiles,
+    inStockTiles,
     totalCatalogs,
     catalogsThisWeek,
     catalogsByStatusRaw,
@@ -58,6 +59,7 @@ export async function getStats(): Promise<DashboardStats> {
     prisma.user.count({ where: { isActive: true } }),
     prisma.brand.count(),
     prisma.tile.count(),
+    prisma.tile.count({ where: { inStock: true } }),
     prisma.catalog.count(),
     prisma.catalog.count({ where: { createdAt: { gte: weekAgo } } }),
     prisma.catalog.groupBy({ by: ['status'], _count: { status: true } }),
@@ -74,7 +76,7 @@ export async function getStats(): Promise<DashboardStats> {
   return {
     users: { total: totalUsers, active: activeUsers },
     brands: { total: totalBrands },
-    tiles: { total: totalTiles },
+    tiles: { total: totalTiles, inStock: inStockTiles },
     catalogs: {
       total: totalCatalogs,
       newThisWeek: catalogsThisWeek,
@@ -150,4 +152,49 @@ export async function getOverview(activityLimit = 10): Promise<DashboardOverview
     recentActivity,
     system: getSystemStatus(),
   };
+}
+
+export interface TopCollection {
+  name: string;
+  tileCount: number;
+  imageUrl: string | null;
+}
+
+export interface TopCollectionsResult {
+  collections: TopCollection[];
+  totalCollections: number;
+}
+
+/**
+ * Groups tiles by the existing Tile.collection field (set by the catalog
+ * extractor / AI classification, not new here) to surface a curated
+ * preview on the Dashboard's "Design Ideas & Collections" card — the top
+ * N collections by tile count, each with one representative image.
+ */
+export async function getTopCollections(limit = 3): Promise<TopCollectionsResult> {
+  const grouped = await prisma.tile.groupBy({
+    by: ['collection'],
+    where: { collection: { not: null } },
+    _count: { collection: true },
+    orderBy: { _count: { collection: 'desc' } },
+    take: limit,
+  });
+
+  const collections = await Promise.all(
+    grouped.map(async (g) => {
+      const name = g.collection as string;
+      const representative = await prisma.tile.findFirst({
+        where: { collection: name, imageUrl: { not: null } },
+        select: { imageUrl: true },
+        orderBy: { createdAt: 'desc' },
+      });
+      return { name, tileCount: g._count.collection, imageUrl: representative?.imageUrl ?? null };
+    }),
+  );
+
+  const totalCollections = (
+    await prisma.tile.groupBy({ by: ['collection'], where: { collection: { not: null } } })
+  ).length;
+
+  return { collections, totalCollections };
 }

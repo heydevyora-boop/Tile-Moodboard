@@ -18,3 +18,8 @@ export const getOverview = catchAsync(async (_req: Request, res: Response) => {
   const overview = await dashboardService.getOverview(10);
   res.status(200).json({ success: true, data: overview });
 });
+
+export const getCollections = catchAsync(async (_req: Request, res: Response) => {
+  const result = await dashboardService.getTopCollections(3);
+  res.status(200).json({ success: true, data: result });
+});

@@ -61,6 +61,9 @@ export const dashboardPaths = {
   '/dashboard/overview': {
     get: { tags: ['Dashboard'], summary: 'Combined stats + recent activity + system status in one call', security: [{ bearerAuth: [] }], responses: { 200: { description: 'Overview.' }, ...standardErrors() } },
   },
+  '/dashboard/collections': {
+    get: { tags: ['Dashboard'], summary: 'Top Tile.collection groupings with a representative image', security: [{ bearerAuth: [] }], responses: { 200: { description: 'Top collections.' }, ...standardErrors() } },
+  },
 };
 
 export const integrationsPaths = {

@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dashboard · Casa de Aurum</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500&family=DM+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root { --ink:#1A1512; --paper:#F7F3EC; --card:#fff; --line:#E7DFD1; --sand:#F4EEE3; --gold:#8A6A3B; --gold-light:#E3C58E; --muted:#8B8177; --text2:#5B5147; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--paper); color:var(--ink); font-family:'DM Sans',sans-serif; -webkit-font-smoothing:antialiased; }
+  a { color:var(--gold); text-decoration:none; }
+  .mono { font-family:'JetBrains Mono',monospace; }
+  .serif { font-family:'Playfair Display',serif; }
+  button { font-family:inherit; }
+  ::-webkit-scrollbar { width:10px; height:10px; }
+  ::-webkit-scrollbar-thumb { background:#DED3C0; border-radius:8px; border:3px solid var(--paper); }
+  @keyframes fadeIn { from{opacity:0} to{opacity:1} }
+  @keyframes rise { from{opacity:0; transform:translateY(14px)} to{opacity:1; transform:none} }
+  @keyframes shimmer { from{background-position:180% 0} to{background-position:-180% 0} }
+
+  .layout { display:flex; height:100vh; overflow:hidden; }
+  .sidebar { flex:0 0 auto; width:266px; height:100%; display:flex; flex-direction:column; background:#FCFAF6; border-right:1px solid var(--line); overflow-y:auto; }
+  .brand { padding:26px 22px 20px; border-bottom:1px solid #EFE7DA; }
+  .brand .name { font-size:19px; letter-spacing:.14em; line-height:1.1; }
+  .brand .tag { font-size:9px; letter-spacing:.22em; color:var(--muted); margin-top:6px; }
+  .nav { padding:20px 14px 8px; }
+  .nav-label { font-size:9.5px; letter-spacing:.2em; color:#A0968A; padding:0 8px 10px; }
+  .nav-items { display:flex; flex-direction:column; gap:3px; }
+  .nav-item { display:flex; align-items:center; gap:12px; width:100%; min-height:48px; padding:0 12px; border:none; border-radius:12px; cursor:pointer; font-size:14px; text-align:left; background:transparent; color:#4A4038; }
+  .nav-item.active { background:var(--ink); color:#FBF6EC; font-weight:500; }
+  .nav-item:not(.active):hover { background:#F1EADD; }
+  .nav-item .lbl { flex:1; }
+  .nav-item .badge { font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:.08em; padding:3px 7px; border-radius:100px; background:#F1EADD; color:var(--muted); }
+  .nav-item.active .badge { background:rgba(227,197,142,.2); color:var(--gold-light); }
+  .status-block { padding:14px 22px 8px; margin-top:6px; border-top:1px solid #EFE7DA; }
+  .status-block .lbl { font-size:9.5px; letter-spacing:.2em; color:#A0968A; padding:8px 0 12px; }
+  .status-row { display:flex; align-items:baseline; justify-content:space-between; gap:10px; margin-bottom:10px; }
+  .status-row span:first-child { font-size:10px; letter-spacing:.12em; color:var(--muted); }
+  .status-row span:last-child { font-size:11px; color:#6E5228; }
+  .bar-track { height:4px; border-radius:100px; background:#EFE7DA; overflow:hidden; margin-bottom:12px; }
+  .bar-fill { height:100%; background:linear-gradient(90deg,var(--gold),var(--gold-light)); }
+  .profile-wrap { margin-top:auto; padding:18px 16px; }
+  .profile { display:flex; align-items:center; gap:11px; padding:12px; background:var(--sand); border:1px solid var(--line); border-radius:14px; }
+  .avatar-circle { width:36px; height:36px; flex:0 0 auto; border-radius:50%; background:linear-gradient(150deg,#C09A5E,var(--gold)); display:grid; place-items:center; font-size:13px; color:#FFF8EC; }
+  .profile .name { font-size:13px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .profile .role { font-size:9px; letter-spacing:.14em; color:var(--muted); }
+  .logout-btn { margin-top:10px; width:100%; padding:8px; background:transparent; border:1px solid var(--line); border-radius:10px; cursor:pointer; font-size:10px; letter-spacing:.1em; color:var(--muted); }
+  .logout-btn:hover { color:var(--ink); border-color:#C7B393; }
+
+  .main { flex:1; min-width:0; overflow-y:auto; padding:clamp(22px,3vw,44px); animation:fadeIn .35s ease both; }
+  .eyebrow { display:flex; align-items:center; gap:9px; font-size:10px; letter-spacing:.2em; color:var(--gold); }
+  .dot { width:6px; height:6px; border-radius:50%; background:var(--gold); }
+  h1.welcome { font-weight:600; font-size:clamp(30px,4.4vw,50px); line-height:1.05; letter-spacing:-.01em; margin:14px 0 0; }
+  .sub { max-width:620px; margin:12px 0 0; font-size:clamp(14px,1.15vw,16.5px); line-height:1.55; color:var(--text2); }
+
+  .stats-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(180px,100%),1fr)); gap:1px; margin-top:clamp(20px,2.4vw,30px); background:var(--line); border:1px solid var(--line); border-radius:16px; overflow:hidden; }
+  .stat-tile { background:var(--sand); padding:18px 20px; display:flex; flex-direction:column; gap:8px; }
+  .stat-tile .lbl { font-size:9.5px; letter-spacing:.18em; color:var(--muted); }
+  .stat-tile .val { font-size:clamp(19px,2vw,25px); }
+
+  .cards-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr)); gap:clamp(14px,1.6vw,20px); margin-top:clamp(16px,1.8vw,22px); }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:20px; padding:clamp(20px,2vw,26px); display:flex; flex-direction:column; gap:14px; }
+  .card-head { display:flex; align-items:flex-start; justify-content:space-between; gap:14px; }
+  .card-eyebrow { font-size:9.5px; letter-spacing:.18em; color:var(--muted); }
+  .card-title { font-weight:600; font-size:clamp(21px,2vw,27px); margin:8px 0 0; line-height:1.15; }
+  .card-icon { width:42px; height:42px; flex:0 0 auto; border-radius:12px; background:var(--sand); display:grid; place-items:center; }
+  .card p { margin:0; font-size:14px; line-height:1.55; color:var(--text2); }
+  .link-btn { margin-top:auto; display:flex; align-items:center; gap:10px; background:transparent; border:none; padding:6px 0 0; cursor:pointer; font-size:11px; letter-spacing:.16em; color:#6E5228; }
+  .link-btn:hover { color:var(--ink); }
+
+  .hero-card { grid-column:1/-1; background:var(--card); border:1px solid var(--line); border-radius:20px; overflow:hidden; display:grid; grid-template-columns:repeat(auto-fit,minmax(min(320px,100%),1fr)); }
+  .hero-img { position:relative; min-height:clamp(230px,26vw,340px); overflow:hidden; background:var(--sand); display:grid; place-items:center; }
+  .hero-body { padding:clamp(22px,2.4vw,34px); display:flex; flex-direction:column; gap:14px; }
+  .hero-body h2 { font-weight:600; font-size:clamp(24px,2.6vw,34px); line-height:1.1; margin:0; }
+  .hero-note { display:flex; align-items:center; gap:10px; padding:12px 14px; background:var(--sand); border-radius:12px; font-size:9.5px; letter-spacing:.14em; color:#6E5228; line-height:1.7; }
+  .cta-btn { margin-top:auto; display:flex; align-items:center; gap:12px; width:100%; min-height:56px; padding:0 22px; background:var(--ink); color:#FBF6EC; border:none; border-radius:14px; cursor:pointer; font-size:11.5px; letter-spacing:.16em; }
+  .cta-btn:hover { background:#33291F; }
+  .cta-btn:disabled { opacity:.55; cursor:not-allowed; }
+
+  .coll-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+  .coll-tile { position:relative; height:80px; padding:0; border:none; border-radius:10px; overflow:hidden; cursor:pointer; background:var(--sand); }
+  .coll-tile img { width:100%; height:100%; object-fit:cover; display:block; }
+  .coll-tag { position:absolute; left:7px; bottom:7px; font-size:8.5px; letter-spacing:.08em; background:rgba(26,21,18,.75); color:#FBF6EC; padding:4px 6px; border-radius:5px; }
+
+  .avatars { display:flex; align-items:center; }
+  .avatars span { width:34px; height:34px; border-radius:50%; background:#E3D8C4; border:2px solid #fff; display:grid; place-items:center; font-size:9px; color:#5B5147; }
+  .avatars span + span { margin-left:-9px; }
+
+  .section-head { display:flex; align-items:center; justify-content:space-between; gap:16px; margin:clamp(30px,3.4vw,44px) 0 16px; }
+  .section-head h2 { display:flex; align-items:center; gap:12px; font-weight:600; font-size:clamp(22px,2.3vw,30px); margin:0; }
+  .view-all { background:transparent; border:none; cursor:pointer; font-size:10px; letter-spacing:.18em; color:var(--muted); }
+  .view-all:hover { color:var(--ink); }
+
+  .sessions { display:flex; flex-direction:column; gap:8px; }
+  .session-row { display:flex; align-items:center; gap:14px; width:100%; text-align:left; padding:14px 16px; background:var(--sand); border:1px solid transparent; border-radius:16px; cursor:pointer; animation:rise .45s cubic-bezier(.2,.7,.3,1) both; }
+  .session-row:hover { background:#EFE7DA; border-color:#E1D5BF; }
+  .session-icon { width:44px; height:44px; flex:0 0 auto; border-radius:12px; background:#E3D8C4; display:grid; place-items:center; }
+  .session-text { flex:1; min-width:0; display:flex; flex-direction:column; gap:4px; }
+  .session-text .client { font-family:'Playfair Display',serif; font-size:16.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .session-text .meta { font-size:10px; letter-spacing:.1em; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .status-pill { font-size:9px; letter-spacing:.1em; white-space:nowrap; padding:7px 10px; border-radius:100px; }
+  .status-pill.done { background:#F7DFBB; color:#6E5228; }
+  .status-pill.neutral { background:#EDE8DF; color:#5B5147; }
+  .empty-state { padding:26px; text-align:center; color:var(--muted); font-size:13px; background:var(--sand); border-radius:16px; }
+
+  .tip { display:flex; gap:14px; margin-top:clamp(18px,2vw,26px); padding:18px 20px; background:var(--sand); border:1px dashed #D8C9AE; border-radius:16px; }
+  .tip p { margin:6px 0 0; font-size:13.5px; line-height:1.55; color:var(--text2); }
+
+  .skeleton { background:linear-gradient(90deg,#F1EADD 20%,#F8F3E9 50%,#F1EADD 80%); background-size:200% 100%; animation:shimmer 1.4s linear infinite; border-radius:16px; }
+
+  @media (max-width: 860px) {
+    .sidebar { display:none; }
+    .main { padding:18px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="layout">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand name serif">CASA DE AURUM</div>
+      <div class="brand tag mono">STUDIO &amp; SHOWROOM</div>
+    </div>
+    <div class="nav">
+      <div class="nav-label mono">WORKSPACE</div>
+      <nav class="nav-items" id="navItems"></nav>
+    </div>
+    <div class="status-block">
+      <div class="status-block lbl mono">ATELIER STATUS</div>
+      <div class="status-row mono"><span>STOCK IN HAND</span><span id="stockLive">—</span></div>
+      <div class="bar-track"><div class="bar-fill" id="stockBar" style="width:0%"></div></div>
+      <div class="status-row mono"><span>RENDERS READY</span><span id="rendersReadyLbl">—</span></div>
+    </div>
+    <div class="profile-wrap">
+      <div class="profile">
+        <div class="avatar-circle serif" id="profileInitials">··</div>
+        <div style="min-width:0; display:flex; flex-direction:column; gap:2px">
+          <span class="name" id="profileName">—</span>
+          <span class="role mono" id="profileRole">—</span>
+        </div>
+      </div>
+      <button class="logout-btn mono" id="logoutBtn">SIGN OUT</button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="eyebrow mono"><span class="dot"></span>SHOWROOM WORKSPACE</div>
+    <h1 class="welcome serif" id="welcomeHeading">Welcome back</h1>
+    <p class="sub">Curate bespoke architectural surface palettes and AI-rendered client scenes in seconds.</p>
+
+    <div class="stats-row" id="statsRow">
+      <div class="stat-tile"><span class="lbl mono">ATELIER STOCK</span><span class="val serif skeleton" style="height:25px">&nbsp;</span></div>
+      <div class="stat-tile"><span class="lbl mono">CURATED COLLECTIONS</span><span class="val serif skeleton" style="height:25px">&nbsp;</span></div>
+      <div class="stat-tile"><span class="lbl mono">RENDERS READY</span><span class="val serif skeleton" style="height:25px">&nbsp;</span></div>
+    </div>
+
+    <div class="cards-grid">
+      <article class="hero-card">
+        <div class="hero-img">
+          <span class="mono" style="font-size:11px; letter-spacing:.14em; color:var(--muted)">SURFACE &amp; TILE VISUALIZER</span>
+        </div>
+        <div class="hero-body">
+          <h2 class="serif">Mood Board Generator</h2>
+          <p>Translate client briefs into photorealistic showroom tile compositions with live stock validation.</p>
+          <div class="hero-note mono">7 GUIDED STEPS · FIXED ROOM TEMPLATES · ZERO GUESSWORK</div>
+          <button class="cta-btn mono" id="startWizardBtn">
+            <span>CREATE A NEW MOOD BOARD</span><span style="margin-left:auto">→</span>
+          </button>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="card-head">
+          <div>
+            <div class="card-eyebrow mono">CURATED ARCHIVES</div>
+            <h3 class="card-title serif">Design Ideas &amp; Collections</h3>
+          </div>
+          <div class="card-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8A6A3B" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4h9a3 3 0 0 1 3 3v9M5 8h9a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3z"></path></svg>
+          </div>
+        </div>
+        <p id="collectionsDesc">Loading curated palettes…</p>
+        <div class="coll-grid" id="collGrid"></div>
+        <button class="link-btn mono" id="exploreCatalogBtn">EXPLORE CATALOG <span>→</span></button>
+      </article>
+
+      <article class="card">
+        <div class="card-head">
+          <div>
+            <div class="card-eyebrow mono">CLIENT PROOFS</div>
+            <h3 class="card-title serif">Saved Mood Boards</h3>
+          </div>
+          <span class="status-pill done mono" id="activeBoardsBadge">—</span>
+        </div>
+        <p id="savedBoardsDesc">Loading…</p>
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap; margin-top:auto">
+          <div class="avatars" id="avatarsRow"></div>
+          <button class="link-btn mono" id="viewSavedBtn">VIEW SAVED <span>→</span></button>
+        </div>
+      </article>
+    </div>
+
+    <div class="section-head">
+      <h2 class="serif">
+        <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#8A6A3B" stroke-width="1.6" stroke-linecap="round"><path d="M12 8v4l3 2M3 12a9 9 0 1 0 3-6.7L3 8m0-5v5h5"></path></svg>
+        Recent Client Sessions
+      </h2>
+      <button class="view-all mono" id="viewAllSessionsBtn">VIEW ALL</button>
+    </div>
+    <div class="sessions" id="sessionsList">
+      <div class="skeleton" style="height:74px"></div>
+      <div class="skeleton" style="height:74px"></div>
+      <div class="skeleton" style="height:74px"></div>
+    </div>
+
+    <div class="tip">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8A6A3B" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto; margin-top:2px"><path d="M6 3h12l3 6-9 12L3 9z"></path></svg>
+      <div>
+        <div style="font-size:13.5px; font-weight:500; letter-spacing:.02em">Material Atelier Tip</div>
+        <p>Double tap any physical swatch in the showroom to beam specular reflections straight to client renders.</p>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="assets/api-client.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  const NAV_ITEMS = [
+    { id: 'dashboard', label: 'Dashboard', href: 'dashboard.html', ready: true },
+    { id: 'moodboard', label: 'Mood Board', href: null, ready: false },
+    { id: 'projects', label: 'Projects', href: null, ready: false },
+    { id: 'catalog', label: 'Catalog', href: null, ready: false },
+  ];
+
+  function notReady() {
+    alert('This section of the new design is still being rebuilt — coming soon.');
+  }
+
+  function renderNav() {
+    const nav = document.getElementById('navItems');
+    nav.innerHTML = '';
+    NAV_ITEMS.forEach((item) => {
+      const btn = document.createElement('button');
+      btn.className = 'nav-item' + (item.id === 'dashboard' ? ' active' : '');
+      btn.innerHTML = '<span class="lbl">' + item.label + '</span>' + (item.ready ? '' : '<span class="badge mono">SOON</span>');
+      btn.addEventListener('click', () => {
+        if (item.href) location.href = item.href;
+        else notReady();
+      });
+      nav.appendChild(btn);
+    });
+  }
+
+  const STATUS_LABELS = {
+    DRAFT: 'Draft',
+    GENERATED: 'Generated',
+    REFINED: 'Refined',
+    APPROVED: 'Approved',
+    REJECTED: 'Rejected',
+    ARCHIVED: 'Archived',
+  };
+
+  function statusPillClass(status) {
+    return status === 'APPROVED' ? 'done' : 'neutral';
+  }
+
+  async function loadStats() {
+    const stats = await CasaApi.dashboard.stats();
+
+    const tiles = stats.tiles || { total: 0, inStock: 0 };
+    const stockPct = tiles.total > 0 ? Math.round((tiles.inStock / tiles.total) * 1000) / 10 : 0;
+
+    const byStatus = (stats.moodBoards && stats.moodBoards.byStatus) || [];
+    const countFor = (s) => (byStatus.find((b) => b.status === s) || { count: 0 }).count;
+    const rendersReady = countFor('GENERATED');
+    const activeBoards = countFor('DRAFT') + countFor('GENERATED') + countFor('REFINED') + countFor('APPROVED');
+
+    document.getElementById('stockLive').textContent = tiles.total > 0 ? stockPct + '% Live' : 'No data';
+    document.getElementById('stockBar').style.width = Math.max(4, stockPct) + '%';
+    document.getElementById('rendersReadyLbl').textContent = rendersReady + ' Pending';
+
+    document.getElementById('activeBoardsBadge').textContent = activeBoards + ' Active';
+    document.getElementById('savedBoardsDesc').textContent =
+      activeBoards + ' active client board' + (activeBoards === 1 ? '' : 's') + ' awaiting client review or print approval.';
+
+    return { stats, stockPct, rendersReady, activeBoards };
+  }
+
+  async function loadCollections() {
+    let result;
+    try {
+      result = await CasaApi.dashboard.collections();
+    } catch (err) {
+      result = { collections: [], totalCollections: 0 };
+    }
+
+    const grid = document.getElementById('collGrid');
+    grid.innerHTML = '';
+
+    if (!result.collections.length) {
+      document.getElementById('collectionsDesc').textContent = 'No curated collections yet — tag tiles with a collection name to populate this.';
+    } else {
+      const names = result.collections.map((c) => c.name).join(', ');
+      document.getElementById('collectionsDesc').textContent = 'Explore trending curated palettes: ' + names + '.';
+
+      result.collections.forEach((c) => {
+        const btn = document.createElement('button');
+        btn.className = 'coll-tile';
+        btn.addEventListener('click', notReady);
+        const img = c.imageUrl ? '<img src="' + c.imageUrl + '" alt="' + c.name + '" loading="lazy">' : '';
+        btn.innerHTML = img + '<span class="coll-tag mono">' + c.name + ' (' + c.tileCount + ')</span>';
+        grid.appendChild(btn);
+      });
+    }
+
+    return result;
+  }
+
+  async function loadRecentSessions() {
+    const { boards } = await CasaApi.moodBoards.list({ limit: 6 });
+    const list = document.getElementById('sessionsList');
+    list.innerHTML = '';
+
+    if (!boards.length) {
+      list.innerHTML = '<div class="empty-state">No mood boards yet. Create one to see recent client sessions here.</div>';
+    } else {
+      boards.slice(0, 3).forEach((b) => {
+        const row = document.createElement('button');
+        row.className = 'session-row';
+        row.addEventListener('click', notReady);
+        const client = (b.customer && b.customer.name) || 'Unassigned client';
+        const staff = (b.createdBy && b.createdBy.name) || 'Unknown staff';
+        const meta = staff + ' · ' + b.room + ' · ' + b.style;
+        row.innerHTML =
+          '<span class="session-icon"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#6E5228" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V9l8-5 8 5v11M9 20v-6h6v6"></path></svg></span>' +
+          '<span class="session-text"><span class="client serif">' + client + '</span><span class="meta mono">' + meta + '</span></span>' +
+          '<span class="status-pill ' + statusPillClass(b.status) + ' mono">' + (STATUS_LABELS[b.status] || b.status) + '</span>' +
+          '<span style="color:#A0968A; font-size:15px">›</span>';
+        list.appendChild(row);
+      });
+    }
+
+    const avatarsRow = document.getElementById('avatarsRow');
+    avatarsRow.innerHTML = '';
+    const seen = new Set();
+    boards.forEach((b) => {
+      const name = b.customer && b.customer.name;
+      if (!name || seen.has(name) || seen.size >= 4) return;
+      seen.add(name);
+      const span = document.createElement('span');
+      span.className = 'serif';
+      span.textContent = CasaApi.initials(name);
+      avatarsRow.appendChild(span);
+    });
+
+    return boards;
+  }
+
+  async function init() {
+    const user = await CasaApi.requireAuth();
+
+    document.getElementById('welcomeHeading').textContent = 'Welcome back, ' + (user.name ? user.name.split(' ')[0] : 'there');
+    document.getElementById('profileInitials').textContent = CasaApi.initials(user.name);
+    document.getElementById('profileName').textContent = user.name || user.email;
+    document.getElementById('profileRole').textContent = (user.role || '').toUpperCase();
+
+    renderNav();
+
+    document.getElementById('startWizardBtn').addEventListener('click', notReady);
+    document.getElementById('exploreCatalogBtn').addEventListener('click', notReady);
+    document.getElementById('viewSavedBtn').addEventListener('click', notReady);
+    document.getElementById('viewAllSessionsBtn').addEventListener('click', notReady);
+    document.getElementById('logoutBtn').addEventListener('click', async () => {
+      await CasaApi.auth.logout();
+      location.href = 'login.html';
+    });
+
+    const statsRow = document.getElementById('statsRow');
+
+    try {
+      const [statsResult, collResult] = await Promise.all([loadStats(), loadCollections()]);
+
+      statsRow.innerHTML =
+        '<div class="stat-tile"><span class="lbl mono">ATELIER STOCK</span><span class="val serif">' + (statsResult.stats.tiles.total > 0 ? statsResult.stockPct + '% Live' : 'No data') + '</span></div>' +
+        '<div class="stat-tile"><span class="lbl mono">CURATED COLLECTIONS</span><span class="val serif">' + collResult.totalCollections + '</span></div>' +
+        '<div class="stat-tile"><span class="lbl mono">RENDERS READY</span><span class="val serif">' + statsResult.rendersReady + '</span></div>';
+    } catch (err) {
+      statsRow.innerHTML = '<div class="empty-state" style="grid-column:1/-1">Could not load dashboard stats: ' + (err.message || err) + '</div>';
+    }
+
+    try {
+      await loadRecentSessions();
+    } catch (err) {
+      document.getElementById('sessionsList').innerHTML =
+        '<div class="empty-state">Could not load recent sessions: ' + (err.message || err) + '</div>';
+    }
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>

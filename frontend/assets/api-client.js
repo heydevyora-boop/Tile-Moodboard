@@ -585,6 +585,15 @@
         (r) =>
           r.data
       );
+    },
+
+    collections() {
+      return apiFetch(
+        '/dashboard/collections'
+      ).then(
+        (r) =>
+          r.data
+      );
     }
   };
 
