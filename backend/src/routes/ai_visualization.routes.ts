@@ -6,11 +6,20 @@ import {
 
 import { prisma } from '@db/connection';
 
+import { authenticate, requirePermission } from '@middlewares/auth';
+
 import {
   generateVisualization,
 } from '../services/python-ai.service';
 
 const router = Router();
+
+// This endpoint proxies straight through to the paid Gemini generation
+// pipeline in catalog_processor -- it must be behind the same auth every
+// other tile-mutating route uses (see catalogExtractor.routes.ts), not
+// open to the internet. tiles:write matches that route's permission for
+// tile-generation actions.
+router.use(authenticate);
 
 // ============================================================
 // POST /visualizations
@@ -18,6 +27,7 @@ const router = Router();
 
 router.post(
   '/visualizations',
+  requirePermission('tiles:write'),
   async (
     req: Request,
     res: Response,
