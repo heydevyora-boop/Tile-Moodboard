@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { catchAsync } from '@utils/catchAsync';
 import { AppError } from '@utils/AppError';
+import { config } from '@config/index';
 import * as promptBuilderService from '@services/promptBuilder.service';
 import * as moodBoardService from '@services/moodBoard.service';
 import {
@@ -10,6 +11,7 @@ import {
   ApproveMoodBoardInput,
   ListMoodBoardsQuery,
   MoodBoardTileLookupQuery,
+  RespondToSharedMoodBoardInput,
 } from '@validators/moodBoard.validators';
 
 function requireActorId(req: Request): string {
@@ -69,4 +71,26 @@ export const approve = catchAsync(async (req: Request, res: Response) => {
   const { selectedIndex } = req.body as ApproveMoodBoardInput;
   const board = await moodBoardService.approveMoodBoard(req.params.id, selectedIndex, requireActorId(req), req);
   res.status(200).json({ success: true, data: { board } });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// Client Share/Approve — `share` is staff-authenticated (normal middleware
+// chain); `getShared` and `respondToShared` are public/token-scoped and are
+// registered in moodBoard.routes.ts before `router.use(authenticate)`.
+// ─────────────────────────────────────────────────────────────────────────
+
+export const share = catchAsync(async (req: Request, res: Response) => {
+  const share = await moodBoardService.shareMoodBoard(req.params.id, requireActorId(req), req);
+  res.status(200).json({ success: true, data: { token: share.token, shareUrl: `${config.frontend.url}/shared.html?token=${share.token}` } });
+});
+
+export const getShared = catchAsync(async (req: Request, res: Response) => {
+  const board = await moodBoardService.getSharedMoodBoardByToken(req.params.token);
+  res.status(200).json({ success: true, data: board });
+});
+
+export const respondToShared = catchAsync(async (req: Request, res: Response) => {
+  const { response } = req.body as RespondToSharedMoodBoardInput;
+  const result = await moodBoardService.respondToSharedMoodBoard(req.params.token, response, req);
+  res.status(200).json({ success: true, data: result });
 });

@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Client Proof · Casa de Aurum</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500&family=DM+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root { --ink:#1A1512; --paper:#F7F3EC; --card:#fff; --line:#E7DFD1; --sand:#F4EEE3; --gold:#8A6A3B; --gold-light:#E3C58E; --muted:#8B8177; --text2:#5B5147; --err:#A8552A; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--paper); color:var(--ink); font-family:'DM Sans',sans-serif; -webkit-font-smoothing:antialiased; }
+  a { color:var(--gold); text-decoration:none; }
+  .mono { font-family:'JetBrains Mono',monospace; }
+  .serif { font-family:'Playfair Display',serif; }
+  button { font-family:inherit; }
+  img { max-width:100%; }
+  @keyframes fadeIn { from{opacity:0} to{opacity:1} }
+  @keyframes spin { to{transform:rotate(360deg)} }
+
+  .topbar { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:14px clamp(14px,4vw,40px); background:var(--ink); color:#FBF6EC; }
+  .topbar-label { display:flex; align-items:center; gap:10px; font-size:9.5px; letter-spacing:.18em; color:var(--gold-light); }
+  .copy-btn { min-height:42px; padding:0 15px; white-space:nowrap; background:transparent; color:#C7BCAA; border:1px solid #4A4038; border-radius:11px; cursor:pointer; font-size:9.5px; letter-spacing:.14em; }
+  .copy-btn:hover { color:#FBF6EC; border-color:var(--gold); }
+
+  .wrap { max-width:940px; margin:0 auto; padding:clamp(22px,4vw,52px) clamp(14px,4vw,40px) clamp(40px,6vw,72px); animation:fadeIn .35s ease both; }
+  .brand-block { text-align:center; }
+  .brand-eyebrow { font-size:9.5px; letter-spacing:.28em; color:#B08F5C; }
+  .brand-name { font-weight:700; font-size:clamp(24px,3.4vw,38px); letter-spacing:.06em; margin-top:10px; }
+  .rule { width:54px; height:1px; background:#C7B393; margin:16px auto 0; }
+  h1.proof-title { font-weight:600; font-size:clamp(26px,3.8vw,42px); line-height:1.1; margin:18px 0 0; text-align:center; }
+  .proof-sub { font-size:10px; letter-spacing:.14em; color:var(--muted); margin-top:10px; line-height:1.7; text-align:center; }
+
+  .board-frame { margin-top:clamp(22px,3vw,34px); border-radius:22px; overflow:hidden; border:1px solid var(--line); background:#fff; }
+  .board-thumbs { display:grid; grid-template-columns:repeat(3,1fr); gap:2px; background:var(--line); }
+  .board-thumbs .t { height:clamp(140px,20vw,220px); background:var(--sand); overflow:hidden; }
+  .board-thumbs .t img { width:100%; height:100%; object-fit:cover; display:block; }
+  .board-meta { display:flex; align-items:baseline; justify-content:space-between; gap:14px; flex-wrap:wrap; padding:18px clamp(16px,2.4vw,26px); }
+  .board-meta .name { font-size:clamp(20px,2.2vw,26px); }
+
+  .proof-desc { max-width:640px; margin:clamp(18px,2.4vw,26px) auto 0; text-align:center; font-size:clamp(14px,1.15vw,16px); line-height:1.65; color:var(--text2); }
+
+  .section-lbl { font-size:9.5px; letter-spacing:.2em; color:var(--muted); text-align:center; margin-top:clamp(24px,3vw,36px); }
+  .formula-list { display:flex; flex-direction:column; gap:1px; background:var(--line); border:1px solid var(--line); border-radius:16px; overflow:hidden; margin-top:14px; }
+  .formula-row { display:flex; gap:14px; align-items:center; background:#fff; padding:15px 18px; }
+  .formula-row img { width:38px; height:38px; flex:0 0 auto; border-radius:10px; object-fit:cover; background:var(--sand); }
+  .formula-role { width:62px; flex:0 0 auto; font-size:9px; letter-spacing:.14em; color:var(--muted); text-transform:uppercase; }
+  .formula-val { flex:1; min-width:0; font-size:13.5px; color:#2E271F; }
+  .stock-badge { font-size:8.5px; letter-spacing:.08em; flex:0 0 auto; }
+  .stock-yes { color:#6E5228; }
+  .stock-no { color:var(--err); }
+
+  .cta-box { margin-top:clamp(24px,3vw,36px); padding:clamp(20px,2.6vw,30px); background:var(--sand); border:1px solid var(--line); border-radius:20px; text-align:center; }
+  .cta-box h2 { font-weight:600; font-size:clamp(20px,2.2vw,27px); margin:0; line-height:1.15; }
+  .cta-box p { max-width:440px; margin:10px auto 0; font-size:14px; line-height:1.55; color:var(--text2); }
+  .cta-actions { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(210px,100%),1fr)); gap:10px; margin-top:20px; }
+  .btn-approve { display:flex; align-items:center; justify-content:center; gap:10px; min-height:56px; padding:0 18px; background:var(--ink); color:#FBF6EC; border:none; border-radius:14px; cursor:pointer; font-size:11px; letter-spacing:.14em; }
+  .btn-approve:hover:not(:disabled) { background:#33291F; }
+  .btn-changes { display:flex; align-items:center; justify-content:center; gap:10px; min-height:56px; padding:0 18px; background:#fff; color:var(--ink); border:1px solid var(--line); border-radius:14px; cursor:pointer; font-size:11px; letter-spacing:.14em; }
+  .btn-changes:hover:not(:disabled) { background:#EFE7DA; }
+  .btn-approve:disabled, .btn-changes:disabled { opacity:.55; cursor:not-allowed; }
+
+  .state-box { margin-top:clamp(24px,3vw,36px); padding:clamp(20px,2.6vw,30px); background:var(--ink); border-radius:20px; text-align:center; color:#FBF6EC; }
+  .state-box .label { font-size:10px; letter-spacing:.2em; color:var(--gold-light); }
+  .state-box p { max-width:420px; margin:12px auto 0; font-size:14px; line-height:1.6; color:#C7BCAA; }
+
+  .footer-note { font-size:9px; letter-spacing:.16em; color:#A0968A; text-align:center; margin-top:clamp(26px,3.4vw,40px); line-height:1.9; }
+
+  .center-box { text-align:center; padding:60px 20px; }
+  .spinner-ring { width:56px; height:56px; margin:0 auto; border-radius:50%; border:2px dashed var(--gold); border-top-color:transparent; animation:spin .9s linear infinite; }
+  .error-title { font-weight:600; font-size:22px; margin:20px 0 0; }
+  .error-msg { font-size:14px; color:var(--text2); margin-top:10px; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <span class="topbar-label mono">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#E3C58E" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7M12 3v13M8 7l4-4 4 4"></path></svg>
+    CLIENT PROOF · SHARED VIEW
+  </span>
+  <button class="copy-btn mono" id="copyLinkBtn">⧉ COPY LINK</button>
+</div>
+
+<div class="wrap" id="content">
+  <div class="center-box">
+    <div class="spinner-ring"></div>
+  </div>
+</div>
+
+<script src="assets/api-client.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  function escapeHtml(s) {
+    const div = document.createElement('div');
+    div.textContent = s == null ? '' : s;
+    return div.innerHTML;
+  }
+
+  const token = new URLSearchParams(location.search).get('token');
+  const content = document.getElementById('content');
+
+  document.getElementById('copyLinkBtn').addEventListener('click', () => {
+    navigator.clipboard.writeText(location.href).then(
+      () => { document.getElementById('copyLinkBtn').textContent = '✓ LINK COPIED'; setTimeout(() => { document.getElementById('copyLinkBtn').textContent = '⧉ COPY LINK'; }, 2000); },
+      () => {}
+    );
+  });
+
+  function renderError(message) {
+    content.innerHTML =
+      '<div class="center-box">' +
+      '<h2 class="error-title serif">This link isn\'t working</h2>' +
+      '<p class="error-msg">' + escapeHtml(message) + '</p>' +
+      '</div>';
+  }
+
+  function renderResponded(board) {
+    const label = board.clientResponse === 'APPROVED' ? 'APPROVED' : 'CHANGES REQUESTED';
+    return '<div class="state-box"><div class="label mono">' + label + '</div><p>The studio has been notified and will follow up with next steps.</p></div>';
+  }
+
+  function renderPending() {
+    return (
+      '<div class="cta-box">' +
+      '<h2 class="serif">Happy with this direction?</h2>' +
+      '<p>Approving locks these surfaces against live vault stock. Requesting changes returns the board to the studio.</p>' +
+      '<div class="cta-actions">' +
+      '<button class="btn-approve mono" id="approveBtn">✓ APPROVE THIS BOARD</button>' +
+      '<button class="btn-changes mono" id="changesBtn">✎ REQUEST CHANGES</button>' +
+      '</div>' +
+      '</div>'
+    );
+  }
+
+  function renderBoard(board) {
+    const combo = board.combination;
+    const title = board.clientName || 'Your Mood Board';
+    const subParts = [board.designerName, board.room, board.style].filter(Boolean);
+    const thumbTiles = combo ? combo.tiles.filter((t) => t.imageUrl) : [];
+
+    content.innerHTML =
+      '<div class="brand-block">' +
+      '<div class="brand-eyebrow mono">● STUDIO &amp; SHOWROOM ●</div>' +
+      '<div class="brand-name serif">CASA DE AURUM</div>' +
+      '<div class="rule"></div>' +
+      '</div>' +
+      '<h1 class="proof-title serif">' + escapeHtml(title) + '</h1>' +
+      '<div class="proof-sub mono">' + escapeHtml(subParts.join(' · ')) + '</div>' +
+      (thumbTiles.length
+        ? '<div class="board-frame"><div class="board-thumbs">' + thumbTiles.map((t) => '<span class="t"><img src="' + t.imageUrl + '" alt=""></span>').join('') + '</div>' +
+          '<div class="board-meta"><span class="name serif">' + escapeHtml(combo.boardName) + '</span></div></div>'
+        : combo ? '<div class="board-frame"><div class="board-meta"><span class="name serif">' + escapeHtml(combo.boardName) + '</span></div></div>' : '') +
+      (combo && combo.reasonForSelection ? '<p class="proof-desc">' + escapeHtml(combo.reasonForSelection) + '</p>' : '') +
+      (combo
+        ? '<div class="section-lbl mono">SPECIFIED SURFACES</div><div class="formula-list">' +
+          combo.tiles.map((t) => {
+            const img = t.imageUrl ? '<img src="' + t.imageUrl + '" alt="">' : '<span style="width:38px;height:38px;flex:0 0 auto;border-radius:10px;background:var(--sand)"></span>';
+            const stock = 'inStock' in t ? '<span class="stock-badge mono ' + (t.inStock ? 'stock-yes' : 'stock-no') + '">' + (t.inStock ? 'IN STOCK' : 'OUT OF STOCK') + '</span>' : '';
+            return '<div class="formula-row">' + img + '<span class="formula-role mono">' + t.role + '</span><span class="formula-val">' + escapeHtml(t.name) + '</span>' + stock + '</div>';
+          }).join('') +
+          '</div>'
+        : '') +
+      (board.clientResponse ? renderResponded(board) : renderPending()) +
+      '<div class="footer-note mono">CASA DE AURUM · MILAN · LISBON · NEW DELHI<br>SURFACES SHOWN ARE MATCHED TO PHYSICAL VAULT STOCK</div>';
+
+    if (!board.clientResponse) {
+      document.getElementById('approveBtn').addEventListener('click', () => respond('APPROVED'));
+      document.getElementById('changesBtn').addEventListener('click', () => respond('CHANGES_REQUESTED'));
+    }
+  }
+
+  async function respond(response) {
+    const approveBtn = document.getElementById('approveBtn');
+    const changesBtn = document.getElementById('changesBtn');
+    if (approveBtn) approveBtn.disabled = true;
+    if (changesBtn) changesBtn.disabled = true;
+
+    try {
+      await CasaApi.shared.respond(token, response);
+      const board = await CasaApi.shared.get(token);
+      renderBoard(board);
+    } catch (err) {
+      if (approveBtn) approveBtn.disabled = false;
+      if (changesBtn) changesBtn.disabled = false;
+      alert((err && err.message) || 'Could not record your response. Please try again.');
+    }
+  }
+
+  async function init() {
+    if (!token) {
+      renderError('No share link token was provided.');
+      return;
+    }
+    try {
+      const board = await CasaApi.shared.get(token);
+      renderBoard(board);
+    } catch (err) {
+      renderError((err && err.message) || 'This share link is invalid or has expired.');
+    }
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>

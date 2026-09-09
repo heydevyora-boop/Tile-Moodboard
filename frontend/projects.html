@@ -123,6 +123,14 @@
   .btn-detail-dashed { display:flex; align-items:center; justify-content:center; gap:10px; min-height:54px; padding:0 16px; background:transparent; color:#4A4038; border:1px dashed #D8C9AE; border-radius:13px; cursor:pointer; font-size:10.5px; letter-spacing:.14em; }
   .btn-detail-dashed:hover { background:#EFE7DA; }
 
+  .modal-overlay { position:fixed; inset:0; z-index:80; display:flex; align-items:center; justify-content:center; padding:20px; background:rgba(26,21,18,.55); }
+  .modal-box { width:min(480px,100%); background:var(--card); border:1px solid var(--line); border-radius:20px; padding:24px; }
+  .modal-box h3 { font-weight:600; font-size:20px; margin:0 0 6px; }
+  .modal-box p { margin:0 0 16px; font-size:13.5px; color:var(--text2); line-height:1.5; }
+  .link-row { display:flex; gap:8px; align-items:center; padding:0 14px; height:48px; background:var(--sand); border:1px solid var(--line); border-radius:12px; }
+  .link-row input { flex:1; min-width:0; border:none; outline:none; background:transparent; font-size:11.5px; color:var(--ink); }
+  .modal-actions { display:flex; gap:10px; margin-top:16px; }
+
   @media (max-width: 860px) {
     .sidebar { display:none; }
     .main { padding:18px; }
@@ -155,6 +163,8 @@
 
   <main class="main" id="mainContent"></main>
 </div>
+
+<div id="modalHost"></div>
 
 <script src="assets/api-client.js"></script>
 <script>
@@ -404,6 +414,55 @@
     render();
   }
 
+  // ============================================================
+  // SHARE WITH CLIENT — real POST /mood-boards/:id/share (idempotent:
+  // re-clicking on an already-shared board just re-shows the same link).
+  // ============================================================
+
+  function closeModal() {
+    document.getElementById('modalHost').innerHTML = '';
+  }
+
+  function showShareModal(shareUrl) {
+    const host = document.getElementById('modalHost');
+    host.innerHTML =
+      '<div class="modal-overlay" id="modalOverlay">' +
+      '<div class="modal-box">' +
+      '<h3 class="serif">Share with client</h3>' +
+      '<p>Send this link to the client. They can view the specified surfaces and approve or request changes — no login required.</p>' +
+      '<div class="link-row"><input type="text" id="shareLinkInput" readonly value="' + escapeHtml(shareUrl) + '"></div>' +
+      '<div class="modal-actions">' +
+      '<button class="btn-detail-primary mono" id="copyShareLinkBtn" style="flex:1">⧉ COPY LINK</button>' +
+      '<button class="btn-detail-secondary mono" id="closeModalBtn" style="flex:0 0 auto; min-width:100px">CLOSE</button>' +
+      '</div>' +
+      '</div>' +
+      '</div>';
+
+    document.getElementById('modalOverlay').addEventListener('click', (e) => { if (e.target.id === 'modalOverlay') closeModal(); });
+    document.getElementById('closeModalBtn').addEventListener('click', closeModal);
+    document.getElementById('copyShareLinkBtn').addEventListener('click', () => {
+      const input = document.getElementById('shareLinkInput');
+      input.select();
+      navigator.clipboard.writeText(shareUrl).then(
+        () => { document.getElementById('copyShareLinkBtn').textContent = '✓ COPIED'; },
+        () => { document.execCommand && document.execCommand('copy'); }
+      );
+    });
+  }
+
+  async function shareBoard(id) {
+    const btn = document.getElementById('shareBtn');
+    if (btn) { btn.disabled = true; btn.textContent = 'SHARING…'; }
+    try {
+      const result = await CasaApi.moodBoards.share(id);
+      showShareModal(result.shareUrl);
+    } catch (err) {
+      alert('Could not create a share link: ' + ((err && err.message) || 'Unknown error'));
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = '↗ SHARE WITH CLIENT'; }
+    }
+  }
+
   function renderDetail() {
     const main = document.getElementById('mainContent');
 
@@ -464,7 +523,7 @@
       '</div>';
 
     document.getElementById('backBtn').addEventListener('click', backToList);
-    document.getElementById('shareBtn').addEventListener('click', notReady);
+    document.getElementById('shareBtn').addEventListener('click', () => shareBoard(b.id));
     document.getElementById('exportBtn').addEventListener('click', notReady);
     document.getElementById('openBoardBtn').addEventListener('click', () => { location.href = 'mood-board.html?boardId=' + encodeURIComponent(b.id); });
 

@@ -80,9 +80,19 @@ export const moodBoardTileLookupQuerySchema = z.object({
     .pipe(z.array(z.string()).min(1, 'At least one tile id is required').max(50, 'At most 50 tile ids per request')),
 });
 
+// ─────────────────────────────────────────────────────────────────────────
+// Client Share/Approve — the client responds through a public, token-based
+// link with no login, so this is the only body a public route accepts.
+// ─────────────────────────────────────────────────────────────────────────
+
+export const respondToSharedMoodBoardSchema = z.object({
+  response: z.enum(['APPROVED', 'CHANGES_REQUESTED']),
+});
+
 export type SaveMoodBoardInput = z.infer<typeof saveMoodBoardSchema>;
 export type UpdateMoodBoardInput = z.infer<typeof updateMoodBoardSchema>;
 export type ApproveMoodBoardInput = z.infer<typeof approveMoodBoardSchema>;
 export type ListMoodBoardsQuery = z.infer<typeof listMoodBoardsQuerySchema>;
 export type MoodBoardTileLookupQuery = z.infer<typeof moodBoardTileLookupQuerySchema>;
 export type CombinationInput = z.infer<typeof combinationSchema>;
+export type RespondToSharedMoodBoardInput = z.infer<typeof respondToSharedMoodBoardSchema>;

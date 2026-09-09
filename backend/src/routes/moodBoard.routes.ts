@@ -2,7 +2,7 @@ import { Router } from 'express';
 import * as moodBoardController from '@controllers/moodBoard.controller';
 import { authenticate, requirePermission } from '@middlewares/auth';
 import { validate } from '@middlewares/validate';
-import { moodBoardGenerationRateLimiter } from '@middlewares/rateLimiters';
+import { moodBoardGenerationRateLimiter, sharedMoodBoardRateLimiter } from '@middlewares/rateLimiters';
 import {
   generateBriefSchema,
   saveMoodBoardSchema,
@@ -10,9 +10,20 @@ import {
   approveMoodBoardSchema,
   listMoodBoardsQuerySchema,
   moodBoardTileLookupQuerySchema,
+  respondToSharedMoodBoardSchema,
 } from '@validators/moodBoard.validators';
 
 const router = Router();
+
+// Public, token-scoped Client Share/Approve routes — declared ABOVE
+// router.use(authenticate) deliberately, same reasoning as
+// catalogExtractor.routes.ts's internal /master-sync route: the client
+// opening a shared link has no login and no JWT, so these authenticate
+// via the unguessable token in the URL instead. Never expose more here
+// than moodBoardService.getSharedMoodBoardByToken already limits itself
+// to (one combination, no customer contact details).
+router.get('/shared/:token', sharedMoodBoardRateLimiter, moodBoardController.getShared);
+router.post('/shared/:token/respond', sharedMoodBoardRateLimiter, validate(respondToSharedMoodBoardSchema), moodBoardController.respondToShared);
 
 router.use(authenticate);
 
@@ -33,5 +44,8 @@ router.get('/:id', requirePermission('mood_boards:read'), moodBoardController.ge
 router.patch('/:id', requirePermission('mood_boards:write'), validate(updateMoodBoardSchema), moodBoardController.update);
 router.delete('/:id', requirePermission('mood_boards:write'), moodBoardController.remove);
 router.post('/:id/approve', requirePermission('mood_boards:write'), validate(approveMoodBoardSchema), moodBoardController.approve);
+
+// Staff-only: mints (or re-returns the existing) share link for this board.
+router.post('/:id/share', requirePermission('mood_boards:write'), moodBoardController.share);
 
 export default router;

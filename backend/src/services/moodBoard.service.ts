@@ -2,6 +2,7 @@ import { Request } from 'express';
 import { prisma } from '@db/connection';
 import { AppError } from '@utils/AppError';
 import { getPagination, buildPaginationMeta, PaginationMeta } from '@utils/pagination';
+import { generateOpaqueToken } from '@utils/crypto';
 import { logActivity } from './activityLog.service';
 import {
   SaveMoodBoardInput,
@@ -262,4 +263,111 @@ export async function approveMoodBoard(id: string, selectedIndex: number, actorI
   });
 
   return updated;
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Client Share/Approve
+//
+// A client opens the shared link with no login, so everything below this
+// point deliberately does NOT go through `authenticate` (see
+// moodBoard.routes.ts) and never returns more than the one combination
+// actually being shared -- not the customer's phone/email, not the other
+// combinations, not internal notes.
+// ─────────────────────────────────────────────────────────────────────────
+
+/**
+ * Idempotent: a board already shared returns its existing link instead of
+ * minting a second one, so staff can click "Share with client" again later
+ * just to re-copy the same URL without invalidating one already sent out.
+ */
+export async function shareMoodBoard(moodBoardId: string, actorId: string, req?: Request) {
+  const board = await prisma.moodBoard.findUnique({ where: { id: moodBoardId } });
+  if (!board) throw AppError.notFound('Mood board not found');
+
+  const existing = await prisma.moodBoardShare.findUnique({ where: { moodBoardId } });
+  if (existing) return existing;
+
+  const share = await prisma.moodBoardShare.create({
+    data: { moodBoardId, token: generateOpaqueToken(), createdById: actorId },
+  });
+
+  await logActivity({
+    userId: actorId,
+    action: 'mood_board.shared',
+    entityType: 'MoodBoard',
+    entityId: moodBoardId,
+    req,
+  });
+
+  return share;
+}
+
+function selectedCombination(board: { combinations: unknown; selectedIndex: number | null }): CombinationInput | null {
+  const combinations = board.combinations as unknown as CombinationInput[];
+  const index = board.selectedIndex != null && combinations[board.selectedIndex] ? board.selectedIndex : 0;
+  return combinations[index] ?? null;
+}
+
+/** Public, token-scoped view for the client's own shared-link page. */
+export async function getSharedMoodBoardByToken(token: string) {
+  const share = await prisma.moodBoardShare.findUnique({
+    where: { token },
+    include: {
+      moodBoard: {
+        include: { customer: { select: { name: true } }, createdBy: { select: { name: true } } },
+      },
+    },
+  });
+  if (!share) throw AppError.notFound('This share link is invalid or has expired');
+
+  const board = share.moodBoard;
+  const combination = selectedCombination(board);
+
+  const tiles = combination ? await getTilesByIds([...new Set(combination.tiles.map((t) => t.tileId))]) : [];
+  const tilesById = new Map(tiles.map((t) => [t.id, t]));
+
+  return {
+    clientName: board.customer?.name ?? null,
+    designerName: board.createdBy?.name ?? null,
+    room: board.room,
+    style: board.style,
+    status: board.status,
+    clientResponse: share.clientResponse,
+    combination: combination
+      ? {
+          boardName: combination.board_name,
+          reasonForSelection: combination.reason_for_selection,
+          groutRecommendation: combination.grout_recommendation,
+          tiles: combination.tiles.map((t) => ({ role: t.role, ...(tilesById.get(t.tileId) ?? { id: t.tileId, name: t.name || 'Tile unavailable' }) })),
+        }
+      : null,
+  };
+}
+
+/** Records the client's own response through the public link. */
+export async function respondToSharedMoodBoard(token: string, response: 'APPROVED' | 'CHANGES_REQUESTED', req?: Request) {
+  const share = await prisma.moodBoardShare.findUnique({ where: { token }, include: { moodBoard: true } });
+  if (!share) throw AppError.notFound('This share link is invalid or has expired');
+
+  await prisma.moodBoardShare.update({
+    where: { id: share.id },
+    data: { clientResponse: response, respondedAt: new Date() },
+  });
+
+  if (response === 'APPROVED') {
+    const combinations = share.moodBoard.combinations as unknown as CombinationInput[];
+    const index = share.moodBoard.selectedIndex != null && combinations[share.moodBoard.selectedIndex] ? share.moodBoard.selectedIndex : 0;
+    await prisma.moodBoard.update({ where: { id: share.moodBoardId }, data: { status: 'APPROVED', selectedIndex: index } });
+  }
+
+  // No authenticated user on a public link -- logActivity's userId is
+  // optional for exactly this case (an anonymous/system-triggered event).
+  await logActivity({
+    action: response === 'APPROVED' ? 'mood_board.client_approved' : 'mood_board.client_requested_changes',
+    entityType: 'MoodBoard',
+    entityId: share.moodBoardId,
+    req,
+  });
+
+  return { clientResponse: response };
 }

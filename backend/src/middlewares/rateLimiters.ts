@@ -39,3 +39,18 @@ export const printBoardExportRateLimiter = rateLimit({
   legacyHeaders: false,
   message: { success: false, status: 'fail', message: 'Too many export requests. Please slow down.' },
 });
+
+/**
+ * The shared mood board view and its approve/request-changes action are the
+ * only unauthenticated, token-scoped routes in the API — no JWT, no
+ * permission check, just whatever token is in the URL. Rate-limited more
+ * tightly than the authenticated endpoints since there's no login to also
+ * slow an attacker down.
+ */
+export const sharedMoodBoardRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60, // 60 requests per 15 min per IP — generous for a client reloading/responding, tight against token guessing
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, status: 'fail', message: 'Too many requests. Please try again in a few minutes.' },
+});

@@ -69,4 +69,33 @@ export const moodBoardPaths = {
       responses: { 200: { description: 'Approved.', content: { 'application/json': { schema: moodBoardResponse } } }, ...standardErrors(404, 422) },
     },
   },
+  '/mood-boards/{id}/share': {
+    post: {
+      tags: ['Mood Boards'],
+      summary: 'Create (or re-return the existing) public client share link for this board',
+      description: 'Idempotent — a board already shared returns its existing token/URL instead of minting a second one, so staff can re-copy the same link later.',
+      security: [{ bearerAuth: [] }],
+      parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+      responses: { 200: { description: 'Share link.', content: { 'application/json': { schema: { type: 'object', properties: { success: { type: 'boolean' }, data: { type: 'object', properties: { token: { type: 'string' }, shareUrl: { type: 'string' } } } } } } } }, ...standardErrors(404) },
+    },
+  },
+  '/mood-boards/shared/{token}': {
+    get: {
+      tags: ['Mood Boards'],
+      summary: "Public, unauthenticated view of a shared board's proof (Client Share/Approve)",
+      description: 'No login, no JWT — authenticates via the unguessable token in the URL alone. Returns only the one shared combination (image/size/finish/stock per tile), never the other combinations or the customer\'s contact details.',
+      parameters: [{ name: 'token', in: 'path', required: true, schema: { type: 'string' } }],
+      responses: { 200: { description: 'The shared board.' }, 404: errorResponses[404], 429: errorResponses[429] },
+    },
+  },
+  '/mood-boards/shared/{token}/respond': {
+    post: {
+      tags: ['Mood Boards'],
+      summary: "Record the client's approve / request-changes response",
+      description: 'Public/unauthenticated, same token-based access as the GET above. Approving sets the underlying mood board to APPROVED with this combination selected — the same transition staff\'s own POST /{id}/approve performs. Requesting changes only records the response; the board\'s own status is left for the studio to decide.',
+      parameters: [{ name: 'token', in: 'path', required: true, schema: { type: 'string' } }],
+      requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['response'], properties: { response: { type: 'string', enum: ['APPROVED', 'CHANGES_REQUESTED'] } } } } } },
+      responses: { 200: { description: 'Recorded.' }, 404: errorResponses[404], 429: errorResponses[429], ...standardErrors(422) },
+    },
+  },
 };

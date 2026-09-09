@@ -1256,6 +1256,53 @@
         (r) =>
           r.data.tiles
       );
+    },
+
+    share(id) {
+      return apiFetch(
+        `/mood-boards/${id}/share`,
+        {
+          method: 'POST'
+        }
+      ).then(
+        (r) =>
+          r.data
+      );
+    }
+  };
+
+  // ============================================================
+  // SHARED (public, token-based Client Share/Approve — no auth,
+  // no requireAuth() gate; used only by shared.html)
+  // ============================================================
+
+  const shared = {
+    get(token) {
+      return apiFetch(
+        `/mood-boards/shared/${encodeURIComponent(token)}`,
+        {
+          skipAuth: true
+        }
+      ).then(
+        (r) =>
+          r.data
+      );
+    },
+
+    respond(token, response) {
+      return apiFetch(
+        `/mood-boards/shared/${encodeURIComponent(token)}/respond`,
+        {
+          method: 'POST',
+          skipAuth: true,
+          body: {
+            response
+          }
+        }
+      ).then(
+        (r) =>
+          r.data
+      );
     }
   };
 
@@ -2986,6 +3033,8 @@ const ai = {
     referenceImages,
 
     moodBoards,
+
+    shared,
 
     tiles,
 

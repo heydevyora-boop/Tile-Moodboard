@@ -110,6 +110,7 @@ model User {
   jobsCreated                Job[]                @relation("JobCreatedBy")
   loginAttempts              LoginAttempt[]
   moodBoardsCreated          MoodBoard[]          @relation("MoodBoardCreatedBy")
+  moodBoardSharesCreated     MoodBoardShare[]     @relation("MoodBoardShareCreatedBy")
   passwordResetTokens        PasswordResetToken[]
   printBoardTemplatesCreated PrintBoardTemplate[] @relation("PrintBoardTemplateCreatedBy")
   printBoardsCreated         PrintBoard[]         @relation("PrintBoardCreatedBy")
@@ -329,6 +330,7 @@ model MoodBoard {
   createdBy     User?           @relation("MoodBoardCreatedBy", fields: [createdById], references: [id])
   customer      Customer?       @relation(fields: [customerId], references: [id])
   printBoards   PrintBoard[]
+  share         MoodBoardShare?
 
   @@index([customerId])
   @@index([status])
@@ -347,6 +349,33 @@ model MoodBoardTile {
 
   @@unique([moodBoardId, tileId, combinationIndex, role])
   @@map("mood_board_tiles")
+}
+
+// A single active share link per board (moodBoardId is @unique — re-sharing
+// reuses the same link rather than creating a second one, and staff need to
+// be able to re-display/re-copy that same link on demand indefinitely).
+// The token is stored as-is rather than hashed like PasswordResetToken --
+// deliberately: this is a stable, repeatedly-retrievable "anyone with the
+// link can view" URL (the same trust model already used for
+// PrintBoard.driveShareUrl / googleDriveClient.generatePublicLink), not a
+// single-use secret that only ever needs to be verified once.
+model MoodBoardShare {
+  id             String                @id @default(cuid())
+  moodBoardId    String                @unique
+  token          String                @unique
+  createdById    String?
+  createdAt      DateTime              @default(now())
+  respondedAt    DateTime?
+  clientResponse ClientResponseStatus?
+  moodBoard      MoodBoard             @relation(fields: [moodBoardId], references: [id], onDelete: Cascade)
+  createdBy      User?                 @relation("MoodBoardShareCreatedBy", fields: [createdById], references: [id])
+
+  @@map("mood_board_shares")
+}
+
+enum ClientResponseStatus {
+  APPROVED
+  CHANGES_REQUESTED
 }
 
 model PrintBoard {
