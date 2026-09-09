@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mood Board Generator · Casa de Aurum</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500&family=DM+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root { --ink:#1A1512; --paper:#F7F3EC; --card:#fff; --line:#E7DFD1; --sand:#F4EEE3; --gold:#8A6A3B; --gold-light:#E3C58E; --muted:#8B8177; --text2:#5B5147; --err:#A8552A; --err-bg:#F6E6DC; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--paper); color:var(--ink); font-family:'DM Sans',sans-serif; -webkit-font-smoothing:antialiased; }
+  a { color:var(--gold); text-decoration:none; }
+  .mono { font-family:'JetBrains Mono',monospace; }
+  .serif { font-family:'Playfair Display',serif; }
+  button { font-family:inherit; }
+  img { max-width:100%; }
+  ::-webkit-scrollbar { width:10px; height:10px; }
+  ::-webkit-scrollbar-thumb { background:#DED3C0; border-radius:8px; border:3px solid var(--paper); }
+  @keyframes fadeIn { from{opacity:0} to{opacity:1} }
+  @keyframes rise { from{opacity:0; transform:translateY(14px)} to{opacity:1; transform:none} }
+  @keyframes spin { to{transform:rotate(360deg)} }
+  @keyframes pulse { 0%,100%{opacity:.5} 50%{opacity:1} }
+
+  /* ---- shell (same as dashboard.html) ---- */
+  .layout { display:flex; height:100vh; overflow:hidden; }
+  .sidebar { flex:0 0 auto; width:266px; height:100%; display:flex; flex-direction:column; background:#FCFAF6; border-right:1px solid var(--line); overflow-y:auto; }
+  .brand { padding:26px 22px 20px; border-bottom:1px solid #EFE7DA; }
+  .brand .name { font-size:19px; letter-spacing:.14em; line-height:1.1; }
+  .brand .tag { font-size:9px; letter-spacing:.22em; color:var(--muted); margin-top:6px; }
+  .nav { padding:20px 14px 8px; }
+  .nav-label { font-size:9.5px; letter-spacing:.2em; color:#A0968A; padding:0 8px 10px; }
+  .nav-items { display:flex; flex-direction:column; gap:3px; }
+  .nav-item { display:flex; align-items:center; gap:12px; width:100%; min-height:48px; padding:0 12px; border:none; border-radius:12px; cursor:pointer; font-size:14px; text-align:left; background:transparent; color:#4A4038; }
+  .nav-item.active { background:var(--ink); color:#FBF6EC; font-weight:500; }
+  .nav-item:not(.active):hover { background:#F1EADD; }
+  .nav-item .lbl { flex:1; }
+  .nav-item .badge { font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:.08em; padding:3px 7px; border-radius:100px; background:#F1EADD; color:var(--muted); }
+  .nav-item.active .badge { background:rgba(227,197,142,.2); color:var(--gold-light); }
+  .profile-wrap { margin-top:auto; padding:18px 16px; }
+  .profile { display:flex; align-items:center; gap:11px; padding:12px; background:var(--sand); border:1px solid var(--line); border-radius:14px; }
+  .avatar-circle { width:36px; height:36px; flex:0 0 auto; border-radius:50%; background:linear-gradient(150deg,#C09A5E,var(--gold)); display:grid; place-items:center; font-size:13px; color:#FFF8EC; }
+  .profile .name { font-size:13px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .profile .role { font-size:9px; letter-spacing:.14em; color:var(--muted); }
+  .logout-btn { margin-top:10px; width:100%; padding:8px; background:transparent; border:1px solid var(--line); border-radius:10px; cursor:pointer; font-size:10px; letter-spacing:.1em; color:var(--muted); }
+  .logout-btn:hover { color:var(--ink); border-color:#C7B393; }
+
+  .main { flex:1; min-width:0; overflow-y:auto; padding:clamp(22px,3vw,44px); }
+  .stage { animation:fadeIn .35s ease both; max-width:1040px; }
+
+  /* ---- wizard ---- */
+  .step-head { display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap; }
+  .eyebrow { display:flex; align-items:center; gap:9px; font-size:10px; letter-spacing:.18em; color:var(--gold); }
+  .dot { width:6px; height:6px; border-radius:50%; background:var(--gold); flex:0 0 auto; }
+  .pct { font-size:10px; letter-spacing:.14em; color:var(--muted); }
+  .progress-track { height:5px; border-radius:100px; background:var(--line); margin-top:12px; overflow:hidden; }
+  .progress-fill { height:100%; background:linear-gradient(90deg,var(--gold),var(--gold-light)); transition:width .3s ease; }
+  .step-tabs { display:flex; gap:8px; margin-top:14px; overflow-x:auto; padding-bottom:6px; }
+  .step-tab { flex:0 0 auto; white-space:nowrap; padding:9px 14px; border-radius:100px; cursor:pointer; font-size:9.5px; letter-spacing:.1em; border:1px solid transparent; background:var(--sand); color:#A0968A; }
+  .step-tab.done { background:#EFE7DA; color:#6E5228; }
+  .step-tab.current { background:var(--ink); color:#FBF6EC; }
+
+  .step-title-row { display:flex; align-items:center; gap:14px; margin-top:clamp(22px,2.6vw,34px); }
+  .step-title-row .lbl { font-size:9.5px; letter-spacing:.2em; color:var(--muted); white-space:nowrap; }
+  .step-title-row .rule { flex:1; height:1px; background:var(--line); }
+  h1.step-h1 { font-weight:600; font-size:clamp(28px,3.8vw,44px); line-height:1.08; margin:14px 0 0; }
+  .step-sub { max-width:660px; margin:12px 0 0; font-size:clamp(14px,1.1vw,16px); line-height:1.55; color:var(--text2); }
+
+  .grid-rooms { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(255px,100%),1fr)); gap:clamp(12px,1.4vw,18px); margin-top:clamp(18px,2vw,26px); }
+  .room-card { display:flex; flex-direction:column; text-align:left; padding:0; overflow:hidden; background:var(--card); border-radius:18px; cursor:pointer; border:1px solid var(--line); }
+  .room-card.selected { border-color:var(--ink); }
+  .room-img { position:relative; height:150px; overflow:hidden; background:var(--sand); }
+  .room-img img { width:100%; height:100%; object-fit:cover; display:block; }
+  .room-badge { position:absolute; left:12px; bottom:12px; font-size:9px; letter-spacing:.12em; background:rgba(26,21,18,.75); color:#FBF6EC; padding:5px 8px; border-radius:6px; }
+  .room-check { position:absolute; top:12px; right:12px; width:28px; height:28px; border-radius:50%; background:var(--ink); color:#FBF6EC; display:grid; place-items:center; font-size:13px; }
+  .room-body { display:flex; flex-direction:column; gap:6px; padding:16px 18px 18px; }
+  .room-body .rn { font-size:20px; line-height:1.15; }
+  .room-body .rd { font-size:13px; line-height:1.5; color:var(--text2); }
+
+  .option-row { display:flex; align-items:flex-start; gap:14px; padding:16px; background:var(--card); border-radius:14px; cursor:pointer; border:1px solid var(--line); text-align:left; width:100%; }
+  .option-row.selected { border-color:var(--ink); }
+  .option-dot { width:18px; height:18px; flex:0 0 auto; margin-top:2px; border-radius:50%; border:1px solid #C7BCAA; }
+  .option-row.selected .option-dot { border-color:var(--ink); background:var(--ink); box-shadow:inset 0 0 0 3px #FBF6EC; }
+  .option-row .ol { display:block; font-size:10.5px; letter-spacing:.14em; }
+  .option-row .od { display:block; font-size:13px; color:var(--text2); margin-top:6px; line-height:1.5; }
+
+  .chip { display:flex; align-items:center; justify-content:center; gap:8px; min-height:48px; padding:0 16px; border-radius:12px; cursor:pointer; font-size:10px; letter-spacing:.12em; background:var(--card); color:#3A322A; border:1px solid var(--line); }
+  .chip.selected { background:var(--ink); color:#FBF6EC; border-color:var(--ink); }
+  .chip-row { display:flex; gap:10px; flex-wrap:wrap; margin-top:12px; }
+  .section-lbl { font-size:9.5px; letter-spacing:.16em; color:var(--muted); margin-top:26px; }
+
+  .finish-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(210px,100%),1fr)); gap:12px; margin-top:12px; }
+  .finish-card { display:flex; gap:14px; align-items:center; padding:14px; background:var(--card); border-radius:14px; cursor:pointer; border:1px solid var(--line); text-align:left; }
+  .finish-card.selected { border-color:var(--ink); }
+  .finish-card img { width:56px; height:56px; border-radius:12px; object-fit:cover; flex:0 0 auto; }
+  .finish-card .fl { display:block; font-size:14px; font-weight:500; }
+  .finish-card .fs { display:block; font-size:9.5px; letter-spacing:.1em; color:var(--muted); margin-top:6px; }
+
+  .budget-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(250px,100%),1fr)); gap:clamp(12px,1.4vw,16px); margin-top:clamp(18px,2vw,26px); }
+  .budget-card { display:flex; flex-direction:column; padding:18px; background:var(--card); border-radius:16px; cursor:pointer; border:1px solid var(--line); text-align:left; }
+  .budget-card.selected { border-color:var(--ink); }
+  .budget-top { display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%; }
+  .budget-tier { font-size:9.5px; letter-spacing:.16em; color:var(--gold); }
+  .budget-check { width:22px; height:22px; border-radius:50%; background:var(--ink); color:#FBF6EC; display:grid; place-items:center; font-size:11px; }
+  .budget-range { display:block; font-size:26px; margin-top:12px; }
+  .budget-note { display:block; font-size:9.5px; letter-spacing:.12em; color:var(--muted); margin-top:6px; }
+  .budget-desc { display:block; font-size:13.5px; color:var(--text2); margin-top:12px; line-height:1.55; }
+
+  .palette-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(230px,100%),1fr)); gap:12px; margin-top:12px; }
+  .palette-card { padding:14px; background:var(--card); border-radius:14px; cursor:pointer; border:1px solid var(--line); text-align:left; }
+  .palette-card.selected { border-color:var(--ink); }
+  .swatch-row { display:flex; gap:5px; width:100%; }
+  .swatch { flex:1; height:34px; border-radius:8px; border:1px solid rgba(26,21,18,.08); }
+  .palette-card .pl { display:block; font-size:14px; font-weight:500; margin-top:14px; }
+  .palette-card .ps { display:block; font-size:9.5px; letter-spacing:.1em; color:var(--muted); margin-top:6px; }
+
+  .summary-card { background:var(--card); border:1px solid var(--line); border-radius:18px; overflow:hidden; }
+  .summary-row { display:flex; gap:12px; align-items:baseline; background:#fff; padding:14px 18px; border-bottom:1px solid var(--line); }
+  .summary-row:last-child { border-bottom:none; }
+  .summary-row .k { width:106px; flex:0 0 auto; font-size:9px; letter-spacing:.14em; color:var(--muted); }
+  .summary-row .v { flex:1; min-width:0; font-size:13.5px; color:#2E271F; }
+
+  .view-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(230px,100%),1fr)); gap:clamp(12px,1.4vw,16px); margin-top:clamp(18px,2vw,26px); }
+  .view-card { padding:16px; background:var(--card); border-radius:16px; cursor:pointer; border:1px solid var(--line); text-align:left; }
+  .view-card.selected { border-color:var(--ink); }
+  .view-card .vl { display:block; font-size:10.5px; letter-spacing:.14em; }
+  .view-card .vd { display:block; font-size:13px; color:var(--text2); margin-top:6px; line-height:1.5; }
+
+  .step-actions { position:sticky; bottom:0; display:flex; gap:12px; flex-wrap:wrap; margin-top:22px; padding:16px 0 8px; background:linear-gradient(180deg,rgba(247,243,236,0),var(--paper) 34%); }
+  .btn-back { min-height:56px; padding:0 22px; background:#fff; color:var(--ink); border:1px solid var(--line); border-radius:14px; cursor:pointer; font-size:11px; letter-spacing:.16em; }
+  .btn-back:hover { background:#F1EADD; }
+  .btn-next { flex:1; min-width:240px; display:flex; align-items:center; gap:12px; min-height:56px; padding:0 22px; background:var(--ink); color:#FBF6EC; border:none; border-radius:14px; cursor:pointer; font-size:11.5px; letter-spacing:.16em; }
+  .btn-next:hover:not(:disabled) { background:#33291F; }
+  .btn-next:disabled { opacity:.5; cursor:not-allowed; }
+
+  /* ---- generating ---- */
+  .generating-box { background:var(--ink); border-radius:24px; padding:clamp(28px,4vw,44px); text-align:center; max-width:600px; margin:40px auto 0; }
+  .spinner-ring { width:80px; height:80px; margin:0 auto; border-radius:50%; border:2px dashed #6B5A42; display:grid; place-items:center; animation:spin 8s linear infinite; }
+  .spinner-core { width:52px; height:52px; border-radius:14px; background:#3A2F24; display:grid; place-items:center; font-size:22px; color:var(--gold-light); animation:pulse 2s ease-in-out infinite; }
+  .gen-label { font-size:10px; letter-spacing:.24em; color:#B08F5C; margin-top:20px; }
+  .gen-title { font-weight:700; font-size:clamp(24px,3.4vw,34px); letter-spacing:.04em; color:#FBF6EC; margin-top:10px; }
+  .gen-sub { font-style:italic; font-size:clamp(15px,1.8vw,20px); color:var(--gold-light); margin-top:6px; }
+  .gen-note { font-size:9.5px; letter-spacing:.14em; color:#8A7F70; margin-top:22px; line-height:1.8; }
+
+  /* ---- error ---- */
+  .error-box { background:#fff; border:1px solid #E1CFC0; border-radius:22px; padding:clamp(24px,3vw,38px); text-align:center; max-width:560px; margin:40px auto 0; }
+  .error-icon { width:64px; height:64px; margin:0 auto; border-radius:50%; background:var(--err-bg); display:grid; place-items:center; }
+  .error-code { font-size:10px; letter-spacing:.2em; color:var(--err); margin-top:20px; }
+  .error-title { font-weight:600; font-size:clamp(22px,3vw,30px); margin:12px 0 0; line-height:1.15; }
+  .error-msg { margin:12px 0 0; font-size:14px; line-height:1.6; color:var(--text2); }
+  .error-actions { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(200px,100%),1fr)); gap:10px; margin-top:20px; }
+  .btn-primary { display:flex; align-items:center; justify-content:center; gap:10px; min-height:52px; padding:0 18px; background:var(--ink); color:#FBF6EC; border:none; border-radius:13px; cursor:pointer; font-size:11px; letter-spacing:.14em; }
+  .btn-primary:hover { background:#33291F; }
+  .btn-secondary { display:flex; align-items:center; justify-content:center; gap:10px; min-height:52px; padding:0 18px; background:#fff; color:var(--ink); border:1px solid var(--line); border-radius:13px; cursor:pointer; font-size:11px; letter-spacing:.14em; }
+  .btn-secondary:hover { background:#F1EADD; }
+
+  /* ---- results ---- */
+  .results-tags { display:flex; gap:10px; flex-wrap:wrap; margin-top:16px; }
+  .results-tag { display:flex; align-items:center; gap:9px; font-size:9.5px; letter-spacing:.14em; color:#6E5228; background:var(--sand); border:1px solid var(--line); padding:9px 13px; border-radius:10px; }
+  .boards-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(340px,100%),1fr)); gap:clamp(14px,1.6vw,20px); margin-top:clamp(20px,2.4vw,30px); }
+  .board-card { background:var(--card); border:1px solid var(--line); border-radius:20px; overflow:hidden; display:flex; flex-direction:column; animation:rise .4s ease both; }
+  .board-strip { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:11px 16px; font-size:9px; letter-spacing:.12em; background:var(--sand); color:#6E5228; border-bottom:1px solid var(--line); }
+  .board-body { padding:clamp(18px,1.8vw,24px); display:flex; flex-direction:column; gap:12px; flex:1; }
+  .board-name-row { display:flex; align-items:baseline; justify-content:space-between; gap:14px; }
+  .board-name-row h3 { font-weight:600; font-size:clamp(21px,2vw,26px); margin:0; line-height:1.15; }
+  .board-desc { margin:0; font-size:14px; line-height:1.55; color:var(--text2); }
+  .board-thumbs { display:flex; gap:6px; }
+  .board-thumb { width:44px; height:44px; border-radius:8px; overflow:hidden; background:var(--sand); flex:0 0 auto; }
+  .board-thumb img { width:100%; height:100%; object-fit:cover; display:block; }
+  .formula-lbl { font-size:9.5px; letter-spacing:.18em; color:var(--muted); margin-top:2px; }
+  .formula-list { display:flex; flex-direction:column; gap:1px; background:var(--line); border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+  .formula-row { display:flex; gap:10px; align-items:center; background:var(--sand); padding:10px 13px; }
+  .formula-row img { width:26px; height:26px; flex:0 0 auto; border-radius:7px; object-fit:cover; background:#EFE7DA; }
+  .formula-role { width:64px; flex:0 0 auto; font-size:9px; letter-spacing:.1em; color:var(--muted); text-transform:uppercase; }
+  .formula-val { flex:1; min-width:0; font-size:10.5px; color:#3A322A; }
+  .btn-use { display:flex; align-items:center; gap:12px; min-height:52px; padding:0 20px; margin-top:6px; background:var(--ink); color:#FBF6EC; border:none; border-radius:13px; cursor:pointer; font-size:11px; letter-spacing:.16em; }
+  .btn-use:hover:not(:disabled) { background:#33291F; }
+  .btn-use:disabled { opacity:.55; cursor:not-allowed; }
+  .btn-view-products { display:flex; align-items:center; justify-content:center; gap:10px; min-height:48px; background:#fff; border:1px solid var(--line); border-radius:13px; cursor:pointer; font-size:10.5px; letter-spacing:.14em; color:#4A4038; }
+  .btn-view-products:hover { background:#F1EADD; }
+
+  .iterate-box { margin-top:clamp(20px,2.4vw,30px); background:var(--sand); border:1px solid var(--line); border-radius:20px; padding:clamp(20px,2.2vw,28px); }
+  .iterate-actions { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(230px,100%),1fr)); gap:10px; margin-top:18px; }
+  .btn-amber { display:flex; align-items:center; justify-content:center; gap:10px; min-height:54px; padding:0 18px; background:var(--gold); color:#FFF8EC; border:none; border-radius:13px; cursor:pointer; font-size:11px; letter-spacing:.14em; }
+  .btn-amber:hover { background:#6E5228; }
+  .btn-dashed { display:flex; align-items:center; justify-content:center; gap:10px; min-height:54px; padding:0 18px; background:transparent; color:#4A4038; border:1px dashed #D8C9AE; border-radius:13px; cursor:pointer; font-size:11px; letter-spacing:.14em; }
+  .btn-dashed:hover { background:#EFE7DA; }
+
+  /* ---- detail ---- */
+  .detail-back { display:flex; align-items:center; gap:10px; min-height:44px; padding:0 4px; background:transparent; border:none; cursor:pointer; font-size:10px; letter-spacing:.18em; color:var(--muted); }
+  .detail-back:hover { color:var(--ink); }
+  .detail-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(320px,100%),1fr)); gap:clamp(16px,2vw,24px); margin-top:14px; }
+  .detail-thumbs { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; border-radius:16px; overflow:hidden; }
+  .detail-thumbs .board-thumb { width:100%; height:100px; border-radius:0; }
+  .detail-part { font-size:9.5px; letter-spacing:.18em; color:var(--gold); }
+  .detail-name { font-weight:600; font-size:clamp(28px,3.4vw,40px); line-height:1.08; margin:0; }
+  .detail-desc { margin:0; font-size:clamp(14px,1.1vw,15.5px); line-height:1.6; color:var(--text2); }
+  .products-list { display:flex; flex-direction:column; gap:10px; }
+  .product-row { display:flex; gap:14px; align-items:center; padding:12px; background:#fff; border:1px solid var(--line); border-radius:14px; }
+  .product-row img { width:50px; height:50px; flex:0 0 auto; border-radius:12px; object-fit:cover; background:var(--sand); }
+  .product-row .pn { display:block; font-size:14px; font-weight:500; }
+  .product-row .ps { display:block; font-size:9.5px; letter-spacing:.08em; color:var(--muted); margin-top:6px; }
+  .stock-badge { font-size:8.5px; letter-spacing:.08em; }
+  .stock-yes { color:#6E5228; }
+  .stock-no { color:var(--err); }
+  .detail-actions { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(190px,100%),1fr)); gap:10px; margin-top:auto; padding-top:6px; }
+
+  /* ---- shared ---- */
+  .toast { position:fixed; left:50%; bottom:32px; transform:translateX(-50%); z-index:80; display:flex; align-items:center; gap:11px; max-width:calc(100vw - 32px); padding:14px 20px; background:var(--ink); color:#FBF6EC; border-radius:100px; box-shadow:0 14px 34px rgba(26,21,18,.28); font-size:10.5px; letter-spacing:.12em; }
+  .modal-overlay { position:fixed; inset:0; background:rgba(26,21,18,.5); display:flex; align-items:center; justify-content:center; padding:20px; z-index:70; }
+  .modal-box { background:#fff; border-radius:20px; padding:24px; max-width:480px; width:100%; max-height:80vh; overflow-y:auto; }
+  .modal-close { float:right; background:transparent; border:none; cursor:pointer; font-size:18px; color:var(--muted); }
+  .empty-state { padding:26px; text-align:center; color:var(--muted); font-size:13px; background:var(--sand); border-radius:16px; }
+
+  @media (max-width: 860px) {
+    .sidebar { display:none; }
+    .main { padding:18px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="layout">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand name serif">CASA DE AURUM</div>
+      <div class="brand tag mono">STUDIO &amp; SHOWROOM</div>
+    </div>
+    <div class="nav">
+      <div class="nav-label mono">WORKSPACE</div>
+      <nav class="nav-items" id="navItems"></nav>
+    </div>
+    <div class="profile-wrap">
+      <div class="profile">
+        <div class="avatar-circle serif" id="profileInitials">··</div>
+        <div style="min-width:0; display:flex; flex-direction:column; gap:2px">
+          <span class="name" id="profileName">—</span>
+          <span class="role mono" id="profileRole">—</span>
+        </div>
+      </div>
+      <button class="logout-btn mono" id="logoutBtn">SIGN OUT</button>
+    </div>
+  </aside>
+
+  <main class="main" id="mainContent"></main>
+</div>
+
+<div id="toastHost"></div>
+<div id="modalHost"></div>
+
+<script src="assets/api-client.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  // ============================================================
+  // NAV (same pattern as dashboard.html)
+  // ============================================================
+
+  const NAV_ITEMS = [
+    { id: 'dashboard', label: 'Dashboard', href: 'dashboard.html', ready: true },
+    { id: 'moodboard', label: 'Mood Board', href: 'mood-board.html', ready: true },
+    { id: 'projects', label: 'Projects', href: null, ready: false },
+    { id: 'catalog', label: 'Catalog', href: null, ready: false },
+  ];
+
+  function notReady() {
+    alert('This section of the new design is still being rebuilt — coming soon.');
+  }
+
+  function renderNav() {
+    const nav = document.getElementById('navItems');
+    nav.innerHTML = '';
+    NAV_ITEMS.forEach((item) => {
+      const btn = document.createElement('button');
+      btn.className = 'nav-item' + (item.id === 'moodboard' ? ' active' : '');
+      btn.innerHTML = '<span class="lbl">' + item.label + '</span>' + (item.ready ? '' : '<span class="badge mono">SOON</span>');
+      btn.addEventListener('click', () => {
+        if (item.href) location.href = item.href;
+        else notReady();
+      });
+      nav.appendChild(btn);
+    });
+  }
+
+  // ============================================================
+  // STATIC WIZARD OPTIONS (form configuration, not backend data --
+  // the generated combinations, tiles, and boards below are all real)
+  // ============================================================
+
+  const ROOMS = [
+    { name: 'Bathroom', badge: 'WET SPACE', desc: 'Wet zone and walk-in shower automatically calibrated.', img: 'img/room-bathroom.png' },
+    { name: 'Powder Room', badge: 'COMPACT VANITY', desc: 'Compact vanity & accent wall statement focus.', img: 'img/room-powder.png' },
+    { name: 'Living Room', badge: 'OPEN FLOOR', desc: 'Large format open floor plan & fireplace wraps.', img: 'img/room-living.png' },
+    { name: 'Bedroom', badge: 'AMBIENT SLEEP', desc: 'Warm textured ambient surfaces and quiet tones.', img: 'img/room-bedroom.png' },
+    { name: 'Kitchen & Dining', badge: 'HIGH TRAFFIC', desc: 'Splashback focal point & stain-resistant porcelain.', img: 'img/room-kitchen.png' },
+    { name: 'Balcony & Patio', badge: 'OUTDOOR R11', desc: 'Anti-skid outdoor porcelain & weather resistance.', img: 'img/room-terrace.png' },
+  ];
+
+  const FEATURES = [
+    { label: 'No feature wall', desc: 'Uniform surface across all four walls — quietest option.' },
+    { label: 'Basin wall', desc: 'Statement surface behind the vanity, mirrored in the render.' },
+    { label: 'Shower nook', desc: 'Accent restricted to the wet niche and shelf return.' },
+  ];
+
+  const SIZES = ['600×600 mm', '600×1200 mm', '800×800 mm'];
+
+  const FINISHES = [
+    { label: 'Honed Matte', spec: 'R10 · ANTI-SKID · WET ZONE', img: 'img/tex-travertine.png' },
+    { label: 'Polished Gloss', spec: 'REFLECTIVE · DRY ZONE ONLY', img: 'img/tex-calacatta.png' },
+    { label: 'Textured Grip', spec: 'R11 · OUTDOOR RATED', img: 'img/tex-terrazzo.png' },
+  ];
+
+  const BUDGETS = [
+    { tier: 'ESSENTIAL', range: '$2 – $4', desc: 'Porcelain bodies and matte neutrals held in bulk stock.' },
+    { tier: 'MID-RANGE', range: '$4 – $8', desc: 'Vein-cut travertine, fluted accents and polished marfil.' },
+    { tier: 'SIGNATURE', range: '$8 – $16', desc: 'Bookmatched slabs, mosaic sheets and brass-trimmed niches.' },
+  ];
+
+  const PALETTES = [
+    { label: 'Warm Neutral', spec: 'BEIGE · SAND · TRAVERTINE', sw: ['#E7DCC6', '#D9C7A6', '#B79A6E', '#8A7A62'] },
+    { label: 'Cool Grey', spec: 'ASH · SILK · SLATE', sw: ['#E3E0DA', '#B9B6AF', '#8C8C8C', '#4A4A4A'] },
+    { label: 'High Contrast', spec: 'IVORY · CHARCOAL · BRASS', sw: ['#F3EEE2', '#C09A5E', '#5A5651', '#241F1B'] },
+  ];
+
+  const GROUTS = ['Ivory Matte', 'Sand Tone', 'Charcoal'];
+
+  const VIEWS = [
+    { label: 'Front Elevation', desc: 'Straight-on wall for like-for-like comparison.' },
+    { label: 'Vanity Close-Up', desc: 'Tight crop on the basin and feature return.' },
+    { label: 'Wide Corner', desc: 'Shows floor module and wall junction together.' },
+  ];
+
+  const STEP_META = {
+    1: { key: 'ROOM TYPOLOGY', eyebrow: 'ARCHITECTURAL FOUNDATION', title: 'What are you designing?', sub: 'Select your space to automatically calibrate ambient lighting, scale proportions, and surface drainage parameters.' },
+    2: { key: 'FEATURE PLACEMENT', eyebrow: 'STATEMENT SURFACE', title: 'Where should the feature wall sit?', sub: 'The accent surface anchors the composition.' },
+    3: { key: 'DIMENSION & FINISH', eyebrow: 'MODULE GEOMETRY', title: 'Pick the floor module', sub: 'Larger modules mean fewer grout lines. Finish drives slip rating and reflectivity.' },
+    4: { key: 'BUDGET BAND', eyebrow: 'COMMERCIAL ENVELOPE', title: 'What is the surface budget?', sub: 'Only in-stock surfaces inside this band are matched, so every concept stays quotable.' },
+    5: { key: 'PALETTE & GROUT', eyebrow: 'TONAL DIRECTION', title: 'Set the palette temperature', sub: 'Grout tone is specified alongside the palette — it changes the perceived scale of the whole wall.' },
+    6: { key: 'REVIEW SPEC', eyebrow: 'DESIGN DNA', title: 'Review the design DNA', sub: 'This is what gets sent to generate your combinations.' },
+    7: { key: 'CAMERA', eyebrow: 'RENDER PIPELINE', title: 'Choose the client view', sub: 'Included as context for the design brief.' },
+  };
+
+  // ============================================================
+  // STATE
+  // ============================================================
+
+  const state = {
+    stage: 'wizard', // wizard | generating | error | results | detail
+    step: 1,
+    room: null,
+    feature: FEATURES[0].label,
+    size: SIZES[1],
+    finish: FINISHES[0].label,
+    budget: BUDGETS[1],
+    palette: PALETTES[0].label,
+    grout: GROUTS[0],
+    view: VIEWS[0].label,
+    combinations: [],
+    warnings: [],
+    tilesById: {},
+    savedBoardId: null,
+    savedBoardIndex: null,
+    detailIndex: null,
+    errorMessage: null,
+    productsModalIndex: null,
+    useInFlight: false,
+  };
+
+  function render() {
+    switch (state.stage) {
+      case 'wizard': return renderWizard();
+      case 'generating': return renderGenerating();
+      case 'error': return renderError();
+      case 'results': return renderResults();
+      case 'detail': return renderDetail();
+      default: return renderWizard();
+    }
+  }
+
+  function showToast(message) {
+    const host = document.getElementById('toastHost');
+    host.innerHTML = '<div class="toast mono">' + message + '</div>';
+    setTimeout(() => { host.innerHTML = ''; }, 3200);
+  }
+
+  // ============================================================
+  // WIZARD
+  // ============================================================
+
+  function stepValid(step) {
+    if (step === 1) return !!state.room;
+    return true;
+  }
+
+  function renderWizard() {
+    const meta = STEP_META[state.step];
+    const pct = Math.round((state.step / 7) * 100);
+    const main = document.getElementById('mainContent');
+
+    const tabs = [1, 2, 3, 4, 5, 6, 7].map((n) => {
+      const cls = n === state.step ? 'current' : n < state.step ? 'done' : '';
+      return '<button class="step-tab mono ' + cls + '" data-goto-step="' + n + '">' + n + '. ' + ['ROOM', 'FEATURE', 'SIZE', 'BUDGET', 'FINISH', 'REVIEW', 'RENDER'][n - 1] + '</button>';
+    }).join('');
+
+    main.innerHTML =
+      '<div class="stage">' +
+      '<div class="step-head"><div class="eyebrow mono"><span class="dot"></span>STEP ' + state.step + ' OF 7 · ' + meta.key + '</div><span class="pct mono">' + pct + '% Complete</span></div>' +
+      '<div class="progress-track"><div class="progress-fill" style="width:' + pct + '%"></div></div>' +
+      '<div class="step-tabs">' + tabs + '</div>' +
+      '<div class="step-title-row"><span class="lbl mono">' + meta.eyebrow + '</span><span class="rule"></span></div>' +
+      '<h1 class="step-h1 serif">' + meta.title + '</h1>' +
+      '<p class="step-sub">' + meta.sub + '</p>' +
+      '<div id="stepBody"></div>' +
+      '<div class="step-actions">' +
+      '<button class="btn-back mono" id="prevBtn">← ' + (state.step === 1 ? 'DASHBOARD' : 'BACK') + '</button>' +
+      '<button class="btn-next mono" id="nextBtn"' + (stepValid(state.step) ? '' : ' disabled') + '><span style="width:6px;height:6px;border-radius:50%;background:#E3C58E"></span><span style="flex:1;text-align:left">' + (state.step === 7 ? 'GENERATE 4 MOOD BOARDS' : 'CONTINUE TO STEP ' + (state.step + 1)) + '</span><span>→</span></button>' +
+      '</div>' +
+      '</div>';
+
+    renderStepBody();
+
+    document.querySelectorAll('[data-goto-step]').forEach((btn) => {
+      btn.addEventListener('click', () => { state.step = parseInt(btn.dataset.gotoStep, 10); render(); });
+    });
+    document.getElementById('prevBtn').addEventListener('click', () => {
+      if (state.step === 1) { location.href = 'dashboard.html'; return; }
+      state.step -= 1; render();
+    });
+    document.getElementById('nextBtn').addEventListener('click', () => {
+      if (!stepValid(state.step)) return;
+      if (state.step === 7) { runGenerate(); return; }
+      state.step += 1; render();
+    });
+  }
+
+  function renderStepBody() {
+    const body = document.getElementById('stepBody');
+
+    if (state.step === 1) {
+      body.innerHTML = '<div class="grid-rooms">' + ROOMS.map((r) => {
+        const sel = state.room === r.name;
+        return '<button class="room-card' + (sel ? ' selected' : '') + '" data-room="' + r.name + '">' +
+          '<span class="room-img"><img src="' + r.img + '" alt="' + r.name + '"><span class="room-badge mono">' + r.badge + '</span>' + (sel ? '<span class="room-check">✓</span>' : '') + '</span>' +
+          '<span class="room-body"><span class="rn serif">' + r.name + '</span><span class="rd">' + r.desc + '</span></span>' +
+          '</button>';
+      }).join('') + '</div>';
+      body.querySelectorAll('[data-room]').forEach((btn) => btn.addEventListener('click', () => { state.room = btn.dataset.room; render(); }));
+      return;
+    }
+
+    if (state.step === 2) {
+      body.innerHTML = '<div style="display:flex; flex-direction:column; gap:12px; margin-top:clamp(18px,2vw,26px); max-width:520px">' + FEATURES.map((f) => {
+        const sel = state.feature === f.label;
+        return '<button class="option-row' + (sel ? ' selected' : '') + '" data-feature="' + f.label + '"><span class="option-dot"></span><span style="flex:1;min-width:0"><span class="ol mono">' + f.label.toUpperCase() + '</span><span class="od">' + f.desc + '</span></span></button>';
+      }).join('') + '</div>';
+      body.querySelectorAll('[data-feature]').forEach((btn) => btn.addEventListener('click', () => { state.feature = btn.dataset.feature; render(); }));
+      return;
+    }
+
+    if (state.step === 3) {
+      body.innerHTML =
+        '<div style="margin-top:clamp(18px,2vw,26px)">' +
+        '<div class="section-lbl mono" style="margin-top:0">FLOOR TILE DIMENSION</div>' +
+        '<div class="chip-row">' + SIZES.map((s) => '<button class="chip mono' + (state.size === s ? ' selected' : '') + '" data-size="' + s + '">' + s + '</button>').join('') + '</div>' +
+        '<div class="section-lbl mono">SURFACE FINISH</div>' +
+        '<div class="finish-grid">' + FINISHES.map((f) => {
+          const sel = state.finish === f.label;
+          return '<button class="finish-card' + (sel ? ' selected' : '') + '" data-finish="' + f.label + '"><img src="' + f.img + '" alt=""><span style="flex:1;min-width:0"><span class="fl">' + f.label + '</span><span class="fs mono">' + f.spec + '</span></span></button>';
+        }).join('') + '</div>' +
+        '</div>';
+      body.querySelectorAll('[data-size]').forEach((btn) => btn.addEventListener('click', () => { state.size = btn.dataset.size; render(); }));
+      body.querySelectorAll('[data-finish]').forEach((btn) => btn.addEventListener('click', () => { state.finish = btn.dataset.finish; render(); }));
+      return;
+    }
+
+    if (state.step === 4) {
+      body.innerHTML = '<div class="budget-grid">' + BUDGETS.map((b) => {
+        const sel = state.budget.tier === b.tier;
+        return '<button class="budget-card' + (sel ? ' selected' : '') + '" data-budget="' + b.tier + '">' +
+          '<span class="budget-top"><span class="budget-tier mono">' + b.tier + '</span>' + (sel ? '<span class="budget-check">✓</span>' : '') + '</span>' +
+          '<span class="budget-range serif">' + b.range + '</span>' +
+          '<span class="budget-note mono">PER SQ FT · SUPPLY ONLY</span>' +
+          '<span class="budget-desc">' + b.desc + '</span>' +
+          '</button>';
+      }).join('') + '</div>';
+      body.querySelectorAll('[data-budget]').forEach((btn) => btn.addEventListener('click', () => {
+        state.budget = BUDGETS.find((b) => b.tier === btn.dataset.budget);
+        render();
+      }));
+      return;
+    }
+
+    if (state.step === 5) {
+      body.innerHTML =
+        '<div style="margin-top:clamp(18px,2vw,26px)">' +
+        '<div class="section-lbl mono" style="margin-top:0">PALETTE TEMPERATURE</div>' +
+        '<div class="palette-grid">' + PALETTES.map((p) => {
+          const sel = state.palette === p.label;
+          return '<button class="palette-card' + (sel ? ' selected' : '') + '" data-palette="' + p.label + '"><span class="swatch-row">' + p.sw.map((c) => '<span class="swatch" style="background:' + c + '"></span>').join('') + '</span><span class="pl">' + p.label + '</span><span class="ps mono">' + p.spec + '</span></button>';
+        }).join('') + '</div>' +
+        '<div class="section-lbl mono">GROUT TONE</div>' +
+        '<div class="chip-row">' + GROUTS.map((g) => '<button class="chip mono' + (state.grout === g ? ' selected' : '') + '" data-grout="' + g + '">' + g + '</button>').join('') + '</div>' +
+        '</div>';
+      body.querySelectorAll('[data-palette]').forEach((btn) => btn.addEventListener('click', () => { state.palette = btn.dataset.palette; render(); }));
+      body.querySelectorAll('[data-grout]').forEach((btn) => btn.addEventListener('click', () => { state.grout = btn.dataset.grout; render(); }));
+      return;
+    }
+
+    if (state.step === 6) {
+      const summary = [
+        ['ROOM', state.room || '—'], ['FEATURE WALL', state.feature], ['FLOOR MODULE', state.size],
+        ['FINISH', state.finish], ['BUDGET BAND', state.budget.tier + ' (' + state.budget.range + ')'],
+        ['PALETTE', state.palette], ['GROUT', state.grout], ['CAMERA', state.view],
+      ];
+      body.innerHTML = '<div class="summary-card" style="margin-top:clamp(18px,2vw,26px)">' +
+        summary.map(([k, v]) => '<div class="summary-row"><span class="k mono">' + k + '</span><span class="v">' + v + '</span></div>').join('') +
+        '</div>';
+      return;
+    }
+
+    if (state.step === 7) {
+      body.innerHTML = '<div class="view-grid">' + VIEWS.map((v) => {
+        const sel = state.view === v.label;
+        return '<button class="view-card' + (sel ? ' selected' : '') + '" data-view="' + v.label + '"><span class="vl mono">' + v.label + '</span><span class="vd">' + v.desc + '</span></button>';
+      }).join('') + '</div>';
+      body.querySelectorAll('[data-view]').forEach((btn) => btn.addEventListener('click', () => { state.view = btn.dataset.view; render(); }));
+      return;
+    }
+  }
+
+  // ============================================================
+  // GENERATE — real call, honest loading state (no fake progress)
+  // ============================================================
+
+  function buildBriefText() {
+    return [
+      'Design a ' + state.room + ' with ' + state.feature.toLowerCase() + '.',
+      'Use ' + state.size + ' floor tiles in a ' + state.finish + ' finish.',
+      'Budget band: ' + state.budget.tier + ' (' + state.budget.range + ' per sq ft, supply only).',
+      'Palette: ' + state.palette + ', with ' + state.grout + ' grout.',
+      'Client view requested for the handout: ' + state.view + '.',
+    ].join(' ');
+  }
+
+  async function runGenerate() {
+    state.stage = 'generating';
+    render();
+
+    try {
+      const payload = {
+        text: buildBriefText(),
+        room: state.room,
+        style: state.palette,
+        budget: state.budget.tier + ' (' + state.budget.range + '/sqft)',
+        combinationCount: 4,
+      };
+      const result = await CasaApi.moodBoards.generate(payload);
+      state.combinations = result.combinations || [];
+      state.warnings = result.warnings || [];
+
+      if (state.combinations.length === 0) {
+        state.errorMessage = 'No combinations came back for this brief. Try widening the budget band or picking a different room.';
+        state.stage = 'error';
+        render();
+        return;
+      }
+
+      const ids = [...new Set(state.combinations.flatMap((c) => c.tiles.map((t) => t.tileId)))];
+      try {
+        const tiles = await CasaApi.moodBoards.tiles(ids);
+        state.tilesById = {};
+        tiles.forEach((t) => { state.tilesById[t.id] = t; });
+      } catch (err) {
+        state.tilesById = {}; // non-fatal -- formula still renders with names, just no images/stock
+      }
+
+      state.savedBoardId = null;
+      state.savedBoardIndex = null;
+      state.stage = 'results';
+      render();
+    } catch (err) {
+      state.errorMessage = (err && err.message) || 'Something went wrong generating this mood board.';
+      state.stage = 'error';
+      render();
+    }
+  }
+
+  function renderGenerating() {
+    const main = document.getElementById('mainContent');
+    main.innerHTML =
+      '<div class="stage">' +
+      '<div class="generating-box">' +
+      '<div class="spinner-ring"><div class="spinner-core">✦</div></div>' +
+      '<div class="gen-label mono">● STUDIO &amp; SHOWROOM ●</div>' +
+      '<div class="gen-title serif">CASA DE AURUM</div>' +
+      '<div class="gen-sub serif">Synthesizing your mood boards…</div>' +
+      '<div class="gen-note mono">CALLING GEMINI · MATCHING AGAINST LIVE INVENTORY</div>' +
+      '</div>' +
+      '</div>';
+  }
+
+  // ============================================================
+  // ERROR
+  // ============================================================
+
+  function renderError() {
+    const main = document.getElementById('mainContent');
+    main.innerHTML =
+      '<div class="stage">' +
+      '<div class="error-box">' +
+      '<div class="error-icon"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#A8552A" stroke-width="1.7" stroke-linecap="round"><path d="M12 8v5M12 16.5v.5M10.3 4 3.4 17a1.6 1.6 0 0 0 1.4 2.4h14.4A1.6 1.6 0 0 0 20.6 17L13.7 4a1.6 1.6 0 0 0-2.8 0z"></path></svg></div>' +
+      '<div class="error-code mono">RENDER PIPELINE INTERRUPTED</div>' +
+      '<h2 class="error-title serif">Could not generate this mood board</h2>' +
+      '<p class="error-msg">' + escapeHtml(state.errorMessage || 'Unknown error.') + '</p>' +
+      '<div class="error-actions">' +
+      '<button class="btn-primary mono" id="retryBtn">↻ RETRY</button>' +
+      '<button class="btn-secondary mono" id="editBtn">◇ EDIT DESIGN DNA</button>' +
+      '</div>' +
+      '</div>' +
+      '</div>';
+    document.getElementById('retryBtn').addEventListener('click', runGenerate);
+    document.getElementById('editBtn').addEventListener('click', () => { state.stage = 'wizard'; state.step = 1; render(); });
+  }
+
+  function escapeHtml(s) {
+    const div = document.createElement('div');
+    div.textContent = s;
+    return div.innerHTML;
+  }
+
+  // ============================================================
+  // RESULTS
+  // ============================================================
+
+  function formulaRowsHtml(tiles) {
+    return '<div class="formula-list">' + tiles.map((t) => {
+      const detail = state.tilesById[t.tileId];
+      const img = detail && detail.imageUrl ? '<img src="' + detail.imageUrl + '" alt="">' : '<span style="width:26px;height:26px;flex:0 0 auto;border-radius:7px;background:#EFE7DA"></span>';
+      const label = detail ? detail.name : (t.name || 'Tile unavailable');
+      return '<div class="formula-row">' + img + '<span class="formula-role mono">' + t.role + '</span><span class="formula-val mono">' + escapeHtml(label) + '</span></div>';
+    }).join('') + '</div>';
+  }
+
+  function renderResults() {
+    const main = document.getElementById('mainContent');
+    const specLine = state.room + ' · ' + state.palette + ' · ' + state.budget.tier + ' · ' + state.size + ' · ' + state.feature + ' · ' + state.view;
+
+    main.innerHTML =
+      '<div class="stage">' +
+      '<div style="display:flex; align-items:flex-start; justify-content:space-between; gap:14px; flex-wrap:wrap">' +
+      '<div class="mono" style="font-size:10px; letter-spacing:.18em; color:var(--muted)">MOOD BOARD RESULT</div>' +
+      '</div>' +
+      '<h1 class="step-h1 serif">' + state.combinations.length + ' Curated Mood Board' + (state.combinations.length === 1 ? '' : 's') + '</h1>' +
+      '<p class="step-sub">' + escapeHtml(specLine) + '</p>' +
+      (state.warnings.length ? '<p class="step-sub" style="color:var(--err)">' + state.warnings.length + ' note(s) from generation — see console for detail.</p>' : '') +
+      '<div class="results-tags"><span class="results-tag mono">◈ ' + state.combinations.length + ' CONCEPT' + (state.combinations.length === 1 ? '' : 'S') + ' READY</span></div>' +
+      '<div class="boards-grid" id="boardsGrid"></div>' +
+      '<div class="iterate-box">' +
+      '<h3 class="serif" style="margin:0; font-size:clamp(20px,2vw,26px)">Iterate the design</h3>' +
+      '<p style="margin:8px 0 0; font-size:14px; color:var(--text2); line-height:1.55">Keeps the same room, feature and budget while generating a fresh set.</p>' +
+      '<div class="iterate-actions">' +
+      '<button class="btn-amber mono" id="regenBtn">↻ TRY 4 MORE VARIATIONS</button>' +
+      '<button class="btn-dashed mono" id="editDnaBtn">◇ EDIT DESIGN DNA</button>' +
+      '</div>' +
+      '</div>' +
+      '</div>';
+
+    if (state.warnings.length) console.warn('Mood board generation warnings:', state.warnings);
+
+    const grid = document.getElementById('boardsGrid');
+    state.combinations.forEach((combo, i) => {
+      const card = document.createElement('article');
+      card.className = 'board-card';
+      const thumbTiles = combo.tiles.map((t) => state.tilesById[t.tileId]).filter((t) => t && t.imageUrl).slice(0, 4);
+      card.innerHTML =
+        '<div class="board-strip mono"><span>PART 0' + (i + 1) + '</span><span style="opacity:.75">' + escapeHtml(combo.rooms_suitable.join(', ')) + '</span></div>' +
+        '<div class="board-body">' +
+        '<div class="board-name-row"><h3 class="serif">' + escapeHtml(combo.board_name) + '</h3></div>' +
+        '<p class="board-desc">' + escapeHtml(combo.reason_for_selection || 'No description provided.') + '</p>' +
+        (thumbTiles.length ? '<div class="board-thumbs">' + thumbTiles.map((t) => '<span class="board-thumb"><img src="' + t.imageUrl + '" alt=""></span>').join('') + '</div>' : '') +
+        '<div class="formula-lbl mono">SPECIFIED TILES (' + combo.tiles.length + ')</div>' +
+        formulaRowsHtml(combo.tiles) +
+        (combo.grout_recommendation ? '<div class="mono" style="font-size:10px;color:var(--muted)">GROUT: ' + escapeHtml(combo.grout_recommendation) + '</div>' : '') +
+        '<button class="btn-use mono" data-use="' + i + '">' + (state.savedBoardIndex === i ? 'SAVED ✓' : 'USE THIS DESIGN') + ' →</button>' +
+        '<button class="btn-view-products mono" data-view-products="' + i + '">VIEW PRODUCTS USED (' + combo.tiles.length + ') ↗</button>' +
+        '</div>';
+      grid.appendChild(card);
+    });
+
+    grid.querySelectorAll('[data-use]').forEach((btn) => btn.addEventListener('click', () => useDesign(parseInt(btn.dataset.use, 10))));
+    grid.querySelectorAll('[data-view-products]').forEach((btn) => btn.addEventListener('click', () => {
+      state.detailIndex = parseInt(btn.dataset.viewProducts, 10);
+      state.stage = 'detail';
+      render();
+    }));
+    document.getElementById('regenBtn').addEventListener('click', runGenerate);
+    document.getElementById('editDnaBtn').addEventListener('click', () => { state.stage = 'wizard'; state.step = 1; render(); });
+  }
+
+  // ============================================================
+  // USE THIS DESIGN — save() persists all combinations, approve()
+  // marks the chosen index. Both existing endpoints, reused as-is.
+  // ============================================================
+
+  async function useDesign(index) {
+    if (state.useInFlight) return;
+    state.useInFlight = true;
+    try {
+      let boardId = state.savedBoardId;
+      if (!boardId) {
+        const board = await CasaApi.moodBoards.save({
+          clientBrief: buildBriefText(),
+          style: state.palette,
+          room: state.room,
+          combinations: state.combinations,
+        });
+        boardId = board.id;
+        state.savedBoardId = boardId;
+      }
+      await CasaApi.moodBoards.approve(boardId, index);
+      state.savedBoardIndex = index;
+      showToast('SAVED TO CLIENT PROOFS');
+      render();
+    } catch (err) {
+      showToast('COULD NOT SAVE: ' + ((err && err.message) || 'Unknown error'));
+    } finally {
+      state.useInFlight = false;
+    }
+  }
+
+  // ============================================================
+  // DETAIL
+  // ============================================================
+
+  function renderDetail() {
+    const main = document.getElementById('mainContent');
+    const combo = state.combinations[state.detailIndex];
+    if (!combo) { state.stage = 'results'; render(); return; }
+
+    const thumbTiles = combo.tiles.map((t) => state.tilesById[t.tileId]).filter((t) => t && t.imageUrl);
+
+    main.innerHTML =
+      '<div class="stage">' +
+      '<button class="detail-back mono" id="backToResultsBtn">← ALL ' + state.combinations.length + ' CONCEPTS</button>' +
+      '<div class="detail-grid">' +
+      '<div>' +
+      (thumbTiles.length ? '<div class="detail-thumbs">' + thumbTiles.map((t) => '<span class="board-thumb"><img src="' + t.imageUrl + '" alt=""></span>').join('') + '</div>' : '<div class="empty-state">No tile images available for this combination.</div>') +
+      '<div class="formula-lbl mono">SPECIFIED PALETTE FORMULA</div>' +
+      formulaRowsHtml(combo.tiles) +
+      '</div>' +
+      '<div style="display:flex; flex-direction:column; gap:14px">' +
+      '<div class="detail-part mono">PART 0' + (state.detailIndex + 1) + '</div>' +
+      '<h1 class="detail-name serif">' + escapeHtml(combo.board_name) + '</h1>' +
+      '<p class="detail-desc">' + escapeHtml(combo.reason_for_selection || 'No description provided.') + '</p>' +
+      '<div class="mono" style="font-size:9.5px; letter-spacing:.18em; color:var(--muted)">SUITABLE ROOMS</div>' +
+      '<p style="margin:0; font-size:13.5px; color:var(--text2)">' + (combo.rooms_suitable.length ? escapeHtml(combo.rooms_suitable.join(', ')) : '—') + '</p>' +
+      (combo.grout_recommendation ? '<div class="mono" style="font-size:9.5px; letter-spacing:.18em; color:var(--muted)">GROUT RECOMMENDATION</div><p style="margin:0; font-size:13.5px; color:var(--text2)">' + escapeHtml(combo.grout_recommendation) + '</p>' : '') +
+      '<div class="mono" style="font-size:9.5px; letter-spacing:.18em; color:var(--muted)">PRODUCTS USED</div>' +
+      '<div class="products-list" id="productsList"></div>' +
+      '<div class="detail-actions">' +
+      '<button class="btn-primary mono" id="useDetailBtn">' + (state.savedBoardIndex === state.detailIndex ? 'SAVED ✓' : 'USE THIS DESIGN →') + '</button>' +
+      '<button class="btn-secondary mono" id="exportDetailBtn">⇩ EXPORT PDF</button>' +
+      '</div>' +
+      '</div>' +
+      '</div>' +
+      '</div>';
+
+    const productsList = document.getElementById('productsList');
+    combo.tiles.forEach((t) => {
+      const detail = state.tilesById[t.tileId];
+      const row = document.createElement('div');
+      row.className = 'product-row';
+      if (!detail) {
+        row.innerHTML = '<span style="width:50px;height:50px;flex:0 0 auto;border-radius:12px;background:var(--sand)"></span><span style="flex:1;min-width:0"><span class="pn">' + escapeHtml(t.name || 'Tile no longer available') + '</span><span class="ps mono">' + t.role + '</span></span>';
+      } else {
+        const img = detail.imageUrl ? '<img src="' + detail.imageUrl + '" alt="' + escapeHtml(detail.name) + '">' : '<span style="width:50px;height:50px;flex:0 0 auto;border-radius:12px;background:var(--sand)"></span>';
+        const spec = [detail.brand ? detail.brand.name : null, detail.size, detail.finish].filter(Boolean).join(' · ');
+        row.innerHTML = img + '<span style="flex:1;min-width:0"><span class="pn">' + escapeHtml(detail.name) + '</span><span class="ps mono">' + escapeHtml(spec) + '</span></span>' +
+          '<span style="flex:0 0 auto; text-align:right"><span class="stock-badge mono ' + (detail.inStock ? 'stock-yes' : 'stock-no') + '">' + (detail.inStock ? 'IN STOCK' : 'OUT OF STOCK') + '</span></span>';
+      }
+      productsList.appendChild(row);
+    });
+
+    document.getElementById('backToResultsBtn').addEventListener('click', () => { state.stage = 'results'; render(); });
+    document.getElementById('useDetailBtn').addEventListener('click', () => useDesign(state.detailIndex));
+    document.getElementById('exportDetailBtn').addEventListener('click', notReady);
+  }
+
+  // ============================================================
+  // INIT
+  // ============================================================
+
+  async function init() {
+    const user = await CasaApi.requireAuth();
+
+    document.getElementById('profileInitials').textContent = CasaApi.initials(user.name);
+    document.getElementById('profileName').textContent = user.name || user.email;
+    document.getElementById('profileRole').textContent = (user.role || '').toUpperCase();
+
+    renderNav();
+    document.getElementById('logoutBtn').addEventListener('click', async () => {
+      await CasaApi.auth.logout();
+      location.href = 'login.html';
+    });
+
+    render();
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>

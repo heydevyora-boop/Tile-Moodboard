@@ -1243,6 +1243,17 @@
         (r) =>
           r.data.board
       );
+    },
+
+    tiles(ids) {
+      return apiFetch(
+        `/mood-boards/tiles${qs({
+          ids: ids.join(',')
+        })}`
+      ).then(
+        (r) =>
+          r.data.tiles
+      );
     }
   };
 

@@ -9,6 +9,7 @@ import {
   UpdateMoodBoardInput,
   ApproveMoodBoardInput,
   ListMoodBoardsQuery,
+  MoodBoardTileLookupQuery,
 } from '@validators/moodBoard.validators';
 
 function requireActorId(req: Request): string {
@@ -40,6 +41,12 @@ export const list = catchAsync(async (req: Request, res: Response) => {
   const query = req.query as unknown as ListMoodBoardsQuery;
   const { boards, meta } = await moodBoardService.listMoodBoards(query);
   res.status(200).json({ success: true, data: { boards }, meta });
+});
+
+export const getTiles = catchAsync(async (req: Request, res: Response) => {
+  const { ids } = req.query as unknown as MoodBoardTileLookupQuery;
+  const tiles = await moodBoardService.getTilesByIds(ids);
+  res.status(200).json({ success: true, data: { tiles } });
 });
 
 export const getOne = catchAsync(async (req: Request, res: Response) => {

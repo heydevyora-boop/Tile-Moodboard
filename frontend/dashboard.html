@@ -234,7 +234,7 @@
 
   const NAV_ITEMS = [
     { id: 'dashboard', label: 'Dashboard', href: 'dashboard.html', ready: true },
-    { id: 'moodboard', label: 'Mood Board', href: null, ready: false },
+    { id: 'moodboard', label: 'Mood Board', href: 'mood-board.html', ready: true },
     { id: 'projects', label: 'Projects', href: null, ready: false },
     { id: 'catalog', label: 'Catalog', href: null, ready: false },
   ];
@@ -373,7 +373,7 @@
 
     renderNav();
 
-    document.getElementById('startWizardBtn').addEventListener('click', notReady);
+    document.getElementById('startWizardBtn').addEventListener('click', () => { location.href = 'mood-board.html'; });
     document.getElementById('exploreCatalogBtn').addEventListener('click', notReady);
     document.getElementById('viewSavedBtn').addEventListener('click', notReady);
     document.getElementById('viewAllSessionsBtn').addEventListener('click', notReady);

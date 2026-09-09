@@ -44,6 +44,16 @@ export const moodBoardPaths = {
       responses: { 201: { description: 'Saved.', content: { 'application/json': { schema: moodBoardResponse } } }, ...standardErrors(422) },
     },
   },
+  '/mood-boards/tiles': {
+    get: {
+      tags: ['Mood Boards'],
+      summary: 'Resolve tileId references from /generate into full tile details',
+      description: '/generate only returns {role, tileId, name} per tile. This resolves those ids back to real Tile rows (image, size, finish, stock) so the wizard can render what was actually picked before (or after) saving.',
+      security: [{ bearerAuth: [] }],
+      parameters: [{ name: 'ids', in: 'query', required: true, schema: { type: 'string' }, example: 'clx1,clx2,clx3', description: 'Comma-separated tile ids' }],
+      responses: { 200: { description: 'Matching tiles (a requested id with no match is simply omitted).' }, ...standardErrors(422) },
+    },
+  },
   '/mood-boards/{id}': {
     get: { tags: ['Mood Boards'], summary: 'Get a saved mood board', security: [{ bearerAuth: [] }], parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }], responses: { 200: { description: 'The board.', content: { 'application/json': { schema: moodBoardResponse } } }, ...standardErrors(404) } },
     patch: { tags: ['Mood Boards'], summary: 'Edit a saved mood board', security: [{ bearerAuth: [] }], parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object' } } } }, responses: { 200: { description: 'Updated.', content: { 'application/json': { schema: moodBoardResponse } } }, ...standardErrors(404, 422) } },

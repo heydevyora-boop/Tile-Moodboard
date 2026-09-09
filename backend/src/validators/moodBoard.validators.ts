@@ -64,8 +64,22 @@ export const listMoodBoardsQuerySchema = z.object({
   customerId: z.string().optional(),
 });
 
+// Resolves the tileId references inside a /generate response's combinations
+// (which only carry {role, tileId, name} -- no image/size/finish/stock) back
+// to real Tile rows, so the UI can render what it actually picked instead of
+// a bare ID. Comma-separated in the query string since these are simple IDs,
+// not a JSON body, and this is a GET.
+export const moodBoardTileLookupQuerySchema = z.object({
+  ids: z
+    .string()
+    .min(1, 'ids is required')
+    .transform((v) => [...new Set(v.split(',').map((s) => s.trim()).filter(Boolean))])
+    .pipe(z.array(z.string()).min(1, 'At least one tile id is required').max(50, 'At most 50 tile ids per request')),
+});
+
 export type SaveMoodBoardInput = z.infer<typeof saveMoodBoardSchema>;
 export type UpdateMoodBoardInput = z.infer<typeof updateMoodBoardSchema>;
 export type ApproveMoodBoardInput = z.infer<typeof approveMoodBoardSchema>;
 export type ListMoodBoardsQuery = z.infer<typeof listMoodBoardsQuerySchema>;
+export type MoodBoardTileLookupQuery = z.infer<typeof moodBoardTileLookupQuerySchema>;
 export type CombinationInput = z.infer<typeof combinationSchema>;

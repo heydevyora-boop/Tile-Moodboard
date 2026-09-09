@@ -88,6 +88,35 @@ export async function saveMoodBoard(input: SaveMoodBoardInput, actorId: string, 
 }
 
 // ─────────────────────────────────────────────────────────────────────────
+// Resolve combination tile references
+// ─────────────────────────────────────────────────────────────────────────
+
+/**
+ * /generate's response only carries {role, tileId, name} per tile -- no
+ * image, size, finish or stock -- so the wizard's results/detail screens
+ * can't render what was actually picked without this. Returns whatever
+ * subset of the requested ids still exist (a tile can be deleted between
+ * generating and viewing); callers should treat a missing id as "no
+ * longer available" rather than an error.
+ */
+export async function getTilesByIds(ids: string[]) {
+  return prisma.tile.findMany({
+    where: { id: { in: ids } },
+    select: {
+      id: true,
+      name: true,
+      imageUrl: true,
+      size: true,
+      finish: true,
+      colorTone: true,
+      inStock: true,
+      productCode: true,
+      brand: { select: { id: true, name: true } },
+    },
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────
 // List / Get
 // ─────────────────────────────────────────────────────────────────────────
 
