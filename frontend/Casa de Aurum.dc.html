@@ -1,0 +1,1620 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500&family=DM+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  body { margin:0; background:#F7F3EC; -webkit-font-smoothing:antialiased; font-family:'DM Sans',sans-serif; }
+  * { box-sizing:border-box; }
+  a { color:#8A6A3B; text-decoration:none; }
+  a:hover { color:#6E5228; }
+  input { font-family:'JetBrains Mono',monospace; }
+  ::-webkit-scrollbar { width:10px; height:10px; }
+  ::-webkit-scrollbar-thumb { background:#DED3C0; border-radius:8px; border:3px solid #F7F3EC; }
+  @keyframes cdaSpin { to { transform:rotate(360deg); } }
+  @keyframes cdaFade { from { opacity:0; } to { opacity:1; } }
+  @keyframes cdaRise { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:none; } }
+  @keyframes cdaPop { from { opacity:0; transform:translateY(16px) scale(.975); } to { opacity:1; transform:none; } }
+  @keyframes cdaSlide { from { transform:translateX(-100%); } to { transform:none; } }
+  @keyframes cdaShimmer { from { background-position:180% 0; } to { background-position:-180% 0; } }
+  @keyframes cdaSheen { 0% { transform:translateX(-140%); } 100% { transform:translateX(340%); } }
+  @keyframes cdaPulse { 0%,100% { opacity:.4; } 50% { opacity:1; } }
+  @keyframes cdaReveal { from { opacity:0; transform:scale(1.06); } to { opacity:1; transform:none; } }
+</style>
+</helmet>
+
+<div ref="{{ rootRef }}" style="height:100vh; display:flex; flex-direction:column; background:#F7F3EC; color:#1A1512; overflow:hidden">
+
+  <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
+    <header style="flex:0 0 auto; display:flex; align-items:center; gap:12px; padding:10px 14px; background:rgba(247,243,236,.94); backdrop-filter:blur(10px); border-bottom:1px solid #E7DFD1; position:relative; z-index:20">
+      <button onClick="{{ openDrawer }}" aria-label="Open navigation" style="width:44px; height:44px; display:grid; place-items:center; background:#fff; border:1px solid #E7DFD1; border-radius:12px; cursor:pointer" style-hover="background:#F1EADD">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1A1512" stroke-width="1.6" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h11"></path></svg>
+      </button>
+      <div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:1px">
+        <span style="font-family:'Playfair Display',serif; font-size:15px; letter-spacing:.16em; line-height:1.1">CASA DE AURUM</span>
+        <span style="font-family:'JetBrains Mono',monospace; font-size:8.5px; letter-spacing:.2em; color:#8B8177; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">{{ crumb }}</span>
+      </div>
+      <button onClick="{{ focusSearch }}" aria-label="Search" style="width:44px; height:44px; display:grid; place-items:center; background:transparent; border:none; cursor:pointer">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1A1512" stroke-width="1.6" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.6-3.6"></path></svg>
+      </button>
+      <div style="position:relative; width:38px; height:38px; flex:0 0 auto">
+        <div style="width:38px; height:38px; border-radius:50%; background:linear-gradient(150deg,#C09A5E,#8A6A3B); display:grid; place-items:center; font-family:'Playfair Display',serif; font-size:14px; color:#FFF8EC">PS</div>
+        <span style="position:absolute; right:0; bottom:0; width:9px; height:9px; border-radius:50%; background:#B4762A; border:2px solid #F7F3EC"></span>
+      </div>
+    </header>
+  </sc-if>
+
+  <div style="flex:1; min-height:0; display:flex">
+
+    <sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
+      <aside style="flex:0 0 auto; width:266px; height:100%; display:flex; flex-direction:column; background:#FCFAF6; border-right:1px solid #E7DFD1; overflow-y:auto">
+        <div style="padding:26px 22px 20px; border-bottom:1px solid #EFE7DA">
+          <div style="font-family:'Playfair Display',serif; font-size:19px; letter-spacing:.14em; line-height:1.1">CASA DE AURUM</div>
+          <div style="font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:.22em; color:#8B8177; margin-top:6px">STUDIO &amp; SHOWROOM</div>
+        </div>
+        <div style="padding:20px 14px 8px">
+          <div style="font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:.2em; color:#A0968A; padding:0 8px 10px">WORKSPACE</div>
+          <nav style="display:flex; flex-direction:column; gap:3px">
+            <sc-for list="{{ navItems }}" as="item" hint-placeholder-count="4">
+              <button onClick="{{ item.go }}" style="{{ item.fullStyle }}" style-hover="background:#F1EADD">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="{{ item.d }}"></path></svg>
+                <span style="flex:1; text-align:left">{{ item.label }}</span>
+                <sc-if value="{{ item.badge }}" hint-placeholder-val="{{ false }}">
+                  <span style="{{ item.badgeStyle }}">{{ item.badge }}</span>
+                </sc-if>
+              </button>
+            </sc-for>
+          </nav>
+        </div>
+        <div style="padding:14px 22px 8px; margin-top:6px; border-top:1px solid #EFE7DA">
+          <div style="font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:.2em; color:#A0968A; padding:8px 0 12px">ATELIER STATUS</div>
+          <div style="display:flex; flex-direction:column; gap:12px">
+            <div style="display:flex; align-items:baseline; justify-content:space-between; gap:10px">
+              <span style="font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.12em; color:#8B8177">STOCK SYNC</span>
+              <span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#6E5228">99.4% Live</span>
+            </div>
+            <div style="height:4px; border-radius:100px; background:#EFE7DA; overflow:hidden">
+              <div style="width:99%; height:100%; background:linear-gradient(90deg,#8A6A3B,#E3C58E)"></div>
+            </div>
+            <div style="display:flex; align-items:baseline; justify-content:space-between; gap:10px">
+              <span style="font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.12em; color:#8B8177">RENDERS READY</span>
+              <span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#6E5228">3 Pending</span>
+            </div>
+          </div>
+        </div>
+        <div style="margin-top:auto; padding:18px 16px">
+          <div style="display:flex; align-items:center; gap:11px; padding:12px; background:#F4EEE3; border:1px solid #E7DFD1; border-radius:14px">
+            <div style="width:36px; height:36px; flex:0 0 auto; border-radius:50%; background:linear-gradient(150deg,#C09A5E,#8A6A3B); display:grid; place-items:center; font-family:'Playfair Display',serif; font-size:13px; color:#FFF8EC">PS</div>
+            <div style="min-width:0; display:flex; flex-direction:column; gap:2px">
+              <span style="font-size:13px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">Priya Sharma</span>
+              <span style="font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:.14em; color:#8B8177">NEW DELHI SHOWROOM</span>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </sc-if>
+
+    <sc-if value="{{ isTablet }}" hint-placeholder-val="{{ false }}">
+      <aside style="flex:0 0 auto; width:82px; height:100%; display:flex; flex-direction:column; align-items:center; background:#FCFAF6; border-right:1px solid #E7DFD1; padding:18px 0">
+        <div style="font-family:'Playfair Display',serif; font-size:20px; letter-spacing:.06em; padding-bottom:18px; border-bottom:1px solid #EFE7DA; width:100%; text-align:center">CdA</div>
+        <nav style="display:flex; flex-direction:column; gap:6px; padding:16px 10px; width:100%">
+          <sc-for list="{{ navItems }}" as="item" hint-placeholder-count="4">
+            <button onClick="{{ item.go }}" title="{{ item.label }}" style="{{ item.railStyle }}" style-hover="background:#F1EADD">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="{{ item.d }}"></path></svg>
+              <span style="font-family:'JetBrains Mono',monospace; font-size:7.5px; letter-spacing:.1em">{{ item.short }}</span>
+            </button>
+          </sc-for>
+        </nav>
+        <div style="margin-top:auto; width:40px; height:40px; border-radius:50%; background:linear-gradient(150deg,#C09A5E,#8A6A3B); display:grid; place-items:center; font-family:'Playfair Display',serif; font-size:14px; color:#FFF8EC">PS</div>
+      </aside>
+    </sc-if>
+
+    <main ref="{{ mainRef }}" style="flex:1; min-width:0; height:100%; overflow-y:auto; overflow-x:hidden">
+
+      <sc-if value="{{ showTopBar }}" hint-placeholder-val="{{ true }}">
+        <header style="position:sticky; top:0; z-index:15; display:flex; align-items:center; gap:18px; padding:16px clamp(20px,3.2vw,44px); background:rgba(247,243,236,.9); backdrop-filter:blur(12px); border-bottom:1px solid #E7DFD1">
+          <div style="min-width:0; display:flex; flex-direction:column; gap:3px">
+            <span style="font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:.22em; color:#8A6A3B; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">ATELIER STATION · {{ crumb }}</span>
+            <span style="font-family:'Playfair Display',serif; font-size:clamp(20px,2.2vw,26px); line-height:1.15; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">{{ title }}</span>
+          </div>
+          <div style="flex:1; max-width:340px; margin-left:auto; display:flex; align-items:center; gap:9px; padding:0 14px; height:44px; background:#fff; border:1px solid #E7DFD1; border-radius:12px">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#A0968A" stroke-width="1.7" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.6-3.6"></path></svg>
+            <input ref="{{ searchRef }}" value="{{ query }}" onChange="{{ onQuery }}" placeholder="Search specs, clients, surfaces" style="flex:1; min-width:0; border:none; outline:none; background:transparent; font-size:11.5px; letter-spacing:.04em; color:#1A1512" />
+          </div>
+          <button onClick="{{ startWizard }}" style="flex:0 0 auto; display:flex; align-items:center; gap:9px; height:44px; padding:0 18px; background:#1A1512; color:#FBF6EC; border:none; border-radius:12px; cursor:pointer; font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.16em" style-hover="background:#33291F">
+            <span style="width:5px; height:5px; border-radius:50%; background:#E3C58E"></span>NEW MOOD BOARD
+          </button>
+          <div style="position:relative; width:40px; height:40px; flex:0 0 auto">
+            <div style="width:40px; height:40px; border-radius:50%; background:linear-gradient(150deg,#C09A5E,#8A6A3B); display:grid; place-items:center; font-family:'Playfair Display',serif; font-size:14px; color:#FFF8EC">PS</div>
+            <span style="position:absolute; right:0; bottom:0; width:10px; height:10px; border-radius:50%; background:#B4762A; border:2px solid #F7F3EC"></span>
+          </div>
+        </header>
+      </sc-if>
+
+      <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex; align-items:center; gap:10px; padding:14px 16px 0">
+          <div style="flex:1; min-width:0; display:flex; align-items:center; gap:9px; padding:0 13px; height:44px; background:#fff; border:1px solid #E7DFD1; border-radius:12px">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#A0968A" stroke-width="1.7" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.6-3.6"></path></svg>
+            <input ref="{{ searchRef }}" value="{{ query }}" onChange="{{ onQuery }}" placeholder="Search specs, clients" style="flex:1; min-width:0; border:none; outline:none; background:transparent; font-size:11.5px; color:#1A1512" />
+          </div>
+        </div>
+      </sc-if>
+
+      <div style="max-width:1320px; margin:0 auto; padding:clamp(18px,2.6vw,34px) clamp(16px,3.2vw,44px) clamp(60px,8vw,88px)">
+
+        <sc-if value="{{ atDashboard }}" hint-placeholder-val="{{ true }}">
+          <section style="animation:cdaFade .35s ease both">
+            <div style="display:flex; align-items:center; gap:9px; font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.2em; color:#8A6A3B">
+              <span style="width:6px; height:6px; border-radius:50%; background:#8A6A3B"></span>SHOWROOM WORKSPACE · NEW DELHI
+            </div>
+            <h1 style="font-family:'Playfair Display',serif; font-weight:600; font-size:clamp(30px,4.4vw,50px); line-height:1.05; letter-spacing:-.01em; margin:14px 0 0">Welcome back, Priya</h1>
+            <p style="max-width:620px; margin:12px 0 0; font-size:clamp(14px,1.15vw,16.5px); line-height:1.55; color:#5B5147; text-wrap:pretty">Curate bespoke architectural surface palettes and AI-rendered client scenes in seconds.</p>
+
+            <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(180px,100%),1fr)); gap:1px; margin-top:clamp(20px,2.4vw,30px); background:#E7DFD1; border:1px solid #E7DFD1; border-radius:16px; overflow:hidden">
+              <sc-for list="{{ stats }}" as="s" hint-placeholder-count="3">
+                <div style="background:#F4EEE3; padding:18px 20px; display:flex; flex-direction:column; gap:8px">
+                  <span style="font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:.18em; color:#8B8177">{{ s.label }}</span>
+                  <span style="{{ s.valueStyle }}">{{ s.value }}</span>
+                </div>
+              </sc-for>
+            </div>
+
+            <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr)); gap:clamp(14px,1.6vw,20px); margin-top:clamp(16px,1.8vw,22px)">
+              <article style="grid-column:1/-1; background:#fff; border:1px solid #E7DFD1; border-radius:20px; overflow:hidden; display:grid; grid-template-columns:repeat(auto-fit,minmax(min(320px,100%),1fr))">
+                <div style="position:relative; min-height:clamp(230px,26vw,340px); overflow:hidden">
+                  <img src="img/board-warm-minimal.png" alt="Bathroom elevation render" style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover" />
+                  <span style="position:absolute; top:16px; left:16px; font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:.16em; background:#FBF7EF; color:#1A1512; padding:8px 12px; border-radius:8px; border:1px solid #E7DFD1">SURFACE &amp; TILE VISUALIZER</span>
+                  <span style="position:absolute; bottom:16px; left:16px; font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:.14em; background:rgba(26,21,18,.7); color:#FBF6EC; padding:6px 10px; border-radius:6px">BATHROOM_TEMPLATE_01 · FRONT VIEW</span>
+                </div>
+                <div style="padding:clamp(22px,2.4vw,34px); display:flex; flex-direction:column; gap:14px">
+                  <h2 style="font-family:'Playfair Display',serif; font-weight:600; font-size:clamp(24px,2.6vw,34px); line-height:1.1; margin:0">Mood Board Generator</h2>
+                  <p style="margin:0; font-size:14.5px; line-height:1.55; color:#5B5147; text-wrap:pretty">Translate client briefs into 4 photorealistic showroom tile compositions with live stock validation.</p>
+                  <div style="display:flex; align-items:center; gap:10px; padding:12px 14px; background:#F4EEE3; border-radius:12px; font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:.14em; color:#6E5228; line-height:1.7">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#8A6A3B" stroke-width="1.6" stroke-linecap="round" style="flex:0 0 auto"><path d="M5 19 19 5M14 4h6v6"></path></svg>
+                    <span>7 GUIDED STEPS · FIXED ROOM TEMPLATES · ZERO GUESSWORK</span>
+                  </div>
+                  <button onClick="{{ startWizard }}" style="margin-top:auto; display:flex; align-items:center; gap:12px; width:100%; min-height:56px; padding:0 22px; background:#1A1512; color:#FBF6EC; border:none; border-radius:14px; cursor:pointer; font-family:'JetBrains Mono',monospace; font-size:11.5px; letter-spacing:.16em" style-hover="background:#33291F">
+                    <span style="width:6px; height:6px; border-radius:50%; background:#E3C58E"></span>
+                    <span style="flex:1; text-align:left">CREATE A NEW MOOD BOARD</span>
+                    <span style="font-size:14px">→</span>
+                  </button>
+                </div>
+              </article>
+
+              <article style="background:#fff; border:1px solid #E7DFD1; border-radius:20px; padding:clamp(20px,2vw,26px); display:flex; flex-direction:column; gap:14px">
+                <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:14px">
+                  <div>
+                    <div style="font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:.18em; color:#8B8177">CURATED ARCHIVES</div>
+                    <h3 style="font-family:'Playfair Display',serif; font-weight:600; font-size:clamp(21px,2vw,27px); margin:8px 0 0; line-height:1.15">Design Ideas &amp; Collections</h3>
+                  </div>
+                  <div style="width:42px; height:42px; flex:0 0 auto; border-radius:12px; background:#F4EEE3; display:grid; place-items:center">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8A6A3B" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4h9a3 3 0 0 1 3 3v9M5 8h9a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3z"></path></svg>
+                  </div>
+                </div>
+                <p style="margin:0; font-size:14px; line-height:1.55; color:#5B5147">Explore trending curated palettes: Japandi Wabi-Sabi, Travertine Minimalist, Modern Slate.</p>
+                <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:8px">
+                  <sc-for list="{{ collections }}" as="c" hint-placeholder-count="3">
+                    <button onClick="{{ c.open }}" style="position:relative; height:80px; padding:0; border:none; border-radius:10px; overflow:hidden; cursor:pointer; background:#EFE7DA" style-hover="opacity:.92">
+                      <sc-if value="{{ c.img }}" hint-placeholder-val="{{ false }}"><img src="{{ c.img }}" alt="{{ c.name }}" loading="lazy" decoding="async" style="width:100%; height:100%; object-fit:cover; display:block" /></sc-if>
+                      <span style="position:absolute; left:7px; bottom:7px; font-family:'JetBrains Mono',monospace; font-size:8.5px; letter-spacing:.08em; background:rgba(26,21,18,.75); color:#FBF6EC; padding:4px 6px; border-radius:5px">{{ c.tag }}</span>
+                    </button>
+                  </sc-for>
+                </div>
+                <button onClick="{{ go.catalog }}" style="margin-top:auto; display:flex; align-items:center; gap:10px; background:transparent; border:none; padding:6px 0 0; cursor:pointer; font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.16em; color:#6E5228" style-hover="color:#1A1512">EXPLORE CATALOG <span style="font-size:14px">→</span></button>
+              </article>
+
+              <article style="background:#fff; border:1px solid #E7DFD1; border-radius:20px; padding:clamp(20px,2vw,26px); display:flex; flex-direction:column; gap:14px">
+                <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:14px">
+                  <div>
+                    <div style="font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:.18em; color:#8B8177">CLIENT PROOFS</div>
+                    <h3 style="font-family:'Playfair Display',serif; font-weight:600; font-size:clamp(21px,2vw,27px); margin:8px 0 0; line-height:1.15">Saved Mood Boards</h3>
+                  </div>
+                  <span style="font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.12em; background:#F7DFBB; color:#6E5228; padding:7px 12px; border-radius:100px; white-space:nowrap">18 Active</span>
+                </div>
+                <p style="margin:0; font-size:14px; line-height:1.55; color:#5B5147">18 active client boards awaiting client review or print approval.</p>
+                <div style="display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap; margin-top:auto">
+                  <div style="display:flex; align-items:center">
+                    <sc-for list="{{ avatars }}" as="a" hint-placeholder-count="4">
+                      <span style="{{ a.style }}">{{ a.initials }}</span>
+                    </sc-for>
+                  </div>
+                  <button onClick="{{ go.projects }}" style="display:flex; align-items:center; gap:10px; background:transparent; border:none; padding:0; cursor:pointer; font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.16em; color:#6E5228" style-hover="color:#1A1512">VIEW SAVED (18) <span style="font-size:14px">→</span></button>
+                </div>
+              </article>
+            </div>
+
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:16px; margin:clamp(30px,3.4vw,44px) 0 16px">
+              <h2 style="display:flex; align-items:center; gap:12px; font-family:'Playfair Display',serif; font-weight:600; font-size:clamp(22px,2.3vw,30px); margin:0">
+                <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#8A6A3B" stroke-width="1.6" stroke-linecap="round"><path d="M12 8v4l3 2M3 12a9 9 0 1 0 3-6.7L3 8m0-5v5h5"></path></svg>
+                Recent Client Sessions
+              </h2>
+              <button onClick="{{ go.projects }}" style="background:transparent; border:none; cursor:pointer; font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.18em; color:#8B8177" style-hover="color:#1A1512">TODAY · VIEW ALL</button>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:8px">
+              <sc-for list="{{ recentSessions }}" as="s" hint-placeholder-count="3">
+                <button onClick="{{ s.open }}" style="{{ s.rowStyle }}" style-hover="background:#EFE7DA; border-color:#E1D5BF">
+                  <span style="width:44px; height:44px; flex:0 0 auto; border-radius:12px; background:#E3D8C4; display:grid; place-items:center">
+                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#6E5228" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="{{ s.d }}"></path></svg>
+                  </span>
+                  <span style="flex:1; min-width:0; display:flex; flex-direction:column; gap:4px">
+                    <span style="font-family:'Playfair Display',serif; font-size:16.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">{{ s.client }}</span>
+                    <span style="font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.1em; color:#8B8177; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">{{ s.meta }}</span>
+                  </span>
+                  <span style="{{ s.pillStyle }}">{{ s.status }}</span>
+                  <span style="color:#A0968A; font-size:15px">›</span>
+                </button>
+              </sc-for>
+            </div>
+
+            <sc-if value="{{ tipsOn }}" hint-placeholder-val="{{ true }}">
+              <div style="display:flex; gap:14px; margin-top:clamp(18px,2vw,26px); padding:18px 20px; background:#F4EEE3; border:1px dashed #D8C9AE; border-radius:16px">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8A6A3B" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto; margin-top:2px"><path d="M6 3h12l3 6-9 12L3 9z"></path></svg>
+                <div>
+                  <div style="font-size:13.5px; font-weight:500; letter-spacing:.02em">Material Atelier Tip</div>
+                  <p style="margin:6px 0 0; font-size:13.5px; line-height:1.55; color:#5B5147; text-wrap:pretty">Double tap any physical swatch in the showroom to beam specular reflections straight to client renders.</p>
+                </div>
+              </div>
+            </sc-if>
+          </section>
+        </sc-if>
+
+                <sc-if value="{{ atWizard }}" hint-placeholder-val="{{ false }}">
+          <section style="animation:cdaFade .35s ease both">
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap">
+              <div style="display:flex; align-items:center; gap:9px; font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.18em; color:#8A6A3B">
+                <span style="width:6px; height:6px; border-radius:50%; background:#8A6A3B"></span>STEP {{ stepNo }} OF 7 · {{ stepKey }}
+              </div>
+              <span style="font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.14em; color:#8B8177">{{ pct }}% Complete</span>
+            </div>
+            <div style="height:5px; border-radius:100px; background:#E7DFD1; margin-top:12px; overflow:hidden">
+              <div style="{{ stepBarStyle }}"></div>
+            </div>
+            <div style="display:flex; gap:8px; margin-top:14px; overflow-x:auto; padding-bottom:6px">
+              <sc-for list="{{ steps }}" as="st" hint-placeholder-count="7">
+                <button onClick="{{ st.go }}" style="{{ st.style }}" style-hover="border-color:#C7B393">{{ st.label }}</button>
+              </sc-for>
+            </div>
+
+            <div style="display:flex; align-items:center; gap:14px; margin-top:clamp(22px,2.6vw,34px)">
+              <span style="font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:.2em; color:#8B8177; white-space:nowrap">{{ stepEyebrow }}</span>
+              <span style="flex:1; height:1px; background:#E7DFD1"></span>
+            </div>
+            <h1 style="font-family:'Playfair Display',serif; font-weight:600; font-size:clamp(28px,3.8vw,44px); line-height:1.08; margin:14px 0 0">{{ stepTitle }}</h1>
+            <p style="max-width:660px; margin:12px 0 0; font-size:clamp(14px,1.1vw,16px); line-height:1.55; color:#5B5147; text-wrap:pretty">{{ stepSub }}</p>
+
+            <sc-if value="{{ isStep1 }}" hint-placeholder-val="{{ true }}">
+              <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(255px,100%),1fr)); gap:clamp(12px,1.4vw,18px); margin-top:clamp(18px,2vw,26px)">
+                <sc-for list="{{ rooms }}" as="r" hint-placeholder-count="6">
+                  <button onClick="{{ r.pick }}" style="{{ r.cardStyle }}" style-hover="border-color:#C7B393; transform:translateY(-2px)">
+                    <span style="{{ r.imgWrap }}">
+                      <sc-if value="{{ r.img }}" hint-placeholder-val="{{ false }}">
+                        <img src="{{ r.img }}" alt="{{ r.name }}" style="width:100%; height:100%; object-fit:cover; display:block" loading="lazy" decoding="async" />
+                      </sc-if>
+                      <span style="position:absolute; left:12px; bottom:12px; font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:.12em; background:rgba(26,21,18,.75); color:#FBF6EC; padding:5px 8px; border-radius:6px">{{ r.badge }}</span>
+                      <sc-if value="{{ r.selected }}" hint-placeholder-val="{{ false }}">
+                        <span style="position:absolute; top:12px; right:12px; width:28px; height:28px; border-radius:50%; background:#1A1512; color:#FBF6EC; display:grid; place-items:center; font-size:13px">✓</span>
+                      </sc-if>
+                    </span>
+                    <span style="display:flex; flex-direction:column; gap:6px; padding:16px 18px 18px">
+                      <span style="font-family:'Playfair Display',serif; font-size:20px; line-height:1.15">{{ r.name }}</span>
+                      <span style="font-size:13px; line-height:1.5; color:#5B5147">{{ r.desc }}</span>
+                    </span>
+                  </button>
+                </sc-for>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ isStep2 }}" hint-placeholder-val="{{ false }}">
+              <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr)); gap:clamp(14px,1.6vw,20px); margin-top:clamp(18px,2vw,26px)">
+                <div style="position:relative; min-height:260px; border-radius:18px; overflow:hidden; border:1px solid #E7DFD1">
+                  <sc-if value="{{ roomImg }}" hint-placeholder-val="{{ false }}"><img src="{{ roomImg }}" alt="{{ room }} template" style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover" loading="lazy" decoding="async" /></sc-if>
+                  <span style="position:absolute; left:14px; top:14px; font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:.14em; background:rgba(26,21,18,.75); color:#FBF6EC; padding:6px 10px; border-radius:6px">{{ room }} · LIVE TEMPLATE</span>
+                  <span style="position:absolute; left:14px; bottom:14px; font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:.14em; background:#FBF7EF; color:#1A1512; padding:6px 10px; border-radius:6px; border:1px solid #E7DFD1">FEATURE: {{ feature }}</span>
+                </div>
+                <div style="display:flex; flex-direction:column; gap:12px">
+                  <sc-for list="{{ features }}" as="f" hint-placeholder-count="3">
+                    <button onClick="{{ f.pick }}" style="{{ f.rowStyle }}" style-hover="border-color:#C7B393">
+                      <span style="{{ f.dotStyle }}"></span>
+                      <span style="flex:1; min-width:0; text-align:left">
+                        <span style="display:block; font-family:'JetBrains Mono',monospace; font-size:10.5px; letter-spacing:.14em">{{ f.label }}</span>
+                        <span style="display:block; font-size:13px; color:#5B5147; margin-top:6px; line-height:1.5">{{ f.desc }}</span>
+                      </span>
+                    </button>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ isStep3 }}" hint-placeholder-val="{{ false }}">
+              <div style="margin-top:clamp(18px,2vw,26px)">
+                <div style="display:flex; align-items:baseline; justify-content:space-between; gap:16px; flex-wrap:wrap">
+                  <span style="font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:.16em; color:#8B8177">FLOOR TILE DIMENSION</span>
+                  <span style="font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.1em; color:#8A6A3B">Honed Matte Recommended</span>
+                </div>
+                <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:12px">
+                  <sc-for list="{{ sizes }}" as="z" hint-placeholder-count="3">
+                    <button onClick="{{ z.pick }}" style="{{ z.style }}" style-hover="border-color:#C7B393">{{ z.label }}</button>
+                  </sc-for>
+                </div>
+                <div style="font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:.16em; color:#8B8177; margin-top:26px">SURFACE FINISH</div>
+                <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(210px,100%),1fr)); gap:12px; margin-top:12px">
+                  <sc-for list="{{ finishes }}" as="f" hint-placeholder-count="3">
+                    <button onClick="{{ f.pick }}" style="{{ f.cardStyle }}" style-hover="border-color:#C7B393">
+                      <sc-if value="{{ f.img }}" hint-placeholder-val="{{ false }}"><img src="{{ f.img }}" alt="{{ f.label }}" style="width:56px; height:56px; border-radius:12px; object-fit:cover; flex:0 0 auto" loading="lazy" decoding="async" /></sc-if>
+                      <span style="flex:1; min-width:0; text-align:left">
+                        <span style="display:block; font-size:14px; font-weight:500">{{ f.label }}</span>
+                        <span style="display:block; font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:.1em; color:#8B8177; margin-top:6px; line-height:1.5">{{ f.spec }}</span>
+                      </span>
+                    </button>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ isStep4 }}" hint-placeholder-val="{{ false }}">
+              <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(250px,100%),1fr)); gap:clamp(12px,1.4vw,16px); margin-top:clamp(18px,2vw,26px)">
+                <sc-for list="{{ budgets }}" as="b" hint-placeholder-count="3">
+                  <button onClick="{{ b.pick }}" style="{{ b.cardStyle }}" style-hover="border-color:#C7B393; transform:translateY(-2px)">
+                    <span style="display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%">
+                      <span style="font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:.16em; color:#8A6A3B">{{ b.tier }}</span>
+                      <sc-if value="{{ b.selected }}" hint-placeholder-val="{{ false }}">
+                        <span style="width:22px; height:22px; border-radius:50%; background:#1A1512; color:#FBF6EC; display:grid; place-items:center; font-size:11px">✓</span>
+                      </sc-if>
+                    </span>
+                    <span style="display:block; font-family:'Playfair Display',serif; font-size:26px; margin-top:12px">{{ b.range }}</span>
+                    <span style="display:block; font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:.12em; color:#8B8177; margin-top:6px">PER SQ FT · SUPPLY ONLY</span>
+                    <span style="display:block; font-size:13.5px; color:#5B5147; margin-top:12px; line-height:1.55; text-align:left">{{ b.desc }}</span>
+                  </button>
+                </sc-for>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ isStep5 }}" hint-placeholder-val="{{ false }}">
+              <div style="margin-top:clamp(18px,2vw,26px)">
+                <div style="font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:.16em; color:#8B8177">PALETTE TEMPERATURE</div>
+                <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(230px,100%),1fr)); gap:12px; margin-top:12px">
+                  <sc-for list="{{ palettes }}" as="p" hint-placeholder-count="3">
+                    <button onClick="{{ p.pick }}" style="{{ p.cardStyle }}" style-hover="border-color:#C7B393">
+                      <span style="display:flex; gap:5px; width:100%">
+                        <sc-for list="{{ p.swatches }}" as="sw" hint-placeholder-count="4">
+                          <span style="{{ sw.style }}"></span>
+                        </sc-for>
+                      </span>
+                      <span style="display:block; font-size:14px; font-weight:500; margin-top:14px; text-align:left">{{ p.label }}</span>
+                      <span style="display:block; font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:.1em; color:#8B8177; margin-top:6px; text-align:left; line-height:1.5">{{ p.spec }}</span>
+                    </button>
+                  </sc-for>
+                </div>
+                <div style="font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:.16em; color:#8B8177; margin-top:26px">GROUT TONE</div>
+                <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:12px">
+                  <sc-for list="{{ grouts }}" as="g" hint-placeholder-count="3">
+                    <button onClick="{{ g.pick }}" style="{{ g.style }}" style-hover="border-color:#C7B393">{{ g.label }}</button>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ isStep6 }}" hint-placeholder-val="{{ false }}">
+              <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr)); gap:clamp(14px,1.6vw,20px); margin-top:clamp(18px,2vw,26px)">
+                <div style="background:#fff; border:1px solid #E7DFD1; border-radius:18px; overflow:hidden">
+                  <div style="display:flex; flex-direction:column; gap:1px; background:#E7DFD1">
+                    <sc-for list="{{ summary }}" as="s" hint-placeholder-count="8">
+                      <div style="display:flex; gap:12px; align-items:baseline; background:#fff; padding:14px 18px">
+                        <span style="width:106px; flex:0 0 auto; font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:.14em; color:#8B8177">{{ s.k }}</span>
+                        <span style="flex:1; min-width:0; font-size:13.5px; color:#2E271F; line-height:1.5">{{ s.v }}</span>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+                <div style="display:flex; flex-direction:column; gap:14px">
+                  <div style="position:relative; min-height:200px; flex:1; border-radius:18px; overflow:hidden; border:1px solid #E7DFD1">
+                    <sc-if value="{{ roomImg }}" hint-placeholder-val="{{ false }}"><img src="{{ roomImg }}" alt="{{ room }} template" style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover" loading="lazy" decoding="async" /></sc-if>
+                  </div>
+                  <div style="display:flex; gap:12px; align-items:flex-start; padding:16px 18px; background:#1A1512; border-radius:14px">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#E3C58E" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto; margin-top:2px"><path d="m7 8 4 4-4 4M13 16h4"></path></svg>
+                    <div style="min-width:0">
+                      <div style="font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.16em; color:#E3C58E">ATELIER INTELLIGENT LAYOUT SYSTEM</div>
+                      <div style="font-family:'JetBrains Mono',monospace; font-size:10.5px; letter-spacing:.06em; color:#C7BCAA; margin-top:7px; line-height:1.6; word-break:break-word">DNA: {{ dna }}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ isStep7 }}" hint-placeholder-val="{{ false }}">
+              <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(230px,100%),1fr)); gap:clamp(12px,1.4vw,16px); margin-top:clamp(18px,2vw,26px)">
+                <sc-for list="{{ views }}" as="v" hint-placeholder-count="3">
+                  <button onClick="{{ v.pick }}" style="{{ v.cardStyle }}" style-hover="border-color:#C7B393; transform:translateY(-2px)">
+                    <span style="position:relative; display:block; width:100%; height:150px; overflow:hidden; border-radius:14px">
+                      <sc-if value="{{ v.img }}" hint-placeholder-val="{{ false }}"><img src="{{ v.img }}" alt="{{ v.label }}" style="width:100%; height:100%; object-fit:cover; display:block; {{ v.imgFx }}" loading="lazy" decoding="async" /></sc-if>
+                      <sc-if value="{{ v.selected }}" hint-placeholder-val="{{ false }}">
+                        <span style="position:absolute; top:10px; right:10px; width:26px; height:26px; border-radius:50%; background:#1A1512; color:#FBF6EC; display:grid; place-items:center; font-size:12px">✓</span>
+                      </sc-if>
+                    </span>
+                    <span style="display:block; font-family:'JetBrains Mono',monospace; font-size:10.5px; letter-spacing:.14em; margin-top:14px; text-align:left">{{ v.label }}</span>
+                    <span style="display:block; font-size:13px; color:#5B5147; margin-top:6px; text-align:left; line-height:1.5">{{ v.desc }}</span>
+                  </button>
+                </sc-for>
+              </div>
+              <div style="display:flex; gap:14px; align-items:center; margin-top:16px; padding:16px 18px; background:#fff; border:1px solid #E7DFD1; border-radius:16px">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8A6A3B" stroke-width="1.5" stroke-linecap="round" style="flex:0 0 auto"><path d="M12 4v2M12 6 7 20M12 6l5 14"></path><circle cx="12" cy="4" r="1.6"></circle></svg>
+                <div style="flex:1; min-width:0">
+                  <div style="font-family:'Playfair Display',serif; font-size:16px">Curated Wet Zone Spec</div>
+                  <div style="font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.1em; color:#8B8177; margin-top:5px; line-height:1.6">Includes Anti-Bacterial Waterproof Grout</div>
+                </div>
+                <span style="font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.12em; color:#8A6A3B; white-space:nowrap">Ready</span>
+              </div>
+            </sc-if>
+
+            <div style="position:sticky; bottom:0; display:flex; gap:12px; flex-wrap:wrap; margin-top:22px; padding:16px 0 8px; background:linear-gradient(180deg,rgba(247,243,236,0),#F7F3EC 34%)">
+              <button onClick="{{ prevStep }}" style="min-height:56px; padding:0 22px; background:#fff; color:#1A1512; border:1px solid #E7DFD1; border-radius:14px; cursor:pointer; font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.16em" style-hover="background:#F1EADD">← {{ backLabel }}</button>
+              <button onClick="{{ nextStep }}" style="flex:1; min-width:240px; display:flex; align-items:center; gap:12px; min-height:56px; padding:0 22px; background:#1A1512; color:#FBF6EC; border:none; border-radius:14px; cursor:pointer; font-family:'JetBrains Mono',monospace; font-size:11.5px; letter-spacing:.16em" style-hover="background:#33291F">
+                <span style="width:6px; height:6px; border-radius:50%; background:#E3C58E"></span>
+                <span style="flex:1; text-align:left">{{ nextLabel }}</span>
+                <span style="font-size:14px">→</span>
+              </button>
+            </div>
+          </section>
+        </sc-if>
+
+                <sc-if value="{{ atGenerating }}" hint-placeholder-val="{{ false }}">
+          <section style="animation:cdaFade .35s ease both; max-width:760px; margin:0 auto">
+            <div style="background:#1A1512; border-radius:24px; padding:clamp(24px,3vw,40px); text-align:center">
+              <div style="width:96px; height:96px; margin:0 auto; border-radius:50%; border:1px dashed #6B5A42; display:grid; place-items:center; animation:cdaSpin 16s linear infinite">
+                <div style="width:62px; height:62px; border-radius:16px; background:#3A2F24; display:grid; place-items:center; font-size:26px; color:#E3C58E; animation:cdaPulse 2.4s ease-in-out infinite">✦</div>
+              </div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.24em; color:#B08F5C; margin-top:22px">● STUDIO &amp; SHOWROOM ●</div>
+              <div style="font-family:'Playfair Display',serif; font-weight:700; font-size:clamp(28px,4vw,44px); letter-spacing:.04em; color:#FBF6EC; margin-top:10px">CASA DE AURUM</div>
+              <div style="font-family:'Playfair Display',serif; font-style:italic; font-size:clamp(18px,2.2vw,26px); color:#E3C58E; margin-top:6px">Synthesizing Your Mood Boards…</div>
+
+              <div style="margin-top:26px; padding:18px 20px; background:#26201A; border-radius:14px; text-align:left">
+                <div style="display:flex; align-items:baseline; justify-content:space-between; gap:14px; flex-wrap:wrap">
+                  <span style="font-family:'JetBrains Mono',monospace; font-size:10.5px; letter-spacing:.16em; color:#C7BCAA">ARCHITECTURAL RENDER PIPELINE</span>
+                  <span style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#FBF6EC">Estimated: {{ eta }}</span>
+                </div>
+                <div style="position:relative; height:8px; border-radius:100px; background:#4A4038; margin-top:14px; overflow:hidden">
+                  <div style="{{ barStyle }}"></div>
+                  <div style="position:absolute; top:0; bottom:0; left:0; width:38%; background:linear-gradient(90deg,rgba(255,240,210,0),rgba(255,240,210,.45),rgba(255,240,210,0)); animation:cdaSheen 1.7s linear infinite"></div>
+                </div>
+              </div>
+
+              <div style="display:flex; flex-direction:column; gap:12px; margin-top:14px; text-align:left">
+                <sc-for list="{{ pipeline }}" as="p" hint-placeholder-count="3">
+                  <div style="{{ p.rowStyle }}">
+                    <span style="{{ p.dotStyle }}">{{ p.mark }}</span>
+                    <span style="flex:1; min-width:0">
+                      <span style="display:flex; align-items:baseline; justify-content:space-between; gap:12px">
+                        <span style="font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.16em; color:#B08F5C">{{ p.part }}</span>
+                        <span style="font-family:'JetBrains Mono',monospace; font-size:10.5px; color:#C7BCAA; white-space:nowrap">{{ p.state }}</span>
+                      </span>
+                      <span style="display:block; font-size:15.5px; font-weight:500; color:#FBF6EC; margin-top:6px">{{ p.title }}</span>
+                      <span style="display:block; font-size:13px; color:#9C9184; margin-top:4px; line-height:1.5">{{ p.detail }}</span>
+                    </span>
+                  </div>
+                </sc-for>
+              </div>
+
+              <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:9px; margin-top:14px">
+                <sc-for list="{{ renderTiles }}" as="t" hint-placeholder-count="4">
+                  <div style="{{ t.style }}">
+                    <sc-if value="{{ t.done }}" hint-placeholder-val="{{ false }}">
+                      <img src="{{ t.img }}" alt="Render preview" style="width:100%; height:100%; object-fit:cover; display:block; animation:cdaReveal .5s ease both" loading="lazy" decoding="async" />
+                    </sc-if>
+                    <sc-if value="{{ t.pending }}" hint-placeholder-val="{{ true }}">
+                      <span style="{{ t.skeletonStyle }}"></span>
+                    </sc-if>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.14em; color:#8A7F70; margin-top:18px; line-height:1.8">ENFORCING REAL INVENTORY · FIXED PERSPECTIVE · ZERO SYNTHETIC HALLUCINATIONS</div>
+            </div>
+
+            <div style="margin-top:14px; padding:20px 22px; background:#fff; border:1px solid #E7DFD1; border-radius:20px">
+              <div style="display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap">
+                <span style="display:flex; align-items:center; gap:10px; font-family:'JetBrains Mono',monospace; font-size:10.5px; letter-spacing:.2em">
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#8A6A3B" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 5 6v5c0 5 3.5 8 7 10 3.5-2 7-5 7-10V6z"></path></svg>
+                  ATELIER INTEGRITY
+                </span>
+                <span style="font-family:'JetBrains Mono',monospace; font-size:11.5px; color:#8A6A3B">Batch #CDA-9824</span>
+              </div>
+              <p style="margin:14px 0 0; font-size:14.5px; line-height:1.6; color:#5B5147; text-wrap:pretty">Every concept is mapped to physical slabs preserved in our Milanese and Lisbon distribution vaults, ensuring absolute constructibility.</p>
+            </div>
+
+            <button onClick="{{ skipGenerating }}" style="display:block; margin:16px auto 0; background:transparent; border:none; cursor:pointer; font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.18em; color:#8B8177" style-hover="color:#1A1512">SKIP ANIMATION →</button>
+          </section>
+        </sc-if>
+
+        <sc-if value="{{ atError }}" hint-placeholder-val="{{ false }}">
+          <section style="animation:cdaPop .35s ease both; max-width:600px; margin:0 auto">
+            <div style="background:#fff; border:1px solid #E1CFC0; border-radius:22px; padding:clamp(24px,3vw,38px); text-align:center">
+              <div style="width:64px; height:64px; margin:0 auto; border-radius:50%; background:#FBEDE2; display:grid; place-items:center">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#A8552A" stroke-width="1.7" stroke-linecap="round"><path d="M12 8v5M12 16.5v.5M10.3 4 3.4 17a1.6 1.6 0 0 0 1.4 2.4h14.4A1.6 1.6 0 0 0 20.6 17L13.7 4a1.6 1.6 0 0 0-2.8 0z"></path></svg>
+              </div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.2em; color:#A8552A; margin-top:20px">RENDER PIPELINE INTERRUPTED</div>
+              <h2 style="font-family:'Playfair Display',serif; font-weight:600; font-size:clamp(24px,3vw,34px); margin:12px 0 0; line-height:1.15">Two surfaces went out of stock</h2>
+              <p style="margin:12px 0 0; font-size:14.5px; line-height:1.6; color:#5B5147; text-wrap:pretty">Part 02 could not verify Calacatta Silk 600×1200 against the Lisbon vault. Your design DNA is saved — retry to re-match against in-stock equivalents.</p>
+              <div style="display:flex; flex-direction:column; gap:1px; background:#E7DFD1; border:1px solid #E7DFD1; border-radius:12px; overflow:hidden; margin-top:20px; text-align:left">
+                <div style="display:flex; gap:10px; background:#F4EEE3; padding:12px 14px; font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.08em; color:#5B5147"><span style="width:74px; flex:0 0 auto; color:#8B8177">CODE</span><span>ERR_STOCK_MISMATCH_02</span></div>
+                <div style="display:flex; gap:10px; background:#F4EEE3; padding:12px 14px; font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.08em; color:#5B5147"><span style="width:74px; flex:0 0 auto; color:#8B8177">BATCH</span><span>#CDA-9824</span></div>
+              </div>
+              <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(200px,100%),1fr)); gap:10px; margin-top:20px">
+                <button onClick="{{ retry }}" style="display:flex; align-items:center; justify-content:center; gap:10px; min-height:54px; padding:0 18px; background:#1A1512; color:#FBF6EC; border:none; border-radius:13px; cursor:pointer; font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.14em" style-hover="background:#33291F">↻ RETRY RENDER</button>
+                <button onClick="{{ startWizard }}" style="display:flex; align-items:center; justify-content:center; gap:10px; min-height:54px; padding:0 18px; background:#fff; color:#1A1512; border:1px solid #E7DFD1; border-radius:13px; cursor:pointer; font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.14em" style-hover="background:#F1EADD">◇ EDIT DESIGN DNA</button>
+              </div>
+            </div>
+          </section>
+        </sc-if>
+
+        <sc-if value="{{ atResults }}" hint-placeholder-val="{{ false }}">
+          <section style="animation:cdaFade .35s ease both">
+            <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:14px; flex-wrap:wrap">
+              <div style="font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.18em; color:#8B8177; line-height:1.8">ARCHITECTURAL SPEC v2.4</div>
+              <span style="font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.1em; background:#F7DFBB; color:#6E5228; padding:8px 13px; border-radius:10px">DNA #CDA-BATH-2026-09</span>
+            </div>
+            <h1 style="font-family:'Playfair Display',serif; font-weight:600; font-size:clamp(28px,3.8vw,44px); line-height:1.08; margin:10px 0 0">4 Curated Mood Boards</h1>
+            <p style="max-width:700px; margin:12px 0 0; font-size:clamp(13.5px,1.1vw,15.5px); line-height:1.6; color:#5B5147">{{ specLine }}</p>
+            <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:16px">
+              <span style="display:flex; align-items:center; gap:9px; font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:.14em; color:#6E5228; background:#F4EEE3; border:1px solid #E7DFD1; padding:9px 13px; border-radius:10px">◈ DETERMINISTIC MATCHING ACTIVE</span>
+              <span style="display:flex; align-items:center; gap:9px; font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:.14em; color:#6E5228; background:#F4EEE3; border:1px solid #E7DFD1; padding:9px 13px; border-radius:10px">◷ 4 CONCEPTS READY</span>
+            </div>
+
+            <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(340px,100%),1fr)); gap:clamp(14px,1.6vw,20px); margin-top:clamp(20px,2.4vw,30px)">
+              <sc-for list="{{ boards }}" as="b" hint-placeholder-count="4">
+                <article style="{{ b.cardStyle }}">
+                  <div style="{{ b.stripStyle }}">
+                    <span>{{ b.part }}</span>
+                    <span style="opacity:.82">{{ b.tone }}</span>
+                  </div>
+                  <div style="padding:clamp(18px,1.8vw,24px); display:flex; flex-direction:column; gap:12px; flex:1">
+                    <div style="display:flex; align-items:baseline; justify-content:space-between; gap:14px">
+                      <h3 style="font-family:'Playfair Display',serif; font-weight:600; font-size:clamp(21px,2vw,26px); margin:0; line-height:1.15">{{ b.name }}</h3>
+                      <span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#6E5228; white-space:nowrap">Est. {{ b.price }}</span>
+                    </div>
+                    <p style="margin:0; font-size:14px; line-height:1.55; color:#5B5147; text-wrap:pretty">{{ b.desc }}</p>
+                    <button onClick="{{ b.open }}" style="{{ b.imgStyle }}" style-hover="opacity:.93">
+                      <sc-if value="{{ b.img }}" hint-placeholder-val="{{ false }}"><img src="{{ b.img }}" alt="{{ b.elevation }}" style="width:100%; height:100%; object-fit:cover; display:block" loading="lazy" decoding="async" /></sc-if>
+                      <span style="position:absolute; left:12px; bottom:12px; font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:.1em; background:rgba(26,21,18,.75); color:#FBF6EC; padding:6px 9px; border-radius:6px">⛶ {{ b.elevation }}</span>
+                      <span style="position:absolute; right:12px; bottom:12px; width:34px; height:34px; border-radius:50%; background:rgba(251,246,236,.92); border:1px solid #E7DFD1; display:grid; place-items:center; font-size:13px; color:#1A1512">⤢</span>
+                    </button>
+                    <div style="font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:.18em; color:#8B8177; margin-top:2px">SPECIFIED PALETTE FORMULA</div>
+                    <div style="display:flex; flex-direction:column; gap:1px; background:#E7DFD1; border:1px solid #E7DFD1; border-radius:12px; overflow:hidden">
+                      <sc-for list="{{ b.formula }}" as="f" hint-placeholder-count="3">
+                        <div style="display:flex; gap:10px; align-items:center; background:#F4EEE3; padding:10px 13px">
+                          <sc-if value="{{ f.tex }}" hint-placeholder-val="{{ false }}"><img src="{{ f.tex }}" alt="" style="width:26px; height:26px; flex:0 0 auto; border-radius:7px; object-fit:cover" loading="lazy" decoding="async" /></sc-if>
+                          <span style="width:56px; flex:0 0 auto; font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:.14em; color:#8B8177">{{ f.slot }}</span>
+                          <span style="flex:1; min-width:0; font-family:'JetBrains Mono',monospace; font-size:10.5px; color:#3A322A; line-height:1.5">{{ f.value }}</span>
+                        </div>
+                      </sc-for>
+                    </div>
+                    <button onClick="{{ b.use }}" style="display:flex; align-items:center; gap:12px; min-height:52px; padding:0 20px; margin-top:6px; background:#1A1512; color:#FBF6EC; border:none; border-radius:13px; cursor:pointer; font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.16em" style-hover="background:#33291F">
+                      <span style="flex:1; text-align:left">USE THIS DESIGN</span><span style="font-size:14px">→</span>
+                    </button>
+                    <button onClick="{{ b.products }}" style="display:flex; align-items:center; justify-content:center; gap:10px; min-height:48px; background:#fff; border:1px solid #E7DFD1; border-radius:13px; cursor:pointer; font-family:'JetBrains Mono',monospace; font-size:10.5px; letter-spacing:.14em; color:#4A4038" style-hover="background:#F1EADD">VIEW PRODUCTS USED {{ b.tiles }} ↗</button>
+                  </div>
+                </article>
+              </sc-for>
+            </div>
+
+            <div style="margin-top:clamp(20px,2.4vw,30px); background:#F4EEE3; border:1px solid #E7DFD1; border-radius:20px; padding:clamp(20px,2.2vw,28px)">
+              <div style="display:flex; gap:14px; align-items:flex-start">
+                <span style="width:42px; height:42px; flex:0 0 auto; border-radius:12px; background:#E3D8C4; display:grid; place-items:center">
+                  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#6E5228" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 0 1 13.6-5.7L20 8m0-4v4h-4M20 12a8 8 0 0 1-13.6 5.7L4 16m0 4v-4h4"></path></svg>
+                </span>
+                <div style="min-width:0">
+                  <h3 style="font-family:'Playfair Display',serif; font-weight:600; font-size:clamp(20px,2vw,26px); margin:0; line-height:1.15">Iterate DNA Archive</h3>
+                  <p style="margin:8px 0 0; font-size:14px; line-height:1.55; color:#5B5147; text-wrap:pretty">Maintains the current room orientation, feature basin geometry, and warm neutral tone while exploring alternative stone quarries.</p>
+                </div>
+              </div>
+              <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(230px,100%),1fr)); gap:10px; margin-top:18px">
+                <button onClick="{{ generate }}" style="display:flex; align-items:center; justify-content:center; gap:10px; min-height:54px; padding:0 18px; background:#8A6A3B; color:#FFF8EC; border:none; border-radius:13px; cursor:pointer; font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.14em" style-hover="background:#6E5228">↻ TRY 4 MORE VARIATIONS</button>
+                <button onClick="{{ openPdfPreview }}" style="display:flex; align-items:center; justify-content:center; gap:10px; min-height:54px; padding:0 18px; background:#fff; color:#1A1512; border:1px solid #E7DFD1; border-radius:13px; cursor:pointer; font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.14em" style-hover="background:#F1EADD">⇩ EXPORT CLIENT PDF</button>
+                <button onClick="{{ startWizard }}" style="display:flex; align-items:center; justify-content:center; gap:10px; min-height:54px; padding:0 18px; background:transparent; color:#4A4038; border:1px dashed #D8C9AE; border-radius:13px; cursor:pointer; font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.14em" style-hover="background:#EFE7DA">◇ EDIT DESIGN DNA</button>
+              </div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:.14em; color:#8B8177; margin-top:16px; line-height:1.8">◉ DNA LOCK: CDA-X 2026 · GUARANTEED IN STOCK</div>
+            </div>
+          </section>
+        </sc-if>
+
+        <sc-if value="{{ atDetail }}" hint-placeholder-val="{{ false }}">
+          <section style="animation:cdaFade .35s ease both">
+            <button onClick="{{ backToResults }}" style="display:flex; align-items:center; gap:10px; min-height:44px; padding:0 4px; background:transparent; border:none; cursor:pointer; font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.18em; color:#8B8177" style-hover="color:#1A1512">← ALL 4 CONCEPTS</button>
+            <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(320px,100%),1fr)); gap:clamp(16px,2vw,24px); margin-top:14px">
+              <div>
+                <div style="position:relative; border-radius:20px; overflow:hidden; border:1px solid #E7DFD1; animation:cdaReveal .4s ease both">
+                  <sc-if value="{{ detail.img }}" hint-placeholder-val="{{ false }}"><img src="{{ detail.img }}" alt="{{ detail.elevation }}" style="width:100%; display:block" loading="lazy" decoding="async" /></sc-if>
+                  <span style="position:absolute; left:14px; bottom:14px; font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:.12em; background:rgba(26,21,18,.75); color:#FBF6EC; padding:7px 11px; border-radius:7px">⛶ {{ detail.elevation }}</span>
+                </div>
+                <div style="font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:.18em; color:#8B8177; margin-top:18px">SPECIFIED PALETTE FORMULA</div>
+                <div style="display:flex; flex-direction:column; gap:1px; background:#E7DFD1; border:1px solid #E7DFD1; border-radius:14px; overflow:hidden; margin-top:10px">
+                  <sc-for list="{{ detail.formula }}" as="f" hint-placeholder-count="3">
+                    <div style="display:flex; gap:12px; align-items:center; background:#fff; padding:13px 15px">
+                      <sc-if value="{{ f.tex }}" hint-placeholder-val="{{ false }}"><img src="{{ f.tex }}" alt="" style="width:34px; height:34px; flex:0 0 auto; border-radius:9px; object-fit:cover" loading="lazy" decoding="async" /></sc-if>
+                      <span style="width:58px; flex:0 0 auto; font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:.14em; color:#8B8177">{{ f.slot }}</span>
+                      <span style="flex:1; min-width:0; font-family:'JetBrains Mono',monospace; font-size:10.5px; color:#3A322A; line-height:1.5">{{ f.value }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+              <div style="display:flex; flex-direction:column; gap:14px">
+                <div style="font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:.18em; color:#8A6A3B">{{ detail.part }}</div>
+                <h1 style="font-family:'Playfair Display',serif; font-weight:600; font-size:clamp(28px,3.4vw,40px); line-height:1.08; margin:0">{{ detail.name }}</h1>
+                <p style="margin:0; font-size:clamp(14px,1.1vw,15.5px); line-height:1.6; color:#5B5147; text-wrap:pretty">{{ detail.desc }}</p>
+                <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(140px,100%),1fr)); gap:1px; background:#E7DFD1; border:1px solid #E7DFD1; border-radius:14px; overflow:hidden">
+                  <div style="background:#F4EEE3; padding:16px 18px">
+                    <div style="font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:.16em; color:#8B8177">EST. PER SQ FT</div>
+                    <div style="font-family:'Playfair Display',serif; font-size:24px; margin-top:8px">{{ detail.price }}</div>
+                  </div>
+                  <div style="background:#F4EEE3; padding:16px 18px">
+                    <div style="font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:.16em; color:#8B8177">TONE</div>
+                    <div style="font-family:'Playfair Display',serif; font-size:19px; margin-top:8px; line-height:1.2">{{ detail.tone }}</div>
+                  </div>
+                </div>
+                <div style="font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:.18em; color:#8B8177; margin-top:4px">PRODUCTS USED</div>
+                <div style="display:flex; flex-direction:column; gap:10px">
+                  <sc-for list="{{ detail.products }}" as="p" hint-placeholder-count="3">
+                    <div style="display:flex; gap:14px; align-items:center; padding:12px; background:#fff; border:1px solid #E7DFD1; border-radius:14px">
+                      <sc-if value="{{ p.tex }}" hint-placeholder-val="{{ false }}"><img src="{{ p.tex }}" alt="{{ p.name }}" style="width:50px; height:50px; flex:0 0 auto; border-radius:12px; object-fit:cover" loading="lazy" decoding="async" /></sc-if>
+                      <span style="flex:1; min-width:0">
+                        <span style="display:block; font-size:14px; font-weight:500; line-height:1.3">{{ p.name }}</span>
+                        <span style="display:block; font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:.08em; color:#8B8177; margin-top:6px; line-height:1.6">{{ p.spec }}</span>
+                      </span>
+                      <span style="flex:0 0 auto; text-align:right">
+                        <span style="display:block; font-family:'JetBrains Mono',monospace; font-size:11px; color:#1A1512">{{ p.price }}</span>
+                        <span style="{{ p.stockStyle }}">{{ p.stock }}</span>
+                      </span>
+                    </div>
+                  </sc-for>
+                </div>
+                <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(190px,100%),1fr)); gap:10px; margin-top:auto; padding-top:6px">
+                  <button onClick="{{ detail.use }}" style="display:flex; align-items:center; justify-content:center; gap:10px; min-height:54px; background:#1A1512; color:#FBF6EC; border:none; border-radius:13px; cursor:pointer; font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.14em" style-hover="background:#33291F">USE THIS DESIGN →</button>
+                  <button onClick="{{ openPdfPreview }}" style="display:flex; align-items:center; justify-content:center; gap:10px; min-height:54px; background:#fff; color:#1A1512; border:1px solid #E7DFD1; border-radius:13px; cursor:pointer; font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.14em" style-hover="background:#F1EADD">⇩ EXPORT PDF</button>
+                </div>
+              </div>
+            </div>
+          </section>
+        </sc-if>
+
+                <sc-if value="{{ atProjects }}" hint-placeholder-val="{{ false }}">
+          <section style="animation:cdaFade .35s ease both">
+            <div style="display:flex; align-items:center; gap:9px; font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.2em; color:#8A6A3B">
+              <span style="width:6px; height:6px; border-radius:50%; background:#8A6A3B"></span>CLIENT PROOFS · 18 ACTIVE BOARDS
+            </div>
+            <h1 style="font-family:'Playfair Display',serif; font-weight:600; font-size:clamp(28px,3.8vw,44px); line-height:1.08; margin:12px 0 0">Projects &amp; Client Sessions</h1>
+            <p style="max-width:640px; margin:12px 0 0; font-size:clamp(14px,1.1vw,16px); line-height:1.55; color:#5B5147; text-wrap:pretty">Every saved mood board, its specified palette formula and current review state.</p>
+
+            <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:20px">
+              <sc-for list="{{ filters }}" as="f" hint-placeholder-count="4">
+                <button onClick="{{ f.pick }}" style="{{ f.style }}" style-hover="border-color:#C7B393">{{ f.label }}</button>
+              </sc-for>
+            </div>
+
+            <sc-if value="{{ loading }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex; flex-direction:column; gap:10px; margin-top:20px">
+                <sc-for list="{{ loadingRows }}" as="l" hint-placeholder-count="6">
+                  <div style="{{ l.style }}"></div>
+                </sc-for>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ showProjects }}" hint-placeholder-val="{{ true }}">
+              <sc-if value="{{ noSessions }}" hint-placeholder-val="{{ false }}">
+                <div style="margin-top:20px; padding:clamp(28px,4vw,48px) clamp(20px,3vw,32px); background:#fff; border:1px dashed #D8C9AE; border-radius:20px; text-align:center">
+                  <div style="width:58px; height:58px; margin:0 auto; border-radius:16px; background:#F4EEE3; display:grid; place-items:center">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#8A6A3B" stroke-width="1.5" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.6-3.6"></path></svg>
+                  </div>
+                  <h3 style="font-family:'Playfair Display',serif; font-weight:600; font-size:clamp(20px,2.2vw,26px); margin:18px 0 0">No sessions match that filter</h3>
+                  <p style="max-width:380px; margin:10px auto 0; font-size:14px; line-height:1.55; color:#5B5147">Try a different review state, or clear the search to see all 18 client boards.</p>
+                  <button onClick="{{ resetFilters }}" style="min-height:52px; padding:0 22px; margin-top:20px; background:#1A1512; color:#FBF6EC; border:none; border-radius:13px; cursor:pointer; font-family:'JetBrains Mono',monospace; font-size:10.5px; letter-spacing:.14em" style-hover="background:#33291F">CLEAR FILTERS</button>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ hasSessions }}" hint-placeholder-val="{{ true }}">
+                <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
+                  <div style="display:flex; flex-direction:column; gap:10px; margin-top:18px">
+                    <sc-for list="{{ sessions }}" as="s" hint-placeholder-count="5">
+                      <article style="{{ s.cardStyle }}">
+                        <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px">
+                          <div style="min-width:0">
+                            <div style="font-family:'Playfair Display',serif; font-size:17px; line-height:1.2">{{ s.client }}</div>
+                            <div style="font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.1em; color:#8B8177; margin-top:6px">{{ s.designer }}</div>
+                          </div>
+                          <span style="{{ s.pillStyle }}">{{ s.status }}</span>
+                        </div>
+                        <div style="display:flex; gap:1px; margin-top:14px; background:#E7DFD1; border:1px solid #E7DFD1; border-radius:10px; overflow:hidden">
+                          <div style="flex:1; background:#F4EEE3; padding:10px 12px">
+                            <div style="font-family:'JetBrains Mono',monospace; font-size:8.5px; letter-spacing:.14em; color:#8B8177">SPEC</div>
+                            <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#3A322A; margin-top:5px">{{ s.spec }}</div>
+                          </div>
+                          <div style="flex:1; background:#F4EEE3; padding:10px 12px">
+                            <div style="font-family:'JetBrains Mono',monospace; font-size:8.5px; letter-spacing:.14em; color:#8B8177">UPDATED</div>
+                            <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#3A322A; margin-top:5px">{{ s.updated }}</div>
+                          </div>
+                        </div>
+                        <button onClick="{{ s.open }}" style="width:100%; min-height:48px; margin-top:12px; background:#1A1512; color:#FBF6EC; border:none; border-radius:12px; cursor:pointer; font-family:'JetBrains Mono',monospace; font-size:10.5px; letter-spacing:.14em">OPEN BOARD →</button>
+                      </article>
+                    </sc-for>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ notMobile }}" hint-placeholder-val="{{ true }}">
+                  <div style="margin-top:20px; background:#fff; border:1px solid #E7DFD1; border-radius:20px; overflow:hidden">
+                    <div style="display:grid; grid-template-columns:minmax(0,2.1fr) minmax(0,1.3fr) minmax(0,1.4fr) minmax(0,1.2fr) 44px; gap:14px; padding:14px 20px; background:#F4EEE3; border-bottom:1px solid #E7DFD1; font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:.16em; color:#8B8177">
+                      <span>CLIENT PROJECT</span><span>DESIGNER</span><span>SPECIFIED SURFACE</span><span>STATUS</span><span></span>
+                    </div>
+                    <sc-for list="{{ sessions }}" as="s" hint-placeholder-count="5">
+                      <button onClick="{{ s.open }}" style="{{ s.tableStyle }}" style-hover="background:#FCFAF6">
+                        <span style="min-width:0; display:flex; align-items:center; gap:12px">
+                          <span style="width:38px; height:38px; flex:0 0 auto; border-radius:11px; background:#F4EEE3; display:grid; place-items:center">
+                            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#6E5228" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="{{ s.d }}"></path></svg>
+                          </span>
+                          <span style="min-width:0">
+                            <span style="display:block; font-family:'Playfair Display',serif; font-size:16.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">{{ s.client }}</span>
+                            <span style="display:block; font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:.1em; color:#8B8177; margin-top:4px">{{ s.updated }}</span>
+                          </span>
+                        </span>
+                        <span style="font-size:13px; color:#4A4038; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">{{ s.designer }}</span>
+                        <span style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#4A4038; line-height:1.5">{{ s.spec }}</span>
+                        <span style="{{ s.pillStyle }}">{{ s.status }}</span>
+                        <span style="text-align:center; color:#A0968A; font-size:15px">›</span>
+                      </button>
+                    </sc-for>
+                  </div>
+                </sc-if>
+              </sc-if>
+
+              <h2 style="font-family:'Playfair Display',serif; font-weight:600; font-size:clamp(22px,2.3vw,30px); margin:clamp(30px,3.4vw,44px) 0 0">Saved Mood Boards</h2>
+              <p style="margin:8px 0 0; font-size:14px; color:#5B5147">Awaiting client review or print approval.</p>
+              <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(210px,100%),1fr)); gap:clamp(12px,1.4vw,16px); margin-top:18px">
+                <sc-for list="{{ savedBoards }}" as="s" hint-placeholder-count="6">
+                  <article style="{{ s.cardStyle }}">
+                    <button onClick="{{ s.open }}" style="position:relative; display:block; width:100%; height:130px; padding:0; border:none; cursor:pointer; background:#EFE7DA" style-hover="opacity:.93">
+                      <sc-if value="{{ s.img }}" hint-placeholder-val="{{ false }}"><img src="{{ s.img }}" alt="{{ s.name }}" style="width:100%; height:100%; object-fit:cover; display:block" loading="lazy" decoding="async" /></sc-if>
+                      <span style="position:absolute; left:10px; bottom:10px; font-family:'JetBrains Mono',monospace; font-size:8.5px; letter-spacing:.1em; background:rgba(26,21,18,.75); color:#FBF6EC; padding:5px 7px; border-radius:5px">{{ s.tag }}</span>
+                    </button>
+                    <div style="padding:14px 16px 16px">
+                      <div style="font-family:'Playfair Display',serif; font-size:16.5px; line-height:1.2">{{ s.name }}</div>
+                      <div style="font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:.1em; color:#8B8177; margin-top:7px; line-height:1.6">{{ s.metaLine }}</div>
+                    </div>
+                  </article>
+                </sc-for>
+              </div>
+            </sc-if>
+          </section>
+        </sc-if>
+
+        <sc-if value="{{ atSession }}" hint-placeholder-val="{{ false }}">
+          <section style="animation:cdaFade .35s ease both">
+            <button onClick="{{ backToProjects }}" style="display:flex; align-items:center; gap:10px; min-height:44px; padding:0 4px; background:transparent; border:none; cursor:pointer; font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.18em; color:#8B8177" style-hover="color:#1A1512">← ALL PROJECTS</button>
+            <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:14px; flex-wrap:wrap; margin-top:6px">
+              <div style="display:flex; flex-direction:column; gap:10px; min-width:0">
+                <h1 style="font-family:'Playfair Display',serif; font-weight:600; font-size:clamp(26px,3.4vw,40px); line-height:1.14; margin:0">{{ session.client }}</h1>
+                <div style="font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.14em; color:#8B8177; line-height:1.7">{{ session.designer }} · UPDATED {{ session.updated }}</div>
+              </div>
+              <span style="{{ session.pillStyle }}">{{ session.status }}</span>
+            </div>
+
+            <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr)); gap:clamp(14px,1.8vw,22px); margin-top:clamp(18px,2.2vw,26px)">
+              <div style="display:flex; flex-direction:column; gap:14px">
+                <div style="position:relative; border-radius:20px; overflow:hidden; border:1px solid #E7DFD1">
+                  <sc-if value="{{ session.img }}" hint-placeholder-val="{{ false }}">
+                    <img src="{{ session.img }}" alt="{{ session.boardName }}" style="width:100%; display:block" loading="lazy" decoding="async" />
+                  </sc-if>
+                  <span style="position:absolute; left:14px; right:14px; bottom:14px; width:fit-content; max-width:calc(100% - 28px); font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:.12em; line-height:1.5; background:rgba(26,21,18,.78); color:#FBF6EC; padding:7px 11px; border-radius:7px">SPECIFIED CONCEPT · {{ session.boardName }}</span>
+                </div>
+                <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(132px,100%),1fr)); gap:1px; background:#E7DFD1; border:1px solid #E7DFD1; border-radius:14px; overflow:hidden">
+                  <sc-for list="{{ session.facts }}" as="f" hint-placeholder-count="4">
+                    <div style="background:#F4EEE3; padding:14px 16px">
+                      <div style="font-family:'JetBrains Mono',monospace; font-size:8.5px; letter-spacing:.16em; color:#8B8177">{{ f.k }}</div>
+                      <div style="font-family:'Playfair Display',serif; font-size:18px; margin-top:7px; line-height:1.2">{{ f.v }}</div>
+                    </div>
+                  </sc-for>
+                </div>
+                <div style="font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:.18em; color:#8B8177; margin-top:4px">SPECIFIED PALETTE FORMULA</div>
+                <div style="display:flex; flex-direction:column; gap:1px; background:#E7DFD1; border:1px solid #E7DFD1; border-radius:14px; overflow:hidden">
+                  <sc-for list="{{ session.formula }}" as="f" hint-placeholder-count="3">
+                    <div style="display:flex; gap:12px; align-items:center; background:#fff; padding:13px 15px">
+                      <sc-if value="{{ f.tex }}" hint-placeholder-val="{{ false }}">
+                        <img src="{{ f.tex }}" alt="" style="width:32px; height:32px; flex:0 0 auto; border-radius:9px; object-fit:cover" loading="lazy" decoding="async" />
+                      </sc-if>
+                      <span style="width:58px; flex:0 0 auto; font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:.14em; color:#8B8177">{{ f.slot }}</span>
+                      <span style="flex:1; min-width:0; font-family:'JetBrains Mono',monospace; font-size:10.5px; color:#3A322A; line-height:1.5">{{ f.value }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+
+              <div style="display:flex; flex-direction:column; gap:14px">
+                <div style="font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:.18em; color:#8B8177">REVIEW PROGRESS</div>
+                <div style="display:flex; flex-direction:column; gap:10px">
+                  <sc-for list="{{ session.timeline }}" as="t" hint-placeholder-count="3">
+                    <div style="{{ t.rowStyle }}">
+                      <span style="{{ t.dotStyle }}">{{ t.mark }}</span>
+                      <span style="flex:1; min-width:0">
+                        <span style="display:block; font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.14em; color:#3A322A">{{ t.label }}</span>
+                        <span style="display:block; font-size:13px; color:#5B5147; margin-top:6px; line-height:1.5">{{ t.note }}</span>
+                      </span>
+                    </div>
+                  </sc-for>
+                </div>
+                <div style="font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:.18em; color:#8B8177; margin-top:6px">SURFACES ON THIS SPEC</div>
+                <div style="display:flex; flex-direction:column; gap:10px">
+                  <sc-for list="{{ session.products }}" as="p" hint-placeholder-count="3">
+                    <div style="display:flex; gap:14px; align-items:center; padding:12px; background:#fff; border:1px solid #E7DFD1; border-radius:14px">
+                      <sc-if value="{{ p.tex }}" hint-placeholder-val="{{ false }}">
+                        <img src="{{ p.tex }}" alt="{{ p.name }}" style="width:48px; height:48px; flex:0 0 auto; border-radius:12px; object-fit:cover" loading="lazy" decoding="async" />
+                      </sc-if>
+                      <span style="flex:1; min-width:0">
+                        <span style="display:block; font-size:14px; font-weight:500; line-height:1.3">{{ p.name }}</span>
+                        <span style="display:block; font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:.08em; color:#8B8177; margin-top:6px; line-height:1.6">{{ p.spec }}</span>
+                      </span>
+                      <span style="flex:0 0 auto; text-align:right">
+                        <span style="display:block; font-family:'JetBrains Mono',monospace; font-size:11px; color:#1A1512">{{ p.price }}</span>
+                        <span style="{{ p.stockStyle }}">{{ p.stock }}</span>
+                      </span>
+                    </div>
+                  </sc-for>
+                </div>
+                <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(186px,100%),1fr)); gap:10px; margin-top:auto; padding-top:8px">
+                  <button onClick="{{ session.share }}" style="display:flex; align-items:center; justify-content:center; gap:10px; min-height:54px; padding:0 16px; background:#1A1512; color:#FBF6EC; border:none; border-radius:13px; cursor:pointer; font-family:'JetBrains Mono',monospace; font-size:10.5px; letter-spacing:.14em" style-hover="background:#33291F">↗ SHARE WITH CLIENT</button>
+                  <button onClick="{{ session.openBoard }}" style="display:flex; align-items:center; justify-content:center; gap:10px; min-height:54px; padding:0 16px; background:#fff; color:#1A1512; border:1px solid #E7DFD1; border-radius:13px; cursor:pointer; font-family:'JetBrains Mono',monospace; font-size:10.5px; letter-spacing:.14em" style-hover="background:#F1EADD">◇ OPEN BOARD</button>
+                  <button onClick="{{ session.exportPdf }}" style="display:flex; align-items:center; justify-content:center; gap:10px; min-height:54px; padding:0 16px; background:transparent; color:#4A4038; border:1px dashed #D8C9AE; border-radius:13px; cursor:pointer; font-family:'JetBrains Mono',monospace; font-size:10.5px; letter-spacing:.14em" style-hover="background:#EFE7DA">⇩ EXPORT PDF</button>
+                </div>
+              </div>
+            </div>
+          </section>
+        </sc-if>
+
+        <sc-if value="{{ atCatalog }}" hint-placeholder-val="{{ false }}">
+          <section style="animation:cdaFade .35s ease both">
+            <div style="display:flex; align-items:center; gap:9px; font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.2em; color:#8A6A3B">
+              <span style="width:6px; height:6px; border-radius:50%; background:#8A6A3B"></span>CURATED ARCHIVES · 99.4% LIVE STOCK
+            </div>
+            <h1 style="font-family:'Playfair Display',serif; font-weight:600; font-size:clamp(28px,3.8vw,44px); line-height:1.08; margin:12px 0 0">Design Ideas &amp; Collections</h1>
+            <p style="max-width:660px; margin:12px 0 0; font-size:clamp(14px,1.1vw,16px); line-height:1.55; color:#5B5147; text-wrap:pretty">Explore trending curated palettes: Japandi Wabi-Sabi, Travertine Minimalist, Modern Slate.</p>
+
+            <sc-if value="{{ loading }}" hint-placeholder-val="{{ false }}">
+              <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr)); gap:16px; margin-top:24px">
+                <sc-for list="{{ loadingRows }}" as="l" hint-placeholder-count="6">
+                  <div style="{{ l.style }}"></div>
+                </sc-for>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ showCatalog }}" hint-placeholder-val="{{ true }}">
+              <sc-if value="{{ noCollections }}" hint-placeholder-val="{{ false }}">
+                <div style="margin-top:24px; padding:clamp(28px,4vw,48px) clamp(20px,3vw,32px); background:#fff; border:1px dashed #D8C9AE; border-radius:20px; text-align:center">
+                  <div style="width:58px; height:58px; margin:0 auto; border-radius:16px; background:#F4EEE3; display:grid; place-items:center">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#8A6A3B" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 3 8l9 5 9-5-9-5M3 14l9 5 9-5"></path></svg>
+                  </div>
+                  <h3 style="font-family:'Playfair Display',serif; font-weight:600; font-size:clamp(20px,2.2vw,26px); margin:18px 0 0">Nothing in the archive matches</h3>
+                  <p style="max-width:380px; margin:10px auto 0; font-size:14px; line-height:1.55; color:#5B5147">Clear the search to browse all curated palettes and the full surface archive.</p>
+                  <button onClick="{{ resetFilters }}" style="min-height:52px; padding:0 22px; margin-top:20px; background:#1A1512; color:#FBF6EC; border:none; border-radius:13px; cursor:pointer; font-family:'JetBrains Mono',monospace; font-size:10.5px; letter-spacing:.14em" style-hover="background:#33291F">CLEAR SEARCH</button>
+                </div>
+              </sc-if>
+
+              <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr)); gap:clamp(14px,1.6vw,20px); margin-top:clamp(20px,2.4vw,30px)">
+                <sc-for list="{{ collections }}" as="c" hint-placeholder-count="3">
+                  <article style="{{ c.cardStyle }}">
+                    <div style="position:relative; height:clamp(170px,18vw,220px); overflow:hidden">
+                      <sc-if value="{{ c.img }}" hint-placeholder-val="{{ false }}"><img src="{{ c.img }}" alt="{{ c.name }}" loading="lazy" decoding="async" style="width:100%; height:100%; object-fit:cover; display:block" /></sc-if>
+                      <span style="position:absolute; left:14px; top:14px; font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:.14em; background:#FBF7EF; color:#1A1512; padding:7px 10px; border-radius:7px; border:1px solid #E7DFD1">{{ c.tag }}</span>
+                    </div>
+                    <div style="padding:clamp(18px,1.8vw,24px); display:flex; flex-direction:column; gap:11px; flex:1">
+                      <h3 style="font-family:'Playfair Display',serif; font-weight:600; font-size:clamp(20px,2vw,26px); margin:0; line-height:1.15">{{ c.name }}</h3>
+                      <p style="margin:0; font-size:14px; line-height:1.55; color:#5B5147; text-wrap:pretty">{{ c.desc }}</p>
+                      <div style="display:flex; gap:6px; margin-top:2px">
+                        <sc-for list="{{ c.swatches }}" as="sw" hint-placeholder-count="4">
+                          <span style="{{ sw.style }}"></span>
+                        </sc-for>
+                      </div>
+                      <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:auto; padding-top:12px">
+                        <span style="font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.1em; color:#8B8177">{{ c.count }}</span>
+                        <button onClick="{{ c.use }}" style="display:flex; align-items:center; gap:9px; min-height:44px; background:transparent; border:none; padding:0; cursor:pointer; font-family:'JetBrains Mono',monospace; font-size:10.5px; letter-spacing:.14em; color:#6E5228" style-hover="color:#1A1512">USE PALETTE <span style="font-size:14px">→</span></button>
+                      </div>
+                    </div>
+                  </article>
+                </sc-for>
+              </div>
+
+              <h2 style="font-family:'Playfair Display',serif; font-weight:600; font-size:clamp(22px,2.3vw,30px); margin:clamp(30px,3.4vw,44px) 0 0">Surface Archive</h2>
+              <p style="margin:8px 0 0; font-size:14px; color:#5B5147">Physical slabs held in the Milanese and Lisbon vaults.</p>
+              <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(190px,100%),1fr)); gap:clamp(10px,1.2vw,14px); margin-top:18px">
+                <sc-for list="{{ surfaces }}" as="s" hint-placeholder-count="8">
+                  <article style="{{ s.cardStyle }}">
+                    <sc-if value="{{ s.img }}" hint-placeholder-val="{{ false }}"><img src="{{ s.img }}" alt="{{ s.name }}" style="width:44px; height:44px; flex:0 0 auto; border-radius:11px; object-fit:cover" loading="lazy" decoding="async" /></sc-if>
+                    <span style="min-width:0">
+                      <span style="display:block; font-size:13.5px; font-weight:500; line-height:1.3">{{ s.name }}</span>
+                      <span style="display:block; font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:.08em; color:#8B8177; margin-top:5px">{{ s.spec }}</span>
+                    </span>
+                  </article>
+                </sc-for>
+              </div>
+            </sc-if>
+          </section>
+        </sc-if>
+
+      </div>
+    </main>
+  </div>
+
+  <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
+    <nav style="flex:0 0 auto; display:grid; grid-template-columns:repeat(4,1fr); gap:2px; padding:8px 6px calc(8px + env(safe-area-inset-bottom)); background:rgba(250,248,243,.97); backdrop-filter:blur(10px); border-top:1px solid #E7DFD1; position:relative; z-index:20">
+      <sc-for list="{{ navItems }}" as="item" hint-placeholder-count="4">
+        <button onClick="{{ item.go }}" style="{{ item.tabStyle }}">
+          <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="{{ item.d }}"></path></svg>
+          <span style="font-family:'JetBrains Mono',monospace; font-size:8.5px; letter-spacing:.08em">{{ item.short }}</span>
+          <span style="{{ item.tabRule }}"></span>
+        </button>
+      </sc-for>
+    </nav>
+  </sc-if>
+
+  <sc-if value="{{ drawerOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed; inset:0; z-index:60; display:flex">
+      <div onClick="{{ closeDrawer }}" style="position:absolute; inset:0; background:rgba(26,21,18,.5); animation:cdaFade .2s ease both"></div>
+      <aside style="position:relative; width:min(300px,84vw); height:100%; background:#FCFAF6; border-right:1px solid #E7DFD1; display:flex; flex-direction:column; overflow-y:auto; animation:cdaSlide .26s cubic-bezier(.2,.7,.3,1) both">
+        <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px; padding:22px 20px 18px; border-bottom:1px solid #EFE7DA">
+          <div>
+            <div style="font-family:'Playfair Display',serif; font-size:17px; letter-spacing:.13em; line-height:1.1">CASA DE AURUM</div>
+            <div style="font-family:'JetBrains Mono',monospace; font-size:8.5px; letter-spacing:.22em; color:#8B8177; margin-top:6px">STUDIO &amp; SHOWROOM</div>
+          </div>
+          <button onClick="{{ closeDrawer }}" aria-label="Close navigation" style="width:44px; height:44px; margin:-8px -8px 0 0; background:transparent; border:none; cursor:pointer; font-size:19px; color:#4A4038">✕</button>
+        </div>
+        <div style="padding:18px 12px 8px">
+          <div style="font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:.2em; color:#A0968A; padding:0 8px 10px">WORKSPACE</div>
+          <nav style="display:flex; flex-direction:column; gap:3px">
+            <sc-for list="{{ navItems }}" as="item" hint-placeholder-count="4">
+              <button onClick="{{ item.go }}" style="{{ item.fullStyle }}" style-hover="background:#F1EADD">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="{{ item.d }}"></path></svg>
+                <span style="flex:1; text-align:left">{{ item.label }}</span>
+              </button>
+            </sc-for>
+          </nav>
+        </div>
+        <div style="padding:16px 12px; margin-top:8px; border-top:1px solid #EFE7DA">
+          <div style="font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:.2em; color:#A0968A; padding:0 8px 10px">ATELIER</div>
+          <button onClick="{{ startWizard }}" style="display:flex; align-items:center; gap:12px; width:100%; min-height:52px; padding:0 12px; background:transparent; border:none; border-radius:12px; cursor:pointer; font-size:14px; color:#4A4038; text-align:left" style-hover="background:#F1EADD">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8A6A3B" stroke-width="1.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>New Mood Board
+          </button>
+          <button onClick="{{ exportPdf }}" style="display:flex; align-items:center; gap:12px; width:100%; min-height:52px; padding:0 12px; background:transparent; border:none; border-radius:12px; cursor:pointer; font-size:14px; color:#4A4038; text-align:left" style-hover="background:#F1EADD">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8A6A3B" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m0 0 4-4m-4 4-4-4M5 19h14"></path></svg>Export Client PDF
+          </button>
+        </div>
+        <div style="margin-top:auto; padding:16px">
+          <div style="display:flex; align-items:center; gap:11px; padding:12px; background:#F4EEE3; border:1px solid #E7DFD1; border-radius:14px">
+            <div style="width:36px; height:36px; flex:0 0 auto; border-radius:50%; background:linear-gradient(150deg,#C09A5E,#8A6A3B); display:grid; place-items:center; font-family:'Playfair Display',serif; font-size:13px; color:#FFF8EC">PS</div>
+            <div style="min-width:0">
+              <div style="font-size:13px; font-weight:500">Priya Sharma</div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:.14em; color:#8B8177; margin-top:3px">STOCK SYNC 99.4% LIVE</div>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ modal }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed; inset:0; z-index:70; display:flex; align-items:center; justify-content:center; padding:clamp(12px,3vw,32px)">
+      <div onClick="{{ closeModal }}" style="position:absolute; inset:0; background:rgba(26,21,18,.55); animation:cdaFade .2s ease both"></div>
+      <div style="position:relative; width:min(560px,100%); max-height:86vh; display:flex; flex-direction:column; background:#FCFAF6; border:1px solid #E7DFD1; border-radius:20px; overflow:hidden; box-shadow:0 26px 60px rgba(26,21,18,.3); animation:cdaPop .28s cubic-bezier(.2,.7,.3,1) both">
+        <div style="display:flex; align-items:flex-start; gap:12px; padding:20px 20px 16px; border-bottom:1px solid #E7DFD1">
+          <div style="flex:1; min-width:0">
+            <div style="font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:.18em; color:#8B8177">PRODUCTS USED · {{ modal.tilesLabel }}</div>
+            <h3 style="font-family:'Playfair Display',serif; font-weight:600; font-size:clamp(20px,2.4vw,26px); margin:8px 0 0; line-height:1.15">{{ modal.name }}</h3>
+          </div>
+          <button onClick="{{ closeModal }}" aria-label="Close" style="width:44px; height:44px; flex:0 0 auto; margin:-6px -6px 0 0; background:transparent; border:none; cursor:pointer; font-size:18px; color:#4A4038" style-hover="color:#1A1512">✕</button>
+        </div>
+        <div style="flex:1; min-height:0; overflow-y:auto; padding:16px 20px; display:flex; flex-direction:column; gap:10px">
+          <sc-for list="{{ modal.products }}" as="p" hint-placeholder-count="3">
+            <div style="display:flex; gap:14px; align-items:center; padding:12px; background:#fff; border:1px solid #E7DFD1; border-radius:14px">
+              <sc-if value="{{ p.tex }}" hint-placeholder-val="{{ false }}"><img src="{{ p.tex }}" alt="{{ p.name }}" style="width:56px; height:56px; flex:0 0 auto; border-radius:12px; object-fit:cover" loading="lazy" decoding="async" /></sc-if>
+              <div style="flex:1; min-width:0">
+                <div style="font-size:14px; font-weight:500; line-height:1.3">{{ p.name }}</div>
+                <div style="font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:.08em; color:#8B8177; margin-top:6px; line-height:1.6">{{ p.spec }}</div>
+              </div>
+              <div style="text-align:right; flex:0 0 auto">
+                <div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#1A1512">{{ p.price }}</div>
+                <div style="{{ p.stockStyle }}">{{ p.stock }}</div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display:flex; gap:10px; flex-wrap:wrap; padding:16px 20px calc(16px + env(safe-area-inset-bottom)); border-top:1px solid #E7DFD1; background:#F4EEE3">
+          <button onClick="{{ addSpec }}" style="flex:1; min-width:170px; min-height:52px; background:#1A1512; color:#FBF6EC; border:none; border-radius:13px; cursor:pointer; font-family:'JetBrains Mono',monospace; font-size:10.5px; letter-spacing:.14em" style-hover="background:#33291F">ADD ALL TO CLIENT SPEC</button>
+          <button onClick="{{ closeModal }}" style="flex:0 0 auto; min-width:110px; min-height:52px; background:#fff; color:#1A1512; border:1px solid #E7DFD1; border-radius:13px; cursor:pointer; font-family:'JetBrains Mono',monospace; font-size:10.5px; letter-spacing:.14em" style-hover="background:#F1EADD">CLOSE</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ toast }}" hint-placeholder-val="{{ false }}">
+    <div style="{{ toastStyle }}">
+      <span style="width:6px; height:6px; border-radius:50%; background:#E3C58E; flex:0 0 auto"></span>{{ toast }}
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ pdfPreview }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed; inset:0; z-index:75; display:flex; align-items:center; justify-content:center; padding:clamp(12px,3vw,32px)">
+      <div onClick="{{ closePdfPreview }}" style="position:absolute; inset:0; background:rgba(26,21,18,.55); animation:cdaFade .2s ease both"></div>
+      <div style="position:relative; width:min(840px,100%); max-height:92vh; display:flex; flex-direction:column; background:#FCFAF6; border:1px solid #E7DFD1; border-radius:24px; overflow:hidden; box-shadow:0 32px 80px rgba(26,21,18,.35); animation:cdaPop .28s cubic-bezier(.2,.7,.3,1) both">
+        <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px; padding:24px 26px 20px; border-bottom:1px solid #E7DFD1">
+          <div style="flex:1; min-width:0">
+            <div style="font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:.18em; color:#8B8177">EXPORT & CLIENT HANDOUT</div>
+            <h3 style="font-family:'Playfair Display',serif; font-weight:600; font-size:clamp(22px,2.2vw,28px); margin:9px 0 0; line-height:1.15">Client PDF Package</h3>
+          </div>
+          <button onClick="{{ closePdfPreview }}" aria-label="Close" style="width:48px; height:48px; flex:0 0 auto; background:transparent; border:none; cursor:pointer; font-size:20px; color:#4A4038" style-hover="color:#1A1512">✕</button>
+        </div>
+        <div style="flex:1; min-height:0; overflow-y:auto; padding:24px 26px">
+          <div style="background:#fff; border:1px solid #E7DFD1; border-radius:18px; overflow:hidden; display:flex; flex-direction:column">
+            <div style="position:relative; width:100%; height:clamp(280px,40vh,480px); background:linear-gradient(135deg,#F4EEE3,#E7DFD1); display:grid; place-items:center">
+              <div style="text-align:center">
+                <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="#8A6A3B" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin:0 auto"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="13" x2="12" y2="19"></line><line x1="9" y1="16" x2="15" y2="16"></line></svg>
+                <div style="font-family:'Playfair Display',serif; font-size:19px; margin-top:14px; color:#1A1512">4-Board PDF Presentation</div>
+                <div style="font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.14em; color:#8B8177; margin-top:8px">A5 Format · 8 Pages · RGB + Embeds</div>
+              </div>
+              <div style="position:absolute; right:20px; bottom:20px; font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:.12em; background:rgba(26,21,18,.08); color:#6E5228; padding:8px 11px; border-radius:8px">PREVIEW</div>
+            </div>
+            <div style="padding:20px; border-top:1px solid #E7DFD1; display:flex; flex-direction:column; gap:12px">
+              <div style="display:flex; align-items:baseline; justify-content:space-between; gap:12px">
+                <span style="font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:.16em; color:#8B8177">CONTENT</span>
+                <span style="font-size:13px; color:#4A4038">4 Mood Boards + Cover + Back Slip</span>
+              </div>
+              <div style="display:flex; align-items:baseline; justify-content:space-between; gap:12px">
+                <span style="font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:.16em; color:#8B8177">INCLUDES</span>
+                <span style="font-size:13px; color:#4A4038">Design DNA, Specs, Material Codes</span>
+              </div>
+              <div style="display:flex; align-items:baseline; justify-content:space-between; gap:12px">
+                <span style="font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:.16em; color:#8B8177">FORMAT</span>
+                <span style="font-size:13px; color:#4A4038">High-Resolution RGB (300 DPI Eq.)</span>
+              </div>
+            </div>
+          </div>
+          <div style="margin-top:18px; padding:16px 18px; background:#F4EEE3; border:1px solid #E7DFD1; border-radius:14px; display:flex; gap:11px; align-items:flex-start">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8A6A3B" stroke-width="1.6" stroke-linecap="round" style="flex:0 0 auto; margin-top:2px"><path d="M12 8v4l3 2M3 12a9 9 0 1 0 3-6.7L3 8m0-5v5h5"></path></svg>
+            <div style="min-width:0">
+              <div style="font-size:13px; font-weight:500">Ready to Download</div>
+              <div style="font-size:12px; color:#5B5147; margin-top:4px; line-height:1.5">Your package is prepared. Click below to download to your device and share with clients immediately.</div>
+            </div>
+          </div>
+        </div>
+        <div style="display:flex; gap:10px; flex-wrap:wrap; padding:18px 26px calc(18px + env(safe-area-inset-bottom)); border-top:1px solid #E7DFD1; background:#F4EEE3">
+          <button onClick="{{ downloadPdf }}" style="flex:1; min-width:180px; display:flex; align-items:center; justify-content:center; gap:10px; min-height:54px; background:#1A1512; color:#FBF6EC; border:none; border-radius:13px; cursor:pointer; font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.14em" style-hover="background:#33291F">⇩ DOWNLOAD PDF</button>
+          <button onClick="{{ closePdfPreview }}" style="flex:0 0 auto; min-width:120px; min-height:54px; background:#fff; color:#1A1512; border:1px solid #E7DFD1; border-radius:13px; cursor:pointer; font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.14em" style-hover="background:#F1EADD">CANCEL</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ sharedOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed; inset:0; z-index:90; overflow-y:auto; overflow-x:hidden; background:#F7F3EC; animation:cdaFade .28s ease both">
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:14px clamp(14px,4vw,40px); background:#1A1512; color:#FBF6EC; position:sticky; top:0; z-index:2">
+        <span style="display:flex; align-items:center; gap:10px; font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:.18em; color:#E3C58E">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#E3C58E" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7M12 3v13M8 7l4-4 4 4"></path></svg>
+          CLIENT PROOF · SHARED VIEW
+        </span>
+        <span style="display:flex; gap:9px; flex-wrap:wrap">
+          <button onClick="{{ copyLink }}" style="min-height:42px; padding:0 15px; white-space:nowrap; background:transparent; color:#C7BCAA; border:1px solid #4A4038; border-radius:11px; cursor:pointer; font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:.14em" style-hover="color:#FBF6EC; border-color:#8A6A3B">⧉ COPY LINK</button>
+          <button onClick="{{ closeShared }}" style="min-height:42px; padding:0 15px; white-space:nowrap; background:#33291F; color:#FBF6EC; border:none; border-radius:11px; cursor:pointer; font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:.14em" style-hover="background:#4A4038">CLOSE ✕</button>
+        </span>
+      </div>
+
+      <div style="max-width:940px; margin:0 auto; padding:clamp(22px,4vw,52px) clamp(14px,4vw,40px) clamp(40px,6vw,72px)">
+        <div style="text-align:center">
+          <div style="font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:.28em; color:#B08F5C">● STUDIO &amp; SHOWROOM ●</div>
+          <div style="font-family:'Playfair Display',serif; font-weight:700; font-size:clamp(24px,3.4vw,38px); letter-spacing:.06em; margin-top:10px">CASA DE AURUM</div>
+          <div style="width:54px; height:1px; background:#C7B393; margin:16px auto 0"></div>
+          <h1 style="font-family:'Playfair Display',serif; font-weight:600; font-size:clamp(26px,3.8vw,42px); line-height:1.1; margin:18px 0 0">{{ shared.title }}</h1>
+          <div style="font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.14em; color:#8B8177; margin-top:10px; line-height:1.7">{{ shared.sub }}</div>
+        </div>
+
+        <div style="margin-top:clamp(22px,3vw,34px); border-radius:22px; overflow:hidden; border:1px solid #E7DFD1; background:#fff">
+          <sc-if value="{{ shared.img }}" hint-placeholder-val="{{ false }}">
+            <img src="{{ shared.img }}" alt="{{ shared.name }}" style="width:100%; display:block" loading="lazy" decoding="async" />
+          </sc-if>
+          <div style="display:flex; align-items:baseline; justify-content:space-between; gap:14px; flex-wrap:wrap; padding:18px clamp(16px,2.4vw,26px)">
+            <span style="font-family:'Playfair Display',serif; font-size:clamp(20px,2.2vw,26px)">{{ shared.name }}</span>
+            <span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#6E5228">Est. {{ shared.price }} / sq ft</span>
+          </div>
+        </div>
+
+        <p style="max-width:640px; margin:clamp(18px,2.4vw,26px) auto 0; text-align:center; font-size:clamp(14px,1.15vw,16px); line-height:1.65; color:#5B5147; text-wrap:pretty">{{ shared.desc }}</p>
+
+        <div style="font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:.2em; color:#8B8177; text-align:center; margin-top:clamp(24px,3vw,36px)">SPECIFIED SURFACES</div>
+        <div style="display:flex; flex-direction:column; gap:1px; background:#E7DFD1; border:1px solid #E7DFD1; border-radius:16px; overflow:hidden; margin-top:14px">
+          <sc-for list="{{ shared.formula }}" as="f" hint-placeholder-count="3">
+            <div style="display:flex; gap:14px; align-items:center; background:#fff; padding:15px 18px">
+              <sc-if value="{{ f.tex }}" hint-placeholder-val="{{ false }}">
+                <img src="{{ f.tex }}" alt="" style="width:38px; height:38px; flex:0 0 auto; border-radius:10px; object-fit:cover" loading="lazy" decoding="async" />
+              </sc-if>
+              <span style="width:62px; flex:0 0 auto; font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:.14em; color:#8B8177">{{ f.slot }}</span>
+              <span style="flex:1; min-width:0; font-size:13.5px; color:#2E271F; line-height:1.5">{{ f.value }}</span>
+            </div>
+          </sc-for>
+        </div>
+
+        <sc-if value="{{ shared.pending }}" hint-placeholder-val="{{ true }}">
+          <div style="margin-top:clamp(24px,3vw,36px); padding:clamp(20px,2.6vw,30px); background:#F4EEE3; border:1px solid #E7DFD1; border-radius:20px; text-align:center">
+            <h2 style="font-family:'Playfair Display',serif; font-weight:600; font-size:clamp(20px,2.2vw,27px); margin:0; line-height:1.15">Happy with this direction?</h2>
+            <p style="max-width:440px; margin:10px auto 0; font-size:14px; line-height:1.55; color:#5B5147">Approving locks these surfaces against live vault stock. Requesting changes returns the board to the studio.</p>
+            <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(min(210px,100%),1fr)); gap:10px; margin-top:20px">
+              <button onClick="{{ shared.approve }}" style="display:flex; align-items:center; justify-content:center; gap:10px; min-height:56px; padding:0 18px; background:#1A1512; color:#FBF6EC; border:none; border-radius:14px; cursor:pointer; font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.14em" style-hover="background:#33291F">✓ APPROVE THIS BOARD</button>
+              <button onClick="{{ shared.changes }}" style="display:flex; align-items:center; justify-content:center; gap:10px; min-height:56px; padding:0 18px; background:#fff; color:#1A1512; border:1px solid #E7DFD1; border-radius:14px; cursor:pointer; font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.14em" style-hover="background:#EFE7DA">✎ REQUEST CHANGES</button>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ shared.state }}" hint-placeholder-val="{{ false }}">
+          <div style="margin-top:clamp(24px,3vw,36px); padding:clamp(20px,2.6vw,30px); background:#1A1512; border-radius:20px; text-align:center; color:#FBF6EC">
+            <div style="font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.2em; color:#E3C58E">{{ shared.state }}</div>
+            <p style="max-width:420px; margin:12px auto 0; font-size:14px; line-height:1.6; color:#C7BCAA">The studio has been notified and will follow up with next steps.</p>
+          </div>
+        </sc-if>
+
+        <div style="font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:.16em; color:#A0968A; text-align:center; margin-top:clamp(26px,3.4vw,40px); line-height:1.9">CASA DE AURUM · MILAN · LISBON · NEW DELHI<br />SURFACES SHOWN ARE MATCHED TO PHYSICAL VAULT STOCK</div>
+      </div>
+    </div>
+  </sc-if>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;forceViewport&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;auto&quot;,&quot;desktop&quot;,&quot;tablet&quot;,&quot;mobile&quot;],&quot;default&quot;:&quot;auto&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Layout&quot;},&quot;defaultSection&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;dashboard&quot;,&quot;moodboard&quot;,&quot;projects&quot;,&quot;catalog&quot;],&quot;default&quot;:&quot;dashboard&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Layout&quot;},&quot;showAtelierTips&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Content&quot;},&quot;generateSpeedMs&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;min&quot;:1200,&quot;max&quot;:9000,&quot;step&quot;:300,&quot;default&quot;:4200,&quot;unit&quot;:&quot;ms&quot;,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Behavior&quot;},&quot;simulateRenderError&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Behavior&quot;}}">
+const MONO = "'JetBrains Mono',monospace";
+const IMG = {
+  'Bathroom': 'img/room-bathroom.png', 'Powder Room': 'img/room-powder.png', 'Living Room': 'img/room-living.png',
+  'Bedroom': 'img/room-bedroom.png', 'Kitchen & Dining': 'img/room-kitchen.png', 'Balcony & Patio': 'img/room-terrace.png'
+};
+const TEX = (n) => 'img/tex-' + n + '.png';
+
+class Component extends DCLogic {
+  state = {
+    section: null, stage: 'wizard', step: 1, mode: 'desktop', drawer: false, loading: false,
+    room: 'Bathroom', feature: 'BASIN WALL', size: '600×1200 mm', finish: 'Honed Matte',
+    budget: 'Mid-Range', palette: 'Warm Neutral', grout: 'Ivory Matte', view: 'Front Elevation',
+    filter: 'ALL BOARDS', query: '', progress: 0, toast: null, modal: null, detail: null, pdfPreview: null,
+    session: null, shared: null, saved: null, approved: {}
+  };
+
+  componentDidMount() {
+    this.sync();
+    window.addEventListener('resize', this.sync);
+    if (typeof ResizeObserver !== 'undefined') {
+      this.ro = new ResizeObserver((entries) => {
+        const w = entries[0] && entries[0].contentRect ? entries[0].contentRect.width : 0;
+        if (w > 0) this.apply(w);
+      });
+      const el = this.rootEl || (this.mainEl && this.mainEl.parentElement) || document.body;
+      if (el) this.ro.observe(el);
+    }
+    this.load();
+  }
+  componentWillUnmount() {
+    window.removeEventListener('resize', this.sync);
+    if (this.ro) this.ro.disconnect();
+    clearInterval(this.timer); clearTimeout(this.toastTimer); clearTimeout(this.loadTimer);
+  }
+  apply = (w) => {
+    const m = w < 768 ? 'mobile' : w < 1120 ? 'tablet' : 'desktop';
+    if (m !== this.state.mode) this.setState({ mode: m });
+  };
+  sync = () => {
+    const el = this.rootEl;
+    const w = el && el.clientWidth ? el.clientWidth : window.innerWidth;
+    this.apply(w);
+  };
+  get mode() { const f = this.props.forceViewport; return f && f !== 'auto' ? f : this.state.mode; }
+  get section() { return this.state.section || this.props.defaultSection || 'dashboard'; }
+  
+  save = () => {
+    if (typeof localStorage !== 'undefined') {
+      const s = { section: this.state.section, room: this.state.room, feature: this.state.feature, size: this.state.size, 
+        finish: this.state.finish, palette: this.state.palette, budget: this.state.budget, grout: this.state.grout, view: this.state.view,
+        saved: this.state.saved, approved: this.state.approved };
+      localStorage.setItem('cda-state', JSON.stringify(s));
+    }
+  };
+  load = () => {
+    if (typeof localStorage !== 'undefined') {
+      try { const s = JSON.parse(localStorage.getItem('cda-state') || '{}'); if (s.room) this.setState(s); } catch (e) {}
+    }
+  };
+
+  top = () => { if (this.mainEl) this.mainEl.scrollTop = 0; };
+  goTo = (id) => {
+    clearTimeout(this.loadTimer);
+    const needsLoad = id === 'projects' || id === 'catalog';
+    this.setState({ section: id, drawer: false, modal: null, detail: null, session: null, loading: needsLoad });
+    requestAnimationFrame(this.top);
+    if (needsLoad) this.loadTimer = setTimeout(() => this.setState({ loading: false }), 520);
+  };
+  flash = (msg) => {
+    clearTimeout(this.toastTimer);
+    this.setState({ toast: msg });
+    this.toastTimer = setTimeout(() => this.setState({ toast: null }), 2600);
+  };
+
+  startWizard = () => { clearInterval(this.timer); this.setState({ section: 'moodboard', stage: 'wizard', step: 1, drawer: false, modal: null, detail: null, progress: 0 }); requestAnimationFrame(this.top); };
+  setStep = (n) => { this.setState({ step: n }, this.save); requestAnimationFrame(this.top); };
+  nextStep = () => { const s = this.state.step; if (s >= 7) this.generate(); else this.setStep(s + 1); };
+  prevStep = () => { const s = this.state.step; if (s <= 1) this.goTo('dashboard'); else this.setStep(s - 1); };
+
+  generate = () => {
+    clearInterval(this.timer);
+    this.setState({ section: 'moodboard', stage: 'generating', drawer: false, modal: null, detail: null, progress: 0 });
+    requestAnimationFrame(this.top);
+    const total = Math.max(1200, this.props.generateSpeedMs ?? 4200), t0 = Date.now();
+    this.timer = setInterval(() => {
+      const p = Math.min(100, ((Date.now() - t0) / total) * 100);
+      if (p >= 100) { clearInterval(this.timer); this.finish(); } else this.setState({ progress: p });
+    }, 60);
+  };
+  finish = () => {
+    const err = this.props.simulateRenderError === true;
+    this.setState({ progress: 100, stage: err ? 'error' : 'results' });
+    requestAnimationFrame(this.top);
+  };
+  skipGenerating = () => { clearInterval(this.timer); this.finish(); };
+  retry = () => { this.generate(); };
+
+  openDetail = (i) => { this.setState({ section: 'moodboard', stage: 'detail', detail: i, modal: null }); requestAnimationFrame(this.top); };
+  backToResults = () => { this.setState({ stage: 'results', detail: null }); requestAnimationFrame(this.top); };
+  get savedList() { return this.state.saved || this.savedData; }
+  saveBoard = (name) => {
+    const b = this.boardData.find(x => x.name === name);
+    const entry = { name: this.state.room + ' · ' + name, tag: name, meta: 'JUST SAVED · NOW', img: b ? b.img : IMG[this.state.room], fresh: true };
+    const list = [entry, ...this.savedList.filter(s => s.name !== entry.name)];
+    this.setState({ saved: list }, this.save);
+    this.flash(name.toUpperCase() + ' SAVED TO CLIENT PROOFS');
+    this.goTo('projects');
+  };
+  openPdfPreview = () => { this.setState({ pdfPreview: true, drawer: false }); };
+  closePdfPreview = () => { this.setState({ pdfPreview: false }); };
+  downloadPdf = () => { this.flash('PDF EXPORT QUEUED · DOWNLOAD STARTING'); this.closePdfPreview(); };
+
+  openSession = (i) => { this.setState({ section: 'projects', session: i, modal: null, shared: null }); requestAnimationFrame(this.top); };
+  backToProjects = () => { this.setState({ session: null }); requestAnimationFrame(this.top); };
+  openShared = (i) => { this.setState({ shared: i }); };
+  closeShared = () => { this.setState({ shared: null }); };
+  approveShared = (key) => {
+    this.setState(s => ({ approved: { ...s.approved, [key]: 'APPROVED' }, shared: null }), this.save);
+    this.flash('CLIENT APPROVAL RECORDED');
+  };
+  requestChanges = (key) => {
+    this.setState(s => ({ approved: { ...s.approved, [key]: 'CHANGES REQUESTED' }, shared: null }), this.save);
+    this.flash('CHANGE REQUEST SENT TO STUDIO');
+  };
+  copyLink = () => this.flash('SHARE LINK COPIED TO CLIPBOARD');
+
+  pill = (status) => `font-family:${MONO}; font-size:9px; letter-spacing:.1em; white-space:nowrap; padding:7px 10px; border-radius:100px; justify-self:start;` +
+    (status === 'IN CURATION' ? 'background:#EDE8DF; color:#5B5147' : 'background:#F7DFBB; color:#6E5228');
+  chip = (on) => `display:flex; align-items:center; justify-content:center; gap:8px; min-height:48px; padding:0 16px; border-radius:12px; cursor:pointer; font-family:${MONO}; font-size:10px; letter-spacing:.12em; ` +
+    (on ? 'background:#1A1512; color:#FBF6EC; border:1px solid #1A1512' : 'background:#fff; color:#3A322A; border:1px solid #E7DFD1');
+  pickCard = (on, extra) => `display:flex; flex-direction:column; align-items:flex-start; padding:18px; background:#fff; border-radius:16px; cursor:pointer; transition:transform .18s ease, border-color .18s ease; border:1px solid ${on ? '#1A1512' : '#E7DFD1'};` + (extra || '');
+  rise = (i) => `animation:cdaRise .45s cubic-bezier(.2,.7,.3,1) both; animation-delay:${i * 45}ms`;
+
+  navData = [
+    { id: 'dashboard', label: 'Dashboard', short: 'DASHBOARD', d: 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z' },
+    { id: 'moodboard', label: 'Mood Board', short: 'MOOD BOARD', badge: '7 STEPS', d: 'M3 15 15 3M8 20 20 8M3 21l4-4' },
+    { id: 'projects', label: 'Projects', short: 'PROJECTS', badge: '18', d: 'M12 6 7 20M12 6l5 14M12 6a2 2 0 1 0 0-4 2 2 0 0 0 0 4' },
+    { id: 'catalog', label: 'Catalog', short: 'CATALOG', d: 'M12 3 3 8l9 5 9-5-9-5M3 14l9 5 9-5' }
+  ];
+
+  sessionData = [
+    { client: 'Vasant Vihar Residence', designer: 'Ar. Ananya Sethi', status: 'CONCEPT APPROVED', spec: 'Bathroom · 600×1200', updated: 'Today · 11:20', board: 0, room: 'Bathroom', area: '148 sq ft', d: 'M4 20V9l8-5 8 5v11M9 20v-6h6v6' },
+    { client: 'Goa Courtyard Villa', designer: 'Siddharth Menon', status: 'SAMPLING DISPATCHED', spec: 'Balcony · Anti-skid R11', updated: 'Today · 09:05', board: 3, room: 'Balcony & Patio', area: '320 sq ft', d: 'M3 15c3-2 5 2 8 0s5 2 10 0M3 9c3-2 5 2 8 0s5 2 10 0' },
+    { client: 'DLF Aralias Powder Room', designer: 'Studio Lotus · Ar. Kabir', status: 'IN CURATION', spec: 'Powder Room · Fluted', updated: 'Yesterday', board: 1, room: 'Powder Room', area: '46 sq ft', d: 'M5 21V4h14v17M9 8h2M13 8h2M9 12h2M13 12h2M9 16h6' },
+    { client: 'Bandra Sea Wing Bath', designer: 'Ar. Meera Rao', status: 'CONCEPT APPROVED', spec: 'Bathroom · Travertine', updated: '2 days ago', board: 2, room: 'Bathroom', area: '132 sq ft', d: 'M4 20V9l8-5 8 5v11M9 20v-6h6v6' },
+    { client: 'Whitefield Kitchen Spec', designer: 'Ar. Rohan Iyer', status: 'IN CURATION', spec: 'Kitchen · Splashback', updated: '3 days ago', board: 1, room: 'Kitchen & Dining', area: '96 sq ft', d: 'M4 7h16v13H4zM8 7V4h8v3M9 12h6' }
+  ];
+  stageOrder = ['IN CURATION', 'CONCEPT APPROVED', 'SAMPLING DISPATCHED'];
+
+  collectionData = [
+    { name: 'Japandi Wabi-Sabi', tag: 'Wabi-Sabi', img: 'img/coll-japandi.png', desc: 'Warm oak battens, chalk plaster walls and honed sand-tone floors.', count: '14 SURFACES · 6 BOARDS', sw: ['#D9C7A6', '#B79A6E', '#EFE7D8', '#8A7A62'] },
+    { name: 'Travertine Minimalist', tag: 'Travertine', img: 'img/coll-travertine.png', desc: 'Vein-cut travertine paired with fluted subway niches and brass trim.', count: '11 SURFACES · 4 BOARDS', sw: ['#E7DCC6', '#CDB893', '#F3EEE2', '#A88F63'] },
+    { name: 'Modern Slate', tag: 'Slate', img: 'img/coll-slate.png', desc: 'Charcoal slate volumes cut by ivory marble and matte black fittings.', count: '9 SURFACES · 8 BOARDS', sw: ['#4A4A4A', '#8C8C8C', '#E3E0DA', '#2B2B2B'] }
+  ];
+
+  surfaceData = [
+    { name: 'ITACA Beige', spec: '600×1200 · MATTE', tex: 'travertine' },
+    { name: 'Calacatta Silk', spec: '600×1200 · POLISHED', tex: 'calacatta' },
+    { name: 'Crema Marfil', spec: '800×800 · HONED', tex: 'crema' },
+    { name: 'Sandstone Beige', spec: '800×800 · POLISHED', tex: 'sandstone' },
+    { name: 'Nero Charcoal Fluted', spec: 'SUBWAY · FLUTED', tex: 'fluted' },
+    { name: 'Botticino Classic', spec: '600×1200 · MATTE', tex: 'botticino' },
+    { name: 'Desert Dune Slab', spec: '1200×2400 · SLAB', tex: 'dune' },
+    { name: 'Matte Chalk White', spec: '400×800 · MATTE', tex: 'chalk' },
+    { name: 'Micro Terrazzo Sand', spec: '600×600 · TEXTURED', tex: 'terrazzo' },
+    { name: 'Oak Batten Warm', spec: '1200×200 · WOOD', tex: 'oak' }
+  ];
+
+  boardData = [
+    { name: 'Warm Minimal', part: 'PART 01 · CURATED BASELINE', tone: 'Recommended Spec', dark: true, price: '$114', elevation: 'Front Elevation 01', tiles: '(3 TILES)', img: 'img/board-warm-minimal.png',
+      desc: 'Earthy, tactile travertine paired with soft glowing under-vanity textures and organic ribbed textures.',
+      formula: [['FLOOR', 'ITACA Beige 600×1200 (Matte)', 'travertine'], ['WALL', 'Calacatta Silk 600×1200', 'calacatta'], ['FEATURE', 'Fluted Travertine Subway Niche', 'oak']],
+      products: [['ITACA Beige', 'CDA-ITB-612 · 600×1200 · Matte R10', '$3.40 / sqft', 'IN STOCK'], ['Calacatta Silk', 'CDA-CAS-612 · 600×1200 · Polished', '$5.10 / sqft', 'IN STOCK'], ['Fluted Travertine Subway', 'CDA-FTS-306 · 300×600 · Fluted', '$7.80 / sqft', '6 CRATES']] },
+    { name: 'Modern Contrast', part: 'PART 02 · ARCHITECTURAL BLEND', tone: 'Balanced Tone', price: '$138', elevation: 'Front Elevation 02', tiles: '(3 TILES)', img: 'img/board-modern-contrast.png',
+      desc: 'Subtle warmth punctuated by dark fluted bronze architecture and dramatic charcoal subway accents.',
+      formula: [['FLOOR', 'Crema Marfil 800×800', 'crema'], ['WALL', 'Sandstone Beige Polished', 'sandstone'], ['FEATURE', 'Nero Charcoal Fluted Subway', 'fluted']],
+      products: [['Crema Marfil', 'CDA-CRM-808 · 800×800 · Honed', '$4.20 / sqft', 'IN STOCK'], ['Sandstone Beige', 'CDA-SSB-808 · 800×800 · Polished', '$4.60 / sqft', 'LOW STOCK'], ['Nero Charcoal Fluted', 'CDA-NCF-306 · 300×600 · Fluted', '$8.40 / sqft', 'IN STOCK']] },
+    { name: 'Luxury Stone', part: 'PART 03 · HIGH LUXURY', tone: 'Signature Marble', price: '$162', elevation: 'Front Elevation 03', tiles: '(3 TILES)', img: 'img/board-luxury-stone.png',
+      desc: 'Graceful bookmatched ivory marble veins accented with geometric herringbone and hand-finished brass.',
+      formula: [['FLOOR', 'Botticino Classic 600×1200', 'botticino'], ['WALL', 'Desert Dune 1200×2400 Slab', 'dune'], ['FEATURE', 'Geometric Herringbone Accent', 'calacatta']],
+      products: [['Botticino Classic', 'CDA-BTC-612 · 600×1200 · Matte', '$5.80 / sqft', 'IN STOCK'], ['Desert Dune Slab', 'CDA-DDS-1224 · 1200×2400 · Slab', '$11.20 / sqft', '2 SLABS'], ['Herringbone Accent', 'CDA-HBA-mos · Mosaic Sheet', '$14.60 / sqft', 'IN STOCK']] },
+    { name: 'Natural Contemporary', part: 'PART 04 · TACTILE FOCUS', tone: 'Organic Texture', price: '$98', elevation: 'Front Elevation 04', tiles: '(3 TILES)', img: 'img/board-natural-contemporary.png',
+      desc: 'Warm sand and micro-terrazzo anchored by gentle chalk white panels and tactile vertical finger mosaic lines.',
+      formula: [['FLOOR', 'Ora Sand 600×600', 'terrazzo'], ['WALL', 'Matte Chalk White 400×800', 'chalk'], ['FEATURE', 'Vertical Finger Mosaic Wall', 'oak']],
+      products: [['Ora Sand Terrazzo', 'CDA-ORS-606 · 600×600 · Textured', '$3.10 / sqft', 'IN STOCK'], ['Matte Chalk White', 'CDA-MCW-408 · 400×800 · Matte', '$2.80 / sqft', 'IN STOCK'], ['Finger Mosaic Oak Tone', 'CDA-FMO-mos · Mosaic Sheet', '$9.40 / sqft', '4 CRATES']] }
+  ];
+
+  roomData = [
+    { name: 'Bathroom', badge: 'WET SPACE', desc: 'Wet zone and walk-in shower automatically calibrated.' },
+    { name: 'Powder Room', badge: 'COMPACT VANITY', desc: 'Compact vanity & accent wall statement focus.' },
+    { name: 'Living Room', badge: 'OPEN FLOOR', desc: 'Large format open floor plan & fireplace wraps.' },
+    { name: 'Bedroom', badge: 'AMBIENT SLEEP', desc: 'Warm textured ambient surfaces and quiet tones.' },
+    { name: 'Kitchen & Dining', badge: 'HIGH TRAFFIC', desc: 'Splashback focal point & stain-resistant porcelain.' },
+    { name: 'Balcony & Patio', badge: 'OUTDOOR R11', desc: 'Anti-skid outdoor porcelain & weather resistance.' }
+  ];
+
+  savedData = [
+    { name: 'Vasant Vihar Bath', tag: 'Warm Minimal', meta: 'APPROVED · TODAY', img: 'img/board-warm-minimal.png' },
+    { name: 'Goa Courtyard Deck', tag: 'Natural', meta: 'SAMPLING · TODAY', img: 'img/room-terrace.png' },
+    { name: 'DLF Powder Room', tag: 'Modern Contrast', meta: 'IN CURATION · 1D', img: 'img/board-modern-contrast.png' },
+    { name: 'Sea Wing Guest Bath', tag: 'Luxury Stone', meta: 'APPROVED · 2D', img: 'img/board-luxury-stone.png' },
+    { name: 'Whitefield Splashback', tag: 'Travertine', meta: 'IN CURATION · 3D', img: 'img/room-kitchen.png' },
+    { name: 'Alipore Master Suite', tag: 'Japandi', meta: 'PRINT READY · 4D', img: 'img/coll-japandi.png' }
+  ];
+
+  stepMeta = {
+    1: { key: 'ROOM TYPOLOGY', eyebrow: 'ARCHITECTURAL FOUNDATION', title: 'What are you designing?', sub: 'Select your space to automatically calibrate ambient lighting, scale proportions, and surface drainage parameters.' },
+    2: { key: 'FEATURE PLACEMENT', eyebrow: 'STATEMENT SURFACE', title: 'Where should the feature wall sit?', sub: 'The accent surface anchors the composition. Everything else is matched to it by the layout system.' },
+    3: { key: 'DIMENSION & FINISH', eyebrow: 'MODULE GEOMETRY', title: 'Pick the floor module', sub: 'Larger modules mean fewer grout lines. Finish drives slip rating and reflectivity in the render.' },
+    4: { key: 'BUDGET BAND', eyebrow: 'COMMERCIAL ENVELOPE', title: 'What is the surface budget?', sub: 'Only in-stock surfaces inside this band are matched, so every concept stays quotable.' },
+    5: { key: 'PALETTE & GROUT', eyebrow: 'TONAL DIRECTION', title: 'Set the palette temperature', sub: 'Grout tone is specified alongside the palette — it changes the perceived scale of the whole wall.' },
+    6: { key: 'REVIEW SPEC', eyebrow: 'DESIGN DNA', title: 'Review the design DNA', sub: 'This locked spec is what the render pipeline reproduces exactly across all four concepts.' },
+    7: { key: 'CAMERA', eyebrow: 'RENDER PIPELINE', title: 'Choose the client view', sub: 'A fixed camera keeps all four concepts comparable side by side in the client handout.' }
+  };
+
+  renderVals() {
+    const mode = this.mode, sec = this.section, st = this.state;
+    const isMobile = mode === 'mobile', isTablet = mode === 'tablet', isDesktop = mode === 'desktop';
+    const q = st.query.trim().toLowerCase();
+    const go = {}; this.navData.forEach(n => { go[n.id] = () => this.goTo(n.id); });
+
+    const navItems = this.navData.map(n => {
+      const on = n.id === sec;
+      return { ...n, go: go[n.id],
+        fullStyle: `display:flex; align-items:center; gap:12px; width:100%; min-height:48px; padding:0 12px; border:none; border-radius:12px; cursor:pointer; font-size:14px; font-weight:${on ? 500 : 400}; text-align:left; transition:background .16s ease; ` + (on ? 'background:#1A1512; color:#FBF6EC' : 'background:transparent; color:#4A4038'),
+        badgeStyle: `font-family:${MONO}; font-size:9px; letter-spacing:.08em; padding:3px 7px; border-radius:100px; ` + (on ? 'background:rgba(227,197,142,.2); color:#E3C58E' : 'background:#F1EADD; color:#8B8177'),
+        railStyle: `display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; width:100%; height:62px; border:none; border-radius:14px; cursor:pointer; transition:background .16s ease; ` + (on ? 'background:#1A1512; color:#FBF6EC' : 'background:transparent; color:#4A4038'),
+        tabStyle: `position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5px; min-height:56px; padding:6px 2px 10px; background:transparent; border:none; cursor:pointer; color:${on ? '#8A6A3B' : '#8B8177'}`,
+        tabRule: `position:absolute; bottom:2px; width:26px; height:2px; border-radius:2px; background:${on ? '#8A6A3B' : 'transparent'}` };
+    });
+
+    const sessions = this.sessionData
+      .filter(s => st.filter === 'ALL BOARDS' || s.status === st.filter)
+      .filter(s => !q || (s.client + s.designer + s.spec).toLowerCase().includes(q))
+      .map((s, i) => ({ ...s, meta: s.designer + ' · ' + s.spec, pillStyle: this.pill(s.status),
+        rowStyle: `display:flex; align-items:center; gap:14px; width:100%; text-align:left; padding:14px 16px; background:#F4EEE3; border:1px solid transparent; border-radius:16px; cursor:pointer; ${this.rise(i)}`,
+        cardStyle: `background:#fff; border:1px solid #E7DFD1; border-radius:16px; padding:16px; ${this.rise(i)}`,
+        tableStyle: `display:grid; grid-template-columns:minmax(0,2.1fr) minmax(0,1.3fr) minmax(0,1.4fr) minmax(0,1.2fr) 44px; gap:14px; align-items:center; width:100%; text-align:left; padding:16px 20px; background:#fff; border:none; border-bottom:1px solid #EFE7DA; cursor:pointer; ${this.rise(i)}`,
+        open: () => this.openSession(this.sessionData.indexOf(s)) }));
+
+    const collections = this.collectionData
+      .filter(c => !q || (c.name + c.desc).toLowerCase().includes(q))
+      .map((c, i) => ({ ...c,
+        cardStyle: `background:#fff; border:1px solid #E7DFD1; border-radius:20px; overflow:hidden; display:flex; flex-direction:column; ${this.rise(i)}`,
+        swatches: c.sw.map(x => ({ style: `width:26px; height:26px; border-radius:7px; background:${x}; border:1px solid rgba(26,21,18,.1)` })),
+        open: () => this.goTo('catalog'), use: () => this.startWizard() }));
+
+    const boards = this.boardData.map((b, i) => ({ ...b,
+      cardStyle: `background:#fff; border:1px solid #E7DFD1; border-radius:20px; overflow:hidden; display:flex; flex-direction:column; ${this.rise(i)}`,
+      stripStyle: `display:flex; align-items:center; justify-content:space-between; gap:12px; padding:11px 16px; font-family:${MONO}; font-size:9px; letter-spacing:.12em; ` + (b.dark ? 'background:#1A1512; color:#E3C58E' : 'background:#F4EEE3; color:#6E5228; border-bottom:1px solid #E7DFD1'),
+      imgStyle: `position:relative; display:block; width:100%; height:${isMobile ? 190 : 230}px; padding:0; border:none; border-radius:14px; overflow:hidden; cursor:pointer; background:#EFE7DA; transition:opacity .18s ease`,
+      formula: b.formula.map(([slot, value, tex]) => ({ slot, value, tex: TEX(tex) })),
+      open: () => this.openDetail(i),
+      use: () => this.saveBoard(b.name),
+      products: () => this.setState({ modal: i }) }));
+
+    const p = Math.round(st.progress);
+    const phase = (n) => p >= n ? 'done' : p >= n - 34 ? 'live' : 'wait';
+    const pipeline = [
+      { part: 'PART 01', title: 'Design DNA Established', detail: `${st.room} Template 01 · ${st.size} ${st.finish}`, state: 'Locked', s: phase(34) },
+      { part: 'PART 02', title: 'Physical Inventory Retrieved', detail: '6 In-Stock Surfaces matched from Casa De Aurum vaults', state: 'Matched', s: phase(68) },
+      { part: 'PART 03', title: 'Rendering 4 Visualizations', detail: 'Bespoke lighting pass & calibrated camera perspective', state: p + '%', s: phase(100) }
+    ].map((x, i) => ({ ...x,
+      mark: x.s === 'done' ? '✓' : x.s === 'live' ? '◐' : '·',
+      rowStyle: `display:flex; align-items:flex-start; gap:14px; padding:16px 18px; background:#26201A; border-radius:14px; ${this.rise(i)}`,
+      dotStyle: `width:34px; height:34px; flex:0 0 auto; border-radius:50%; display:grid; place-items:center; font-size:13px; ` +
+        (x.s === 'done' ? 'background:#3A2F24; color:#E3C58E' : x.s === 'live' ? 'background:#3A2F24; color:#E3C58E; animation:cdaSpin 1.6s linear infinite' : 'background:#2E2721; color:#6B5A42') }));
+
+    const renderTiles = this.boardData.map((b, i) => {
+      const done = p > (i + 1) * 22;
+      return { done, pending: !done, img: b.img,
+        style: 'position:relative; height:66px; border-radius:9px; overflow:hidden; background:#3A322A',
+        skeletonStyle: 'position:absolute; inset:0; background:linear-gradient(90deg,#3A322A 20%,#4E453A 50%,#3A322A 80%); background-size:200% 100%; animation:cdaShimmer 1.5s linear infinite' };
+    });
+
+    const detailIdx = st.detail;
+    const detail = detailIdx == null ? null : (() => {
+      const b = this.boardData[detailIdx];
+      return { ...b,
+        formula: b.formula.map(([slot, value, tex]) => ({ slot, value, tex: TEX(tex) })),
+        products: b.products.map(([name, spec, price, stock]) => ({ name, spec, price, stock, tex: TEX(b.formula[0][2]),
+          stockStyle: `font-family:${MONO}; font-size:8.5px; letter-spacing:.08em; margin-top:6px; color:${stock === 'IN STOCK' ? '#6E5228' : '#A8552A'}` })),
+        use: () => this.saveBoard(b.name),
+        showProducts: () => this.setState({ modal: detailIdx }) };
+    })();
+
+    const modalIdx = st.modal;
+    const modal = modalIdx == null ? null : (() => {
+      const b = this.boardData[modalIdx];
+      return { name: b.name, tilesLabel: b.tiles.replace(/[()]/g, ''),
+        products: b.products.map(([name, spec, price, stock], i) => ({ name, spec, price, stock, tex: TEX(b.formula[i][2]),
+          stockStyle: `font-family:${MONO}; font-size:8.5px; letter-spacing:.08em; margin-top:6px; color:${stock === 'IN STOCK' ? '#6E5228' : '#A8552A'}` })) };
+    })();
+
+    const session = st.session == null ? null : (() => {
+      const s = this.sessionData[st.session], b = this.boardData[s.board];
+      const liveStatus = st.approved['sess-' + st.session] || s.status;
+      const reached = Math.max(0, this.stageOrder.indexOf(s.status));
+      return { ...s, status: liveStatus, pillStyle: this.pill(liveStatus),
+        boardName: b.name, price: b.price, img: b.img, roomImg: IMG[s.room],
+        desc: b.desc,
+        formula: b.formula.map(([slot, value, tex]) => ({ slot, value, tex: TEX(tex) })),
+        products: b.products.map(([name, spec, price, stock], i) => ({ name, spec, price, stock, tex: TEX(b.formula[i][2]),
+          stockStyle: `font-family:${MONO}; font-size:8.5px; letter-spacing:.08em; margin-top:6px; color:${stock === 'IN STOCK' ? '#6E5228' : '#A8552A'}` })),
+        facts: [{ k: 'ROOM', v: s.room }, { k: 'AREA', v: s.area }, { k: 'MODULE', v: s.spec.split(' · ')[1] || '600×1200' }, { k: 'EST. RATE', v: b.price + ' / sq ft' }],
+        timeline: this.stageOrder.map((label, i) => {
+          const done = i <= reached;
+          return { label, mark: done ? '✓' : String(i + 1),
+            note: ['Palette and module locked with the studio.', 'Client signed off on the render pack.', 'Physical samples on the way to site.'][i],
+            rowStyle: `display:flex; gap:14px; align-items:flex-start; padding:15px 17px; background:${done ? '#F4EEE3' : '#fff'}; border:1px solid #E7DFD1; border-radius:14px`,
+            dotStyle: `width:28px; height:28px; flex:0 0 auto; border-radius:50%; display:grid; place-items:center; font-family:${MONO}; font-size:10px; ` +
+              (done ? 'background:#1A1512; color:#FBF6EC' : 'background:#EFE7DA; color:#8B8177') };
+        }),
+        openBoard: () => this.openDetail(s.board),
+        share: () => this.openShared('sess-' + st.session),
+        exportPdf: this.openPdfPreview };
+    })();
+
+    const shared = st.shared == null ? null : (() => {
+      const key = st.shared;
+      let title, sub, b, room;
+      if (String(key).startsWith('sess-')) {
+        const s = this.sessionData[+String(key).slice(5)];
+        b = this.boardData[s.board]; title = s.client; sub = s.designer + ' · ' + s.spec; room = s.room;
+      } else {
+        const sv = this.savedList[+String(key).slice(6)] || this.savedList[0];
+        b = this.boardData.find(x => x.name === sv.tag) || this.boardData[0];
+        title = sv.name; sub = sv.tag + ' · ' + sv.meta; room = st.room;
+      }
+      return { title, sub, name: b.name, img: b.img, price: b.price, desc: b.desc, room,
+        state: st.approved[key] || null, pending: !st.approved[key],
+        formula: b.formula.map(([slot, value, tex]) => ({ slot, value, tex: TEX(tex) })),
+        approve: () => this.approveShared(key), changes: () => this.requestChanges(key) };
+    })();
+
+    const stepNo = st.step, meta = this.stepMeta[stepNo];
+    const dna = `${st.room.toUpperCase().replace(/[^A-Z]/g, '_')}_TEMPLATE_01 · ${st.feature.replace(/ /g, '_')} · ${st.size.replace(/ /g, '')} · ${st.finish.toUpperCase().replace(/ /g, '_')} · ${st.palette.toUpperCase().replace(/ /g, '_')}`;
+
+    return {
+      isMobile, isTablet, isDesktop, notMobile: !isMobile, showTopBar: !isMobile,
+      atDashboard: sec === 'dashboard',
+      atWizard: sec === 'moodboard' && st.stage === 'wizard',
+      atGenerating: sec === 'moodboard' && st.stage === 'generating',
+      atError: sec === 'moodboard' && st.stage === 'error',
+      atResults: sec === 'moodboard' && st.stage === 'results',
+      atDetail: sec === 'moodboard' && st.stage === 'detail' && !!detail,
+      atProjects: sec === 'projects' && !session, atCatalog: sec === 'catalog',
+      title: { dashboard: 'Dashboard', moodboard: st.stage === 'detail' && detail ? detail.name : 'Mood Board Generator', projects: session ? session.client : 'Projects', catalog: 'Catalog' }[sec],
+      crumb: { dashboard: 'WORKSPACE', moodboard: st.stage === 'results' ? 'SPEC RESULTS' : st.stage === 'generating' ? 'RENDER PIPELINE' : st.stage === 'error' ? 'PIPELINE ERROR' : st.stage === 'detail' ? 'BOARD DETAIL' : `STEP ${stepNo} OF 7`, projects: session ? 'SESSION DETAIL' : 'CLIENT PROOFS', catalog: 'CURATED ARCHIVES' }[sec],
+      navItems, go, sessions, collections, boards, pipeline, renderTiles, detail, modal,
+      recentSessions: sessions.slice(0, 3),
+      noSessions: sessions.length === 0, hasSessions: sessions.length > 0,
+      noCollections: collections.length === 0,
+      showProjects: !st.loading, showCatalog: !st.loading,
+      loading: st.loading, loadingRows: [0, 1, 2, 3, 4, 5].map(i => ({
+        style: `height:${i < 3 ? 74 : 190}px; border-radius:16px; background:linear-gradient(90deg,#F1EADD 20%,#F8F3E9 50%,#F1EADD 80%); background-size:200% 100%; animation:cdaShimmer 1.4s linear infinite` })),
+      filters: ['ALL BOARDS', 'CONCEPT APPROVED', 'SAMPLING DISPATCHED', 'IN CURATION'].map(label => ({
+        label, style: this.chip(st.filter === label), pick: () => this.setState({ filter: label }) })),
+      resetFilters: () => this.setState({ filter: 'ALL BOARDS', query: '' }),
+      savedBoards: this.savedList.map((s, i) => ({ ...s,
+        cardStyle: `background:#fff; border:1px solid ${s.fresh ? '#C7B393' : '#E7DFD1'}; border-radius:16px; overflow:hidden; ${this.rise(i)}`,
+        metaLine: (st.approved['saved-' + s.name] || s.meta),
+        open: () => this.openShared('saved-' + i) })),
+      surfaces: this.surfaceData.map((s, i) => ({ ...s, img: TEX(s.tex),
+        cardStyle: `background:#fff; border:1px solid #E7DFD1; border-radius:14px; padding:14px; display:flex; gap:12px; align-items:center; ${this.rise(i)}` })),
+      stats: [['ATELIER STOCK', '99.4% Live', '#6E5228'], ['ACTIVE SPECS', '24 Tonal Kits', '#1A1512'], ['RENDERS READY', '3 Pending', '#8A6A3B']]
+        .map(([label, value, c]) => ({ label, value, valueStyle: `font-family:'Playfair Display',serif; font-size:clamp(19px,2vw,25px); color:${c}` })),
+      avatars: [['VV', '#E3D8C4'], ['GV', '#F0E2C6'], ['DL', '#DCCBAA'], ['+15', '#1A1512']].map(([initials, bg], i) => ({
+        initials, style: `width:34px; height:34px; margin-left:${i ? -9 : 0}px; border-radius:50%; background:${bg}; border:2px solid #fff; display:grid; place-items:center; font-family:${MONO}; font-size:9px; color:${initials === '+15' ? '#FBF6EC' : '#5B5147'}` })),
+      tipsOn: this.props.showAtelierTips !== false,
+
+      stepNo, pct: Math.round(stepNo / 7 * 100), stepKey: meta.key, stepEyebrow: meta.eyebrow, stepTitle: meta.title, stepSub: meta.sub,
+      isStep1: stepNo === 1, isStep2: stepNo === 2, isStep3: stepNo === 3, isStep4: stepNo === 4, isStep5: stepNo === 5, isStep6: stepNo === 6, isStep7: stepNo === 7,
+      stepBarStyle: `width:${Math.round(stepNo / 7 * 100)}%; height:100%; background:linear-gradient(90deg,#8A6A3B,#E3C58E); transition:width .3s ease`,
+      steps: ['1. ROOM', '2. FEATURE', '3. SIZE', '4. BUDGET', '5. FINISH', '6. REVIEW', '7. RENDER'].map((label, i) => ({
+        label, go: () => this.setStep(i + 1),
+        style: `flex:0 0 auto; white-space:nowrap; padding:9px 14px; border-radius:100px; cursor:pointer; font-family:${MONO}; font-size:9.5px; letter-spacing:.1em; border:1px solid transparent; ` +
+          (i + 1 === stepNo ? 'background:#1A1512; color:#FBF6EC' : i + 1 < stepNo ? 'background:#EFE7DA; color:#6E5228' : 'background:#F4EEE3; color:#A0968A') })),
+      backLabel: stepNo === 1 ? 'DASHBOARD' : 'BACK',
+      nextLabel: stepNo === 7 ? 'GENERATE 4 MOOD BOARDS' : 'CONTINUE TO STEP ' + (stepNo + 1),
+      prevStep: this.prevStep, nextStep: this.nextStep,
+      room: st.room, roomImg: IMG[st.room], feature: st.feature, dna,
+      specLine: `${st.room} · ${st.palette} · ${st.budget} · ${st.size} · ${st.feature} · ${st.view}`,
+      rooms: this.roomData.map((r, i) => ({ ...r, img: IMG[r.name], selected: st.room === r.name,
+        pick: () => this.setState({ room: r.name }, this.save),
+        cardStyle: `display:flex; flex-direction:column; text-align:left; padding:0; overflow:hidden; background:#fff; border-radius:18px; cursor:pointer; transition:transform .18s ease, border-color .18s ease; border:1px solid ${st.room === r.name ? '#1A1512' : '#E7DFD1'}; ${this.rise(i)}`,
+        imgWrap: `position:relative; display:block; height:${isMobile ? 130 : 150}px; overflow:hidden` })),
+      features: [
+        ['NO FEATURE', 'Uniform surface across all four walls — quietest option.'],
+        ['BASIN WALL', 'Statement surface behind the vanity, mirrored in the render.'],
+        ['SHOWER NOOK', 'Accent restricted to the wet niche and shelf return.']
+      ].map(([label, desc]) => ({ label, desc,
+        rowStyle: `display:flex; align-items:flex-start; gap:14px; padding:16px; background:#fff; border-radius:14px; cursor:pointer; transition:border-color .18s ease; border:1px solid ${st.feature === label ? '#1A1512' : '#E7DFD1'}`,
+        dotStyle: `width:18px; height:18px; flex:0 0 auto; margin-top:2px; border-radius:50%; border:1px solid ${st.feature === label ? '#1A1512' : '#C7BCAA'}; background:${st.feature === label ? '#1A1512' : 'transparent'}; box-shadow:${st.feature === label ? 'inset 0 0 0 3px #FBF6EC' : 'none'}`,
+        pick: () => this.setState({ feature: label }, this.save) })),
+      sizes: ['600×600 mm', '600×1200 mm ★', '800×800 mm'].map(label => ({ label,
+        style: this.chip(st.size === label.replace(' ★', '')) + '; flex:1; min-width:140px',
+        pick: () => this.setState({ size: label.replace(' ★', '') }, this.save) })),
+      finishes: [['Honed Matte', 'R10 · ANTI-SKID · WET ZONE', 'travertine'], ['Polished Gloss', 'REFLECTIVE · DRY ZONE ONLY', 'calacatta'], ['Textured Grip', 'R11 · OUTDOOR RATED', 'terrazzo']]
+        .map(([label, spec, tex]) => ({ label, spec, img: TEX(tex),
+          cardStyle: `display:flex; gap:14px; align-items:center; padding:14px; background:#fff; border-radius:14px; cursor:pointer; transition:border-color .18s ease; border:1px solid ${st.finish === label ? '#1A1512' : '#E7DFD1'}`,
+          pick: () => this.setState({ finish: label }, this.save) })),
+      budgets: [['ESSENTIAL', '$2 – $4', 'Porcelain bodies and matte neutrals held in bulk stock.'], ['MID-RANGE', '$4 – $8', 'Vein-cut travertine, fluted accents and polished marfil.'], ['SIGNATURE', '$8 – $16', 'Bookmatched slabs, mosaic sheets and brass-trimmed niches.']]
+        .map(([tier, range, desc]) => { const key = tier === 'MID-RANGE' ? 'Mid-Range' : tier === 'ESSENTIAL' ? 'Essential' : 'Signature';
+          return { tier, range, desc, selected: st.budget === key, pick: () => this.setState({ budget: key }, this.save),
+            cardStyle: this.pickCard(st.budget === key) }; }),
+      palettes: [['Warm Neutral', 'BEIGE · SAND · TRAVERTINE', ['#E7DCC6', '#D9C7A6', '#B79A6E', '#8A7A62']], ['Cool Grey', 'ASH · SILK · SLATE', ['#E3E0DA', '#B9B6AF', '#8C8C8C', '#4A4A4A']], ['High Contrast', 'IVORY · CHARCOAL · BRASS', ['#F3EEE2', '#C09A5E', '#5A5651', '#241F1B']]]
+        .map(([label, spec, sw]) => ({ label, spec, selected: st.palette === label, pick: () => this.setState({ palette: label }, this.save),
+          cardStyle: this.pickCard(st.palette === label),
+          swatches: sw.map(x => ({ style: `flex:1; height:34px; border-radius:8px; background:${x}; border:1px solid rgba(26,21,18,.08)` })) })),
+      grouts: ['Ivory Matte', 'Sand Tone', 'Charcoal'].map(label => ({ label,
+        style: this.chip(st.grout === label) + '; flex:1; min-width:130px', pick: () => this.setState({ grout: label }, this.save) })),
+      views: [['Front Elevation', 'Straight-on wall for like-for-like comparison.', 'img/board-warm-minimal.png', ''], ['Vanity Close-Up', 'Tight crop on the basin and feature return.', 'img/board-luxury-stone.png', 'transform:scale(1.35)'], ['Wide Corner', 'Shows floor module and wall junction together.', 'img/board-natural-contemporary.png', 'transform:scale(1.05)']]
+        .map(([label, desc, img, imgFx]) => ({ label, desc, img, imgFx, selected: st.view === label, pick: () => this.setState({ view: label }, this.save),
+          cardStyle: this.pickCard(st.view === label, ' width:100%') })),
+      summary: [
+        { k: 'ROOM', v: st.room }, { k: 'FEATURE WALL', v: st.feature }, { k: 'FLOOR MODULE', v: st.size },
+        { k: 'FINISH', v: st.finish }, { k: 'BUDGET BAND', v: st.budget }, { k: 'PALETTE', v: st.palette },
+        { k: 'GROUT', v: st.grout }, { k: 'CAMERA', v: st.view }
+      ],
+
+      eta: (Math.max(0, 100 - p) / 100 * 3.4 + 0.2).toFixed(1) + 's',
+      barStyle: `width:${Math.max(4, p)}%; height:100%; background:linear-gradient(90deg,#8A6A3B,#F0DDB4); transition:width .2s linear`,
+      skipGenerating: this.skipGenerating, retry: this.retry, generate: this.generate,
+      backToResults: this.backToResults, startWizard: this.startWizard,
+      closeModal: () => this.setState({ modal: null }),
+      addSpec: () => { this.setState({ modal: null }); this.flash('3 SURFACES ADDED TO CLIENT SPEC'); },
+      pdfPreview: st.pdfPreview, openPdfPreview: this.openPdfPreview, closePdfPreview: this.closePdfPreview, downloadPdf: this.downloadPdf,
+      drawerOpen: st.drawer, toast: st.toast, query: st.query,
+      toastStyle: `position:fixed; left:50%; bottom:${isMobile ? '88px' : '32px'}; transform:translateX(-50%); z-index:80; display:flex; align-items:center; gap:11px; max-width:calc(100vw - 32px); padding:14px 20px; background:#1A1512; color:#FBF6EC; border-radius:100px; box-shadow:0 14px 34px rgba(26,21,18,.28); font-family:${MONO}; font-size:10.5px; letter-spacing:.12em; animation:cdaPop .25s ease both`,
+      openDrawer: () => this.setState({ drawer: true }),
+      closeDrawer: () => this.setState({ drawer: false }),
+      onQuery: (e) => this.setState({ query: e.target.value }),
+      focusSearch: () => { if (this.searchEl) this.searchEl.focus(); },
+      searchRef: (el) => { this.searchEl = el; },
+      mainRef: (el) => { this.mainEl = el; },
+      rootRef: (el) => {
+        this.rootEl = el;
+        if (el && this.ro) { this.ro.disconnect(); this.ro.observe(el); }
+        if (el) this.apply(el.clientWidth || window.innerWidth);
+      },
+      exportPdf: this.openPdfPreview,
+      atSession: sec === 'projects' && !!session, session, sessionOpen: !!session,
+      shared, sharedOpen: !!shared, closeShared: this.closeShared, copyLink: this.copyLink,
+      backToProjects: this.backToProjects
+    };
+  }
+}
+
+</script>
+</body>
+</html>
