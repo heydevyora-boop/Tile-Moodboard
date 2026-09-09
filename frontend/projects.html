@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Projects · Casa de Aurum</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500&family=DM+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root { --ink:#1A1512; --paper:#F7F3EC; --card:#fff; --line:#E7DFD1; --sand:#F4EEE3; --gold:#8A6A3B; --gold-light:#E3C58E; --muted:#8B8177; --text2:#5B5147; --err:#A8552A; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--paper); color:var(--ink); font-family:'DM Sans',sans-serif; -webkit-font-smoothing:antialiased; }
+  a { color:var(--gold); text-decoration:none; }
+  .mono { font-family:'JetBrains Mono',monospace; }
+  .serif { font-family:'Playfair Display',serif; }
+  button { font-family:inherit; }
+  img { max-width:100%; }
+  ::-webkit-scrollbar { width:10px; height:10px; }
+  ::-webkit-scrollbar-thumb { background:#DED3C0; border-radius:8px; border:3px solid var(--paper); }
+  @keyframes fadeIn { from{opacity:0} to{opacity:1} }
+  @keyframes rise { from{opacity:0; transform:translateY(14px)} to{opacity:1; transform:none} }
+  @keyframes shimmer { from{background-position:180% 0} to{background-position:-180% 0} }
+
+  .layout { display:flex; height:100vh; overflow:hidden; }
+  .sidebar { flex:0 0 auto; width:266px; height:100%; display:flex; flex-direction:column; background:#FCFAF6; border-right:1px solid var(--line); overflow-y:auto; }
+  .brand { padding:26px 22px 20px; border-bottom:1px solid #EFE7DA; }
+  .brand .name { font-size:19px; letter-spacing:.14em; line-height:1.1; }
+  .brand .tag { font-size:9px; letter-spacing:.22em; color:var(--muted); margin-top:6px; }
+  .nav { padding:20px 14px 8px; }
+  .nav-label { font-size:9.5px; letter-spacing:.2em; color:#A0968A; padding:0 8px 10px; }
+  .nav-items { display:flex; flex-direction:column; gap:3px; }
+  .nav-item { display:flex; align-items:center; gap:12px; width:100%; min-height:48px; padding:0 12px; border:none; border-radius:12px; cursor:pointer; font-size:14px; text-align:left; background:transparent; color:#4A4038; }
+  .nav-item.active { background:var(--ink); color:#FBF6EC; font-weight:500; }
+  .nav-item:not(.active):hover { background:#F1EADD; }
+  .nav-item .lbl { flex:1; }
+  .nav-item .badge { font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:.08em; padding:3px 7px; border-radius:100px; background:#F1EADD; color:var(--muted); }
+  .nav-item.active .badge { background:rgba(227,197,142,.2); color:var(--gold-light); }
+  .profile-wrap { margin-top:auto; padding:18px 16px; }
+  .profile { display:flex; align-items:center; gap:11px; padding:12px; background:var(--sand); border:1px solid var(--line); border-radius:14px; }
+  .avatar-circle { width:36px; height:36px; flex:0 0 auto; border-radius:50%; background:linear-gradient(150deg,#C09A5E,var(--gold)); display:grid; place-items:center; font-size:13px; color:#FFF8EC; }
+  .profile .name { font-size:13px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .profile .role { font-size:9px; letter-spacing:.14em; color:var(--muted); }
+  .logout-btn { margin-top:10px; width:100%; padding:8px; background:transparent; border:1px solid var(--line); border-radius:10px; cursor:pointer; font-size:10px; letter-spacing:.1em; color:var(--muted); }
+  .logout-btn:hover { color:var(--ink); border-color:#C7B393; }
+
+  .main { flex:1; min-width:0; overflow-y:auto; padding:clamp(22px,3vw,44px); }
+  .stage { animation:fadeIn .35s ease both; max-width:1100px; }
+
+  .eyebrow { display:flex; align-items:center; gap:9px; font-size:10px; letter-spacing:.2em; color:var(--gold); }
+  .dot { width:6px; height:6px; border-radius:50%; background:var(--gold); flex:0 0 auto; }
+  h1.page-h1 { font-weight:600; font-size:clamp(28px,3.8vw,44px); line-height:1.08; margin:12px 0 0; }
+  .page-sub { max-width:660px; margin:12px 0 0; font-size:clamp(14px,1.1vw,16px); line-height:1.55; color:var(--text2); }
+
+  .search-box { display:flex; align-items:center; gap:9px; padding:0 14px; height:46px; max-width:420px; background:#fff; border:1px solid var(--line); border-radius:12px; margin-top:20px; }
+  .search-box input { flex:1; min-width:0; border:none; outline:none; background:transparent; font-size:12px; letter-spacing:.02em; color:var(--ink); }
+
+  .chip-row { display:flex; gap:8px; flex-wrap:wrap; margin-top:16px; }
+  .chip { padding:9px 14px; border-radius:100px; cursor:pointer; font-size:10px; letter-spacing:.1em; background:var(--card); color:#4A4038; border:1px solid var(--line); }
+  .chip.selected { background:var(--ink); color:#FBF6EC; border-color:var(--ink); }
+
+  .skeleton-grid { display:flex; flex-direction:column; gap:10px; margin-top:20px; }
+  .skeleton { height:74px; border-radius:16px; background:linear-gradient(90deg,#F1EADD 20%,#F8F3E9 50%,#F1EADD 80%); background-size:200% 100%; animation:shimmer 1.4s linear infinite; }
+
+  .empty-state { padding:clamp(28px,4vw,48px) clamp(20px,3vw,32px); background:#fff; border:1px dashed #D8C9AE; border-radius:20px; text-align:center; margin-top:20px; }
+  .empty-icon { width:58px; height:58px; margin:0 auto; border-radius:16px; background:var(--sand); display:grid; place-items:center; }
+  .empty-title { font-weight:600; font-size:clamp(20px,2.2vw,26px); margin:18px 0 0; }
+  .empty-desc { max-width:380px; margin:10px auto 0; font-size:14px; line-height:1.55; color:var(--text2); }
+  .btn-primary { min-height:52px; padding:0 22px; margin-top:20px; background:var(--ink); color:#FBF6EC; border:none; border-radius:13px; cursor:pointer; font-size:10.5px; letter-spacing:.14em; }
+  .btn-primary:hover { background:#33291F; }
+
+  .sessions-list { display:flex; flex-direction:column; gap:8px; margin-top:20px; }
+  .session-row { display:flex; align-items:center; gap:14px; flex-wrap:wrap; width:100%; text-align:left; padding:14px 16px; background:var(--sand); border:1px solid transparent; border-radius:16px; cursor:pointer; animation:rise .4s ease both; }
+  .session-row:hover { background:#EFE7DA; border-color:#E1D5BF; }
+  .session-icon { width:44px; height:44px; flex:0 0 auto; border-radius:12px; background:#E3D8C4; display:grid; place-items:center; }
+  .session-main { flex:1; min-width:180px; display:flex; flex-direction:column; gap:4px; }
+  .session-main .client { font-size:16.5px; }
+  .session-main .meta { font-size:10px; letter-spacing:.1em; color:var(--muted); }
+  .session-spec { font-size:10px; color:#4A4038; min-width:140px; }
+  .status-pill { font-size:9px; letter-spacing:.1em; white-space:nowrap; padding:7px 10px; border-radius:100px; }
+  .status-pill.approved { background:#F7DFBB; color:#6E5228; }
+  .status-pill.neutral { background:#EDE8DF; color:#5B5147; }
+  .status-pill.rejected { background:#F6E6DC; color:var(--err); }
+
+  .load-more-row { display:flex; justify-content:center; margin-top:22px; }
+  .btn-secondary { min-height:48px; padding:0 22px; background:#fff; color:var(--ink); border:1px solid var(--line); border-radius:13px; cursor:pointer; font-size:10.5px; letter-spacing:.14em; }
+  .btn-secondary:hover:not(:disabled) { background:#F1EADD; }
+  .btn-secondary:disabled { opacity:.5; cursor:not-allowed; }
+
+  /* ---- detail ---- */
+  .detail-back { display:flex; align-items:center; gap:10px; min-height:44px; padding:0 4px; background:transparent; border:none; cursor:pointer; font-size:10px; letter-spacing:.18em; color:var(--muted); }
+  .detail-back:hover { color:var(--ink); }
+  .detail-head { display:flex; align-items:flex-start; justify-content:space-between; gap:14px; flex-wrap:wrap; margin-top:6px; }
+  .detail-head h1 { font-weight:600; font-size:clamp(26px,3.4vw,40px); line-height:1.14; margin:0; }
+  .detail-head .sub { font-size:10px; letter-spacing:.14em; color:var(--muted); margin-top:8px; }
+  .detail-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr)); gap:clamp(14px,1.8vw,22px); margin-top:clamp(18px,2.2vw,26px); }
+  .thumb-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; border-radius:16px; overflow:hidden; }
+  .thumb { width:100%; height:100px; background:var(--sand); overflow:hidden; }
+  .thumb img { width:100%; height:100%; object-fit:cover; display:block; }
+  .facts-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(132px,100%),1fr)); gap:1px; background:var(--line); border:1px solid var(--line); border-radius:14px; overflow:hidden; }
+  .fact-cell { background:var(--sand); padding:14px 16px; }
+  .fact-cell .k { font-size:8.5px; letter-spacing:.16em; color:var(--muted); }
+  .fact-cell .v { font-size:18px; margin-top:7px; line-height:1.2; }
+  .formula-lbl { font-size:9.5px; letter-spacing:.18em; color:var(--muted); margin-top:4px; }
+  .formula-list { display:flex; flex-direction:column; gap:1px; background:var(--line); border:1px solid var(--line); border-radius:14px; overflow:hidden; }
+  .formula-row { display:flex; gap:12px; align-items:center; background:#fff; padding:13px 15px; }
+  .formula-row img { width:32px; height:32px; flex:0 0 auto; border-radius:9px; object-fit:cover; background:var(--sand); }
+  .formula-role { width:58px; flex:0 0 auto; font-size:9px; letter-spacing:.14em; color:var(--muted); text-transform:uppercase; }
+  .formula-val { flex:1; min-width:0; font-size:10.5px; color:#3A322A; }
+  .products-list { display:flex; flex-direction:column; gap:10px; }
+  .product-row { display:flex; gap:14px; align-items:center; padding:12px; background:#fff; border:1px solid var(--line); border-radius:14px; }
+  .product-row img { width:48px; height:48px; flex:0 0 auto; border-radius:12px; object-fit:cover; background:var(--sand); }
+  .product-row .pn { display:block; font-size:14px; font-weight:500; }
+  .product-row .ps { display:block; font-size:9.5px; letter-spacing:.08em; color:var(--muted); margin-top:6px; }
+  .stock-badge { font-size:8.5px; letter-spacing:.08em; }
+  .stock-yes { color:#6E5228; }
+  .stock-no { color:var(--err); }
+  .detail-actions { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(186px,100%),1fr)); gap:10px; margin-top:auto; padding-top:8px; }
+  .btn-detail-primary { display:flex; align-items:center; justify-content:center; gap:10px; min-height:54px; padding:0 16px; background:var(--ink); color:#FBF6EC; border:none; border-radius:13px; cursor:pointer; font-size:10.5px; letter-spacing:.14em; }
+  .btn-detail-primary:hover { background:#33291F; }
+  .btn-detail-secondary { display:flex; align-items:center; justify-content:center; gap:10px; min-height:54px; padding:0 16px; background:#fff; color:var(--ink); border:1px solid var(--line); border-radius:13px; cursor:pointer; font-size:10.5px; letter-spacing:.14em; }
+  .btn-detail-secondary:hover { background:#F1EADD; }
+  .btn-detail-dashed { display:flex; align-items:center; justify-content:center; gap:10px; min-height:54px; padding:0 16px; background:transparent; color:#4A4038; border:1px dashed #D8C9AE; border-radius:13px; cursor:pointer; font-size:10.5px; letter-spacing:.14em; }
+  .btn-detail-dashed:hover { background:#EFE7DA; }
+
+  @media (max-width: 860px) {
+    .sidebar { display:none; }
+    .main { padding:18px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="layout">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand name serif">CASA DE AURUM</div>
+      <div class="brand tag mono">STUDIO &amp; SHOWROOM</div>
+    </div>
+    <div class="nav">
+      <div class="nav-label mono">WORKSPACE</div>
+      <nav class="nav-items" id="navItems"></nav>
+    </div>
+    <div class="profile-wrap">
+      <div class="profile">
+        <div class="avatar-circle serif" id="profileInitials">··</div>
+        <div style="min-width:0; display:flex; flex-direction:column; gap:2px">
+          <span class="name" id="profileName">—</span>
+          <span class="role mono" id="profileRole">—</span>
+        </div>
+      </div>
+      <button class="logout-btn mono" id="logoutBtn">SIGN OUT</button>
+    </div>
+  </aside>
+
+  <main class="main" id="mainContent"></main>
+</div>
+
+<script src="assets/api-client.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  const NAV_ITEMS = [
+    { id: 'dashboard', label: 'Dashboard', href: 'dashboard.html', ready: true },
+    { id: 'moodboard', label: 'Mood Board', href: 'mood-board.html', ready: true },
+    { id: 'projects', label: 'Projects', href: 'projects.html', ready: true },
+    { id: 'catalog', label: 'Catalog', href: 'catalog.html', ready: true },
+  ];
+
+  function notReady() {
+    alert('This section of the new design is still being rebuilt — coming soon.');
+  }
+
+  function renderNav() {
+    const nav = document.getElementById('navItems');
+    nav.innerHTML = '';
+    NAV_ITEMS.forEach((item) => {
+      const btn = document.createElement('button');
+      btn.className = 'nav-item' + (item.id === 'projects' ? ' active' : '');
+      btn.innerHTML = '<span class="lbl">' + item.label + '</span>' + (item.ready ? '' : '<span class="badge mono">SOON</span>');
+      btn.addEventListener('click', () => {
+        if (item.href) location.href = item.href;
+        else notReady();
+      });
+      nav.appendChild(btn);
+    });
+  }
+
+  function escapeHtml(s) {
+    const div = document.createElement('div');
+    div.textContent = s == null ? '' : s;
+    return div.innerHTML;
+  }
+
+  const STATUS_LABELS = {
+    DRAFT: 'Draft', GENERATED: 'Generated', REFINED: 'Refined',
+    APPROVED: 'Approved', REJECTED: 'Rejected', ARCHIVED: 'Archived',
+  };
+  const STATUS_ORDER = ['DRAFT', 'GENERATED', 'REFINED', 'APPROVED', 'REJECTED', 'ARCHIVED'];
+
+  function statusPillClass(status) {
+    if (status === 'APPROVED') return 'approved';
+    if (status === 'REJECTED') return 'rejected';
+    return 'neutral';
+  }
+
+  // ============================================================
+  // STATE
+  // ============================================================
+
+  const state = {
+    stage: 'list', // list | detail
+    boards: [],
+    meta: null,
+    page: 1,
+    status: 'ALL',
+    query: '',
+    loading: true,
+    error: null,
+    detailBoard: null,
+    detailTilesById: {},
+    detailLoading: false,
+    detailError: null,
+  };
+
+  let searchDebounce = null;
+
+  function render() {
+    if (state.stage === 'detail') return renderDetail();
+    return renderList();
+  }
+
+  // ============================================================
+  // LIST
+  // ============================================================
+
+  async function loadBoards(reset) {
+    if (reset) { state.page = 1; state.boards = []; }
+    state.loading = true;
+    state.error = null;
+    render();
+
+    try {
+      const params = { page: state.page, limit: 20 };
+      if (state.status !== 'ALL') params.status = state.status;
+      if (state.query) params.search = state.query;
+      const result = await CasaApi.moodBoards.list(params);
+      state.boards = reset ? result.boards : state.boards.concat(result.boards);
+      state.meta = result.meta;
+    } catch (err) {
+      state.error = (err && err.message) || 'Could not load projects.';
+    } finally {
+      state.loading = false;
+      render();
+    }
+  }
+
+  function renderList() {
+    const main = document.getElementById('mainContent');
+    const total = state.meta ? state.meta.total : null;
+
+    main.innerHTML =
+      '<div class="stage">' +
+      '<div class="eyebrow mono"><span class="dot"></span>CLIENT PROOFS' + (total != null ? ' · ' + total + ' BOARD' + (total === 1 ? '' : 'S') : '') + '</div>' +
+      '<h1 class="page-h1 serif">Projects &amp; Client Sessions</h1>' +
+      '<p class="page-sub">Every saved mood board and its current review status.</p>' +
+      '<div class="search-box"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#A0968A" stroke-width="1.7" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.6-3.6"></path></svg><input id="searchInput" type="text" placeholder="Search client, room, or style" value="' + escapeHtml(state.query) + '"></div>' +
+      '<div class="chip-row" id="chipRow"></div>' +
+      '<div id="listBody"></div>' +
+      '<div class="load-more-row" id="loadMoreRow" style="display:none"><button class="btn-secondary mono" id="loadMoreBtn">LOAD MORE</button></div>' +
+      '</div>';
+
+    const chipRow = document.getElementById('chipRow');
+    ['ALL'].concat(STATUS_ORDER).forEach((s) => {
+      const chip = document.createElement('button');
+      chip.className = 'chip mono' + (state.status === s ? ' selected' : '');
+      chip.textContent = s === 'ALL' ? 'ALL BOARDS' : STATUS_LABELS[s].toUpperCase();
+      chip.addEventListener('click', () => { state.status = s; loadBoards(true); });
+      chipRow.appendChild(chip);
+    });
+
+    document.getElementById('searchInput').addEventListener('input', (e) => {
+      state.query = e.target.value;
+      clearTimeout(searchDebounce);
+      searchDebounce = setTimeout(() => loadBoards(true), 300);
+    });
+
+    renderListBody();
+  }
+
+  function renderListBody() {
+    const body = document.getElementById('listBody');
+    const loadMoreRow = document.getElementById('loadMoreRow');
+    if (!body) return;
+
+    if (state.loading && state.boards.length === 0) {
+      body.innerHTML = '<div class="skeleton-grid"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div></div>';
+      loadMoreRow.style.display = 'none';
+      return;
+    }
+
+    if (state.error) {
+      body.innerHTML = '<div class="empty-state"><p class="empty-desc" style="color:#A8552A">' + escapeHtml(state.error) + '</p></div>';
+      loadMoreRow.style.display = 'none';
+      return;
+    }
+
+    if (state.boards.length === 0) {
+      const filtered = state.status !== 'ALL' || state.query;
+      body.innerHTML =
+        '<div class="empty-state">' +
+        '<div class="empty-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#8A6A3B" stroke-width="1.5" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.6-3.6"></path></svg></div>' +
+        '<h3 class="empty-title serif">' + (filtered ? 'No sessions match that filter' : 'No mood boards saved yet') + '</h3>' +
+        '<p class="empty-desc">' + (filtered ? 'Try a different review state, or clear the search.' : 'Save a mood board from the wizard to see it here.') + '</p>' +
+        (filtered ? '<button class="btn-primary mono" id="clearFiltersBtn">CLEAR FILTERS</button>' : '') +
+        '</div>';
+      if (filtered) {
+        document.getElementById('clearFiltersBtn').addEventListener('click', () => {
+          state.status = 'ALL'; state.query = ''; loadBoards(true);
+        });
+      }
+      loadMoreRow.style.display = 'none';
+      return;
+    }
+
+    body.innerHTML = '<div class="sessions-list" id="sessionsList"></div>';
+    const list = document.getElementById('sessionsList');
+    state.boards.forEach((b) => {
+      const row = document.createElement('button');
+      row.className = 'session-row';
+      const client = (b.customer && b.customer.name) || 'Unassigned client';
+      const staff = (b.createdBy && b.createdBy.name) || 'Unknown staff';
+      row.innerHTML =
+        '<span class="session-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#6E5228" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V9l8-5 8 5v11M9 20v-6h6v6"></path></svg></span>' +
+        '<span class="session-main"><span class="client serif">' + escapeHtml(client) + '</span><span class="meta mono">' + escapeHtml(staff) + ' · ' + CasaApi.relativeTime(b.updatedAt) + '</span></span>' +
+        '<span class="session-spec mono">' + escapeHtml(b.room) + ' · ' + escapeHtml(b.style) + '</span>' +
+        '<span class="status-pill ' + statusPillClass(b.status) + ' mono">' + (STATUS_LABELS[b.status] || b.status) + '</span>' +
+        '<span style="color:#A0968A; font-size:15px">›</span>';
+      row.addEventListener('click', () => openDetail(b.id));
+      list.appendChild(row);
+    });
+
+    const hasMore = !!(state.meta && state.meta.hasNextPage);
+    loadMoreRow.style.display = hasMore ? 'flex' : 'none';
+    document.getElementById('loadMoreBtn').disabled = state.loading;
+  }
+
+  document.addEventListener('click', (e) => {
+    if (e.target && e.target.id === 'loadMoreBtn') {
+      state.page += 1;
+      loadBoards(false);
+    }
+  });
+
+  // ============================================================
+  // DETAIL
+  // ============================================================
+
+  function formulaRowsHtml(tiles) {
+    return '<div class="formula-list">' + tiles.map((t) => {
+      const detail = state.detailTilesById[t.tileId];
+      const img = detail && detail.imageUrl ? '<img src="' + detail.imageUrl + '" alt="">' : '<span style="width:32px;height:32px;flex:0 0 auto;border-radius:9px;background:var(--sand)"></span>';
+      const label = detail ? detail.name : (t.name || 'Tile unavailable');
+      return '<div class="formula-row">' + img + '<span class="formula-role mono">' + t.role + '</span><span class="formula-val mono">' + escapeHtml(label) + '</span></div>';
+    }).join('') + '</div>';
+  }
+
+  async function openDetail(id) {
+    state.stage = 'detail';
+    state.detailBoard = null;
+    state.detailTilesById = {};
+    state.detailLoading = true;
+    state.detailError = null;
+    render();
+
+    try {
+      const board = await CasaApi.moodBoards.get(id);
+      state.detailBoard = board;
+
+      const combos = board.combinations || [];
+      const idx = board.selectedIndex != null && combos[board.selectedIndex] ? board.selectedIndex : 0;
+      const combo = combos[idx];
+
+      if (combo) {
+        const ids = [...new Set(combo.tiles.map((t) => t.tileId))];
+        try {
+          const tiles = await CasaApi.moodBoards.tiles(ids);
+          tiles.forEach((t) => { state.detailTilesById[t.id] = t; });
+        } catch (err) {
+          // non-fatal -- formula still renders with names, just no images/stock
+        }
+      }
+    } catch (err) {
+      state.detailError = (err && err.message) || 'Could not load this project.';
+    } finally {
+      state.detailLoading = false;
+      render();
+    }
+  }
+
+  function backToList() {
+    state.stage = 'list';
+    render();
+  }
+
+  function renderDetail() {
+    const main = document.getElementById('mainContent');
+
+    if (state.detailLoading) {
+      main.innerHTML = '<div class="stage"><button class="detail-back mono" id="backBtn">← ALL PROJECTS</button><div class="skeleton-grid" style="margin-top:20px"><div class="skeleton" style="height:300px"></div></div></div>';
+      document.getElementById('backBtn').addEventListener('click', backToList);
+      return;
+    }
+
+    if (state.detailError || !state.detailBoard) {
+      main.innerHTML =
+        '<div class="stage"><button class="detail-back mono" id="backBtn">← ALL PROJECTS</button>' +
+        '<div class="empty-state"><p class="empty-desc" style="color:#A8552A">' + escapeHtml(state.detailError || 'Project not found.') + '</p></div></div>';
+      document.getElementById('backBtn').addEventListener('click', backToList);
+      return;
+    }
+
+    const b = state.detailBoard;
+    const client = (b.customer && b.customer.name) || 'Unassigned client';
+    const staff = (b.createdBy && b.createdBy.name) || 'Unknown staff';
+    const combos = b.combinations || [];
+    const idx = b.selectedIndex != null && combos[b.selectedIndex] ? b.selectedIndex : 0;
+    const combo = combos[idx];
+    const thumbTiles = combo ? combo.tiles.map((t) => state.detailTilesById[t.tileId]).filter((t) => t && t.imageUrl) : [];
+
+    main.innerHTML =
+      '<div class="stage">' +
+      '<button class="detail-back mono" id="backBtn">← ALL PROJECTS</button>' +
+      '<div class="detail-head">' +
+      '<div><h1 class="serif">' + escapeHtml(client) + '</h1><div class="sub mono">' + escapeHtml(staff) + ' · UPDATED ' + CasaApi.relativeTime(b.updatedAt) + '</div></div>' +
+      '<span class="status-pill ' + statusPillClass(b.status) + ' mono">' + (STATUS_LABELS[b.status] || b.status) + '</span>' +
+      '</div>' +
+      '<div class="detail-grid">' +
+      '<div style="display:flex; flex-direction:column; gap:14px">' +
+      (thumbTiles.length ? '<div class="thumb-grid">' + thumbTiles.map((t) => '<span class="thumb"><img src="' + t.imageUrl + '" alt=""></span>').join('') + '</div>' : '<div class="empty-state" style="margin-top:0"><p class="empty-desc">No tile images available for this concept.</p></div>') +
+      '<div class="facts-grid">' +
+      '<div class="fact-cell"><div class="k mono">ROOM</div><div class="v serif">' + escapeHtml(b.room) + '</div></div>' +
+      '<div class="fact-cell"><div class="k mono">STYLE</div><div class="v serif">' + escapeHtml(b.style) + '</div></div>' +
+      '<div class="fact-cell"><div class="k mono">CONCEPTS</div><div class="v serif">' + combos.length + '</div></div>' +
+      '<div class="fact-cell"><div class="k mono">CREATED</div><div class="v serif" style="font-size:14px">' + CasaApi.relativeTime(b.createdAt) + '</div></div>' +
+      '</div>' +
+      (combo ? '<div class="formula-lbl mono">SPECIFIED PALETTE FORMULA' + (combo.board_name ? ' · ' + escapeHtml(combo.board_name) : '') + '</div>' + formulaRowsHtml(combo.tiles) : '') +
+      '</div>' +
+      '<div style="display:flex; flex-direction:column; gap:14px">' +
+      '<div class="formula-lbl mono" style="margin-top:0">REVIEW STATUS</div>' +
+      '<div class="facts-grid" style="grid-template-columns:repeat(auto-fit,minmax(min(150px,100%),1fr))">' +
+      '<div class="fact-cell"><div class="k mono">STATUS</div><div class="v serif" style="font-size:16px">' + (STATUS_LABELS[b.status] || b.status) + '</div></div>' +
+      '<div class="fact-cell"><div class="k mono">LAST UPDATED</div><div class="v serif" style="font-size:14px">' + CasaApi.relativeTime(b.updatedAt) + '</div></div>' +
+      '</div>' +
+      (combo ? '<div class="formula-lbl mono">SURFACES ON THIS SPEC</div><div class="products-list" id="productsList"></div>' : '') +
+      '<div class="detail-actions">' +
+      '<button class="btn-detail-primary mono" id="shareBtn">↗ SHARE WITH CLIENT</button>' +
+      '<button class="btn-detail-secondary mono" id="openBoardBtn">◇ OPEN BOARD</button>' +
+      '<button class="btn-detail-dashed mono" id="exportBtn">⇩ EXPORT PDF</button>' +
+      '</div>' +
+      '</div>' +
+      '</div>' +
+      '</div>';
+
+    document.getElementById('backBtn').addEventListener('click', backToList);
+    document.getElementById('shareBtn').addEventListener('click', notReady);
+    document.getElementById('exportBtn').addEventListener('click', notReady);
+    document.getElementById('openBoardBtn').addEventListener('click', () => { location.href = 'mood-board.html?boardId=' + encodeURIComponent(b.id); });
+
+    if (combo) {
+      const productsList = document.getElementById('productsList');
+      combo.tiles.forEach((t) => {
+        const detail = state.detailTilesById[t.tileId];
+        const row = document.createElement('div');
+        row.className = 'product-row';
+        if (!detail) {
+          row.innerHTML = '<span style="width:48px;height:48px;flex:0 0 auto;border-radius:12px;background:var(--sand)"></span><span style="flex:1;min-width:0"><span class="pn">' + escapeHtml(t.name || 'Tile no longer available') + '</span><span class="ps mono">' + t.role + '</span></span>';
+        } else {
+          const img = detail.imageUrl ? '<img src="' + detail.imageUrl + '" alt="' + escapeHtml(detail.name) + '">' : '<span style="width:48px;height:48px;flex:0 0 auto;border-radius:12px;background:var(--sand)"></span>';
+          const spec = [detail.brand ? detail.brand.name : null, detail.size, detail.finish].filter(Boolean).join(' · ');
+          row.innerHTML = img + '<span style="flex:1;min-width:0"><span class="pn">' + escapeHtml(detail.name) + '</span><span class="ps mono">' + escapeHtml(spec) + '</span></span>' +
+            '<span style="flex:0 0 auto; text-align:right"><span class="stock-badge mono ' + (detail.inStock ? 'stock-yes' : 'stock-no') + '">' + (detail.inStock ? 'IN STOCK' : 'OUT OF STOCK') + '</span></span>';
+        }
+        productsList.appendChild(row);
+      });
+    }
+  }
+
+  // ============================================================
+  // INIT
+  // ============================================================
+
+  async function init() {
+    const user = await CasaApi.requireAuth();
+
+    document.getElementById('profileInitials').textContent = CasaApi.initials(user.name);
+    document.getElementById('profileName').textContent = user.name || user.email;
+    document.getElementById('profileRole').textContent = (user.role || '').toUpperCase();
+
+    renderNav();
+    document.getElementById('logoutBtn').addEventListener('click', async () => {
+      await CasaApi.auth.logout();
+      location.href = 'login.html';
+    });
+
+    const openId = new URLSearchParams(location.search).get('open');
+    if (openId) {
+      openDetail(openId);
+    } else {
+      loadBoards(true);
+    }
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>

@@ -235,7 +235,7 @@
   const NAV_ITEMS = [
     { id: 'dashboard', label: 'Dashboard', href: 'dashboard.html', ready: true },
     { id: 'moodboard', label: 'Mood Board', href: 'mood-board.html', ready: true },
-    { id: 'projects', label: 'Projects', href: null, ready: false },
+    { id: 'projects', label: 'Projects', href: 'projects.html', ready: true },
     { id: 'catalog', label: 'Catalog', href: 'catalog.html', ready: true },
   ];
 
@@ -334,7 +334,7 @@
       boards.slice(0, 3).forEach((b) => {
         const row = document.createElement('button');
         row.className = 'session-row';
-        row.addEventListener('click', notReady);
+        row.addEventListener('click', () => { location.href = 'projects.html?open=' + encodeURIComponent(b.id); });
         const client = (b.customer && b.customer.name) || 'Unassigned client';
         const staff = (b.createdBy && b.createdBy.name) || 'Unknown staff';
         const meta = staff + ' · ' + b.room + ' · ' + b.style;
@@ -375,8 +375,8 @@
 
     document.getElementById('startWizardBtn').addEventListener('click', () => { location.href = 'mood-board.html'; });
     document.getElementById('exploreCatalogBtn').addEventListener('click', () => { location.href = 'catalog.html'; });
-    document.getElementById('viewSavedBtn').addEventListener('click', notReady);
-    document.getElementById('viewAllSessionsBtn').addEventListener('click', notReady);
+    document.getElementById('viewSavedBtn').addEventListener('click', () => { location.href = 'projects.html'; });
+    document.getElementById('viewAllSessionsBtn').addEventListener('click', () => { location.href = 'projects.html'; });
     document.getElementById('logoutBtn').addEventListener('click', async () => {
       await CasaApi.auth.logout();
       location.href = 'login.html';

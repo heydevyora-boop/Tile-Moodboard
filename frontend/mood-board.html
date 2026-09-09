@@ -261,7 +261,7 @@
   const NAV_ITEMS = [
     { id: 'dashboard', label: 'Dashboard', href: 'dashboard.html', ready: true },
     { id: 'moodboard', label: 'Mood Board', href: 'mood-board.html', ready: true },
-    { id: 'projects', label: 'Projects', href: null, ready: false },
+    { id: 'projects', label: 'Projects', href: 'projects.html', ready: true },
     { id: 'catalog', label: 'Catalog', href: 'catalog.html', ready: true },
   ];
 
@@ -366,6 +366,13 @@
     errorMessage: null,
     productsModalIndex: null,
     useInFlight: false,
+    // Set when this page was opened via ?boardId= from Projects "Open
+    // Board" -- viewing a previously-saved board rather than a live
+    // wizard session, so the wizard-only fields above (feature/size/
+    // finish/budget/grout/view) were never set and must not be shown.
+    viewOnly: false,
+    loadedBoard: null,
+    pendingBoardId: null,
   };
 
   function render() {
@@ -587,16 +594,64 @@
     }
   }
 
+  // ============================================================
+  // LOAD AN EXISTING SAVED BOARD — Projects page's "Open Board" links
+  // here with ?boardId=. Reuses GET /mood-boards/:id and the same
+  // tile-lookup endpoint the wizard already uses; no new backend.
+  // ============================================================
+
+  async function loadBoardFromId(boardId) {
+    state.viewOnly = true;
+    state.pendingBoardId = boardId;
+    state.stage = 'generating';
+    render();
+
+    try {
+      const board = await CasaApi.moodBoards.get(boardId);
+      state.loadedBoard = board;
+      state.combinations = board.combinations || [];
+      state.room = board.room;
+      state.palette = board.style;
+      state.savedBoardId = board.id;
+      state.savedBoardIndex = board.selectedIndex != null ? board.selectedIndex : null;
+
+      if (state.combinations.length === 0) {
+        state.errorMessage = 'This saved project has no combinations.';
+        state.stage = 'error';
+        render();
+        return;
+      }
+
+      const ids = [...new Set(state.combinations.flatMap((c) => c.tiles.map((t) => t.tileId)))];
+      try {
+        const tiles = await CasaApi.moodBoards.tiles(ids);
+        state.tilesById = {};
+        tiles.forEach((t) => { state.tilesById[t.id] = t; });
+      } catch (err) {
+        state.tilesById = {};
+      }
+
+      state.stage = 'results';
+      render();
+    } catch (err) {
+      state.errorMessage = (err && err.message) || 'Could not load this saved project.';
+      state.stage = 'error';
+      render();
+    }
+  }
+
   function renderGenerating() {
     const main = document.getElementById('mainContent');
+    const sub = state.viewOnly ? 'Loading your saved mood board…' : 'Synthesizing your mood boards…';
+    const note = state.viewOnly ? 'FETCHING SAVED PROJECT' : 'CALLING GEMINI · MATCHING AGAINST LIVE INVENTORY';
     main.innerHTML =
       '<div class="stage">' +
       '<div class="generating-box">' +
       '<div class="spinner-ring"><div class="spinner-core">✦</div></div>' +
       '<div class="gen-label mono">● STUDIO &amp; SHOWROOM ●</div>' +
       '<div class="gen-title serif">CASA DE AURUM</div>' +
-      '<div class="gen-sub serif">Synthesizing your mood boards…</div>' +
-      '<div class="gen-note mono">CALLING GEMINI · MATCHING AGAINST LIVE INVENTORY</div>' +
+      '<div class="gen-sub serif">' + sub + '</div>' +
+      '<div class="gen-note mono">' + note + '</div>' +
       '</div>' +
       '</div>';
   }
@@ -607,21 +662,30 @@
 
   function renderError() {
     const main = document.getElementById('mainContent');
+    const title = state.viewOnly ? 'Could not load this project' : 'Could not generate this mood board';
+    const code = state.viewOnly ? 'PROJECT LOAD FAILED' : 'RENDER PIPELINE INTERRUPTED';
+    const secondaryLabel = state.viewOnly ? '← BACK TO PROJECTS' : '◇ EDIT DESIGN DNA';
     main.innerHTML =
       '<div class="stage">' +
       '<div class="error-box">' +
       '<div class="error-icon"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#A8552A" stroke-width="1.7" stroke-linecap="round"><path d="M12 8v5M12 16.5v.5M10.3 4 3.4 17a1.6 1.6 0 0 0 1.4 2.4h14.4A1.6 1.6 0 0 0 20.6 17L13.7 4a1.6 1.6 0 0 0-2.8 0z"></path></svg></div>' +
-      '<div class="error-code mono">RENDER PIPELINE INTERRUPTED</div>' +
-      '<h2 class="error-title serif">Could not generate this mood board</h2>' +
+      '<div class="error-code mono">' + code + '</div>' +
+      '<h2 class="error-title serif">' + title + '</h2>' +
       '<p class="error-msg">' + escapeHtml(state.errorMessage || 'Unknown error.') + '</p>' +
       '<div class="error-actions">' +
       '<button class="btn-primary mono" id="retryBtn">↻ RETRY</button>' +
-      '<button class="btn-secondary mono" id="editBtn">◇ EDIT DESIGN DNA</button>' +
+      '<button class="btn-secondary mono" id="editBtn">' + secondaryLabel + '</button>' +
       '</div>' +
       '</div>' +
       '</div>';
-    document.getElementById('retryBtn').addEventListener('click', runGenerate);
-    document.getElementById('editBtn').addEventListener('click', () => { state.stage = 'wizard'; state.step = 1; render(); });
+    document.getElementById('retryBtn').addEventListener('click', () => {
+      if (state.viewOnly && state.pendingBoardId) loadBoardFromId(state.pendingBoardId);
+      else runGenerate();
+    });
+    document.getElementById('editBtn').addEventListener('click', () => {
+      if (state.viewOnly) { location.href = 'projects.html'; return; }
+      state.stage = 'wizard'; state.step = 1; render();
+    });
   }
 
   function escapeHtml(s) {
@@ -645,26 +709,25 @@
 
   function renderResults() {
     const main = document.getElementById('mainContent');
-    const specLine = state.room + ' · ' + state.palette + ' · ' + state.budget.tier + ' · ' + state.size + ' · ' + state.feature + ' · ' + state.view;
+    const specLine = state.viewOnly
+      ? state.room + ' · ' + state.palette + (state.loadedBoard && state.loadedBoard.clientBrief ? ' — ' + state.loadedBoard.clientBrief : '')
+      : state.room + ' · ' + state.palette + ' · ' + state.budget.tier + ' · ' + state.size + ' · ' + state.feature + ' · ' + state.view;
+
+    const iterateBoxHtml = state.viewOnly
+      ? '<div class="iterate-box"><h3 class="serif" style="margin:0; font-size:clamp(20px,2vw,26px)">Saved project</h3><p style="margin:8px 0 0; font-size:14px; color:var(--text2); line-height:1.55">Viewing a previously saved mood board.</p><div class="iterate-actions"><button class="btn-dashed mono" id="backToProjectsBtn">← BACK TO PROJECTS</button></div></div>'
+      : '<div class="iterate-box"><h3 class="serif" style="margin:0; font-size:clamp(20px,2vw,26px)">Iterate the design</h3><p style="margin:8px 0 0; font-size:14px; color:var(--text2); line-height:1.55">Keeps the same room, feature and budget while generating a fresh set.</p><div class="iterate-actions"><button class="btn-amber mono" id="regenBtn">↻ TRY 4 MORE VARIATIONS</button><button class="btn-dashed mono" id="editDnaBtn">◇ EDIT DESIGN DNA</button></div></div>';
 
     main.innerHTML =
       '<div class="stage">' +
       '<div style="display:flex; align-items:flex-start; justify-content:space-between; gap:14px; flex-wrap:wrap">' +
-      '<div class="mono" style="font-size:10px; letter-spacing:.18em; color:var(--muted)">MOOD BOARD RESULT</div>' +
+      '<div class="mono" style="font-size:10px; letter-spacing:.18em; color:var(--muted)">' + (state.viewOnly ? 'SAVED MOOD BOARD' : 'MOOD BOARD RESULT') + '</div>' +
       '</div>' +
       '<h1 class="step-h1 serif">' + state.combinations.length + ' Curated Mood Board' + (state.combinations.length === 1 ? '' : 's') + '</h1>' +
       '<p class="step-sub">' + escapeHtml(specLine) + '</p>' +
       (state.warnings.length ? '<p class="step-sub" style="color:var(--err)">' + state.warnings.length + ' note(s) from generation — see console for detail.</p>' : '') +
       '<div class="results-tags"><span class="results-tag mono">◈ ' + state.combinations.length + ' CONCEPT' + (state.combinations.length === 1 ? '' : 'S') + ' READY</span></div>' +
       '<div class="boards-grid" id="boardsGrid"></div>' +
-      '<div class="iterate-box">' +
-      '<h3 class="serif" style="margin:0; font-size:clamp(20px,2vw,26px)">Iterate the design</h3>' +
-      '<p style="margin:8px 0 0; font-size:14px; color:var(--text2); line-height:1.55">Keeps the same room, feature and budget while generating a fresh set.</p>' +
-      '<div class="iterate-actions">' +
-      '<button class="btn-amber mono" id="regenBtn">↻ TRY 4 MORE VARIATIONS</button>' +
-      '<button class="btn-dashed mono" id="editDnaBtn">◇ EDIT DESIGN DNA</button>' +
-      '</div>' +
-      '</div>' +
+      iterateBoxHtml +
       '</div>';
 
     if (state.warnings.length) console.warn('Mood board generation warnings:', state.warnings);
@@ -695,8 +758,12 @@
       state.stage = 'detail';
       render();
     }));
-    document.getElementById('regenBtn').addEventListener('click', runGenerate);
-    document.getElementById('editDnaBtn').addEventListener('click', () => { state.stage = 'wizard'; state.step = 1; render(); });
+    if (state.viewOnly) {
+      document.getElementById('backToProjectsBtn').addEventListener('click', () => { location.href = 'projects.html'; });
+    } else {
+      document.getElementById('regenBtn').addEventListener('click', runGenerate);
+      document.getElementById('editDnaBtn').addEventListener('click', () => { state.stage = 'wizard'; state.step = 1; render(); });
+    }
   }
 
   // ============================================================
@@ -805,7 +872,12 @@
       location.href = 'login.html';
     });
 
-    render();
+    const boardId = new URLSearchParams(location.search).get('boardId');
+    if (boardId) {
+      loadBoardFromId(boardId);
+    } else {
+      render();
+    }
   }
 
   init();

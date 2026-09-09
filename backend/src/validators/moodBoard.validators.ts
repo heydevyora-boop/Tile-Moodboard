@@ -62,6 +62,9 @@ export const listMoodBoardsQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
   status: z.enum(['DRAFT', 'GENERATED', 'REFINED', 'APPROVED', 'REJECTED', 'ARCHIVED']).optional(),
   customerId: z.string().optional(),
+  // Free-text match against client name, room, or style -- the Projects
+  // page's search box, same pattern as the Catalog page's tile search.
+  search: z.string().trim().max(100).optional(),
 });
 
 // Resolves the tileId references inside a /generate response's combinations

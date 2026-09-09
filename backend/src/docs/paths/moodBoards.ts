@@ -32,7 +32,7 @@ export const moodBoardPaths = {
       tags: ['Mood Boards'],
       summary: 'List saved mood boards',
       security: [{ bearerAuth: [] }],
-      parameters: [{ name: 'status', in: 'query', schema: { type: 'string' } }, { name: 'customerId', in: 'query', schema: { type: 'string' } }, { name: 'page', in: 'query', schema: { type: 'integer' } }, { name: 'limit', in: 'query', schema: { type: 'integer' } }],
+      parameters: [{ name: 'status', in: 'query', schema: { type: 'string' } }, { name: 'customerId', in: 'query', schema: { type: 'string' } }, { name: 'search', in: 'query', schema: { type: 'string' }, description: 'Matches client name, room, or style' }, { name: 'page', in: 'query', schema: { type: 'integer' } }, { name: 'limit', in: 'query', schema: { type: 'integer' } }],
       responses: { 200: { description: 'A page of mood boards.', content: { 'application/json': { schema: { type: 'object', properties: { success: { type: 'boolean' }, data: { type: 'object', properties: { boards: { type: 'array', items: { $ref: '#/components/schemas/MoodBoard' } } } }, meta: { $ref: '#/components/schemas/PaginationMeta' } } } } } }, ...standardErrors() },
     },
     post: {

@@ -125,6 +125,15 @@ export async function listMoodBoards(query: ListMoodBoardsQuery) {
   const where = {
     ...(query.status ? { status: query.status } : {}),
     ...(query.customerId ? { customerId: query.customerId } : {}),
+    ...(query.search
+      ? {
+          OR: [
+            { room: { contains: query.search, mode: 'insensitive' as const } },
+            { style: { contains: query.search, mode: 'insensitive' as const } },
+            { customer: { name: { contains: query.search, mode: 'insensitive' as const } } },
+          ],
+        }
+      : {}),
   };
 
   const [boards, total] = await Promise.all([
