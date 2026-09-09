@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign In · Casa de Aurum</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500&family=DM+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root { --ink:#1A1512; --paper:#F7F3EC; --card:#fff; --line:#E7DFD1; --sand:#F4EEE3; --gold:#8A6A3B; --gold-light:#E3C58E; --muted:#8B8177; --text2:#5B5147; --err:#A8552A; --err-bg:#F6E6DC; }
+  * { box-sizing:border-box; }
+  body { margin:0; min-height:100vh; background:var(--paper); color:var(--ink); font-family:'DM Sans',sans-serif; -webkit-font-smoothing:antialiased; display:flex; align-items:center; justify-content:center; padding:24px; }
+  .mono { font-family:'JetBrains Mono',monospace; }
+  .serif { font-family:'Playfair Display',serif; }
+  @keyframes fadeIn { from{opacity:0; transform:translateY(10px)} to{opacity:1; transform:none} }
+  @keyframes spin { to{transform:rotate(360deg)} }
+
+  .panel { width:100%; max-width:400px; animation:fadeIn .4s cubic-bezier(.2,.7,.3,1) both; }
+  .brand { text-align:center; margin-bottom:30px; }
+  .brand .name { font-size:24px; letter-spacing:.16em; }
+  .brand .tag { font-size:9.5px; letter-spacing:.24em; color:var(--muted); margin-top:8px; }
+
+  .card { background:var(--card); border:1px solid var(--line); border-radius:20px; padding:clamp(28px,4vw,38px); }
+  .card h1 { font-size:22px; font-weight:600; margin:0 0 6px; }
+  .card .sub { font-size:13.5px; color:var(--text2); margin:0 0 26px; line-height:1.5; }
+
+  .field { margin-bottom:16px; }
+  .field label { display:block; font-size:9.5px; letter-spacing:.16em; color:var(--muted); margin-bottom:8px; }
+  .field input { width:100%; min-height:48px; padding:0 14px; border:1px solid var(--line); border-radius:12px; background:var(--sand); color:var(--ink); font-size:14px; font-family:'DM Sans',sans-serif; }
+  .field input:focus { outline:none; border-color:var(--gold); background:#fff; }
+  .field input.invalid { border-color:var(--err); }
+  .field-error { font-size:11.5px; color:var(--err); margin-top:6px; }
+
+  .alert { display:flex; gap:10px; align-items:flex-start; padding:12px 14px; background:var(--err-bg); border:1px solid #E7C4AE; border-radius:12px; margin-bottom:18px; font-size:13px; line-height:1.5; color:#6E3A1F; }
+
+  .submit-btn { width:100%; min-height:52px; margin-top:6px; display:flex; align-items:center; justify-content:center; gap:10px; background:var(--ink); color:#FBF6EC; border:none; border-radius:14px; cursor:pointer; font-size:11.5px; letter-spacing:.16em; font-family:'JetBrains Mono',monospace; }
+  .submit-btn:hover:not(:disabled) { background:#33291F; }
+  .submit-btn:disabled { opacity:.65; cursor:not-allowed; }
+  .spinner { width:14px; height:14px; border-radius:50%; border:2px solid rgba(251,246,236,.35); border-top-color:#FBF6EC; animation:spin .7s linear infinite; }
+
+  .checking { text-align:center; padding:40px 0; color:var(--muted); font-size:13px; }
+</style>
+</head>
+<body>
+
+<div class="panel">
+  <div class="brand">
+    <div class="name serif">CASA DE AURUM</div>
+    <div class="tag mono">STUDIO &amp; SHOWROOM</div>
+  </div>
+
+  <div class="card" id="cardWrap">
+    <div class="checking mono" id="checkingState">CHECKING SESSION…</div>
+
+    <form id="loginForm" style="display:none">
+      <h1 class="serif">Sign in</h1>
+      <p class="sub">Enter your showroom credentials to access the workspace.</p>
+
+      <div class="alert" id="formAlert" style="display:none"></div>
+
+      <div class="field">
+        <label class="mono" for="email">EMAIL</label>
+        <input type="email" id="email" name="email" autocomplete="username" placeholder="you@casadeaurum.com" required>
+        <div class="field-error" id="emailError" style="display:none"></div>
+      </div>
+
+      <div class="field">
+        <label class="mono" for="password">PASSWORD</label>
+        <input type="password" id="password" name="password" autocomplete="current-password" placeholder="••••••••" required>
+        <div class="field-error" id="passwordError" style="display:none"></div>
+      </div>
+
+      <button type="submit" class="submit-btn" id="submitBtn">
+        <span id="submitLabel">SIGN IN</span>
+      </button>
+    </form>
+  </div>
+</div>
+
+<script src="assets/api-client.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  function isSafeRedirect(raw) {
+    // Only accept a same-origin relative path (matches how redirectToLogin()
+    // in api-client.js builds it: location.pathname + location.search).
+    // Reject anything with a colon (blocks "https://…", "javascript:…",
+    // "data:…") and protocol-relative "//host" paths, so this can never be
+    // turned into an open redirect via a crafted ?redirect= value.
+    return !!raw && !raw.includes(':') && !raw.startsWith('//');
+  }
+
+  function getRedirectTarget() {
+    const raw = new URLSearchParams(location.search).get('redirect');
+    return isSafeRedirect(raw) ? raw : 'dashboard.html';
+  }
+
+  function showAlert(message) {
+    const el = document.getElementById('formAlert');
+    el.textContent = message;
+    el.style.display = 'flex';
+  }
+
+  function hideAlert() {
+    const el = document.getElementById('formAlert');
+    el.style.display = 'none';
+    el.textContent = '';
+  }
+
+  function clearFieldErrors() {
+    ['email', 'password'].forEach((id) => {
+      document.getElementById(id).classList.remove('invalid');
+      const err = document.getElementById(id + 'Error');
+      err.style.display = 'none';
+      err.textContent = '';
+    });
+  }
+
+  function showFieldError(id, message) {
+    document.getElementById(id).classList.add('invalid');
+    const err = document.getElementById(id + 'Error');
+    err.textContent = message;
+    err.style.display = 'block';
+  }
+
+  function setLoading(loading) {
+    const btn = document.getElementById('submitBtn');
+    const label = document.getElementById('submitLabel');
+    btn.disabled = loading;
+    label.innerHTML = loading ? '<span class="spinner"></span> SIGNING IN…' : 'SIGN IN';
+  }
+
+  function isValidEmail(value) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    hideAlert();
+    clearFieldErrors();
+
+    const email = document.getElementById('email').value.trim();
+    const password = document.getElementById('password').value;
+
+    let hasClientError = false;
+    if (!email || !isValidEmail(email)) {
+      showFieldError('email', 'Enter a valid email address');
+      hasClientError = true;
+    }
+    if (!password) {
+      showFieldError('password', 'Password is required');
+      hasClientError = true;
+    }
+    if (hasClientError) return;
+
+    setLoading(true);
+
+    try {
+      await CasaApi.auth.login(email, password);
+      location.href = getRedirectTarget();
+    } catch (err) {
+      setLoading(false);
+
+      if (err && err.status === 400 && Array.isArray(err.errors) && err.errors.length) {
+        err.errors.forEach((fieldErr) => {
+          if (fieldErr.path === 'email' || fieldErr.path === 'password') {
+            showFieldError(fieldErr.path, fieldErr.message);
+          }
+        });
+        showAlert('Please fix the highlighted fields.');
+      } else {
+        showAlert((err && err.message) || 'Something went wrong. Please try again.');
+      }
+    }
+  }
+
+  async function init() {
+    // Already-authenticated visitors (a valid refresh cookie) skip straight
+    // past the form instead of being asked to log in again. ensureSession()
+    // never throws -- it resolves to null when there's no valid session.
+    const user = await CasaApi.auth.ensureSession();
+    if (user) {
+      location.href = getRedirectTarget();
+      return;
+    }
+
+    document.getElementById('checkingState').style.display = 'none';
+    document.getElementById('loginForm').style.display = 'block';
+    document.getElementById('loginForm').addEventListener('submit', handleSubmit);
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>
