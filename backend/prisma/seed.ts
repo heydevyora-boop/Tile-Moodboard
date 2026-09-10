@@ -64,6 +64,10 @@ async function seedRoles() {
         'mood_boards:read', 'mood_boards:write',
         'print_boards:read', 'print_boards:write',
         'customers:read', 'customers:write',
+        // The Dashboard is Staff's landing page, and its stats/collections
+        // cards are gated on analytics:read -- without it those two calls
+        // 403 and the page loads with an error where the stats should be.
+        'analytics:read',
       ],
     },
   ];
