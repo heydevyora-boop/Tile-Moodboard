@@ -701,7 +701,7 @@
   function formulaRowsHtml(tiles) {
     return '<div class="formula-list">' + tiles.map((t) => {
       const detail = state.tilesById[t.tileId];
-      const img = detail && detail.imageUrl ? '<img src="' + detail.imageUrl + '" alt="">' : '<span style="width:26px;height:26px;flex:0 0 auto;border-radius:7px;background:#EFE7DA"></span>';
+      const img = detail && detail.imageUrl ? '<img src="' + CasaApi.resolveBackendImageUrl(detail.imageUrl) + '" alt="">' : '<span style="width:26px;height:26px;flex:0 0 auto;border-radius:7px;background:#EFE7DA"></span>';
       const label = detail ? detail.name : (t.name || 'Tile unavailable');
       return '<div class="formula-row">' + img + '<span class="formula-role mono">' + t.role + '</span><span class="formula-val mono">' + escapeHtml(label) + '</span></div>';
     }).join('') + '</div>';
@@ -742,7 +742,7 @@
         '<div class="board-body">' +
         '<div class="board-name-row"><h3 class="serif">' + escapeHtml(combo.board_name) + '</h3></div>' +
         '<p class="board-desc">' + escapeHtml(combo.reason_for_selection || 'No description provided.') + '</p>' +
-        (thumbTiles.length ? '<div class="board-thumbs">' + thumbTiles.map((t) => '<span class="board-thumb"><img src="' + t.imageUrl + '" alt=""></span>').join('') + '</div>' : '') +
+        (thumbTiles.length ? '<div class="board-thumbs">' + thumbTiles.map((t) => '<span class="board-thumb"><img src="' + CasaApi.resolveBackendImageUrl(t.imageUrl) + '" alt=""></span>').join('') + '</div>' : '') +
         '<div class="formula-lbl mono">SPECIFIED TILES (' + combo.tiles.length + ')</div>' +
         formulaRowsHtml(combo.tiles) +
         (combo.grout_recommendation ? '<div class="mono" style="font-size:10px;color:var(--muted)">GROUT: ' + escapeHtml(combo.grout_recommendation) + '</div>' : '') +
@@ -813,7 +813,7 @@
       '<button class="detail-back mono" id="backToResultsBtn">← ALL ' + state.combinations.length + ' CONCEPTS</button>' +
       '<div class="detail-grid">' +
       '<div>' +
-      (thumbTiles.length ? '<div class="detail-thumbs">' + thumbTiles.map((t) => '<span class="board-thumb"><img src="' + t.imageUrl + '" alt=""></span>').join('') + '</div>' : '<div class="empty-state">No tile images available for this combination.</div>') +
+      (thumbTiles.length ? '<div class="detail-thumbs">' + thumbTiles.map((t) => '<span class="board-thumb"><img src="' + CasaApi.resolveBackendImageUrl(t.imageUrl) + '" alt=""></span>').join('') + '</div>' : '<div class="empty-state">No tile images available for this combination.</div>') +
       '<div class="formula-lbl mono">SPECIFIED PALETTE FORMULA</div>' +
       formulaRowsHtml(combo.tiles) +
       '</div>' +
