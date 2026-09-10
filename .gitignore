@@ -21,3 +21,5 @@ node_modules/
 
 # Google service-account credentials — never commit
 backend/secrets/
+.vercel
+.env*
