@@ -20,8 +20,10 @@
   // ============================================================
 
   const API_BASE =
-    window.CASA_API_BASE ||
-    'http://localhost:5000/api/v1';
+  window.CASA_API_BASE ||
+  (window.location.hostname === 'localhost'
+    ? 'http://localhost:4096/api/v1'
+    : '/api/v1');
 
   const ACCESS_TOKEN_KEY = 'casa_access_token';
   const USER_KEY = 'casa_user';
