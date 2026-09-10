@@ -199,6 +199,19 @@ export function createApp(): Application {
     ),
   );
 
+  // Same directory, second alias. python-ai.service.ts hands the frontend an
+  // absolute /generated-visualizations/<file> URL, but when a response
+  // carries only a raw Python path, api-client.js's resolveBackendImageUrl
+  // rewrites it to /static/visualizations/<file> -- a path nothing served,
+  // so that fallback always 404'd.
+  app.use(
+    '/static/visualizations',
+    staticAssetHeaders,
+    express.static(
+      visualizationDirectory,
+    ),
+  );
+
   // ============================================================
   // ROOT
   // ============================================================

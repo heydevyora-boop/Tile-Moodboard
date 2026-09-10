@@ -24,6 +24,7 @@
     { "src": "/api/v1/(.*)", "dest": "backend/api/index.ts" },
     { "src": "/pyapi/(.*)", "dest": "catalog_processor/api/index.py" },
     { "src": "/static/(.*)", "dest": "backend/api/index.ts" },
+    { "src": "/generated-visualizations/(.*)", "dest": "backend/api/index.ts" },
     { "handle": "filesystem" }
   ]
 }
