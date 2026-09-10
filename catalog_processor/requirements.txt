@@ -21,7 +21,7 @@ httpx==0.28.1
 idna==3.18
 numpy==2.3.5
 oauthlib==3.3.1
-opencv-python==5.0.0.93
+opencv-python-headless==5.0.0.93
 pillow==12.3.0
 proto-plus==1.28.3
 protobuf==7.35.1
