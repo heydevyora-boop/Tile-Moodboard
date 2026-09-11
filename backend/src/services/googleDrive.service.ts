@@ -43,14 +43,21 @@ function classifyError(err: unknown): DriveError {
  * Accepts either the raw JSON or a base64 blob of it, because pasting raw
  * JSON into a dashboard env var frequently mangles the private key's
  * newlines; literal "\n" sequences are restored for the same reason.
+ *
+ * Returns the full parsed key object (repaired), not just the two fields
+ * this module's own GoogleAuth() call needs -- catalogExtractor.service.ts
+ * reuses this to materialize a real service-account key *file* for
+ * extract.py, which (via google.oauth2.service_account.Credentials.
+ * from_service_account_file) needs the complete key document, not a
+ * client_email/private_key subset.
  */
-function parseServiceAccountJson(raw: string): { client_email: string; private_key: string } {
+export function parseServiceAccountJson(raw: string): Record<string, unknown> & { client_email: string; private_key: string } {
   const trimmed = raw.trim();
   const decoded = trimmed.startsWith('{')
     ? trimmed
     : Buffer.from(trimmed, 'base64').toString('utf8');
 
-  let parsed: { client_email?: string; private_key?: string };
+  let parsed: Record<string, unknown> & { client_email?: string; private_key?: string };
   try {
     parsed = JSON.parse(decoded);
   } catch {
@@ -61,7 +68,7 @@ function parseServiceAccountJson(raw: string): { client_email: string; private_k
     throw AppError.internal('GOOGLE_SERVICE_ACCOUNT_JSON is missing client_email or private_key');
   }
 
-  return { client_email: parsed.client_email, private_key: parsed.private_key.replace(/\\n/g, '\n') };
+  return { ...parsed, client_email: parsed.client_email, private_key: parsed.private_key.replace(/\\n/g, '\n') };
 }
 
 export interface UploadFileInput {

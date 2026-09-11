@@ -1,4 +1,5 @@
 import fs from 'fs';
+import os from 'os';
 import crypto from 'crypto';
 import path from 'path';
 import { Request } from 'express';
@@ -12,6 +13,7 @@ import { getPagination, buildPaginationMeta, PaginationMeta } from '@utils/pagin
 import { logActivity } from './activityLog.service';
 import { resolveBrand } from './brand.service';
 import { getExtractionQueue } from './extractionQueue.service';
+import { parseServiceAccountJson } from './googleDrive.service';
 import {
   UploadCatalogInput,
   ListCatalogsQuery,
@@ -227,8 +229,26 @@ async function runExtractionInner(catalogId: string, catalog: Awaited<ReturnType
     '--drive-folder', config.google.driveRootFolder,
     '--sheet-name', config.google.sheetName,
   ];
+
+  // extract.py's Drive mode only accepts a service-account key *file*
+  // (google.oauth2.service_account.Credentials.from_service_account_file).
+  // A host with no persistent/known-path key file -- e.g. this app's own
+  // serverless deployment -- instead configures GOOGLE_SERVICE_ACCOUNT_JSON,
+  // the same env var googleDrive.service.ts already uses for the rest of
+  // the app's Drive access there. Without this, extraction silently fell
+  // back to LOCAL disk storage on such a host, and those files vanish once
+  // the invocation that wrote them ends -- the cause of tile images 404ing
+  // in production. Reuses googleDrive.service.ts's own credential parsing
+  // instead of re-implementing it; writes the *file* extract.py needs to a
+  // temp path and removes it once the subprocess is done (see below).
+  let tempKeyFilePath: string | null = null;
   if (config.google.serviceAccountKeyPath) {
     args.push('--service-account-key', config.google.serviceAccountKeyPath);
+  } else if (config.google.serviceAccountJson) {
+    const keyObject = parseServiceAccountJson(config.google.serviceAccountJson);
+    tempKeyFilePath = path.join(os.tmpdir(), `gsa-key-${catalogId}-${crypto.randomBytes(6).toString('hex')}.json`);
+    fs.writeFileSync(tempKeyFilePath, JSON.stringify(keyObject), { mode: 0o600 });
+    args.push('--service-account-key', tempKeyFilePath);
   }
 
   // Every PROGRESS line gets appended to an in-memory buffer, written to
@@ -250,7 +270,20 @@ async function runExtractionInner(catalogId: string, catalog: Awaited<ReturnType
       .catch((err: Error) => logger.warn(`Failed to persist progress for catalog ${catalogId}`, { error: err.message }));
   };
 
-  const { stdout } = await runPythonScript({ script: 'extract.py', args, onLine });
+  let stdout: string;
+  try {
+    ({ stdout } = await runPythonScript({ script: 'extract.py', args, onLine }));
+  } finally {
+    // Best-effort: the temp key file is only ever a copy of a credential
+    // already held (as GOOGLE_SERVICE_ACCOUNT_JSON) by this same process's
+    // own environment, so a failed cleanup here is not a new leak -- just
+    // don't let it fail or block returning the real extraction result.
+    if (tempKeyFilePath) {
+      fs.rm(tempKeyFilePath, { force: true }, (err) => {
+        if (err) logger.warn(`Failed to remove temp service-account key file for catalog ${catalogId}`, { error: err.message });
+      });
+    }
+  }
   const result = parseResultLine<ExtractionResult>(stdout, 'RESULT_JSON:');
   const fullLog = logBuffer.join('\n');
 
