@@ -154,6 +154,3 @@ def mark_processed(file_hash, filename):
 
     connection.commit()
     connection.close()
-
-
-initialize_database()
