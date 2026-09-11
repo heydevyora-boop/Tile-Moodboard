@@ -1,5 +1,6 @@
 import { prisma } from '@db/connection';
 import { getPagination, buildPaginationMeta, PaginationMeta } from '@utils/pagination';
+import { normalizeDriveImageUrl } from './referenceImages.service';
 import { ListTilesQuery } from '@validators/tileRecommendation.validators';
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -320,7 +321,10 @@ export async function listAllTiles(query: ListTilesQuery) {
     prisma.tile.count({ where }),
   ]);
 
-  return { tiles, meta: buildPaginationMeta(total, page, limit) as PaginationMeta };
+  return {
+    tiles: tiles.map((t) => ({ ...t, imageUrl: normalizeDriveImageUrl(t.imageUrl) })),
+    meta: buildPaginationMeta(total, page, limit) as PaginationMeta,
+  };
 }
 
 // Minimal structural type for the Prisma client's tile delegate — keeps

@@ -4,6 +4,7 @@ import { AppError } from '@utils/AppError';
 import { getPagination, buildPaginationMeta, PaginationMeta } from '@utils/pagination';
 import { generateOpaqueToken } from '@utils/crypto';
 import { logActivity } from './activityLog.service';
+import { normalizeDriveImageUrl } from './referenceImages.service';
 import {
   SaveMoodBoardInput,
   UpdateMoodBoardInput,
@@ -101,7 +102,7 @@ export async function saveMoodBoard(input: SaveMoodBoardInput, actorId: string, 
  * longer available" rather than an error.
  */
 export async function getTilesByIds(ids: string[]) {
-  return prisma.tile.findMany({
+  const tiles = await prisma.tile.findMany({
     where: { id: { in: ids } },
     select: {
       id: true,
@@ -115,6 +116,7 @@ export async function getTilesByIds(ids: string[]) {
       brand: { select: { id: true, name: true } },
     },
   });
+  return tiles.map((t) => ({ ...t, imageUrl: normalizeDriveImageUrl(t.imageUrl) }));
 }
 
 // ─────────────────────────────────────────────────────────────────────────

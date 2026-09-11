@@ -45,14 +45,31 @@ async function getDriveFolderId(): Promise<string> {
  * image"). This is also the exact shape main_step6_complete.py normalizes
  * Drive URLs into, so it round-trips unchanged.
  */
-function toDriveDownloadUrl(fileId: string): string {
+export function toDriveDownloadUrl(fileId: string): string {
   return `https://drive.google.com/uc?export=download&id=${fileId}`;
 }
 
 /** Recovers the Drive file id from a URL built by toDriveDownloadUrl — lets deletes work without adding a column to store it. */
-function driveFileIdFromUrl(imageUrl: string | null): string | null {
+export function driveFileIdFromUrl(imageUrl: string | null): string | null {
   if (!imageUrl || !imageUrl.includes('drive.google.com')) return null;
   return /[?&]id=([^&]+)/.exec(imageUrl)?.[1] ?? /\/d\/([^/]+)/.exec(imageUrl)?.[1] ?? null;
+}
+
+/**
+ * Tile.imageUrl can carry a Drive URL in whichever shape whatever wrote it
+ * used — the pendrive extraction flow (main_step6_complete.py) stores
+ * Drive's webViewLink, an HTML viewer page an <img> tag can't render (the
+ * exact cause of tiles showing broken-image icons: the browser gets an
+ * HTML document, not pixels). extract.py's own Drive mode already returns
+ * the correct uc?id= download form. This normalizes any of those (or the
+ * already-canonical uc?export=download&id= form) to the one form that
+ * always loads, by reusing the two helpers above rather than storage
+ * writers each needing to agree on a format. A non-Drive value (a local
+ * /static/... path, or null) passes through unchanged.
+ */
+export function normalizeDriveImageUrl(imageUrl: string | null): string | null {
+  const fileId = driveFileIdFromUrl(imageUrl);
+  return fileId ? toDriveDownloadUrl(fileId) : imageUrl;
 }
 
 /**

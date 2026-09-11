@@ -1,5 +1,6 @@
 import { prisma, isDatabaseConnected } from '@db/connection';
 import { config } from '@config/index';
+import { normalizeDriveImageUrl } from './referenceImages.service';
 
 const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -188,7 +189,7 @@ export async function getTopCollections(limit = 3): Promise<TopCollectionsResult
         select: { imageUrl: true },
         orderBy: { createdAt: 'desc' },
       });
-      return { name, tileCount: g._count.collection, imageUrl: representative?.imageUrl ?? null };
+      return { name, tileCount: g._count.collection, imageUrl: normalizeDriveImageUrl(representative?.imageUrl ?? null) };
     }),
   );
 
