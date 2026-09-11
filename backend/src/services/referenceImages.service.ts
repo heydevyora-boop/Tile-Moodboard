@@ -56,20 +56,38 @@ export function driveFileIdFromUrl(imageUrl: string | null): string | null {
 }
 
 /**
+ * The browser-embeddable form, which is NOT toDriveDownloadUrl's form.
+ *
+ * uc?export=download is a download endpoint: Google serves an HTML
+ * interstitial from it rather than image bytes, so an <img> pointed at it
+ * fails with naturalWidth 0 even when the file is world-readable. That is
+ * deliberately still what toDriveDownloadUrl returns, because the Python
+ * visualization service fetches server-side and wants the download form.
+ * Only what a browser renders is switched here.
+ */
+function toDriveThumbnailUrl(fileId: string): string {
+  return `https://drive.google.com/thumbnail?id=${fileId}&sz=w1000`;
+}
+
+/**
  * Tile.imageUrl can carry a Drive URL in whichever shape whatever wrote it
  * used — the pendrive extraction flow (main_step6_complete.py) stores
  * Drive's webViewLink, an HTML viewer page an <img> tag can't render (the
  * exact cause of tiles showing broken-image icons: the browser gets an
- * HTML document, not pixels). extract.py's own Drive mode already returns
- * the correct uc?id= download form. This normalizes any of those (or the
- * already-canonical uc?export=download&id= form) to the one form that
- * always loads, by reusing the two helpers above rather than storage
- * writers each needing to agree on a format. A non-Drive value (a local
- * /static/... path, or null) passes through unchanged.
+ * HTML document, not pixels). extract.py's own Drive mode returns the
+ * uc?id= download form, which an <img> can't render either. This
+ * normalizes any of those (webViewLink, uc?id=, uc?export=download&id=)
+ * to the one form a browser actually renders, by reusing
+ * driveFileIdFromUrl rather than storage writers each needing to agree on
+ * a format. A non-Drive value (a local /static/... path, or null) passes
+ * through unchanged.
+ *
+ * Read-time only: nothing is rewritten in the database, so rows keep
+ * whatever their writer stored and this stays correct for both.
  */
 export function normalizeDriveImageUrl(imageUrl: string | null): string | null {
   const fileId = driveFileIdFromUrl(imageUrl);
-  return fileId ? toDriveDownloadUrl(fileId) : imageUrl;
+  return fileId ? toDriveThumbnailUrl(fileId) : imageUrl;
 }
 
 /**
