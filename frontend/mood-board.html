@@ -206,6 +206,12 @@
   .stock-no { color:var(--err); }
   .detail-actions { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(190px,100%),1fr)); gap:10px; margin-top:auto; padding-top:6px; }
 
+  /* ---- bathroom scene visualization (same tokens as the rest of this page) ---- */
+  .btn-amber:disabled { opacity:.55; cursor:not-allowed; }
+  .viz-error { padding:14px 16px; background:var(--err-bg); border-radius:13px; font-size:12.5px; line-height:1.5; color:var(--err); }
+  .viz-image-frame { border-radius:16px; overflow:hidden; background:var(--sand); border:1px solid var(--line); }
+  .viz-image-frame img { width:100%; display:block; object-fit:cover; }
+
   /* ---- shared ---- */
   .toast { position:fixed; left:50%; bottom:32px; transform:translateX(-50%); z-index:80; display:flex; align-items:center; gap:11px; max-width:calc(100vw - 32px); padding:14px 20px; background:var(--ink); color:#FBF6EC; border-radius:100px; box-shadow:0 14px 34px rgba(26,21,18,.28); font-size:10.5px; letter-spacing:.12em; }
   .modal-overlay { position:fixed; inset:0; background:rgba(26,21,18,.5); display:flex; align-items:center; justify-content:center; padding:20px; z-index:70; }
@@ -366,6 +372,11 @@
     errorMessage: null,
     productsModalIndex: null,
     useInFlight: false,
+    // Bathroom scene visualization for the currently-viewed detail
+    // combination only -- forIndex lets renderDetail() tell a stale
+    // result (from a previously-viewed combination) apart from a fresh
+    // one and reset to idle when the user navigates to a different combo.
+    visualization: { status: 'idle', imageUrl: null, error: null, forIndex: null },
     // Set when this page was opened via ?boardId= from Projects "Open
     // Board" -- viewing a previously-saved board rather than a live
     // wizard session, so the wizard-only fields above (feature/size/
@@ -806,6 +817,12 @@
     const combo = state.combinations[state.detailIndex];
     if (!combo) { state.stage = 'results'; render(); return; }
 
+    // A visualization from a previously-viewed combination must not carry
+    // over when the user opens a different one.
+    if (state.visualization.forIndex !== state.detailIndex) {
+      state.visualization = { status: 'idle', imageUrl: null, error: null, forIndex: state.detailIndex };
+    }
+
     const thumbTiles = combo.tiles.map((t) => state.tilesById[t.tileId]).filter((t) => t && t.imageUrl);
 
     main.innerHTML =
@@ -830,6 +847,7 @@
       '<button class="btn-primary mono" id="useDetailBtn">' + (state.savedBoardIndex === state.detailIndex ? 'SAVED ✓' : 'USE THIS DESIGN →') + '</button>' +
       '<button class="btn-secondary mono" id="exportDetailBtn">⇩ EXPORT PDF</button>' +
       '</div>' +
+      (state.savedBoardIndex === state.detailIndex ? visualizationSectionHtml() : '') +
       '</div>' +
       '</div>' +
       '</div>';
@@ -853,6 +871,69 @@
     document.getElementById('backToResultsBtn').addEventListener('click', () => { state.stage = 'results'; render(); });
     document.getElementById('useDetailBtn').addEventListener('click', () => useDesign(state.detailIndex));
     document.getElementById('exportDetailBtn').addEventListener('click', notReady);
+    const generateSceneBtn = document.getElementById('generateSceneBtn');
+    if (generateSceneBtn) generateSceneBtn.addEventListener('click', generateBathroomScene);
+  }
+
+  // ============================================================
+  // BATHROOM SCENE VISUALIZATION — reuses the existing
+  // POST /ai/visualizations pipeline (CasaApi.ai.generateImageUrl),
+  // scoped to the BASE tile of the currently-viewed, already-saved
+  // combination. No new backend, no new API-client method.
+  // ============================================================
+
+  function visualizationSectionHtml() {
+    const v = state.visualization;
+    const label = '<div class="mono" style="font-size:9.5px; letter-spacing:.18em; color:var(--muted)">BATHROOM SCENE VISUALIZATION</div>';
+
+    if (v.status === 'loading') {
+      return label + '<button class="btn-amber mono" id="generateSceneBtn" disabled>GENERATING BATHROOM SCENE…</button>';
+    }
+    if (v.status === 'error') {
+      return label +
+        '<div class="viz-error mono">COULD NOT GENERATE: ' + escapeHtml(v.error || 'Unknown error') + '</div>' +
+        '<button class="btn-dashed mono" id="generateSceneBtn">↻ TRY AGAIN</button>';
+    }
+    if (v.status === 'success' && v.imageUrl) {
+      return label +
+        '<div class="viz-image-frame"><img src="' + v.imageUrl + '" alt="Generated bathroom scene"></div>' +
+        '<button class="btn-dashed mono" id="generateSceneBtn">↻ GENERATE AGAIN</button>';
+    }
+    return label + '<button class="btn-amber mono" id="generateSceneBtn">GENERATE BATHROOM SCENE →</button>';
+  }
+
+  async function generateBathroomScene() {
+    if (state.visualization.status === 'loading') return;
+
+    const combo = state.combinations[state.detailIndex];
+    if (!combo) return;
+
+    // The combination's foundational tile -- every combination is
+    // guaranteed a 'base' tile server-side (promptBuilder.service.ts
+    // VALID_ROLES / the "must include a base tile" check), so this is
+    // the real, already-selected product to visualize, not a guess.
+    const baseTile = combo.tiles.find((t) => t.role === 'base');
+    if (!baseTile) {
+      state.visualization = { status: 'error', imageUrl: null, error: 'This combination has no base tile to visualize.', forIndex: state.detailIndex };
+      render();
+      return;
+    }
+
+    state.visualization = { status: 'loading', imageUrl: null, error: null, forIndex: state.detailIndex };
+    render();
+
+    try {
+      const imageUrl = await CasaApi.ai.generateImageUrl({
+        product_id: baseTile.tileId,
+        // No surface picker exists in this UI; WALL matches the default
+        // the previous Scene & Angles tool used for the same backend call.
+        surface: 'WALL',
+      });
+      state.visualization = { status: 'success', imageUrl, error: null, forIndex: state.detailIndex };
+    } catch (err) {
+      state.visualization = { status: 'error', imageUrl: null, error: (err && err.message) || 'Something went wrong generating the bathroom scene.', forIndex: state.detailIndex };
+    }
+    render();
   }
 
   // ============================================================
