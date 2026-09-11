@@ -15,10 +15,10 @@ import {
 const router = Router();
 
 // This endpoint proxies straight through to the paid Gemini generation
-// pipeline in catalog_processor -- it must be behind the same auth every
-// other tile-mutating route uses (see catalogExtractor.routes.ts), not
-// open to the internet. tiles:write matches that route's permission for
-// tile-generation actions.
+// pipeline in catalog_processor -- it must not be open to the internet.
+// It never writes to a Tile row (the one DB call below is a read), so it
+// gets its own visualizations:write permission rather than tiles:write,
+// which also gates real tile mutations in catalogExtractor.routes.ts.
 router.use(authenticate);
 
 // ============================================================
@@ -27,7 +27,7 @@ router.use(authenticate);
 
 router.post(
   '/visualizations',
-  requirePermission('tiles:write'),
+  requirePermission('visualizations:write'),
   async (
     req: Request,
     res: Response,

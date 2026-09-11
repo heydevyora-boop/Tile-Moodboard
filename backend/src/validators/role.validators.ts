@@ -19,6 +19,7 @@ export const PERMISSION_STRINGS = [
   'tiles:write',
   'users:read',
   'users:write',
+  'visualizations:write',
 ] as const;
 
 export const updateRoleSchema = z.object({

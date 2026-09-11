@@ -49,6 +49,7 @@ async function seedRoles() {
         'customers:read', 'customers:write',
         'users:read', 'users:write',
         'logs:read', 'analytics:read',
+        'visualizations:write',
       ],
     },
     {
@@ -68,6 +69,10 @@ async function seedRoles() {
         // cards are gated on analytics:read -- without it those two calls
         // 403 and the page loads with an error where the stats should be.
         'analytics:read',
+        // Scene & Angles / bathroom scene generation -- this route was
+        // gated on tiles:write until now, which Staff never had (and
+        // which would also grant catalog-extractor tile edit/delete).
+        'visualizations:write',
       ],
     },
   ];
