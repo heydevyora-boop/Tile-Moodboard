@@ -468,6 +468,42 @@ def upload_file(
         fields="id,name,webViewLink,webContentLink",
     ).execute()
 
+    # --------------------------------------------------------
+    # PUBLIC VIEW PERMISSION
+    # --------------------------------------------------------
+    #
+    # Without this the file is readable only by the account that
+    # uploaded it, so the tile image 404s/redirects to a sign-in
+    # page for anyone loading it from the frontend -- the upload
+    # itself succeeds and the URL looks right, which is what made
+    # this hard to spot. Same call, and the same non-fatal
+    # handling, as drive_sheets.py already uses after its own
+    # upload: a catalog that is otherwise fully processed must not
+    # be aborted just because sharing failed.
+
+    try:
+
+        drive_service.permissions().create(
+            fileId=uploaded_file["id"],
+            body={
+                "type": "anyone",
+                "role": "reader"
+            },
+            fields="id"
+        ).execute()
+
+    except Exception as error:
+
+        print()
+        print(
+            "WARNING: Could not create public "
+            "Drive permission."
+        )
+
+        print(
+            f"Reason: {error}"
+        )
+
     return uploaded_file
 
 
