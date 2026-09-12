@@ -431,14 +431,18 @@ exactly the same as it would for any other angle of this same room.
 You are a professional architectural visualization engine.
 
 TASK:
-Apply the EXACT tile shown in the supplied tile reference image
-to the {surface_description} of the supplied bathroom/interior image.
+Two images are supplied, in this order:
+  IMAGE 1 = the bathroom/interior scene.
+  IMAGE 2 = the EXACT selected catalog tile.
+
+Apply the EXACT tile shown in IMAGE 2 to the {surface_description}
+of IMAGE 1.
 
 {identity}
 {camera_section}
 REFERENCE PRIORITY:
 
-1. The bathroom image is the source of truth for:
+1. IMAGE 1 (the bathroom) is the source of truth for:
    - architecture
    - room dimensions
    - doors
@@ -449,12 +453,20 @@ REFERENCE PRIORITY:
    - lighting
    - existing objects
 
-2. The tile image is the source of truth for:
+2. IMAGE 2 (the selected catalog tile) is the ONLY source of
+   truth for the tile itself:
    - tile color
    - texture
    - pattern
    - finish
+   - geometry/shape
+   - distinctive markings and surface details
    - visual character
+
+   Reproduce that exact tile. Do NOT invent a visually similar
+   tile, and do NOT derive the tile from the product name, SKU or
+   brand. Any tile already present in IMAGE 1 is part of the old
+   room, never the tile to apply.
 
 DO NOT redesign the room.
 
@@ -737,15 +749,46 @@ def apply_tile_to_scene(
     # GEMINI INPUT
     # --------------------------------------------------------
 
+    # Both images used to be passed as bare, adjacent, unlabelled byte
+    # parts, so nothing in the request said which one was the room and
+    # which one was the tile -- the model had to infer that from their
+    # content alone, and could treat the scene as authoritative for
+    # everything and invent a plausible-looking tile instead of
+    # reproducing the supplied one. Naming each image immediately before
+    # its own bytes binds the role to the part itself.
     contents = [
 
         types.Part.from_text(
             text=prompt
         ),
 
+        types.Part.from_text(
+            text=(
+                "IMAGE 1 = BATHROOM SCENE REFERENCE. "
+                "The room in the next image is the source of truth for "
+                "architecture, layout, fixtures, camera and lighting "
+                "ONLY. Its existing tiles/materials are NOT the tile to "
+                "use and must be replaced on the requested surface."
+            )
+        ),
+
         types.Part.from_bytes(
             data=scene_bytes,
             mime_type=scene_mime_type,
+        ),
+
+        types.Part.from_text(
+            text=(
+                "IMAGE 2 = EXACT SELECTED CATALOG TILE. "
+                "The next image is the real catalog photograph of the "
+                "one tile product being visualized, and is the ONLY "
+                "source of truth for the tile itself. Reproduce this "
+                "exact tile -- its pattern, colour, texture, finish, "
+                "geometry/shape and distinctive markings -- on the "
+                "requested surface. Do NOT invent a visually similar "
+                "tile, and do NOT substitute a tile inferred from the "
+                "product name, SKU or brand."
+            )
         ),
 
         types.Part.from_bytes(
