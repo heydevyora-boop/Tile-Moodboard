@@ -21,7 +21,7 @@ try:
 except ImportError:
     MediaIoBaseDownload = None
 
-from fastapi import FastAPI
+from fastapi import APIRouter, FastAPI
 from pydantic import BaseModel, Field
 from typing import Optional
 import uvicorn
@@ -558,6 +558,22 @@ def internal_visualization(
                 "message": str(error),
             },
         }
+
+
+# ============================================================
+# /pyapi PREFIX COMPATIBILITY
+# ============================================================
+# Vercel forwards requests under /pyapi/* to this ASGI app, but regular
+# Serverless Functions still receive the original, unrewritten request
+# path, so the bare routes above never match in production. Register the
+# same handlers under /pyapi as well (no duplicated logic) so both the
+# bare paths (local/Docker) and the /pyapi-prefixed paths (Vercel) work.
+pyapi_router = APIRouter(prefix="/pyapi")
+pyapi_router.add_api_route("/health", health, methods=["GET"])
+pyapi_router.add_api_route(
+    "/internal/visualizations", internal_visualization, methods=["POST"]
+)
+app.include_router(pyapi_router)
 
 
 # ============================================================
