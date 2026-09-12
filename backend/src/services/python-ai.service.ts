@@ -1,3 +1,4 @@
+import fs from 'fs';
 import path from 'path';
 
 import { config } from '@config/index';
@@ -53,6 +54,10 @@ export interface PythonAIResponse {
 
   image?: {
     url?: string;
+    // Python base64-encodes the generated PNG into this field, which is
+    // the only copy of the image that survives when Python's filesystem
+    // is not shared with this process (see normalizeVisualizationResponse).
+    data_url?: string;
     drive_file_id?: string;
   };
 
@@ -207,6 +212,59 @@ function toAbsoluteImageUrl(
 }
 
 // ============================================================
+// IS THE GENERATED FILE ACTUALLY SERVABLE FROM HERE?
+// ============================================================
+
+/*
+ * Directory app.ts serves /generated-visualizations from. Kept in sync
+ * with the mount there.
+ */
+const VISUALIZATION_DIRECTORY =
+  path.join(
+    path.resolve(
+      process.cwd(),
+      '../catalog_processor',
+    ),
+    'output',
+    'tile_visualizations',
+  );
+
+/**
+ * Python reports the absolute path it wrote the image to. That file is
+ * only reachable from here when both processes share a filesystem (the
+ * docker-compose `catalog_processor_output` volume, or a single host).
+ * On a serverless host they are separate containers, so the file lives
+ * on Python's disk alone and a /generated-visualizations/<file> URL
+ * built from it would always 404 -- the image has to come back inline
+ * instead.
+ */
+function visualizationFileIsServable(
+  imagePath: string,
+): boolean {
+  const fileName =
+    path.basename(
+      String(imagePath || '')
+        .trim()
+        .replace(/\\/g, '/'),
+    );
+
+  if (!fileName) {
+    return false;
+  }
+
+  try {
+    return fs.existsSync(
+      path.join(
+        VISUALIZATION_DIRECTORY,
+        fileName,
+      ),
+    );
+  } catch {
+    return false;
+  }
+}
+
+// ============================================================
 // NORMALIZE PYTHON RESPONSE
 // ============================================================
 
@@ -229,18 +287,37 @@ function normalizeVisualizationResponse(
     driveImage?.webViewLink;
 
   /*
-   * Prefer local Express-served image.
+   * The inline copy Python always encodes. Used only when the file
+   * itself cannot be served from here, since it is far larger than a
+   * URL to a statically-served file.
+   */
+
+  const incomingImageUrl =
+    result.image?.url || '';
+
+  const dataUrl =
+    result.image?.data_url ||
+    (incomingImageUrl.startsWith('data:')
+      ? incomingImageUrl
+      : '');
+
+  /*
+   * Prefer local Express-served image, but only when that file is
+   * really present in the directory Express serves -- otherwise the
+   * URL would 404.
    *
-   * Fall back to Google Drive URL if the
-   * local path isn't available.
+   * Fall back to the inline image, then to the Google Drive URL.
    */
 
   const imageUrl =
-    imagePath
+    imagePath &&
+    visualizationFileIsServable(
+      imagePath,
+    )
       ? buildVisualizationImageUrl(
           imagePath,
         )
-      : driveUrl || '';
+      : dataUrl || driveUrl || '';
 
   result.image = {
     url:
