@@ -3,6 +3,7 @@
 # Part 1 (Catalog Extractor) is the first consumer — see build guide.
 
 PyMuPDF>=1.24.0
+google-genai>=1.0.0
 gspread>=6.1.0
 google-auth>=2.32.0
 google-auth-oauthlib>=1.2.0

@@ -397,6 +397,276 @@ def classify_image_content(image_bytes, image_rect, page_rect):
     return False, measured
 
 
+# ---------------------------------------------------------------------------
+# Semantic tile validation (Gemini vision)
+#
+# WHY THIS EXISTS, when classify_image_content above already filters:
+# classify_image_content's only real signal is how much the image's regions
+# differ in HUE. That is blind, by construction, to a tonally monochromatic
+# room -- a beige kitchen with a beige slab worktop, beige cabinetry and a
+# beige splashback is colour-UNIFORM, so it reads as a flat tile surface.
+# Measured on exactly that case: colour spread 0.0083, which is LOWER than
+# 112 of the 113 genuine product photos recorded in
+# test_extract_tile_classification.py (whose minimum is 0.0102). The two
+# populations are not merely close there, they are inverted, so no threshold
+# on that metric can separate them -- rejecting 0.0083 would reject
+# essentially the whole catalog. A signal that understands image CONTENT,
+# not image statistics, is the only thing that can make this call.
+#
+# Deliberately NOT imported from catalog_processor/app/gemini_service.py,
+# which implements the same contract: backend/ and catalog_processor/ deploy
+# as separate serverless functions with separate dependency sets, so that
+# module is not importable from here. It also raises at import time when the
+# key is absent, which would turn a missing key into a hard crash of the
+# whole extraction rather than a degraded run.
+#
+# Runs AFTER the free filters (size, page-template, content statistics,
+# duplicate hash) so the paid call is only ever made on candidates that
+# survived everything cheaper.
+# ---------------------------------------------------------------------------
+
+GEMINI_MODEL = os.getenv('GEMINI_MODEL', 'gemini-3.1-flash-lite')
+
+# The codebase's own documented confidence bands (gemini_service.py) read
+# 0.90-1.00 "extremely clear", 0.75-0.89 "strong", 0.50-0.74 "uncertain".
+# Anything below "strong" is treated as unsure and therefore rejected.
+SEMANTIC_MIN_CONFIDENCE = 0.75
+
+# Smallest crop worth keeping, as a fraction of the image's own width/height.
+# Guards against a degenerate bbox collapsing a real tile to a few pixels.
+MIN_CROP_FRACTION = 0.10
+
+TILE_VALIDATION_PROMPT = """You are validating one image taken from a tile
+manufacturer's product catalog. Decide whether it shows the TILE PRODUCT
+ITSELF, or something else.
+
+APPROVE (is_product_image = true) only when the image is essentially the
+tile/product surface on its own: a flat swatch, a product close-up, or a
+studio shot of the tile face. The tile surface must dominate the frame.
+
+REJECT (is_product_image = false) when the image is any of:
+- a room or lifestyle scene (kitchen, bathroom, bedroom, living room)
+- a tile shown installed on a wall, floor, island, counter or splashback
+- people or models
+- furniture, cabinets, countertops, sanitaryware or appliances
+- an architectural scene, room render or installation photograph
+- a promotional or marketing composition
+- an image dominated by branding, logos or marketing text
+- a screenshot of a catalog page, or a collage of several products
+- any image where the tile is only visible in the background
+
+The single most common error is approving a room photo because the tile is
+installed in it and the photo's colours are muted and uniform. A muted,
+evenly-toned kitchen or bathroom is STILL a room photo. Judge what the image
+DEPICTS, not how colourful it is.
+
+Do not use the product name, size or brand text to decide. Judge only the
+visual content.
+
+product_bbox: when approving, give the tight bounds of the tile surface
+within the image, normalised 0.0-1.0 as {x1, y1, x2, y2}. If the whole image
+is already the tile, return {x1: 0, y1: 0, x2: 1, y2: 1}. Return null when
+rejecting.
+
+confidence: your certainty about the classification, 0.0-1.0.
+
+reason: one short phrase naming what you actually saw.
+
+Return ONLY valid JSON."""
+
+TILE_VALIDATION_SCHEMA = {
+    'type': 'OBJECT',
+    'properties': {
+        'is_product_image': {'type': 'BOOLEAN'},
+        'confidence': {'type': 'NUMBER'},
+        'reason': {'type': 'STRING'},
+        'product_bbox': {
+            'type': 'OBJECT',
+            'nullable': True,
+            'properties': {
+                'x1': {'type': 'NUMBER'},
+                'y1': {'type': 'NUMBER'},
+                'x2': {'type': 'NUMBER'},
+                'y2': {'type': 'NUMBER'},
+            },
+            'required': ['x1', 'y1', 'x2', 'y2'],
+        },
+    },
+    'required': ['is_product_image', 'confidence', 'reason'],
+}
+
+
+class SemanticTileValidator:
+    """Gemini-backed "is this actually the tile, or a photo of a room?" check.
+
+    FAIL-CLOSED: production requires that ONLY a real, confidently-verified
+    tile/product image is ever saved. That bar applies uniformly to every
+    way this check can fail to produce a confirmation -- a missing API key
+    is not treated differently from a low-confidence answer, an unreadable
+    response, or an exhausted quota. All of them mean "this candidate was
+    not confirmed as the product", so all of them reject. There is no
+    inert/pass-through mode: `enabled=False` (no key configured) causes
+    every verdict() call to reject, exactly like every other unavailable
+    path below. `enabled` is reported by the caller purely so a run where
+    every candidate is being rejected for lack of a key -- rather than
+    because those candidates are genuinely bad -- is diagnosable from the
+    output instead of silently reading as "this catalog had no tiles".
+
+    Quota handling mirrors catalog_processor/app/gemini_service.py: the first
+    429/RESOURCE_EXHAUSTED trips a process-local latch and no further calls
+    are made, rather than burning the rest of the catalog against an API that
+    is already refusing -- every remaining candidate in this run rejects
+    immediately without a network call.
+    """
+
+    def __init__(self, api_key):
+        self.enabled = bool(api_key)
+        self._api_key = api_key
+        self._client = None
+        self._quota_exhausted = False
+
+    def _get_client(self):
+        if self._client is None:
+            from google import genai
+            self._client = genai.Client(api_key=self._api_key)
+        return self._client
+
+    @staticmethod
+    def _is_quota_error(error):
+        for attribute in ('code', 'status_code'):
+            if getattr(error, attribute, None) == 429:
+                return True
+        message = str(error).upper()
+        return any(marker in message for marker in (
+            '429', 'RESOURCE_EXHAUSTED', 'QUOTA EXCEEDED',
+            'RATE LIMIT', 'RATE_LIMIT', 'TOO MANY REQUESTS',
+        ))
+
+    def verdict(self, image_bytes):
+        """Returns (approved, reason, bbox).
+
+        bbox is a normalised (x1, y1, x2, y2) tuple or None.
+
+        Anything short of a confident "yes, this is the product" is a
+        rejection -- no configured key, an unreadable response, a
+        low-confidence answer, a transient API error, and an exhausted quota
+        all return approved=False. That is the fail-closed posture this gate
+        was asked for: a wrong tile image is worse than a missing one, so an
+        image this validator could not positively confirm is never saved,
+        including when it could not even ask.
+        """
+        if not self.enabled:
+            return False, (
+                'semantic validation unavailable (GEMINI_API_KEY not configured) '
+                '-- cannot confirm this is the actual product, needs review'
+            ), None
+
+        if self._quota_exhausted:
+            return False, 'Gemini quota exhausted earlier in this run -- needs review', None
+
+        from google.genai import types
+
+        try:
+            response = self._get_client().models.generate_content(
+                model=GEMINI_MODEL,
+                contents=[
+                    types.Part.from_text(text=TILE_VALIDATION_PROMPT),
+                    types.Part.from_bytes(data=image_bytes, mime_type='image/png'),
+                ],
+                config=types.GenerateContentConfig(
+                    response_mime_type='application/json',
+                    response_schema=TILE_VALIDATION_SCHEMA,
+                    # Classification, not composition -- the same image must
+                    # get the same verdict on every run.
+                    temperature=0.0,
+                ),
+            )
+        except Exception as error:  # noqa: BLE001 -- see docstring: never fail open
+            if self._is_quota_error(error):
+                self._quota_exhausted = True
+                return False, 'Gemini quota/rate limit hit -- needs review', None
+            return False, f'Gemini validation failed ({error}) -- needs review', None
+
+        try:
+            parsed = json.loads(response.text)
+        except Exception:  # noqa: BLE001 -- unparseable answer is not a confirmation
+            return False, 'Gemini returned an unreadable verdict -- needs review', None
+
+        reason = str(parsed.get('reason') or '').strip() or 'no reason given'
+
+        try:
+            confidence = float(parsed.get('confidence') or 0.0)
+        except (TypeError, ValueError):
+            confidence = 0.0
+
+        if not bool(parsed.get('is_product_image')):
+            return False, f'not a tile/product image: {reason}', None
+
+        if confidence < SEMANTIC_MIN_CONFIDENCE:
+            return False, (
+                f'tile/product classification too uncertain to trust '
+                f'(confidence {confidence:.2f} < {SEMANTIC_MIN_CONFIDENCE}): {reason}'
+            ), None
+
+        return True, f'{reason} (confidence {confidence:.2f})', _parse_bbox(parsed.get('product_bbox'))
+
+
+def _parse_bbox(raw):
+    """Normalised bbox as a tuple, or None if it's absent/malformed/degenerate."""
+    if not isinstance(raw, dict):
+        return None
+    try:
+        box = tuple(float(raw[key]) for key in ('x1', 'y1', 'x2', 'y2'))
+    except (KeyError, TypeError, ValueError):
+        return None
+    x1, y1, x2, y2 = box
+    if not all(0.0 <= value <= 1.0 for value in box):
+        return None
+    if x2 - x1 < MIN_CROP_FRACTION or y2 - y1 < MIN_CROP_FRACTION:
+        return None
+    return box
+
+
+def crop_to_product_bbox(image_bytes, bbox):
+    """Crops to the tile surface the validator located.
+
+    Pure extraction -- it only ever selects a sub-rectangle of pixels that
+    are already there. Nothing is scaled, stretched, padded or generated, so
+    the tile's colour, pattern, texture and proportions are exactly the
+    catalog's own. Returns the image unchanged if the crop would be a no-op
+    or anything goes wrong.
+    """
+    if not bbox:
+        return image_bytes
+
+    x1, y1, x2, y2 = bbox
+    if (x1, y1, x2, y2) == (0.0, 0.0, 1.0, 1.0):
+        return image_bytes
+
+    try:
+        import io
+
+        from PIL import Image
+
+        with Image.open(io.BytesIO(image_bytes)) as source:
+            source.load()
+            width, height = source.size
+            # Rounded, not truncated: int() always floors, so a bound that
+            # lands on 489.999 instead of 490 silently shaves a pixel off
+            # the tile and skews its proportions.
+            box = (
+                round(x1 * width), round(y1 * height),
+                round(x2 * width), round(y2 * height),
+            )
+            if box[2] - box[0] < 1 or box[3] - box[1] < 1:
+                return image_bytes
+            buffer = io.BytesIO()
+            source.crop(box).save(buffer, 'PNG')
+            return buffer.getvalue()
+    except Exception:  # noqa: BLE001 -- a failed crop must not lose the tile
+        return image_bytes
+
+
 def text_near_image(image_rect, text_blocks, max_distance=MAX_LABEL_DISTANCE_PT):
     """Text blocks near an image's rect, closest first. A block directly
     above or below the image (a caption/title) ranks ahead of one merely
@@ -695,7 +965,35 @@ def extract(pdf_path, brand, output_dir, uploader):
     warnings = []
     pages_with_no_images = 0
     duplicate_images_skipped = 0
+    semantic_rejections = 0
     seen_image_hashes = {}  # sha256 -> first filename that had it, for the warning message
+
+    validator = SemanticTileValidator(os.getenv('GEMINI_API_KEY'))
+    if validator.enabled:
+        log_progress(
+            f"Semantic tile validation ON ({GEMINI_MODEL}) -- images that are not "
+            "confidently the tile product itself will be reported, not saved"
+        )
+    else:
+        # FAIL-CLOSED: production requires that ONLY a confidently-verified
+        # real tile image is ever saved, and a missing key means that
+        # confirmation can never be obtained -- so every candidate that
+        # reaches this gate is rejected, and this run WILL extract zero
+        # tiles. Stated outright, at the top of the run, rather than left to
+        # be inferred from an empty result: an operator watching progress
+        # scroll by needs to know in the first line why, not discover it
+        # after a multi-hundred-page catalog finishes with nothing saved.
+        log_progress(
+            "ERROR -- GEMINI_API_KEY is not set. Semantic tile validation cannot "
+            "run, and per the fail-closed requirement no candidate can be "
+            "confirmed as the real product without it. EVERY extracted image in "
+            "this run will be rejected (0 tiles saved) until the key is configured."
+        )
+        warnings.append(
+            "GEMINI_API_KEY is not configured -- semantic tile validation could not "
+            "run, so no candidate image could be confirmed as the actual product. "
+            "All candidates were rejected rather than saved unverified."
+        )
 
     # Each tile's image is uploaded to Drive synchronously, immediately
     # after it's extracted, before moving on to the next image -- a
@@ -851,6 +1149,30 @@ def extract(pdf_path, brand, output_dir, uploader):
                     continue
                 seen_image_hashes[image_hash] = f"page {page_num + 1}"
 
+                # Last gate, and the only one that judges what the image
+                # actually DEPICTS rather than how its pixels are
+                # distributed -- see SemanticTileValidator. Placed here so
+                # the paid call is only made for candidates that already
+                # survived every free filter above, including the duplicate
+                # hash, rather than once per placement on the page.
+                #
+                # Rejection means the image is NOT saved and no tile row is
+                # produced for it: a room photo stored as a product is worse
+                # than a gap the warnings below make visible.
+                approved, verdict_reason, product_bbox = validator.verdict(image_bytes)
+                if not approved:
+                    semantic_rejections += 1
+                    warnings.append(
+                        f"Page {page_num + 1} image {image_index}: not saved -- {verdict_reason}"
+                    )
+                    continue
+
+                # Tighten to the tile surface the validator located. Selects
+                # a sub-rectangle of existing pixels only -- never scales,
+                # pads or synthesises (see crop_to_product_bbox).
+                if product_bbox:
+                    image_bytes = crop_to_product_bbox(image_bytes, product_bbox)
+
                 name = guess_name(detection_text, brand, page_num + 1, image_index)
                 filename = f"{slugify(brand)}-p{page_num + 1}-{image_index}.{ext}"
                 local_path = os.path.join(output_dir, filename)
@@ -915,7 +1237,24 @@ def extract(pdf_path, brand, output_dir, uploader):
         except Exception as e:  # noqa: BLE001 -- images are already uploaded either way
             warnings.append(f"Sheet append failed: {e}")
 
-    log_progress(f"Done -- {len(tiles)} tile candidate(s) extracted from {total_pages} page(s), {duplicate_images_skipped} duplicate(s) skipped")
+    log_progress(
+        f"Done -- {len(tiles)} tile candidate(s) extracted from {total_pages} page(s), "
+        f"{duplicate_images_skipped} duplicate(s) skipped, "
+        f"{semantic_rejections} rejected as not-the-tile"
+    )
+
+    # A run where every candidate was rejected (an expired key, a missing
+    # key, an exhausted quota, a catalog whose images all genuinely fail)
+    # otherwise reads as "this catalog simply had no tiles". Said plainly
+    # instead -- this fires whether the rejections came from the validator
+    # actively disapproving images or from it being unavailable to run at
+    # all, since fail-closed makes both paths end in the same outcome.
+    if semantic_rejections and not tiles:
+        log_progress(
+            "ERROR -- every candidate image was rejected "
+            f"({'semantic validation is unavailable' if not validator.enabled else 'by semantic validation'}). "
+            "Check the warnings for the reason before assuming the catalog is empty."
+        )
 
     return {
         'totalPages': total_pages,
@@ -923,6 +1262,8 @@ def extract(pdf_path, brand, output_dir, uploader):
         'tiles': tiles,
         'warnings': warnings,
         'duplicateImagesSkipped': duplicate_images_skipped,
+        'semanticRejections': semantic_rejections,
+        'semanticValidation': 'on' if validator.enabled else 'unavailable',
         'storageMode': 'drive' if uploader.enabled else 'local',
     }
 
