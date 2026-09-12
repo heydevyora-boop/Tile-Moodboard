@@ -6,6 +6,7 @@ import re
 import csv
 import hashlib
 import mimetypes
+import tempfile
 from io import BytesIO
 from pathlib import Path
 from urllib.error import HTTPError, URLError
@@ -273,7 +274,13 @@ def _download_scene_image(source: str, scene_id: Optional[str] = None) -> Path:
     if not source:
         raise ValueError("scene_image_path is required.")
 
-    scene_inputs_dir = OUTPUT_DIR / "scene_inputs"
+    # OUTPUT_DIR ("output", relative to cwd) is fine for the local/Docker
+    # pendrive flow but is read-only on Vercel's serverless filesystem
+    # outside of /tmp. These are transient per-request scratch files
+    # (downloaded, then read back once during this same request), so the
+    # OS temp dir is safe here without touching OUTPUT_DIR's other, real
+    # local-output usages elsewhere in this file.
+    scene_inputs_dir = Path(tempfile.gettempdir()) / "casa-scene-inputs"
     scene_inputs_dir.mkdir(parents=True, exist_ok=True)
 
     source_hash = hashlib.sha256(source.encode("utf-8")).hexdigest()[:16]
