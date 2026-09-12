@@ -1648,6 +1648,7 @@ def process_pdf(
     uploaded_count = 0
     skipped_count = 0
     sheet_failed_count = 0
+    sync_failed_count = 0
 
     for image in images:
 
@@ -1763,11 +1764,34 @@ def process_pdf(
         #
         # Deliberately best-effort and AFTER the sheet write: it must
         # never abort a catalog whose row and image already landed.
-        sync_master_product_to_backend(
+        synced = sync_master_product_to_backend(
             product_code=product_id,
             brand=brand,
             image_url=drive_url,
         )
+
+        # Same rule the sheet write above follows, for the same reason: a
+        # product that did NOT reach its destination must not be recorded
+        # as processed. sync_master_product_to_backend returns None for
+        # every failure mode -- no INTERNAL_SYNC_API_KEY configured, an
+        # unreachable BACKEND_SYNC_URL, a non-2xx response -- and marking
+        # those as done strands the product permanently: already_processed()
+        # skips it on every later run, so it can never reach the Tile table
+        # even once the sync is configured correctly, and the mood board
+        # never sees it. Leaving it unmarked costs a repeat Drive upload on
+        # the next run (the MASTER row itself is already protected by
+        # append_unique_row) and is the only thing that lets the product
+        # arrive at all.
+        if synced is None:
+            sync_failed_count += 1
+
+            print(
+                f"BACKEND SYNC FAILED for {product_id} "
+                f"(image in Drive, MASTER row written, Tile row NOT "
+                f"created, will retry next run)"
+            )
+
+            continue
 
         mark_processed(
             file_hash=file_hash,
@@ -1793,6 +1817,24 @@ def process_pdf(
     print(
         f"Sheet failures   : {sheet_failed_count}"
     )
+
+    print(
+        f"Backend sync fail: {sync_failed_count}"
+    )
+
+    # A run where every product reached Drive and MASTER but none reached
+    # Postgres otherwise looks like a complete success -- the mood board
+    # simply never shows the new tiles, with nothing in the output saying
+    # why. Called out explicitly instead.
+    if sync_failed_count and not uploaded_count:
+        print("")
+        print(
+            "ERROR -- no product from this catalog reached the backend Tile "
+            "table, so none of them can appear in a mood board. Check that "
+            "INTERNAL_SYNC_API_KEY is set (it is blank by default) and that "
+            "BACKEND_SYNC_URL points at the deployed backend rather than the "
+            "default localhost:5000."
+        )
 
     return {
         "brand": brand,
