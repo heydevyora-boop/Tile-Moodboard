@@ -398,6 +398,116 @@ def classify_image_content(image_bytes, image_rect, page_rect):
 
 
 # ---------------------------------------------------------------------------
+# Final tile aspect-ratio correction
+#
+# The image surviving every filter above (and, further down the pipeline,
+# semantic validation and its own product_bbox crop) is the confirmed tile
+# surface -- but its PIXEL aspect ratio is whatever the catalog page
+# happened to print it at, not the product's actual physical proportions.
+# A page that frames an 800x2400mm plank tile inside a roughly square photo
+# box still saves a roughly square image, even though the real product is a
+# 1:3 plank.
+#
+# This corrects that using metadata the pipeline ALREADY extracts -- the
+# catalog's own stated size, via detect_size/SIZE_PATTERN above -- so
+# nothing new is inferred, guessed, or invented; a candidate with no
+# detected size is left exactly as extracted. It is a pure centre-crop:
+# only pixels already present in the validated image are kept, nothing is
+# scaled, stretched, or generated, and only the one dimension that is
+# oversized relative to the product's true proportion is trimmed, by the
+# minimum amount needed -- the other dimension is kept in full.
+# ---------------------------------------------------------------------------
+
+# Matches the numeric prefix of detect_size()'s own output format
+# ("800x2400mm", "750x300cm", ...) -- deliberately not SIZE_PATTERN again,
+# since that scans free-form catalog text for a match anywhere in it; this
+# only ever parses the already-detected, already-normalised string.
+PRODUCT_DIMENSIONS_PATTERN = re.compile(r'^(\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)', re.IGNORECASE)
+
+# A source image's pixel ratio within this fraction of the product's real
+# ratio is treated as already correct -- avoids a crop that would only ever
+# shave a stray pixel off one edge for no real benefit.
+ASPECT_RATIO_TOLERANCE = 0.02
+
+
+def parse_product_aspect_ratio(size_text):
+    """Recovers width/height as a ratio from the already-detected size
+    string (e.g. "800x2400mm", produced by detect_size above).
+
+    Returns None when no dimension was detected for this candidate, or the
+    text doesn't parse -- callers then leave the image exactly as extracted
+    rather than guessing a proportion that isn't actually in the catalog.
+    """
+    if not size_text:
+        return None
+
+    match = PRODUCT_DIMENSIONS_PATTERN.match(size_text)
+    if not match:
+        return None
+
+    width, height = float(match.group(1)), float(match.group(2))
+    if width <= 0 or height <= 0:
+        return None
+
+    return width / height
+
+
+def crop_to_aspect_ratio(image_bytes, target_ratio):
+    """Centre-crops the image to the product's real width:height ratio,
+    keeping every pixel of whichever dimension is already correct and
+    trimming only the minimum needed from the other.
+
+    Pure extraction, like crop_to_product_bbox above: only ever removes
+    pixels already at the image's own edges. Never scales, stretches, pads
+    or generates, so the texture/colour/pattern/finish inside the kept
+    region is byte-identical to the source. Returns the image unchanged
+    when it already matches the target ratio (within ASPECT_RATIO_TOLERANCE)
+    or when anything about the crop can't be computed safely -- a skipped
+    correction leaves a validated tile image exactly as it was; nothing
+    here can turn a good image into a bad one.
+    """
+    if not target_ratio or target_ratio <= 0:
+        return image_bytes
+
+    try:
+        import io
+
+        from PIL import Image
+
+        with Image.open(io.BytesIO(image_bytes)) as source:
+            source.load()
+            width, height = source.size
+            if width < 2 or height < 2:
+                return image_bytes
+
+            current_ratio = width / height
+            if abs(current_ratio - target_ratio) / target_ratio <= ASPECT_RATIO_TOLERANCE:
+                return image_bytes  # already the product's real proportion
+
+            if current_ratio > target_ratio:
+                # Wider than the product's true shape -- narrow the width
+                # only, keep every row of height.
+                new_width = min(width, max(1, round(height * target_ratio)))
+                x0 = (width - new_width) // 2
+                box = (x0, 0, x0 + new_width, height)
+            else:
+                # Taller than the product's true shape -- shorten the
+                # height only, keep every column of width.
+                new_height = min(height, max(1, round(width / target_ratio)))
+                y0 = (height - new_height) // 2
+                box = (0, y0, width, y0 + new_height)
+
+            if box[2] - box[0] < 1 or box[3] - box[1] < 1:
+                return image_bytes
+
+            buffer = io.BytesIO()
+            source.crop(box).save(buffer, 'PNG')
+            return buffer.getvalue()
+    except Exception:  # noqa: BLE001 -- a failed crop must not lose the tile
+        return image_bytes
+
+
+# ---------------------------------------------------------------------------
 # Semantic tile validation (Gemini vision)
 #
 # WHY THIS EXISTS, when classify_image_content above already filters:
@@ -1172,6 +1282,15 @@ def extract(pdf_path, brand, output_dir, uploader):
                 # pads or synthesises (see crop_to_product_bbox).
                 if product_bbox:
                     image_bytes = crop_to_product_bbox(image_bytes, product_bbox)
+
+                # Correct the saved image to the product's real physical
+                # proportion (see crop_to_aspect_ratio), reusing the size
+                # already detected above -- no new detection, no invented
+                # dimensions. A no-op when no size was detected, or when the
+                # image already has the right proportion.
+                target_ratio = parse_product_aspect_ratio(detected_size)
+                if target_ratio:
+                    image_bytes = crop_to_aspect_ratio(image_bytes, target_ratio)
 
                 name = guess_name(detection_text, brand, page_num + 1, image_index)
                 filename = f"{slugify(brand)}-p{page_num + 1}-{image_index}.{ext}"
