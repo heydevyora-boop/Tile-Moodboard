@@ -37,6 +37,7 @@ import re
 import base64
 import urllib.parse
 import os
+import tempfile
 import uuid
 import importlib
 import inspect
@@ -289,6 +290,28 @@ def _create_local_bathroom_fallback(output_path: Path) -> Path:
     return output_path.resolve()
 
 
+def _default_output_root() -> Path:
+    """
+    Default root for generated scene/visualization files.
+
+    <catalog_processor>/output is correct for local and Docker runs and
+    stays the default there. On serverless hosts the deployment is
+    mounted read-only (Vercel serves it from /var/task), so creating or
+    writing that directory raises OSError [Errno 30]; fall back to the
+    OS temp directory, which is the only writable location there.
+    """
+    packaged_root = Path(__file__).resolve().parent.parent / "output"
+
+    try:
+        packaged_root.mkdir(parents=True, exist_ok=True)
+        if os.access(packaged_root, os.W_OK):
+            return packaged_root
+    except OSError:
+        pass
+
+    return Path(tempfile.gettempdir()) / "casa-visualization-output"
+
+
 def _generate_random_bathroom_scene(
     output_root: Optional[Path] = None,
     requirements: Optional[Dict[str, Any]] = None,
@@ -298,7 +321,7 @@ def _generate_random_bathroom_scene(
     root = (
         Path(output_root)
         if output_root is not None
-        else Path(__file__).resolve().parent.parent / "output"
+        else _default_output_root()
     )
 
     scene_dir = root / "scene_images"
@@ -459,7 +482,7 @@ def resolve_scene_image(
     root = (
         Path(output_root)
         if output_root is not None
-        else Path(__file__).resolve().parent.parent / "output"
+        else _default_output_root()
     )
 
     should_generate = (
