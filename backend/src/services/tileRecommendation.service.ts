@@ -192,6 +192,110 @@ function sourceGroupKey(tile: TileSource): string {
   return `brand:${tile.brandId}`;
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// Extraction recency — which copy of a product is the current one
+//
+// Re-running the catalog extractor over a brand's PDF inserts a NEW Tile
+// row per product rather than updating the previous run's row, so the same
+// physical product legitimately exists several times over: once per
+// extraction it has ever appeared in. Nothing below the database
+// distinguished those copies, so which one reached a mood board came down
+// to rankTiles' alphabetical tie-break (`a.name.localeCompare(b.name)`) --
+// and for two rows of the SAME product the names are identical, making the
+// winner effectively arbitrary. In practice that meant a re-extracted
+// product kept being represented by whichever older row happened to sort
+// first, image and all, even though a newer, better extraction of that
+// exact product was sitting right next to it.
+//
+// Recency is read from metadata that already exists (Catalog.completedAt /
+// Catalog.createdAt, else Tile.createdAt) -- no new schema, no migration.
+// ─────────────────────────────────────────────────────────────────────────
+
+interface TileRecencySource {
+  createdAt?: Date | string | null;
+  catalog?: { completedAt?: Date | string | null; createdAt?: Date | string | null } | null;
+}
+
+/**
+ * When this tile's extraction run finished, as a timestamp.
+ *
+ * The Catalog's own completion time is the real "which extraction is this"
+ * signal, so it leads. Tiles synced from the MASTER sheet have no Catalog
+ * row at all (masterTileSync.service.ts leaves catalogId null), which is
+ * why the tile's own createdAt is the fallback rather than an error.
+ */
+function extractionRecency(tile: TileRecencySource): number {
+  const candidate = tile.catalog?.completedAt ?? tile.catalog?.createdAt ?? tile.createdAt;
+  if (!candidate) return 0;
+  const time = new Date(candidate).getTime();
+  return Number.isNaN(time) ? 0 : time;
+}
+
+/**
+ * Identity of the PRODUCT, as distinct from the identity of a row.
+ *
+ * productCode is the real SKU and is what makes two rows the same product
+ * across extractions. Falling back to name+size rather than to the row id
+ * is deliberate: an id fallback would make every row its own product and
+ * silently disable the de-duplication below for exactly the catalogs whose
+ * codes the extractor could not read.
+ */
+function productIdentityKey(tile: { productCode?: string | null; name: string; size?: string | null }): string {
+  const code = tile.productCode?.trim().toUpperCase();
+  if (code) return `code:${code}`;
+  return `name:${tile.name.trim().toLowerCase()}|${(tile.size ?? '').trim().toLowerCase()}`;
+}
+
+function hasUsableImage(tile: { imageUrl?: string | null }): boolean {
+  return typeof tile.imageUrl === 'string' && tile.imageUrl.trim().length > 0;
+}
+
+/**
+ * Collapses multiple extractions of the same product down to the copy that
+ * should represent it, newest-first:
+ *
+ *   1. the most recent extraction that actually has an image
+ *   2. otherwise the most recent copy at all (no image anywhere -- the
+ *      product still competes on its metadata, exactly as it did before)
+ *
+ * Step 1 is what keeps an older copy from winning purely by existing
+ * first, while step 2 is what stops a newer image-less copy from hiding an
+ * older one that does have an image. Only the losing DUPLICATES are
+ * dropped; a product that appears once is returned untouched, so a catalog
+ * of entirely distinct products passes through this unchanged.
+ */
+function keepCurrentExtractionPerProduct<T extends TileRecencySource & { productCode?: string | null; name: string; size?: string | null; imageUrl?: string | null }>(
+  tiles: T[],
+): T[] {
+  const byProduct = new Map<string, T>();
+
+  for (const tile of tiles) {
+    const key = productIdentityKey(tile);
+    const incumbent = byProduct.get(key);
+
+    if (!incumbent) {
+      byProduct.set(key, tile);
+      continue;
+    }
+
+    const tileHasImage = hasUsableImage(tile);
+    const incumbentHasImage = hasUsableImage(incumbent);
+
+    // An image-bearing copy always beats an image-less one, whichever is
+    // newer; recency only decides between two copies of equal usefulness.
+    if (tileHasImage !== incumbentHasImage) {
+      if (tileHasImage) byProduct.set(key, tile);
+      continue;
+    }
+
+    if (extractionRecency(tile) > extractionRecency(incumbent)) {
+      byProduct.set(key, tile);
+    }
+  }
+
+  return [...byProduct.values()];
+}
+
 /**
  * Fill the pool by taking each source's best tile, then each source's
  * second best, and so on, instead of taking the global top N.
@@ -261,10 +365,21 @@ export async function getRecommendedTiles(prisma: PrismaTileClient, filter: Reco
       ...(filter.brandId ? { brandId: filter.brandId } : {}),
       ...(filter.type ? { type: filter.type } : {}),
     },
-    include: { brand: { select: { name: true } } },
+    include: {
+      brand: { select: { name: true } },
+      // Sourced purely to date this tile's extraction run -- see
+      // extractionRecency(). Nothing here alters what is selectable.
+      catalog: { select: { completedAt: true, createdAt: true } },
+    },
   });
 
-  const forRanking: TileForRanking[] = tiles.map((t) => ({
+  // Collapse repeat extractions of the same product to the current copy
+  // BEFORE ranking, so a product competes once, represented by its newest
+  // usable extraction, rather than having several copies of itself
+  // competing and an arbitrary one winning on the alphabetical tie-break.
+  const currentTiles = keepCurrentExtractionPerProduct(tiles);
+
+  const forRanking: TileForRanking[] = currentTiles.map((t) => ({
     id: t.id,
     name: t.name,
     brandName: t.brand.name,
@@ -278,8 +393,26 @@ export async function getRecommendedTiles(prisma: PrismaTileClient, filter: Reco
 
   const ranked = rankTiles(forRanking, { room: filter.room, style: filter.style, colorTone: filter.colorTone });
 
+  // Re-break ties by extraction recency, newest first.
+  //
+  // Scores are compared first and are NOT touched, so every room/style/
+  // colour/role judgement rankTiles made survives exactly -- this only
+  // decides the order of tiles rankTiles already considered equally good,
+  // which it settles alphabetically because it has no notion of catalogs
+  // (see the note on RankedTile.catalogGroup). Alphabetical order is
+  // arbitrary with respect to which extraction a tile came from, so
+  // without this a newly extracted product still loses its slot in the
+  // pool to an equally-scored older one whose name sorts earlier. Kept
+  // here rather than inside rankTiles so that function stays pure and
+  // catalog-agnostic.
+  const recencyByTileId = new Map<string, number>(tiles.map((t) => [t.id, extractionRecency(t)]));
+  const recencyOf = (id: string) => recencyByTileId.get(id) ?? 0;
+  const rankedByRecency = [...ranked].sort(
+    (a, b) => b.score - a.score || recencyOf(b.id) - recencyOf(a.id) || a.name.localeCompare(b.name),
+  );
+
   const sourceByTileId = new Map<string, string>(tiles.map((t) => [t.id, sourceGroupKey(t)]));
-  const selected = interleaveBySource(ranked, (id) => sourceByTileId.get(id) ?? `tile:${id}`, filter.limit ?? 20);
+  const selected = interleaveBySource(rankedByRecency, (id) => sourceByTileId.get(id) ?? `tile:${id}`, filter.limit ?? 20);
 
   return selected.map((t) => ({ ...t, catalogGroup: sourceByTileId.get(t.id) ?? `tile:${t.id}` }));
 }

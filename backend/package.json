@@ -23,6 +23,7 @@
     "test:prompt-builder": "ts-node -r tsconfig-paths/register test-scripts/prompt_builder_test.ts",
     "test:print-board": "ts-node -r tsconfig-paths/register test-scripts/print_board_test.ts",
     "test:tile-recommendation": "ts-node -r tsconfig-paths/register test-scripts/tile_recommendation_test.ts",
+    "test:tile-extraction-recency": "ts-node -r tsconfig-paths/register test-scripts/tile_extraction_recency_test.ts",
     "test:print-board-png": "ts-node -r tsconfig-paths/register test-scripts/print_board_png_test.ts",
     "test:google-drive": "ts-node -r tsconfig-paths/register test-scripts/google_drive_test.ts",
     "test:notifications": "node test-scripts/notifications_test.js",
