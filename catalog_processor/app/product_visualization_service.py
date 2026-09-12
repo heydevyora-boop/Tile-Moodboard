@@ -713,15 +713,49 @@ def generate_product_visualization(
     )
 
     # --------------------------------------------------------
+    # RESOLVE FALLBACK IMAGE
+    # --------------------------------------------------------
+
+    # A tile can legitimately exist in Postgres with no MASTER row:
+    # only the pen-drive extraction path writes to the MASTER sheet,
+    # while UI-uploaded catalogs insert straight into Postgres via
+    # catalogExtractor.service.ts. Failing closed there made every
+    # UI-uploaded tile unrenderable. The Node route already sends this
+    # product's own Tile.imageUrl for exactly that case, so use it
+    # rather than cancelling. A different product is still never
+    # substituted, and no synthetic swatch is ever generated.
+    resolved_fallback = _usable_fallback_image(
+        fallback_image_path
+    )
+
+    # --------------------------------------------------------
     # LOAD MASTER
     # --------------------------------------------------------
 
-    records = load_product_master(
-        spreadsheet_id=spreadsheet_id,
-        sheet_name=sheet_name,
-    )
+    # MASTER is unreachable whenever this service has no Google
+    # credentials: google_services.py authenticates through an
+    # interactive OAuth flow that cannot run on a headless/serverless
+    # host, so it raises before a single row is read. That is the
+    # documented "no Drive/Sheets configured" deployment (DEPLOYMENT.md),
+    # which is supposed to still serve the core visualization feature,
+    # so degrade to the caller-supplied image exactly as a missing
+    # MASTER row already does below. With no usable fallback the
+    # original error still propagates untouched.
+    try:
 
-    if not records:
+        records = load_product_master(
+            spreadsheet_id=spreadsheet_id,
+            sheet_name=sheet_name,
+        )
+
+    except Exception:
+
+        if resolved_fallback is None:
+            raise
+
+        records = []
+
+    if not records and resolved_fallback is None:
 
         raise RuntimeError(
             "MASTER returned no records."
@@ -744,18 +778,6 @@ def generate_product_visualization(
     # --------------------------------------------------------
     # EXACT PRODUCT LOOKUP
     # --------------------------------------------------------
-
-    # A tile can legitimately exist in Postgres with no MASTER row:
-    # only the pen-drive extraction path writes to the MASTER sheet,
-    # while UI-uploaded catalogs insert straight into Postgres via
-    # catalogExtractor.service.ts. Failing closed there made every
-    # UI-uploaded tile unrenderable. The Node route already sends this
-    # product's own Tile.imageUrl for exactly that case, so use it
-    # rather than cancelling. A different product is still never
-    # substituted, and no synthetic swatch is ever generated.
-    resolved_fallback = _usable_fallback_image(
-        fallback_image_path
-    )
 
     try:
 
