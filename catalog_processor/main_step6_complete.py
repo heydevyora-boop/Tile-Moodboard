@@ -942,6 +942,263 @@ def classify_image_content(image_bytes, image_rect, page_rect):
     return False, measured
 
 
+# ---------------------------------------------------------------------------
+# Tile-only semantic validation + product aspect-ratio correction
+#
+# classify_image_content() above is a cheap, purely statistical pre-filter
+# (see its docstring) -- it is blind to a tonally uniform lifestyle photo. A
+# beige kitchen (slab worktop, matching cabinetry and splashback) measures a
+# colour spread around 0.008, BELOW the range real product photos measure
+# at, so no threshold on that signal can catch it without also rejecting
+# genuine tiles. The already-approved fix for that -- a Gemini vision gate
+# that judges what the image actually DEPICTS, plus a pure (no upscale, no
+# synthesis) crop to the product's real physical aspect ratio -- already
+# exists in this exact package: app/gemini_service.analyze_product_image and
+# app/image_validator.validate_product_decision/validate_bbox, built for
+# app/catalog_pipeline.py's separate entry point. This reuses those exact
+# functions rather than standing up a second Gemini prompt/schema; only the
+# aspect-ratio piece is new below, since no such correction exists anywhere
+# in catalog_processor yet (only in the separate backend/python/ service).
+#
+# Deliberately NOT imported at module level: app.gemini_service raises
+# RuntimeError at import time when GEMINI_API_KEY is absent, and THIS file
+# is also the FastAPI visualization service's entry point (see
+# `if __name__ == "__main__"` at the bottom) -- a top-level import here
+# would make that service fail to even start without a key. Loaded once per
+# catalog (not per image) inside extract_images_from_pdf instead.
+# ---------------------------------------------------------------------------
+
+# Scoped ONLY to pick the correction crop's target ratio -- never written to
+# MASTER, the Tile table, or any product metadata field. The authoritative
+# Dimensions value is still produced entirely by the existing, untouched
+# classification pass; this is a purely internal, throwaway signal, same
+# technique as the approved backend/python/extract.py implementation.
+SIZE_TEXT_PATTERN = re.compile(r'(\d{2,4})\s*[xX×]\s*(\d{2,4})\s*(mm|cm)?', re.IGNORECASE)
+
+MAX_LABEL_DISTANCE_PT = 260  # generous enough for a title above / spec line below a photo
+
+
+def detect_nearby_size_text(text):
+    """First WIDTHxHEIGHT match in nearby page text, or None."""
+    match = SIZE_TEXT_PATTERN.search(text)
+    if not match:
+        return None
+    return f"{match.group(1)}x{match.group(2)}"
+
+
+def get_page_text_spans(page):
+    """Text spans with their bounding boxes, in reading order.
+
+    Span-level, not PyMuPDF's own block/line grouping -- block grouping
+    merges same-row captions that are far apart horizontally (e.g. a
+    "Decor" label under the left tile and a "Base" label under the right
+    tile), which would let one image's nearby size text bleed into another
+    image's crop decision on the same page.
+    """
+    spans = []
+    for block in page.get_text('dict').get('blocks', []):
+        if block.get('type') != 0:  # 0 = text block, 1 = image block
+            continue
+        for line in block.get('lines', []):
+            for span in line.get('spans', []):
+                text = span.get('text', '').strip()
+                if text:
+                    spans.append({'bbox': tuple(span['bbox']), 'text': text})
+    return spans
+
+
+def text_near_image(image_rect, text_spans, max_distance=MAX_LABEL_DISTANCE_PT):
+    """Text spans near an image's rect, closest first -- a caption directly
+    above/below the image ranks ahead of one merely nearby but off to the
+    side, matching how catalog layouts actually caption a photo."""
+    if not image_rect:
+        return []
+    ix0, iy0, ix1, iy1 = image_rect
+    scored = []
+    for span in text_spans:
+        bx0, by0, bx1, by1 = span['bbox']
+        if by0 >= iy1:
+            vgap = by0 - iy1
+        elif by1 <= iy0:
+            vgap = iy0 - by1
+        else:
+            vgap = 0
+        if vgap > max_distance:
+            continue
+        horizontally_aligned = min(bx1, ix1) - max(bx0, ix0) > 0
+        scored.append((vgap, 0 if horizontally_aligned else 1, span))
+    scored.sort(key=lambda item: (item[0], item[1]))
+    return [item[2] for item in scored]
+
+
+def parse_product_aspect_ratio(size_text):
+    """"NNNxNNN" -> width/height ratio, or None.
+
+    Never guesses: a candidate with no nearby size text, or unparseable
+    text, is left at whatever proportion it was extracted at rather than
+    having a ratio invented for it.
+    """
+    if not size_text:
+        return None
+    match = re.match(r'^(\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)', size_text, re.IGNORECASE)
+    if not match:
+        return None
+    width, height = float(match.group(1)), float(match.group(2))
+    if width <= 0 or height <= 0:
+        return None
+    return width / height
+
+
+# A source image's pixel ratio within this fraction of the product's real
+# ratio is treated as already correct, avoiding a crop that would only ever
+# shave a stray pixel off one edge for no benefit.
+ASPECT_RATIO_TOLERANCE = 0.02
+
+
+def crop_image_to_aspect_ratio(image, target_ratio):
+    """Centre-crops a PIL Image to `target_ratio` (width/height), keeping
+    every pixel of whichever dimension is already correct and trimming only
+    the minimum needed from the other.
+
+    Pure pixel selection: never scales, stretches, pads or generates
+    content, so texture/colour/pattern/finish inside the kept region is
+    byte-identical to the source. Returns the image unchanged when it
+    already matches (within ASPECT_RATIO_TOLERANCE) or the ratio is
+    unusable.
+
+    Mirrors backend/python/extract.py's crop_to_aspect_ratio (the already-
+    approved UI-upload-path implementation) rather than importing it:
+    backend/python/ and catalog_processor/ are separate deployable services
+    with disjoint dependencies and no shared module path.
+    """
+    if not target_ratio or target_ratio <= 0:
+        return image
+
+    width, height = image.size
+    if width < 2 or height < 2:
+        return image
+
+    current_ratio = width / height
+    if abs(current_ratio - target_ratio) / target_ratio <= ASPECT_RATIO_TOLERANCE:
+        return image
+
+    if current_ratio > target_ratio:
+        # Wider than the product's true shape -- narrow the width only,
+        # keep every row of height.
+        new_width = min(width, max(1, round(height * target_ratio)))
+        x0 = (width - new_width) // 2
+        box = (x0, 0, x0 + new_width, height)
+    else:
+        # Taller than the product's true shape -- shorten the height only,
+        # keep every column of width.
+        new_height = min(height, max(1, round(width / target_ratio)))
+        y0 = (height - new_height) // 2
+        box = (0, y0, width, y0 + new_height)
+
+    if box[2] - box[0] < 1 or box[3] - box[1] < 1:
+        return image
+
+    return image.crop(box)
+
+
+# A bbox side smaller than this fraction of the frame is treated as
+# degenerate (guards against a sliver crop from a malformed/tiny bbox).
+MIN_BBOX_FRACTION = 0.10
+
+
+def crop_image_to_validated_bbox(image, bbox):
+    """Pure crop to a validate_bbox()-style pixel-space {x1,y1,x2,y2} dict.
+
+    Deliberately does NOT call app.image_processor.crop_from_bbox: that
+    helper upscales any crop whose short side is below 1200px
+    (cv2.resize), which synthesises pixels not present in the source --
+    exactly what this task must not do. This selects existing pixels only,
+    same posture as crop_image_to_aspect_ratio above.
+    """
+    width, height = image.size
+    x1 = max(0, min(width, round(bbox['x1'])))
+    y1 = max(0, min(height, round(bbox['y1'])))
+    x2 = max(0, min(width, round(bbox['x2'])))
+    y2 = max(0, min(height, round(bbox['y2'])))
+
+    if x2 - x1 < width * MIN_BBOX_FRACTION or y2 - y1 < height * MIN_BBOX_FRACTION:
+        return image  # degenerate box -- keep the validated full frame instead
+
+    if x1 <= 0 and y1 <= 0 and x2 >= width and y2 >= height:
+        return image  # already full-frame, nothing to trim
+
+    return image.crop((x1, y1, x2, y2))
+
+
+def load_semantic_tile_validator():
+    """Lazily imports the approved Gemini tile-vs-room validator.
+
+    Returns (analyze_product_image, validate_product_decision, validate_bbox)
+    or None when unavailable (no GEMINI_API_KEY, import failure) -- see the
+    module note above for why this cannot be a top-level import here.
+    """
+    try:
+        from app.gemini_service import analyze_product_image
+        from app.image_validator import validate_product_decision, validate_bbox
+        return analyze_product_image, validate_product_decision, validate_bbox
+    except Exception as exc:  # noqa: BLE001 -- a missing key raises RuntimeError, not ImportError
+        print(f"  [tile-validation] Semantic validation unavailable: {exc}")
+        return None
+
+
+def validate_and_correct_tile_image(output_path, image_rect, text_spans, semantic_validator):
+    """Gates and corrects ONE already-saved candidate image in place.
+
+    Returns (approved, reason). On rejection the caller deletes output_path
+    and skips this candidate -- the fail-closed posture already approved
+    for the UI-upload path: a candidate that cannot be positively confirmed
+    as the real product is never kept, including when validation itself
+    could not run (missing key, API error, quota, unreadable response).
+    "Could not confirm" and "confirmed not a tile" are treated identically,
+    because a wrong/lifestyle image reaching Drive/MASTER is worse than a
+    missing one.
+    """
+    if semantic_validator is None:
+        return False, 'semantic validation unavailable (GEMINI_API_KEY not configured) -- needs review'
+
+    analyze_product_image, validate_product_decision, validate_bbox = semantic_validator
+
+    nearby_text = '\n'.join(span['text'] for span in text_near_image(image_rect, text_spans)[:8])
+
+    try:
+        gemini_result = analyze_product_image(str(output_path), page_text=nearby_text)
+    except Exception as exc:  # noqa: BLE001 -- never fail open, see docstring
+        return False, f'Gemini validation failed ({exc}) -- needs review'
+
+    # cv_score is accepted by validate_product_decision for signature
+    # compatibility with its other caller (catalog_pipeline.py) but is not
+    # read by its current decision logic (image_type + is_product_image
+    # only) -- so it is not computed here. calculate_cv_score() reads the
+    # file with OpenCV, whose build in this environment has no WebP
+    # support (these candidates are saved as .webp), so calling it would
+    # only add a silent-failure risk for a value that is discarded anyway.
+    decision = validate_product_decision(None, gemini_result)
+    if decision.get('decision') != 'APPROVED':
+        return False, decision.get('reason') or 'not approved as a standalone tile product'
+
+    with Image.open(output_path) as opened:
+        opened.load()
+        image = opened.convert('RGB') if opened.mode not in ('RGB', 'RGBA') else opened
+
+        if gemini_result.product_bbox:
+            bbox_check = validate_bbox(gemini_result.product_bbox, image.width, image.height)
+            if bbox_check.get('valid'):
+                image = crop_image_to_validated_bbox(image, bbox_check['bbox'])
+
+        target_ratio = parse_product_aspect_ratio(detect_nearby_size_text(nearby_text))
+        if target_ratio:
+            image = crop_image_to_aspect_ratio(image, target_ratio)
+
+        image.save(output_path, 'WEBP', quality=IMAGE_QUALITY, method=6)
+
+    return True, decision.get('reason') or ''
+
+
 def find_repeating_template_rects(document):
     """Pre-scans every page's image placements and returns bucketed
     positions that recur across many pages while always rendering to the
@@ -1013,11 +1270,31 @@ def extract_images_from_pdf(
     seen_hashes = set()
     duplicates_skipped = 0
     room_photos_skipped = 0
+    semantic_rejections = 0
+
+    # Loaded once per PDF, not per image/page -- see the note on
+    # load_semantic_tile_validator(). None means validation could not be
+    # set up at all (e.g. no GEMINI_API_KEY); every candidate in this run
+    # then fails closed via validate_and_correct_tile_image's own check.
+    semantic_validator = load_semantic_tile_validator()
+    if semantic_validator is None:
+        print(
+            "  [tile-validation] WARNING -- semantic tile validation is OFF for this "
+            "catalog. Every extracted candidate will be rejected until GEMINI_API_KEY "
+            "is configured (statistical filtering alone cannot reliably tell a tile "
+            "from a lifestyle/room photo)."
+        )
 
     for page_number, page in enumerate(
         document,
         start=1,
     ):
+
+        # Cached once per page: get_page_text_spans() re-reads the whole
+        # page's text layout, so computing it once and reusing it for every
+        # image on the page (rather than once per image) avoids repeating
+        # that work for a page with several tiles on it.
+        text_spans = get_page_text_spans(page)
 
         for image_info in page.get_images(
             full=True
@@ -1117,6 +1394,31 @@ def extract_images_from_pdf(
                         method=6,
                     )
 
+                    # Last gate, and the only one that judges what the
+                    # image actually DEPICTS rather than how its pixels are
+                    # statistically distributed (classify_image_content
+                    # above) -- see validate_and_correct_tile_image. Also
+                    # applies the product aspect-ratio correction in place
+                    # on the same saved file when approved.
+                    approved, validation_reason = validate_and_correct_tile_image(
+                        output_path, image_rect, text_spans, semantic_validator,
+                    )
+                    if not approved:
+                        semantic_rejections += 1
+                        output_path.unlink(missing_ok=True)
+                        print(
+                            f"  [tile-validation] SKIPPED page {page_number} "
+                            f"image {image_counter}: {validation_reason}"
+                        )
+                        continue
+
+                    # validate_and_correct_tile_image may have cropped the
+                    # saved file (bbox and/or aspect-ratio correction), so
+                    # the recorded width/height must reflect the FINAL
+                    # saved pixels, not the pre-crop ones above.
+                    with Image.open(output_path) as corrected:
+                        width, height = corrected.size
+
                     extracted_images.append(
                         {
                             "page": page_number,
@@ -1141,8 +1443,16 @@ def extract_images_from_pdf(
 
     print(
         f"Extracted {len(extracted_images)} image(s), skipped {duplicates_skipped} "
-        f"duplicate(s) and {room_photos_skipped} room/lifestyle photo(s)"
+        f"duplicate(s), {room_photos_skipped} room/lifestyle photo(s) (statistical), "
+        f"and {semantic_rejections} rejected by tile-only validation"
     )
+
+    if semantic_validator is None and not extracted_images and semantic_rejections > 0:
+        print(
+            "  [tile-validation] ERROR -- every candidate was rejected because semantic "
+            "validation is unavailable. Configure GEMINI_API_KEY before assuming this "
+            "catalog has no tiles."
+        )
 
     return extracted_images
 
@@ -1347,10 +1657,32 @@ def process_pdf(
             image["image_index"],
         )
 
-        # Use the image path as the duplicate identity.
+        # Duplicate identity: path+filename ALONE (the previous behaviour)
+        # means a re-run of the same PDF always skips every image, even
+        # when what was actually saved for that page/slot has changed --
+        # e.g. re-extracting after the tile-only validation/aspect-ratio
+        # fix above now saves a different, better crop for the same
+        # filename. Folding in a SHA-256 of the SAVED image's own bytes
+        # fixes that: an unchanged image still hashes identically (still
+        # skipped, no wasted re-upload); a changed/improved image for the
+        # same page/slot hashes differently and is treated as new below --
+        # re-uploaded, re-synced, and made available to the backend. Old
+        # processed_files rows, old Drive files and old MASTER rows are
+        # never touched or deleted by this -- it only changes what KEY a
+        # run computes going forward.
+        try:
+            image_content_hash = hashlib.sha256(
+                Path(image["path"]).read_bytes()
+            ).hexdigest()
+        except OSError:
+            # The saved file is unexpectedly missing -- fall back to the
+            # old path-only identity rather than crashing the whole run.
+            image_content_hash = "unreadable"
+
         file_hash = (
             f"{pdf_path.resolve()}::"
-            f"{image['filename']}"
+            f"{image['filename']}::"
+            f"{image_content_hash}"
         )
 
         if already_processed(
