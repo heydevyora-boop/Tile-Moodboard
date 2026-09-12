@@ -15,8 +15,8 @@ import { getRecommendedTiles, PrismaTileClient } from '../src/services/tileRecom
  * satisfies what was asked for:
  *
  *   - old and newly-synced tiles are both real candidates
- *   - the existing compatibility/room/style score is the PRIMARY criterion
- *   - recency only breaks a tie between equally-scored candidates
+ *   - the existing compatibility/room/style score is the ONLY criterion
+ *   - recency decides nothing, not even a tie
  *   - "newest wins" is never unconditional
  *   - an in-place MASTER-sync update (no new row) is reflected with zero
  *     further ranking-code changes, because there is only ever one row per
@@ -139,7 +139,9 @@ async function main() {
   }
 
   // ───────────────────────────────────────────────────────────────────
-  // "NEW TILE score = 90 = OLD TILE score = 90 -> NEWER tile may win as tie-breaker"
+  // Equal score -> recency must NOT decide. Both stay candidates and
+  // rankTiles' own deterministic tie-break stands. (See
+  // tile_candidate_pool_test.ts for the full set of guarantees here.)
   // ───────────────────────────────────────────────────────────────────
   {
     const tiles = [
@@ -148,8 +150,8 @@ async function main() {
     ];
     const result = await getRecommendedTiles(fakePrisma(tiles), { room: 'Bathroom' });
     check(
-      '3. Equal score -> the NEWER tile wins the tie (recency as tie-breaker only)',
-      result[0]?.score === result[1]?.score && result[0]?.id === 'new-equal-score',
+      '3. Equal score -> both remain candidates and the newer is NOT promoted by age',
+      result.length === 2 && result[0]?.score === result[1]?.score && result[0]?.id === 'old-equal-score',
       result.map((t) => ({ id: t.id, score: t.score })),
     );
   }
