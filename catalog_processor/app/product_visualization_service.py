@@ -23,7 +23,9 @@ IMPORTANT:
 """
 
 import hashlib
+import os
 import re
+import tempfile
 
 import requests
 
@@ -53,10 +55,31 @@ PROJECT_ROOT = (
     .parent
 )
 
-OUTPUT_ROOT = (
-    PROJECT_ROOT
-    / "output"
-)
+def _default_output_root() -> Path:
+    """
+    Default root for generated/cached visualization files.
+
+    <catalog_processor>/output is correct for local and Docker runs and
+    stays the default there. On serverless hosts the deployment is
+    mounted read-only (Vercel serves it from /var/task), so writing that
+    directory fails with OSError [Errno 30]; fall back to the OS temp
+    directory, which is the only writable location there.
+
+    This runs at import time, so it only probes writability and never
+    creates anything -- the existing call sites still do their own
+    mkdir(parents=True, exist_ok=True) when they actually write.
+    """
+    packaged_root = PROJECT_ROOT / "output"
+
+    probe = packaged_root if packaged_root.exists() else PROJECT_ROOT
+
+    if os.access(probe, os.W_OK):
+        return packaged_root
+
+    return Path(tempfile.gettempdir()) / "casa-visualization-output"
+
+
+OUTPUT_ROOT = _default_output_root()
 
 
 # ============================================================

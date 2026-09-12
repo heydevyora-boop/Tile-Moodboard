@@ -1,6 +1,7 @@
 import re
 import uuid
 from pathlib import Path
+from app.output_paths import writable_output_root
 from typing import Any, Dict, Optional
 
 from app.tile_application_engine import (
@@ -25,7 +26,7 @@ PROJECT_ROOT = (
     .parent
 )
 
-OUTPUT_ROOT = (
+OUTPUT_ROOT = writable_output_root(
     PROJECT_ROOT
     / "output"
 )

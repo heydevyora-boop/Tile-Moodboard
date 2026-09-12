@@ -22,6 +22,7 @@ Final design with applied_visualizations
 from __future__ import annotations
 
 from pathlib import Path
+from app.output_paths import writable_output_root
 from typing import Any, Dict, List, Optional
 import json
 from datetime import datetime, timezone
@@ -35,7 +36,7 @@ PROJECT_ROOT = (
     Path(__file__).resolve().parent.parent
 )
 
-OUTPUT_ROOT = (
+OUTPUT_ROOT = writable_output_root(
     PROJECT_ROOT / "output"
 )
 

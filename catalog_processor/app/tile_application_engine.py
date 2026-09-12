@@ -17,6 +17,7 @@ Applied Tile Bathroom Image
 """
 
 from pathlib import Path
+from app.output_paths import writable_output_root
 from typing import Any, Dict, Optional
 import mimetypes
 import os
@@ -104,10 +105,12 @@ IMAGE_MODEL = (
     or "gemini-3.1-flash-image"
 )
 
-OUTPUT_ROOT = Path(
-    os.getenv(
-        "OUTPUT_ROOT",
-        str(PROJECT_ROOT / "output"),
+OUTPUT_ROOT = writable_output_root(
+    Path(
+        os.getenv(
+            "OUTPUT_ROOT",
+            str(PROJECT_ROOT / "output"),
+        )
     )
 )
 

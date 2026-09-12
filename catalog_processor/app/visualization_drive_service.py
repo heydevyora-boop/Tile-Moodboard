@@ -21,6 +21,7 @@ No duplicate Google authentication system is created here.
 from __future__ import annotations
 
 from pathlib import Path
+from app.output_paths import writable_output_root
 from typing import Any, Dict, Optional
 import json
 import mimetypes
@@ -368,8 +369,10 @@ def write_visualization_metadata(
     output_dir = Path(
         output_dir
         or (
-            PROJECT_ROOT
-            / "output"
+            writable_output_root(
+                PROJECT_ROOT
+                / "output"
+            )
             / "visualizations"
             / "metadata"
         )

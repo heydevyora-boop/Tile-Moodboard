@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from app.output_paths import writable_output_root
 from typing import Any, Optional
 import base64
 import hashlib
@@ -15,7 +16,7 @@ import urllib.parse
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
-OUTPUT_ROOT = (
+OUTPUT_ROOT = writable_output_root(
     PROJECT_ROOT / "output"
 )
 

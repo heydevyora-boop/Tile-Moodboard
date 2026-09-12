@@ -38,6 +38,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from pathlib import Path
+from app.output_paths import writable_output_root
 from typing import Any, Dict, List, Optional
 import json
 import re
@@ -55,7 +56,7 @@ PROJECT_ROOT = (
     .parent
 )
 
-OUTPUT_ROOT = (
+OUTPUT_ROOT = writable_output_root(
     PROJECT_ROOT
     / "output"
 )

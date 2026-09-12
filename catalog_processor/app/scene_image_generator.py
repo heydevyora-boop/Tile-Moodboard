@@ -2,6 +2,7 @@ import os
 import json
 import mimetypes
 from pathlib import Path
+from app.output_paths import writable_output_root
 from typing import Any, Dict, Optional
 
 from dotenv import load_dotenv
@@ -47,10 +48,12 @@ IMAGE_MODEL = os.getenv(
 # OUTPUT DIRECTORY
 # ============================================================
 
-OUTPUT_ROOT = Path(
-    os.getenv(
-        "SCENE_OUTPUT_ROOT",
-        "output/scenes"
+OUTPUT_ROOT = writable_output_root(
+    Path(
+        os.getenv(
+            "SCENE_OUTPUT_ROOT",
+            "output/scenes"
+        )
     )
 )
 
