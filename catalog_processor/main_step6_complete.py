@@ -968,11 +968,13 @@ def classify_image_content(image_bytes, image_rect, page_rect):
 # catalog (not per image) inside extract_images_from_pdf instead.
 # ---------------------------------------------------------------------------
 
-# Scoped ONLY to pick the correction crop's target ratio -- never written to
-# MASTER, the Tile table, or any product metadata field. The authoritative
-# Dimensions value is still produced entirely by the existing, untouched
-# classification pass; this is a purely internal, throwaway signal, same
-# technique as the approved backend/python/extract.py implementation.
+# Picks the correction crop's target ratio, and is also reported upward as
+# the product's detected size so the synced Tile row is not left with a NULL
+# size (an unclassified tile scores far below a classified one when mood
+# board candidates are ranked). Never written to MASTER: the authoritative
+# Dimensions value there is still produced entirely by the existing,
+# untouched classification pass. Same technique as the approved
+# backend/python/extract.py implementation.
 SIZE_TEXT_PATTERN = re.compile(r'(\d{2,4})\s*[xX×]\s*(\d{2,4})\s*(mm|cm)?', re.IGNORECASE)
 
 MAX_LABEL_DISTANCE_PT = 260  # generous enough for a title above / spec line below a photo
@@ -1149,7 +1151,11 @@ def load_semantic_tile_validator():
 def validate_and_correct_tile_image(output_path, image_rect, text_spans, semantic_validator):
     """Gates and corrects ONE already-saved candidate image in place.
 
-    Returns (approved, reason). On rejection the caller deletes output_path
+    Returns (approved, reason, metadata). metadata carries the values this
+    function already derives on the way through -- the Gemini-reported
+    product name and the size text detected next to the image -- so the
+    caller can attach them to the synced Tile row instead of discarding
+    them; it is always {} on rejection. On rejection the caller deletes output_path
     and skips this candidate -- the fail-closed posture already approved
     for the UI-upload path: a candidate that cannot be positively confirmed
     as the real product is never kept, including when validation itself
@@ -1159,7 +1165,7 @@ def validate_and_correct_tile_image(output_path, image_rect, text_spans, semanti
     missing one.
     """
     if semantic_validator is None:
-        return False, 'semantic validation unavailable (GEMINI_API_KEY not configured) -- needs review'
+        return False, 'semantic validation unavailable (GEMINI_API_KEY not configured) -- needs review', {}
 
     analyze_product_image, validate_product_decision, validate_bbox = semantic_validator
 
@@ -1168,7 +1174,7 @@ def validate_and_correct_tile_image(output_path, image_rect, text_spans, semanti
     try:
         gemini_result = analyze_product_image(str(output_path), page_text=nearby_text)
     except Exception as exc:  # noqa: BLE001 -- never fail open, see docstring
-        return False, f'Gemini validation failed ({exc}) -- needs review'
+        return False, f'Gemini validation failed ({exc}) -- needs review', {}
 
     # cv_score is accepted by validate_product_decision for signature
     # compatibility with its other caller (catalog_pipeline.py) but is not
@@ -1179,7 +1185,7 @@ def validate_and_correct_tile_image(output_path, image_rect, text_spans, semanti
     # only add a silent-failure risk for a value that is discarded anyway.
     decision = validate_product_decision(None, gemini_result)
     if decision.get('decision') != 'APPROVED':
-        return False, decision.get('reason') or 'not approved as a standalone tile product'
+        return False, decision.get('reason') or 'not approved as a standalone tile product', {}
 
     with Image.open(output_path) as opened:
         opened.load()
@@ -1190,13 +1196,19 @@ def validate_and_correct_tile_image(output_path, image_rect, text_spans, semanti
             if bbox_check.get('valid'):
                 image = crop_image_to_validated_bbox(image, bbox_check['bbox'])
 
-        target_ratio = parse_product_aspect_ratio(detect_nearby_size_text(nearby_text))
+        detected_size = detect_nearby_size_text(nearby_text)
+        target_ratio = parse_product_aspect_ratio(detected_size)
         if target_ratio:
             image = crop_image_to_aspect_ratio(image, target_ratio)
 
         image.save(output_path, 'WEBP', quality=IMAGE_QUALITY, method=6)
 
-    return True, decision.get('reason') or ''
+    metadata = {
+        'product_name': (gemini_result.product_name or '').strip(),
+        'size': detected_size or '',
+    }
+
+    return True, decision.get('reason') or '', metadata
 
 
 def find_repeating_template_rects(document):
@@ -1400,7 +1412,7 @@ def extract_images_from_pdf(
                     # above) -- see validate_and_correct_tile_image. Also
                     # applies the product aspect-ratio correction in place
                     # on the same saved file when approved.
-                    approved, validation_reason = validate_and_correct_tile_image(
+                    approved, validation_reason, tile_metadata = validate_and_correct_tile_image(
                         output_path, image_rect, text_spans, semantic_validator,
                     )
                     if not approved:
@@ -1429,6 +1441,11 @@ def extract_images_from_pdf(
                             ),
                             "width": width,
                             "height": height,
+                            # Carried purely so the backend sync below can
+                            # fill these columns on the Tile row; both are
+                            # already-derived values, and either may be "".
+                            "product_name": tile_metadata.get("product_name", ""),
+                            "size": tile_metadata.get("size", ""),
                         }
                     )
 
@@ -1764,10 +1781,19 @@ def process_pdf(
         #
         # Deliberately best-effort and AFTER the sheet write: it must
         # never abort a catalog whose row and image already landed.
+        # The optional fields are the ones already derived during
+        # extraction. Without them the Tile row lands with size/collection
+        # NULL, which makes it score far below an older classified tile
+        # when mood board candidates are ranked. backend_sync drops any of
+        # these that is blank, so a product whose size text or name could
+        # not be read syncs exactly as it does today.
         synced = sync_master_product_to_backend(
             product_code=product_id,
             brand=brand,
+            product_name=image.get("product_name", ""),
             image_url=drive_url,
+            size=image.get("size", ""),
+            collection=catalog,
         )
 
         # Same rule the sheet write above follows, for the same reason: a
