@@ -1229,7 +1229,7 @@ def load_tile_region_miner():
 # A page of room photography plausibly contains a real tiled wall; a logo,
 # a price list or a basin does not, and re-running those through the
 # detector would only spend API calls to rediscover that.
-REGION_MINEABLE_CATEGORIES = frozenset({
+LEGACY_REGION_MINEABLE_CATEGORIES = frozenset({
     "installed wall/floor scene",
     "bathroom/room/lifestyle image",
     "multiple products in one image",
@@ -1293,19 +1293,21 @@ def mine_tile_regions(
     seen_signatures = set()
 
     for index, region in enumerate(regions, start=1):
-        label = (
-            f"page {page_number} image {image_counter} "
-            f"region {index} ({region['surface']}, "
-            f"confidence {region['confidence']:.2f})"
-        )
+        label = f"page {page_number} image {image_counter} region {index}"
+
+        print(f"    CANDIDATE -- {label}")
+        print(f"      detected surface   : {region['surface']}")
+        print(f"      detector confidence: {region['confidence']:.2f}")
+        print(f"      occluder box(es)   : {len(region['occluders'])}")
 
         crop, info = extract_tile_region(
             image_bgr, region["quad"], region["occluders"],
         )
 
         if crop is None:
-            print(f"    REGION REJECTED -- {label}: {info['reason']} "
+            print(f"      geometry           : REJECTED -- {info['reason']} "
                   f"[stage={info['stage']}]")
+            print(f"      FINAL              : REJECTED")
             continue
 
         # Two detections of one surface produce near-identical crops; keep
@@ -1314,9 +1316,16 @@ def mine_tile_regions(
             cv2.resize(crop, (32, 32), interpolation=cv2.INTER_AREA).tobytes()
         ).hexdigest()
         if signature in seen_signatures:
-            print(f"    REGION REJECTED -- {label}: duplicate of an earlier region")
+            print(f"      geometry           : extracted, but duplicates an "
+                  f"earlier region in this image")
+            print(f"      FINAL              : REJECTED (duplicate)")
             continue
         seen_signatures.add(signature)
+
+        crop_width, crop_height = info["crop_size"]
+        print(f"      geometry           : OK -- {crop_width}x{crop_height}px, "
+              f"{info['clean_area_fraction']:.0%} of the rectified surface "
+              f"is unobstructed")
 
         region_path = (
             output_directory
@@ -1328,26 +1337,34 @@ def mine_tile_regions(
                 region_path, "WEBP", quality=IMAGE_QUALITY, method=6,
             )
         except Exception as exc:  # noqa: BLE001
-            print(f"    REGION REJECTED -- {label}: could not save ({exc})")
+            print(f"      FINAL              : REJECTED -- could not save ({exc})")
             continue
 
-        # The strict gate. The swatch must stand on its own as a tile
-        # product, judged by the same validator that just rejected the
-        # scene it came from.
+        # The strict gate -- and the one that actually decides ACCEPT vs
+        # REJECT. It re-classifies the SAVED CROP FILE from scratch: this
+        # call receives region_path, so whatever verdict the whole source
+        # image got earlier is not visible to it and cannot leak in.
         approved, reason, metadata = validate_and_correct_tile_image(
             region_path, image_rect, text_spans, semantic_validator,
         )
 
+        region_type = metadata.get('image_type', '?')
+        region_confidence = metadata.get('confidence')
+        confidence_text = (
+            f"{region_confidence:.2f}" if isinstance(region_confidence, (int, float))
+            else "?"
+        )
+        print(f"      region classification: {region_type} "
+              f"(confidence {confidence_text})")
+
         if not approved:
             region_path.unlink(missing_ok=True)
-            print(f"    REGION REJECTED -- {label}: {reason}")
+            print(f"      region validation  : FAIL -- {reason}")
+            print(f"      FINAL              : REJECTED")
             continue
 
-        crop_width, crop_height = info["crop_size"]
-        print(f"    REGION ACCEPTED -- {label}: {crop_width}x{crop_height}px, "
-              f"{info['occluders']} occluder(s) avoided, "
-              f"{info['clean_area_fraction']:.0%} of surface clean "
-              f"-> {region_path.name}")
+        print(f"      region validation  : PASS -- {reason}")
+        print(f"      FINAL              : ACCEPTED -> {region_path.name}")
 
         accepted.append((region_path, reason, metadata))
 
@@ -1405,10 +1422,20 @@ def validate_and_correct_tile_image(output_path, image_rect, text_spans, semanti
     # file with OpenCV, whose build in this environment has no WebP
     # support (these candidates are saved as .webp), so calling it would
     # only add a silent-failure risk for a value that is discarded anyway.
+    classifier_info = {
+        'image_type': getattr(gemini_result, 'image_type', '?'),
+        'confidence': getattr(gemini_result, 'confidence', 0.0),
+    }
+
     decision = validate_product_decision(None, gemini_result)
     if decision.get('decision') != 'APPROVED':
         detail = decision.get('reason') or 'not approved as a standalone tile product'
-        return False, f"{detail} [type={getattr(gemini_result, 'image_type', '?')} confidence={getattr(gemini_result, 'confidence', 0.0):.2f}]", {}
+        return (
+            False,
+            f"{detail} [type={classifier_info['image_type']} "
+            f"confidence={classifier_info['confidence']:.2f}]",
+            classifier_info,
+        )
 
     with Image.open(output_path) as opened:
         opened.load()
@@ -1429,6 +1456,7 @@ def validate_and_correct_tile_image(output_path, image_rect, text_spans, semanti
     metadata = {
         'product_name': (gemini_result.product_name or '').strip(),
         'size': detected_size or '',
+        **classifier_info,
     }
 
     return True, decision.get('reason') or '', metadata
@@ -1654,13 +1682,28 @@ def extract_images_from_pdf(
 
                         # The image is not a tile product, but it may
                         # SHOW tile. Mine it for surfaces before discarding
-                        # it -- each recovered swatch is independently
-                        # re-validated inside mine_tile_regions.
+                        # it -- unconditionally: the source image's own
+                        # classification (GRAPHIC, ROOM, COLLAGE, whatever
+                        # category printed above) is where the search
+                        # starts, never a reason to skip searching. Each
+                        # recovered swatch is independently re-validated
+                        # inside mine_tile_regions -- on the swatch itself,
+                        # not on this verdict.
                         recovered = []
-                        if (
-                            region_miner is not None
-                            and category in REGION_MINEABLE_CATEGORIES
-                        ):
+                        if region_miner is not None:
+                            would_have_skipped = (
+                                category not in LEGACY_REGION_MINEABLE_CATEGORIES
+                            )
+                            print(
+                                f"  [tile-region] source classification "
+                                f"'{category}'"
+                                + (
+                                    " -- searching anyway (previously this "
+                                    "category would have skipped region "
+                                    "search entirely)"
+                                    if would_have_skipped else ""
+                                )
+                            )
                             recovered = mine_tile_regions(
                                 output_path,
                                 page_number,
