@@ -1,5 +1,6 @@
 import os
 import json
+import math
 import time
 from pathlib import Path
 from dataclasses import dataclass
@@ -1392,3 +1393,247 @@ IMAGE INDEXES PRESENT:
     data.setdefault("rejected_image_indices", [])
     data.setdefault("review_image_indices", [])
     return data
+
+# ============================================================
+# TILE REGION DETECTION
+#
+# Separate from analyze_product_image on purpose. That function answers
+# "is this WHOLE image one standalone tile product", and a bathroom photo
+# is correctly a no. This one answers a different question -- "where
+# inside this image is there a flat tiled SURFACE" -- so a room scene is
+# an expected, useful input rather than a rejection.
+#
+# It deliberately does NOT decide anything. It locates candidates; each
+# extracted region is then put back through the normal strict validator,
+# which is what keeps a room scene from ever becoming a Tile row.
+# ============================================================
+
+TILE_REGION_PROMPT = """
+You locate flat TILED SURFACES inside a photograph. You do not judge
+whether the photograph is a product image -- something else does that.
+
+Find every region showing a real tiled/paved/clad surface made of
+repeating units: wall tiles, floor tiles, ceiling tiles, terrace, parking,
+exterior cladding, or a tile sample board. Interior scenes are normal
+input. Report the surface wherever it appears.
+
+For EACH distinct tiled surface return:
+
+- surface: one of WALL, FLOOR, CEILING, EXTERIOR, SAMPLE, OTHER
+- quad: the four corners of the flat surface plane, in order
+  top-left, top-right, bottom-right, bottom-left, each {x, y} normalized
+  0.0-1.0. Follow the real perspective of the plane: for a floor receding
+  from the camera the far edge is shorter than the near edge. Cover only
+  the tiled plane itself, not the whole photo.
+- occluders: bounding boxes {x1, y1, x2, y2} normalized 0.0-1.0 for
+  anything sitting ON TOP of that surface and hiding the tile --
+  furniture, sofa, table, bed, toilet, basin, shower, taps, mirror,
+  cabinets, rugs, plants, people, animals, decorations, appliances, doors,
+  windows, text, logos, watermarks. Be generous: a box that is slightly
+  too large costs a little tile, a box that is too small leaks furniture
+  into the product image. Return [] when the surface is clear.
+- confidence: 0.0-1.0 that this really is a tiled surface.
+
+Rules:
+
+Return a SEPARATE entry per distinct tiled surface. A room whose wall and
+floor use different tiles is two entries. Do not return the same surface
+twice.
+
+Only report a surface where you can actually see repeating tile units or
+tile joints. A plain painted wall, a bare concrete floor, a wooden floor,
+a carpet, a curtain, a worktop or a single flat colour is NOT a tiled
+surface -- omit it entirely.
+
+If the image contains no tiled surface at all, return an empty list.
+Never invent a region to have something to return.
+
+Return ONLY valid JSON.
+"""
+
+
+TILE_REGION_SCHEMA = {
+    "type": "OBJECT",
+    "properties": {
+        "regions": {
+            "type": "ARRAY",
+            "items": {
+                "type": "OBJECT",
+                "properties": {
+                    "surface": {"type": "STRING"},
+                    "confidence": {"type": "NUMBER"},
+                    "quad": {
+                        "type": "ARRAY",
+                        "items": {
+                            "type": "OBJECT",
+                            "properties": {
+                                "x": {"type": "NUMBER"},
+                                "y": {"type": "NUMBER"},
+                            },
+                            "required": ["x", "y"],
+                        },
+                    },
+                    "occluders": {
+                        "type": "ARRAY",
+                        "items": {
+                            "type": "OBJECT",
+                            "properties": {
+                                "x1": {"type": "NUMBER"},
+                                "y1": {"type": "NUMBER"},
+                                "x2": {"type": "NUMBER"},
+                                "y2": {"type": "NUMBER"},
+                            },
+                            "required": ["x1", "y1", "x2", "y2"],
+                        },
+                    },
+                },
+                "required": ["surface", "confidence", "quad"],
+            },
+        }
+    },
+    "required": ["regions"],
+}
+
+
+# Below this the detector is guessing at a surface it cannot really see.
+# Regions are re-validated downstream anyway, so this only avoids the cost
+# of extracting and re-classifying obvious noise.
+TILE_REGION_MIN_CONFIDENCE = 0.55
+
+# More than this many surfaces in one image means the detector is
+# fragmenting a scene rather than finding distinct products.
+TILE_REGION_MAX = 6
+
+
+def _region_points(raw_quad, width, height):
+    """Converts a normalized quad into pixel corners, or None if unusable."""
+    if not isinstance(raw_quad, (list, tuple)) or len(raw_quad) != 4:
+        return None
+
+    points = []
+    for corner in raw_quad:
+        if isinstance(corner, dict):
+            x, y = corner.get("x"), corner.get("y")
+        elif isinstance(corner, (list, tuple)) and len(corner) >= 2:
+            x, y = corner[0], corner[1]
+        else:
+            return None
+
+        try:
+            x = float(x)
+            y = float(y)
+        except (TypeError, ValueError):
+            return None
+
+        if not (math.isfinite(x) and math.isfinite(y)):
+            return None
+
+        # Coordinates are specified normalized; clamp rather than reject so
+        # a corner marginally outside the frame still yields a usable plane.
+        points.append((
+            max(0.0, min(1.0, x)) * width,
+            max(0.0, min(1.0, y)) * height,
+        ))
+
+    return points
+
+
+def _region_occluders(raw_occluders, width, height):
+    """Converts normalized occluder boxes into pixel boxes, dropping junk."""
+    boxes = []
+
+    for entry in raw_occluders or []:
+        if not isinstance(entry, dict):
+            continue
+        try:
+            x1 = float(entry.get("x1", 0))
+            y1 = float(entry.get("y1", 0))
+            x2 = float(entry.get("x2", 0))
+            y2 = float(entry.get("y2", 0))
+        except (TypeError, ValueError):
+            continue
+
+        values = (x1, y1, x2, y2)
+        if not all(math.isfinite(value) for value in values):
+            continue
+
+        x1, x2 = sorted((max(0.0, min(1.0, x1)), max(0.0, min(1.0, x2))))
+        y1, y2 = sorted((max(0.0, min(1.0, y1)), max(0.0, min(1.0, y2))))
+
+        if x2 <= x1 or y2 <= y1:
+            continue
+
+        boxes.append((x1 * width, y1 * height, x2 * width, y2 * height))
+
+    return boxes
+
+
+def detect_tile_regions(image_path, width, height):
+    """Locates tiled surfaces inside one image.
+
+    Returns a list of {surface, confidence, quad, occluders} with
+    pixel-space geometry, ordered most confident first. Returns [] when
+    there is no tiled surface, when Gemini is unavailable, or when the
+    response cannot be parsed -- a caller that gets nothing back simply
+    keeps the existing whole-image decision.
+    """
+    try:
+        with open(image_path, "rb") as handle:
+            image_bytes = handle.read()
+    except OSError:
+        return []
+
+    try:
+        response = _generate_content_safe(
+            model=GEMINI_MODEL,
+            contents=[
+                types.Part.from_bytes(
+                    data=image_bytes,
+                    mime_type="image/webp",
+                ),
+                TILE_REGION_PROMPT,
+            ],
+            config={
+                "response_mime_type": "application/json",
+                "response_schema": TILE_REGION_SCHEMA,
+            },
+        )
+    except Exception:  # noqa: BLE001 -- never break extraction over this
+        return []
+
+    if response is None:
+        return []
+
+    try:
+        payload = json.loads(response.text)
+    except (AttributeError, ValueError, TypeError):
+        return []
+
+    regions = []
+
+    for raw in (payload or {}).get("regions", []) or []:
+        if not isinstance(raw, dict):
+            continue
+
+        try:
+            confidence = float(raw.get("confidence", 0.0))
+        except (TypeError, ValueError):
+            confidence = 0.0
+
+        if confidence < TILE_REGION_MIN_CONFIDENCE:
+            continue
+
+        quad = _region_points(raw.get("quad"), width, height)
+        if quad is None:
+            continue
+
+        regions.append({
+            "surface": str(raw.get("surface") or "OTHER").strip().upper(),
+            "confidence": max(0.0, min(1.0, confidence)),
+            "quad": quad,
+            "occluders": _region_occluders(raw.get("occluders"), width, height),
+        })
+
+    regions.sort(key=lambda region: region["confidence"], reverse=True)
+
+    return regions[:TILE_REGION_MAX]
