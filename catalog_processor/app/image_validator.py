@@ -5,9 +5,19 @@ import math
 # ALLOWED TILE TYPES
 # ============================================================
 
+# Tile-only. Deliberately NARROWER than gemini_service.ALLOWED_PRODUCT_TYPES:
+# that set also admits mirrors, sanitaryware and fittings for the other
+# pipeline, and the pen-drive catalog extractor must never turn a basin, WC,
+# tap or mirror into a Tile row.
+#
+# TILE_SLAB/SLAB are included because a slab shown as the actual product is a
+# wanted standalone tile product; they are listed in the classifier prompt's
+# tile vocabulary too, so they are real values rather than guesses.
 ALLOWED_TILE_TYPES = {
     "TILE",
     "TILE_SAMPLE",
+    "TILE_SLAB",
+    "SLAB",
     "STONE_TILE",
     "MARBLE_TILE",
     "PORCELAIN_TILE",

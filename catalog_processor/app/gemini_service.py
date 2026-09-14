@@ -177,6 +177,8 @@ ALLOWED_PRODUCT_TYPES = {
     # Tiles / surfaces
     "TILE",
     "TILE_SAMPLE",
+    "TILE_SLAB",
+    "SLAB",
     "STONE_TILE",
     "MARBLE_TILE",
     "PORCELAIN_TILE",
@@ -373,10 +375,15 @@ If it is installed or part of the environment, reject it.
 IMAGE TYPE
 ============================================================
 
-Return ONE concise type. Prefer one of these exact values when applicable:
+Return ONE type. You MUST return EXACTLY one of the values listed below,
+copied verbatim. Never invent a new type string, never add prefixes or
+suffixes, and never return a type that is not on one of these two lists.
+If no listed product type fits, return OTHER.
 
 TILE
 TILE_SAMPLE
+TILE_SLAB
+SLAB
 STONE_TILE
 MARBLE_TILE
 PORCELAIN_TILE
@@ -410,6 +417,22 @@ BANNER
 COLLAGE
 OTHER
 UNKNOWN
+
+TEXTURE vs TILE_SAMPLE -- read this carefully, it is the most common
+mistake on a tile catalog:
+
+A catalog photograph of ONE tile shot flat and straight-on fills the frame
+with tile surface and has no room, no furniture and no depth. That is still
+a standalone product photograph. Classify it as TILE_SAMPLE (or the
+specific material type) and set is_product_image = true.
+
+Use TEXTURE ONLY for a seamless repeating swatch that is presented as a
+background/material graphic rather than as one catalog product -- for
+example a pattern that tiles infinitely with no edge, border or product
+boundary anywhere in the frame.
+
+Filling the frame is NOT a reason to reject. A tile sample photographed
+edge-to-edge is the normal way a tile catalog presents its product.
 
 ============================================================
 PRODUCT COUNT
