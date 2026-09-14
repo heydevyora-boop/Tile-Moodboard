@@ -18,6 +18,7 @@ ALLOWED_TILE_TYPES = {
     "TILE_SAMPLE",
     "TILE_SLAB",
     "SLAB",
+    "MOSAIC_TILE",
     "STONE_TILE",
     "MARBLE_TILE",
     "PORCELAIN_TILE",

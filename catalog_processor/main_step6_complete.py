@@ -1152,15 +1152,16 @@ REJECTION_CATEGORIES = (
     )),
     ("furniture", ("furniture", "sofa", "cabinet", "table", "chair")),
     ("decorative artwork/mosaic", (
-        "artwork", "mosaic", "decorative", "mural", "collage",
+        "artwork", "mosaic", "decorative", "mural",
     )),
     ("human/face", ("human", "face", "person", "people", "model")),
+    ("multiple products in one image", (
+        "multiple", "more than one", "several products", "product_count",
+        "collage", "mix & match", "catalog page", "page layout",
+    )),
     ("logo/text/marketing graphic", (
         "logo", "banner", "advertisement", "text graphic", "graphic",
         "brand mark", "colour chart", "color chart", "palette",
-    )),
-    ("multiple products in one image", (
-        "multiple", "more than one", "several products", "product_count",
     )),
     ("validation could not run", (
         "gemini_api_key", "validation unavailable", "validation failed",
@@ -1170,12 +1171,42 @@ REJECTION_CATEGORIES = (
 
 
 def categorize_rejection(reason):
-    """Maps a free-text rejection reason onto a short operator-facing label."""
+    """Maps a free-text rejection reason onto a short operator-facing label.
+
+    Two rules, both learned from real misreports:
+
+    Matches on WORD boundaries, not raw substrings. Short keywords like
+    "wc", "tap" and "model" otherwise hit inside ordinary words -- a real
+    run reported a promotional banner as sanitaryware because "showcasing"
+    contains "wc". Multi-word keywords are still matched as phrases.
+
+    Picks the category with the MOST matches rather than the first one in
+    declaration order. These reasons routinely carry several signals at
+    once, and first-match-wins let one incidental word outvote the actual
+    subject -- "mosaic artwork depicting a human face mounted as a mural"
+    was reported as an installed wall scene purely because of "mounted".
+    Ties fall back to declaration order, so the outcome stays predictable.
+    """
     lowered = str(reason or "").lower()
+    words = set(re.findall(r"[a-z0-9_&]+", lowered))
+
+    best_label = None
+    best_score = 0
+
     for label, keywords in REJECTION_CATEGORIES:
-        if any(keyword in lowered for keyword in keywords):
-            return label
-    return "not a standalone tile"
+        score = 0
+        for keyword in keywords:
+            if " " in keyword or "&" in keyword:
+                if keyword in lowered:
+                    score += 1
+            elif keyword in words:
+                score += 1
+
+        if score > best_score:
+            best_label = label
+            best_score = score
+
+    return best_label or "not a standalone tile"
 
 
 def load_semantic_tile_validator():
@@ -1231,7 +1262,8 @@ def validate_and_correct_tile_image(output_path, image_rect, text_spans, semanti
     # only add a silent-failure risk for a value that is discarded anyway.
     decision = validate_product_decision(None, gemini_result)
     if decision.get('decision') != 'APPROVED':
-        return False, decision.get('reason') or 'not approved as a standalone tile product', {}
+        detail = decision.get('reason') or 'not approved as a standalone tile product'
+        return False, f"{detail} [type={getattr(gemini_result, 'image_type', '?')} confidence={getattr(gemini_result, 'confidence', 0.0):.2f}]", {}
 
     with Image.open(output_path) as opened:
         opened.load()

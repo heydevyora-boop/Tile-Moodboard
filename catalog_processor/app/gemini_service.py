@@ -1,5 +1,6 @@
 import os
 import json
+import time
 from pathlib import Path
 from dataclasses import dataclass
 from typing import Optional
@@ -80,17 +81,62 @@ def _is_gemini_quota_error(error):
     return any(marker in message for marker in quota_markers)
 
 
+# A dropped connection or a 5xx is not a verdict about the image. The
+# validator fails closed, so an un-retried blip permanently rejects a
+# candidate that was never actually classified -- observed in a real run as
+# "Gemini validation failed (Server disconnected without sending a
+# response.) -- needs review". These markers are matched on the exception
+# text to decide whether another attempt is worth making.
+GEMINI_TRANSIENT_MARKERS = (
+    "SERVER DISCONNECTED",
+    "CONNECTION RESET",
+    "CONNECTION ABORTED",
+    "CONNECTION ERROR",
+    "REMOTEDISCONNECTED",
+    "REMOTE END CLOSED",
+    "BROKEN PIPE",
+    "TIMED OUT",
+    "TIMEOUT",
+    "TEMPORARILY UNAVAILABLE",
+    "SERVICE UNAVAILABLE",
+    "INTERNAL ERROR",
+    "BAD GATEWAY",
+    "500",
+    "502",
+    "503",
+    "504",
+)
+
+GEMINI_TRANSIENT_RETRIES = 3
+GEMINI_TRANSIENT_DELAY = 2
+
+
+def _is_gemini_transient_error(error) -> bool:
+    """True for connection/5xx blips that are worth another attempt.
+
+    Quota errors are deliberately excluded: they are handled by the
+    short-circuit below, and retrying a rate limit only makes it worse.
+    """
+
+    if _is_gemini_quota_error(error):
+        return False
+
+    message = f"{type(error).__name__} {error}".upper()
+
+    return any(marker in message for marker in GEMINI_TRANSIENT_MARKERS)
+
+
 def _generate_content_safe(*args, **kwargs):
     """
-    Call Gemini once unless the current process has already hit a
-    quota/rate-limit error.
+    Call Gemini, retrying only transient connection/5xx failures, unless
+    the current process has already hit a quota/rate-limit error.
 
     Returns:
         Gemini response object on success.
         None when Gemini quota/rate limit is exhausted.
 
     Raises:
-        Original exception for non-quota errors.
+        Original exception for non-quota errors that did not recover.
     """
 
     global GEMINI_QUOTA_EXHAUSTED
@@ -98,37 +144,64 @@ def _generate_content_safe(*args, **kwargs):
     if GEMINI_QUOTA_EXHAUSTED:
         return None
 
-    try:
-        return client.models.generate_content(
-            *args,
-            **kwargs,
-        )
+    attempt = 0
 
-    except Exception as error:
-        if _is_gemini_quota_error(error):
-            GEMINI_QUOTA_EXHAUSTED = True
+    while True:
+        attempt += 1
 
-            print("")
-            print("=" * 70)
-            print("GEMINI QUOTA / RATE LIMIT REACHED")
-            print("=" * 70)
-            print(
-                "Gemini analysis is temporarily unavailable."
+        try:
+            return client.models.generate_content(
+                *args,
+                **kwargs,
             )
-            print(
-                "Remaining images will be marked for REVIEW "
-                "instead of stopping the catalog pipeline."
-            )
-            print(
-                "Restart the process after the quota resets "
-                "to retry Gemini."
-            )
-            print("=" * 70)
-            print("")
 
-            return None
+        except Exception as error:
 
-        raise
+            # Unchanged behaviour: a quota/rate-limit error disables Gemini
+            # for the rest of the process and is never retried.
+            if _is_gemini_quota_error(error):
+                GEMINI_QUOTA_EXHAUSTED = True
+
+                print("")
+                print("=" * 70)
+                print("GEMINI QUOTA / RATE LIMIT REACHED")
+                print("=" * 70)
+                print(
+                    "Gemini analysis is temporarily unavailable."
+                )
+                print(
+                    "Remaining images will be marked for REVIEW "
+                    "instead of stopping the catalog pipeline."
+                )
+                print(
+                    "Restart the process after the quota resets "
+                    "to retry Gemini."
+                )
+                print("=" * 70)
+                print("")
+
+                return None
+
+            # A dropped connection is not a verdict about the image. Retry
+            # it rather than let the validator fail the candidate closed on
+            # a blip. The retried call runs the SAME classification, so no
+            # accept/reject criterion is relaxed by getting an answer.
+            if (
+                attempt < GEMINI_TRANSIENT_RETRIES
+                and _is_gemini_transient_error(error)
+            ):
+                wait_time = GEMINI_TRANSIENT_DELAY * attempt
+
+                print(
+                    f"  [tile-validation] transient Gemini error "
+                    f"(attempt {attempt}/{GEMINI_TRANSIENT_RETRIES}): "
+                    f"{error} -- retrying in {wait_time}s"
+                )
+
+                time.sleep(wait_time)
+                continue
+
+            raise
 
 
 # ============================================================
@@ -179,6 +252,7 @@ ALLOWED_PRODUCT_TYPES = {
     "TILE_SAMPLE",
     "TILE_SLAB",
     "SLAB",
+    "MOSAIC_TILE",
     "STONE_TILE",
     "MARBLE_TILE",
     "PORCELAIN_TILE",
@@ -384,6 +458,7 @@ TILE
 TILE_SAMPLE
 TILE_SLAB
 SLAB
+MOSAIC_TILE
 STONE_TILE
 MARBLE_TILE
 PORCELAIN_TILE
@@ -417,6 +492,27 @@ BANNER
 COLLAGE
 OTHER
 UNKNOWN
+
+MOSAIC -- product sample vs decorative artwork:
+
+Mosaic appears in tile catalogs BOTH as a sellable product and as
+decoration, and the two are opposite decisions.
+
+ACCEPT as a product (TILE_SAMPLE or MOSAIC_TILE) when the mosaic is
+presented as ONE catalog product: a mosaic sheet, panel or swatch shown by
+itself, typically square or rectangular, on a plain or neutral background,
+with no room around it. A mosaic being made of many small chips does NOT
+make it multiple products -- one mosaic sheet is ONE product.
+
+REJECT when the mosaic is decoration rather than the product being sold:
+- a mosaic mural, feature wall or artwork installed in a space
+- a mosaic that depicts a picture, scene, face, figure or logo
+- a mosaic shown as part of a room, bathroom or building
+- a close-up of a mosaic surface with no product boundary, sheet edge or
+  catalog presentation visible -- that is a surface texture, not a product
+
+The test is presentation, not pattern. Never reject an image merely for
+containing a mosaic pattern.
 
 TEXTURE vs TILE_SAMPLE -- read this carefully, it is the most common
 mistake on a tile catalog:
