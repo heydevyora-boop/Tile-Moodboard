@@ -45,10 +45,28 @@ MIN_REGION_AREA_FRACTION = 0.02
 # is too fragmentary to represent the tile.
 MIN_CLEAN_AREA_FRACTION = 0.25
 
-# Absolute pixel floor for a saved swatch, matched to the extractor's
+# Preferred pixel floor for a saved swatch, matched to the extractor's
 # existing MIN_IMAGE_WIDTH/MIN_IMAGE_HEIGHT so this stage cannot emit
 # something the caller would immediately discard.
 MIN_OUTPUT_SIDE_PX = 200
+
+# ...but a flat 200px floor is wrong when the SOURCE is small: a 320px
+# catalog thumbnail cannot yield a 200px clean rectangle once occluders
+# are removed, so a real tile gets discarded for being small relative to
+# nothing. The effective floor is therefore scaled to the source and only
+# ever RELAXED from MIN_OUTPUT_SIDE_PX, never tightened -- a large source
+# is held to exactly the same 200px it is today.
+MIN_OUTPUT_SIDE_FRACTION = 0.20
+
+# Below this a crop is too small to read as a tile pattern at any source
+# size, so the relative rule never descends past it.
+MIN_OUTPUT_SIDE_FLOOR_PX = 96
+
+
+def effective_min_side(source_width, source_height):
+    """Smallest acceptable crop side for a source of this size."""
+    relative = int(min(source_width, source_height) * MIN_OUTPUT_SIDE_FRACTION)
+    return max(MIN_OUTPUT_SIDE_FLOOR_PX, min(MIN_OUTPUT_SIDE_PX, relative))
 
 # Resolution of the occupancy grid used to search for the clean
 # rectangle. 160x160 keeps the search at roughly 25k cells -- accurate to
@@ -77,6 +95,77 @@ def _order_quad(quad: np.ndarray) -> np.ndarray:
             points[np.argmax(diff)],    # bottom-left
         ],
         dtype=np.float32,
+    )
+
+
+def normalize_quad(quad, image_width, image_height):
+    """Repairs a detected quad into one this module can actually use.
+
+    Detectors return geometry that is *nearly* right far more often than
+    they return geometry that is wrong: a corner a few pixels outside the
+    frame, an inverted or rotated winding, float noise that makes an edge
+    a hair shorter than zero. Discarding those loses real tiles, so each
+    is corrected here rather than rejected.
+
+    What is NOT repaired is a quad with no area -- fewer than three
+    distinct corners, or a bounding box thinner than a pixel. There is no
+    surface there to correct towards.
+
+    Returns (points, note) with points as a list of four clamped (x, y)
+    pairs, or (None, reason) when the quad is genuinely unusable. `note`
+    describes any correction applied, for the caller's log.
+    """
+    try:
+        points = np.asarray(quad, dtype=np.float64).reshape(4, 2)
+    except (ValueError, TypeError):
+        return None, "quad is not four (x, y) corners"
+
+    if not np.all(np.isfinite(points)):
+        return None, "quad contains non-finite coordinates"
+
+    clamped = np.empty_like(points)
+    clamped[:, 0] = np.clip(points[:, 0], 0.0, float(image_width))
+    clamped[:, 1] = np.clip(points[:, 1], 0.0, float(image_height))
+
+    notes = []
+    if not np.allclose(clamped, points, atol=0.5):
+        notes.append("clamped to image bounds")
+
+    # Distinctness is measured at whole-pixel resolution: two corners
+    # half a pixel apart describe an edge no crop can represent.
+    distinct = {(round(float(x)), round(float(y))) for x, y in clamped}
+    if len(distinct) < 3:
+        return None, f"quad collapses to {len(distinct)} distinct corner(s)"
+
+    span_x = float(clamped[:, 0].max() - clamped[:, 0].min())
+    span_y = float(clamped[:, 1].max() - clamped[:, 1].min())
+
+    if span_x < 1.0 or span_y < 1.0:
+        return None, (
+            f"quad bounding box is {span_x:.1f}x{span_y:.1f}px -- no area"
+        )
+
+    return [(float(x), float(y)) for x, y in clamped], ", ".join(notes)
+
+
+def describe_quad(quad):
+    """Renders a quad as rounded (x, y) pairs for a log line."""
+    try:
+        points = np.asarray(quad, dtype=np.float64).reshape(-1, 2)
+    except (ValueError, TypeError):
+        return repr(quad)
+
+    return [(round(float(x), 1), round(float(y), 1)) for x, y in points]
+
+
+def quad_bounds(quad):
+    """Axis-aligned integer (x1, y1, x2, y2) enclosing the quad."""
+    points = np.asarray(quad, dtype=np.float64).reshape(-1, 2)
+    return (
+        int(np.floor(points[:, 0].min())),
+        int(np.floor(points[:, 1].min())),
+        int(np.ceil(points[:, 0].max())),
+        int(np.ceil(points[:, 1].max())),
     )
 
 
@@ -234,15 +323,62 @@ def extract_tile_region(image_bgr, quad, occluders=None):
     step that ended it and `reason` explaining why, so the caller can log
     a per-candidate decision without re-deriving any of this.
     """
-    info: dict = {"stage": "rectify", "reason": ""}
+    source_height, source_width = image_bgr.shape[:2]
+    source_area = float(source_height * source_width)
 
-    source_area = float(image_bgr.shape[0] * image_bgr.shape[1])
+    info: dict = {
+        "stage": "normalize",
+        "reason": "",
+        "quad_in": describe_quad(quad),
+        "surface_source": "rectified",
+    }
 
-    rectified = rectify_quad(image_bgr, quad)
-    if rectified is None:
-        info["reason"] = "degenerate region geometry"
+    normalized, note = normalize_quad(quad, source_width, source_height)
+    if normalized is None:
+        info["reason"] = f"degenerate region geometry -- {note}"
         return None, info
 
+    info["quad_normalized"] = [
+        (round(x, 1), round(y, 1)) for x, y in normalized
+    ]
+    if note:
+        info["normalize_note"] = note
+
+    info["stage"] = "rectify"
+
+    # Perspective correction is the preferred path -- it squares up a wall
+    # shot at an angle so the tile grid reads true. But a quad that is
+    # already axis-aligned, or one whose corner ordering the homography
+    # cannot resolve, still describes a real surface: falling back to its
+    # bounding rectangle keeps that tile instead of throwing it away for a
+    # geometry technicality. The crop is of real pixels either way.
+    rectified = rectify_quad(image_bgr, normalized)
+
+    if rectified is None:
+        x1, y1, x2, y2 = quad_bounds(normalized)
+        x1 = max(0, min(source_width, x1))
+        y1 = max(0, min(source_height, y1))
+        x2 = max(0, min(source_width, x2))
+        y2 = max(0, min(source_height, y2))
+
+        if x2 - x1 < 2 or y2 - y1 < 2:
+            info["reason"] = (
+                "degenerate region geometry -- bounding-box fallback is "
+                f"{x2 - x1}x{y2 - y1}px"
+            )
+            return None, info
+
+        rectified = image_bgr[y1:y2, x1:x2].copy()
+        info["surface_source"] = "bbox-fallback"
+        info["bbox_fallback"] = (x1, y1, x2, y2)
+
+        # Occluders are already in source-image space, so on this path they
+        # only need translating into the crop -- there is no homography to
+        # send them through.
+        occluders = [
+            (ox1 - x1, oy1 - y1, ox2 - x1, oy2 - y1)
+            for ox1, oy1, ox2, oy2 in (occluders or [])
+        ]
     height, width = rectified.shape[:2]
     info["rectified_size"] = (width, height)
 
@@ -261,8 +397,18 @@ def extract_tile_region(image_bgr, quad, occluders=None):
     projected: list[tuple[float, float, float, float]] = []
     for occluder in occluders or []:
         ox1, oy1, ox2, oy2 = occluder
+
+        if info["surface_source"] == "bbox-fallback":
+            # Already translated into the crop above; there is no
+            # homography on this path to send them through.
+            projected.append((
+                float(min(ox1, ox2)), float(min(oy1, oy2)),
+                float(max(ox1, ox2)), float(max(oy1, oy2)),
+            ))
+            continue
+
         corners = project_points(
-            quad,
+            normalized,
             [(ox1, oy1), (ox2, oy1), (ox2, oy2), (ox1, oy2)],
         )
         xs = corners[:, 0]
@@ -295,11 +441,15 @@ def extract_tile_region(image_bgr, quad, occluders=None):
         )
         return None, info
 
-    if clean_width < MIN_OUTPUT_SIDE_PX or clean_height < MIN_OUTPUT_SIDE_PX:
+    min_side = effective_min_side(source_width, source_height)
+    info["min_side"] = min_side
+
+    if clean_width < min_side or clean_height < min_side:
         info["stage"] = "too_small"
         info["reason"] = (
             f"clean area is {clean_width}x{clean_height}px, "
-            f"below the {MIN_OUTPUT_SIDE_PX}px minimum side"
+            f"below the {min_side}px minimum side for a "
+            f"{source_width}x{source_height} source"
         )
         return None, info
 

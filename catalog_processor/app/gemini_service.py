@@ -1505,12 +1505,79 @@ TILE_REGION_MIN_CONFIDENCE = 0.55
 TILE_REGION_MAX = 6
 
 
-def _region_points(raw_quad, width, height):
-    """Converts a normalized quad into pixel corners, or None if unusable."""
+# Gemini emits spatial coordinates in more than one convention, and which
+# one arrives is not something the prompt reliably controls. The vision
+# models are trained to report points and boxes normalized to 0-1000, and
+# they fall back to that convention regularly even when asked for 0.0-1.0
+# -- especially behind a response_schema whose fields are plain NUMBERs.
+#
+# Assuming a single convention and clamping to it is destructive rather
+# than merely inaccurate: clamping a 0-1000 quad into 0.0-1.0 collapses
+# all four corners onto (width, height), i.e. one point, which then reads
+# downstream as "degenerate region geometry" and silently discards a
+# correctly detected tile surface. So the space is DETECTED from the
+# values themselves instead of assumed.
+#
+# The quad is the anchor: it is the required field, it carries eight
+# values, and whatever convention it uses is the convention the occluder
+# boxes in the same response use. Deciding once from the quad and applying
+# that same decision to the occluders is what keeps the two in step --
+# reading occluders in the wrong space would collapse them to zero area,
+# drop them as junk, and leak the very furniture they mark into a swatch.
+
+# At or below this, values are read as the 0.0-1.0 fractions the prompt
+# asks for. Slightly above 1.0 to tolerate a corner reported just outside
+# the frame.
+UNIT_SPACE_MAX = 1.5
+
+# At or below this (and above UNIT_SPACE_MAX), values are read as Gemini's
+# native 0-1000 grid. Anything larger can only be raw pixels.
+THOUSAND_SPACE_MAX = 1000.0
+
+
+def _coordinate_space(values):
+    """Names the convention a set of raw coordinates is expressed in.
+
+    Returns "unit" (0.0-1.0), "thousand" (0-1000) or "pixel". Ambiguity is
+    resolved towards "thousand" because that is what the vision models
+    actually emit: a value of 780 from an 800px-wide image is far more
+    likely to be 0.78 of the width than 780 pixels of it.
+    """
+    largest = max((abs(value) for value in values), default=0.0)
+
+    if largest <= UNIT_SPACE_MAX:
+        return "unit"
+    if largest <= THOUSAND_SPACE_MAX:
+        return "thousand"
+    return "pixel"
+
+
+def _to_pixels(x, y, space, width, height):
+    """Maps one coordinate pair out of `space` into clamped pixel space."""
+    if space == "unit":
+        fraction_x, fraction_y = x, y
+    elif space == "thousand":
+        fraction_x, fraction_y = x / 1000.0, y / 1000.0
+    else:
+        fraction_x = x / width if width else 0.0
+        fraction_y = y / height if height else 0.0
+
+    return (
+        max(0.0, min(1.0, fraction_x)) * width,
+        max(0.0, min(1.0, fraction_y)) * height,
+    )
+
+
+def _raw_corners(raw_quad):
+    """Parses a quad into four raw (x, y) floats, without reading scale.
+
+    Scale is deliberately not interpreted here -- _coordinate_space needs
+    to see the untouched values to tell which convention they are in.
+    """
     if not isinstance(raw_quad, (list, tuple)) or len(raw_quad) != 4:
         return None
 
-    points = []
+    corners = []
     for corner in raw_quad:
         if isinstance(corner, dict):
             x, y = corner.get("x"), corner.get("y")
@@ -1528,19 +1595,35 @@ def _region_points(raw_quad, width, height):
         if not (math.isfinite(x) and math.isfinite(y)):
             return None
 
-        # Coordinates are specified normalized; clamp rather than reject so
-        # a corner marginally outside the frame still yields a usable plane.
-        points.append((
-            max(0.0, min(1.0, x)) * width,
-            max(0.0, min(1.0, y)) * height,
-        ))
+        corners.append((x, y))
 
-    return points
+    return corners
 
 
-def _region_occluders(raw_occluders, width, height):
-    """Converts normalized occluder boxes into pixel boxes, dropping junk."""
-    boxes = []
+def _region_points(raw_quad, width, height, space=None):
+    """Converts a detected quad into pixel corners, or None if unusable.
+
+    `space` overrides the auto-detected convention; pass the value from
+    _coordinate_space when several fields of one region must be read
+    together.
+    """
+    corners = _raw_corners(raw_quad)
+    if corners is None:
+        return None
+
+    if space is None:
+        space = _coordinate_space([value for corner in corners for value in corner])
+
+    return [_to_pixels(x, y, space, width, height) for x, y in corners]
+
+
+def _region_occluders(raw_occluders, width, height, space=None):
+    """Converts occluder boxes into pixel boxes, dropping junk.
+
+    `space` must be the convention resolved for the region's quad -- see
+    the note above on why these cannot be detected independently.
+    """
+    parsed = []
 
     for entry in raw_occluders or []:
         if not isinstance(entry, dict):
@@ -1557,13 +1640,25 @@ def _region_occluders(raw_occluders, width, height):
         if not all(math.isfinite(value) for value in values):
             continue
 
-        x1, x2 = sorted((max(0.0, min(1.0, x1)), max(0.0, min(1.0, x2))))
-        y1, y2 = sorted((max(0.0, min(1.0, y1)), max(0.0, min(1.0, y2))))
+        parsed.append(values)
 
-        if x2 <= x1 or y2 <= y1:
+    if space is None:
+        space = _coordinate_space(
+            [value for entry in parsed for value in entry]
+        )
+
+    boxes = []
+    for x1, y1, x2, y2 in parsed:
+        px1, py1 = _to_pixels(x1, y1, space, width, height)
+        px2, py2 = _to_pixels(x2, y2, space, width, height)
+
+        px1, px2 = sorted((px1, px2))
+        py1, py2 = sorted((py1, py2))
+
+        if px2 <= px1 or py2 <= py1:
             continue
 
-        boxes.append((x1 * width, y1 * height, x2 * width, y2 * height))
+        boxes.append((px1, py1, px2, py2))
 
     return boxes
 
@@ -1623,7 +1718,17 @@ def detect_tile_regions(image_path, width, height):
         if confidence < TILE_REGION_MIN_CONFIDENCE:
             continue
 
-        quad = _region_points(raw.get("quad"), width, height)
+        corners = _raw_corners(raw.get("quad"))
+        if corners is None:
+            continue
+
+        # Resolved once from the quad and reused for the occluders, so both
+        # are read in the same convention -- see _coordinate_space.
+        space = _coordinate_space(
+            [value for corner in corners for value in corner]
+        )
+
+        quad = _region_points(raw.get("quad"), width, height, space)
         if quad is None:
             continue
 
@@ -1631,7 +1736,10 @@ def detect_tile_regions(image_path, width, height):
             "surface": str(raw.get("surface") or "OTHER").strip().upper(),
             "confidence": max(0.0, min(1.0, confidence)),
             "quad": quad,
-            "occluders": _region_occluders(raw.get("occluders"), width, height),
+            "coordinate_space": space,
+            "occluders": _region_occluders(
+                raw.get("occluders"), width, height, space
+            ),
         })
 
     regions.sort(key=lambda region: region["confidence"], reverse=True)

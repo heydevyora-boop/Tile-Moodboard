@@ -45,6 +45,88 @@ INTERNAL_SYNC_API_KEY = os.getenv(
 
 SYNC_TIMEOUT_SECONDS = 15
 
+# Shorter than a real sync: this runs before any work has been done, so a
+# backend that is simply down should be reported quickly rather than
+# stalling the start of every run.
+PREFLIGHT_TIMEOUT_SECONDS = 8
+
+
+def preflight_internal_sync() -> tuple[bool, str]:
+    """Checks BOTH halves of the internal sync before a run starts.
+
+    The failure this exists to prevent is silent and expensive: the key is
+    configured on the Python side but not on the Node side, so every
+    product uploads to Drive and lands in MASTER, and only the Tile row --
+    the thing combination generation actually reads -- is refused, 403 at
+    a time, for the whole catalog. Discovering that after dozens of
+    uploads means a half-synced catalog to reconcile; discovering it here
+    costs one request.
+
+    The probe deliberately sends an EMPTY body. The route runs internalAuth
+    before its validator, so the auth outcome is already decided by the
+    time the empty payload is rejected -- and productCode/brandName are
+    both required, so this request cannot create or modify a Tile row
+    whatever the auth result.
+
+    Returns (ok, detail). ok=False means the Tile-row half of the pipeline
+    will not work this run; the caller decides whether to continue.
+    """
+    if not INTERNAL_SYNC_API_KEY:
+        return False, (
+            "INTERNAL SYNC CONFIGURATION ERROR:\n"
+            "INTERNAL_SYNC_API_KEY is missing on catalog_processor\n"
+            "  Set it in catalog_processor/.env to the same value as the "
+            "backend's INTERNAL_SYNC_API_KEY.\n"
+            "  Without it, extracted tiles reach Drive and the MASTER "
+            "sheet but never become Tile rows,\n"
+            "  so they cannot be used in mood board combinations."
+        )
+
+    try:
+        response = requests.post(
+            BACKEND_SYNC_URL,
+            json={},
+            headers={"x-internal-key": INTERNAL_SYNC_API_KEY},
+            timeout=PREFLIGHT_TIMEOUT_SECONDS,
+        )
+    except Exception as exc:  # noqa: BLE001 -- a preflight must never raise
+        return False, (
+            "INTERNAL SYNC CONFIGURATION ERROR:\n"
+            f"the backend at {BACKEND_SYNC_URL} is unreachable ({exc})\n"
+            "  Start the Node backend, or correct BACKEND_SYNC_URL in "
+            "catalog_processor/.env."
+        )
+
+    if response.status_code == 403:
+        body = (response.text or "").lower()
+
+        if "not configured" in body or "is unset" in body:
+            return False, (
+                "INTERNAL SYNC CONFIGURATION ERROR:\n"
+                "INTERNAL_SYNC_API_KEY is missing on backend\n"
+                "  catalog_processor has a key, but the Node backend does "
+                "not, so it refuses every sync.\n"
+                "  Set INTERNAL_SYNC_API_KEY in backend/.env (local) or the "
+                "Vercel project environment\n"
+                "  (production) to the same value catalog_processor uses, "
+                "then restart the backend."
+            )
+
+        return False, (
+            "INTERNAL SYNC CONFIGURATION ERROR:\n"
+            "INTERNAL_SYNC_API_KEY does not match between catalog_processor "
+            "and backend\n"
+            "  Both sides have a key configured, but they differ. Make them "
+            "identical, then restart the backend."
+        )
+
+    # Anything else means the request got past internalAuth -- including
+    # the 400 the empty body earns, which is the expected success signal.
+    return True, (
+        f"internal sync OK -- backend at {BACKEND_SYNC_URL} accepted the "
+        f"shared key"
+    )
+
 
 def sync_master_product_to_backend(
     product_code: str,

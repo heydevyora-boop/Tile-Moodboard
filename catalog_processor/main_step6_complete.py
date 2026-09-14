@@ -4,6 +4,7 @@
 import os
 import re
 import csv
+import json
 import hashlib
 import mimetypes
 import tempfile
@@ -49,6 +50,7 @@ from app.google_services import (
 )
 
 from app.backend_sync import (
+    preflight_internal_sync,
     sync_master_product_to_backend,
 )
 
@@ -831,6 +833,35 @@ def render_image_crop(page, rect, dpi=300):
     return pix.tobytes("png"), pix.width, pix.height
 
 
+# DPI for the whole-page render used by the fallback below. Deliberately
+# lower than render_image_crop's 300: this rasterizes an ENTIRE page
+# rather than one swatch box, and the regions cut out of it are a fraction
+# of it. At 200 DPI an A4 page is ~1654x2339, so a surface covering a
+# third of the page still yields roughly 550x780 -- comfortably past the
+# minimum side, without holding a 300 DPI full-page bitmap per page.
+PAGE_RENDER_DPI = 200
+
+
+def page_has_visual_content(page):
+    """True when a page has anything a tile could be drawn with.
+
+    The page-render fallback costs one Gemini call, so it must not fire on
+    pages that are purely text -- an index, a price list, a foreword. A
+    page with no embedded images AND no vector drawings cannot be showing
+    a tile, whatever else is on it.
+    """
+    try:
+        if page.get_images(full=True):
+            return True
+    except Exception:  # noqa: BLE001
+        return True  # can't tell -- let the fallback decide
+
+    try:
+        return bool(page.get_drawings())
+    except Exception:  # noqa: BLE001
+        return True
+
+
 # ---------------------------------------------------------------------------
 # Room/lifestyle photo rejection and page-furniture (badge/logo) exclusion.
 #
@@ -1246,6 +1277,8 @@ def mine_tile_regions(
     semantic_validator,
     region_miner,
     output_directory,
+    source_type="embedded-image",
+    trace=None,
 ):
     """Recovers tile-only swatches from an image rejected as a whole.
 
@@ -1295,20 +1328,57 @@ def mine_tile_regions(
     for index, region in enumerate(regions, start=1):
         label = f"page {page_number} image {image_counter} region {index}"
 
+        def note(final, **extra):
+            """Records this candidate's full decision trail for the report."""
+            if trace is None:
+                return
+            entry = {
+                "page": page_number,
+                "source_type": source_type,
+                "source_image": output_path.name,
+                "candidate": index,
+                "surface": region["surface"],
+                "detector_confidence": round(region["confidence"], 3),
+                "coordinate_space": region.get("coordinate_space"),
+                "occluder_boxes": len(region["occluders"]),
+                "final": final,
+            }
+            entry.update(extra)
+            trace.append(entry)
+
         print(f"    CANDIDATE -- {label}")
         print(f"      detected surface   : {region['surface']}")
         print(f"      detector confidence: {region['confidence']:.2f}")
+        print(f"      coordinate space   : {region.get('coordinate_space', '?')}")
         print(f"      occluder box(es)   : {len(region['occluders'])}")
 
         crop, info = extract_tile_region(
             image_bgr, region["quad"], region["occluders"],
         )
 
+        # Both geometries are printed on every failure: a candidate that
+        # dies here died between "the detector saw a surface" and "there
+        # are pixels to crop", and only the before/after shows which.
         if crop is None:
+            print(f"      geometry in        : {info.get('quad_in')}")
+            print(f"      geometry normalized: {info.get('quad_normalized', 'n/a')}")
             print(f"      geometry           : REJECTED -- {info['reason']} "
                   f"[stage={info['stage']}]")
             print(f"      FINAL              : REJECTED")
+            note(
+                "REJECTED",
+                geometry_in=info.get("quad_in"),
+                geometry_normalized=info.get("quad_normalized"),
+                geometry_stage=info["stage"],
+                geometry_reason=info["reason"],
+            )
             continue
+
+        if info.get("surface_source") == "bbox-fallback":
+            print(f"      geometry           : perspective rectification "
+                  f"unavailable -- using the region's bounding rectangle")
+        if info.get("normalize_note"):
+            print(f"      geometry repair    : {info['normalize_note']}")
 
         # Two detections of one surface produce near-identical crops; keep
         # the first and drop the rest rather than syncing the same tile twice.
@@ -1319,6 +1389,8 @@ def mine_tile_regions(
             print(f"      geometry           : extracted, but duplicates an "
                   f"earlier region in this image")
             print(f"      FINAL              : REJECTED (duplicate)")
+            note("REJECTED", geometry_stage="duplicate",
+                 geometry_reason="duplicates an earlier region in this image")
             continue
         seen_signatures.add(signature)
 
@@ -1338,6 +1410,7 @@ def mine_tile_regions(
             )
         except Exception as exc:  # noqa: BLE001
             print(f"      FINAL              : REJECTED -- could not save ({exc})")
+            note("REJECTED", geometry_stage="save", geometry_reason=str(exc))
             continue
 
         # The strict gate -- and the one that actually decides ACCEPT vs
@@ -1357,18 +1430,71 @@ def mine_tile_regions(
         print(f"      region classification: {region_type} "
               f"(confidence {confidence_text})")
 
+        geometry_fields = {
+            "geometry_in": info.get("quad_in"),
+            "geometry_normalized": info.get("quad_normalized"),
+            "geometry_stage": info["stage"],
+            "surface_source": info.get("surface_source"),
+            "crop_size": list(info["crop_size"]),
+            "clean_area_fraction": info.get("clean_area_fraction"),
+            "region_type": region_type,
+            "region_confidence": region_confidence,
+        }
+
         if not approved:
             region_path.unlink(missing_ok=True)
             print(f"      region validation  : FAIL -- {reason}")
             print(f"      FINAL              : REJECTED")
+            note("REJECTED", validation="FAIL", validation_reason=reason,
+                 **geometry_fields)
             continue
 
         print(f"      region validation  : PASS -- {reason}")
         print(f"      FINAL              : ACCEPTED -> {region_path.name}")
 
+        note("ACCEPTED", validation="PASS", validation_reason=reason,
+             image_path=str(region_path),
+             product_name=metadata.get("product_name", ""),
+             **geometry_fields)
+
         accepted.append((region_path, reason, metadata))
 
     return accepted
+
+
+def append_recovered_regions(
+    recovered, extracted_images, page_number, image_counter,
+):
+    """Records validated region swatches as extraction results.
+
+    Every path that can recover a swatch -- a rejected embedded image, a
+    statistically-flagged room photo, a rendered page -- produces the same
+    (path, reason, metadata) triples and must turn them into the same
+    record shape, so they share this rather than each keeping their own
+    copy of it.
+
+    Returns the updated image_counter.
+    """
+    for region_path, _reason, region_metadata in recovered:
+        image_counter += 1
+
+        with Image.open(region_path) as region_image:
+            region_width, region_height = region_image.size
+
+        extracted_images.append(
+            {
+                "path": str(region_path),
+                "filename": region_path.name,
+                "page": page_number,
+                "image_index": image_counter,
+                "width": region_width,
+                "height": region_height,
+                "product_name": region_metadata.get("product_name", ""),
+                "size": region_metadata.get("size", ""),
+            }
+        )
+
+    return image_counter
 
 
 def load_semantic_tile_validator():
@@ -1531,6 +1657,7 @@ def extract_images_from_pdf(
     extracted_images = []
     image_counter = 0
     seen_hashes = set()
+    candidates_examined = 0
     duplicates_skipped = 0
     room_photos_skipped = 0
     semantic_rejections = 0
@@ -1553,6 +1680,14 @@ def extract_images_from_pdf(
     # pointless without one.
     region_miner = load_tile_region_miner() if semantic_validator else None
     regions_recovered = 0
+    page_render_recoveries = 0
+
+    # One entry per tile-surface candidate examined, whatever became of
+    # it. Written out at the end of the catalog so a run that recovered
+    # nothing can be diagnosed from its decisions rather than re-run under
+    # a debugger -- which geometry arrived, what it normalized to, which
+    # stage ended it, and what the region validator said.
+    region_trace = []
 
     for page_number, page in enumerate(
         document,
@@ -1564,6 +1699,11 @@ def extract_images_from_pdf(
         # image on the page (rather than once per image) avoids repeating
         # that work for a page with several tiles on it.
         text_spans = get_page_text_spans(page)
+
+        # Watermark for the page-render fallback below: if nothing is
+        # appended for this page by the embedded-image path, the page's
+        # tiles (if any) are not embedded rasters at all.
+        accepted_before_page = len(extracted_images)
 
         for image_info in page.get_images(
             full=True
@@ -1606,12 +1746,24 @@ def extract_images_from_pdf(
                     ):
                         continue
 
+                    candidates_examined += 1
+
+                    # Statistical room/lifestyle detection. Deliberately NOT
+                    # a place to stop any more: a room photo is precisely
+                    # where a tiled wall or floor lives, and that surface is
+                    # the product the catalog is selling. Skipping here threw
+                    # those away before anything had looked for them.
+                    #
+                    # What it still decides is whether the whole-image
+                    # semantic call is worth paying for. It isn't: the
+                    # statistics already say this is a scene, and asking
+                    # Gemini "is this whole photo a tile product?" would only
+                    # confirm it. So the image goes straight to the region
+                    # search below instead, which is the question that
+                    # actually matters for a scene.
                     is_room_photo, _reason = classify_image_content(
                         image_bytes, image_rect, page.rect
                     )
-                    if is_room_photo:
-                        room_photos_skipped += 1
-                        continue
 
                     # Real duplicate detection -- an exact byte hash of the
                     # rendered crop catches the same photo appearing more
@@ -1663,6 +1815,39 @@ def extract_images_from_pdf(
                         method=6,
                     )
 
+                    if is_room_photo:
+                        room_photos_skipped += 1
+
+                        print(
+                            f"  [tile-region] page {page_number} image "
+                            f"{image_counter}: reads statistically as a "
+                            f"room/lifestyle scene -- searching it for tiled "
+                            f"surfaces rather than discarding it"
+                        )
+
+                        recovered = []
+                        if region_miner is not None:
+                            recovered = mine_tile_regions(
+                                output_path,
+                                page_number,
+                                image_counter,
+                                text_spans,
+                                image_rect,
+                                semantic_validator,
+                                region_miner,
+                                output_directory,
+                                trace=region_trace,
+                            )
+
+                        output_path.unlink(missing_ok=True)
+
+                        regions_recovered += len(recovered)
+                        image_counter = append_recovered_regions(
+                            recovered, extracted_images,
+                            page_number, image_counter,
+                        )
+                        continue
+
                     # Last gate, and the only one that judges what the
                     # image actually DEPICTS rather than how its pixels are
                     # statistically distributed (classify_image_content
@@ -1713,6 +1898,7 @@ def extract_images_from_pdf(
                                 semantic_validator,
                                 region_miner,
                                 output_directory,
+                                trace=region_trace,
                             )
 
                         output_path.unlink(missing_ok=True)
@@ -1724,26 +1910,11 @@ def extract_images_from_pdf(
                             )
                             continue
 
-                        for region_path, _region_reason, region_metadata in recovered:
-                            image_counter += 1
-                            regions_recovered += 1
-
-                            with Image.open(region_path) as region_image:
-                                region_width, region_height = region_image.size
-
-                            extracted_images.append(
-                                {
-                                    "path": str(region_path),
-                                    "filename": region_path.name,
-                                    "page": page_number,
-                                    "image_index": image_counter,
-                                    "width": region_width,
-                                    "height": region_height,
-                                    "product_name": region_metadata.get("product_name", ""),
-                                    "size": region_metadata.get("size", ""),
-                                }
-                            )
-
+                        regions_recovered += len(recovered)
+                        image_counter = append_recovered_regions(
+                            recovered, extracted_images,
+                            page_number, image_counter,
+                        )
                         continue
 
                     # validate_and_correct_tile_image may have cropped the
@@ -1778,22 +1949,90 @@ def extract_images_from_pdf(
                         f"{pdf_path.name}: {exc}"
                     )
 
+        # ----------------------------------------------------------
+        # Page-render fallback.
+        #
+        # Everything above reads page.get_images() -- the PDF's embedded
+        # raster resources. Plenty of catalogs do not put their tiles
+        # there: the swatch is vector artwork, or a composed layout of
+        # clipped graphics, or a shape filled with a pattern. For those
+        # pages get_images() returns nothing (or nothing usable) and the
+        # tile is never even looked at, however clearly it is printed.
+        #
+        # So when a page yields no accepted tile, rasterize the page
+        # itself and put THAT through the same region detection and the
+        # same strict per-region validation. Nothing is loosened: a
+        # rendered page is simply another image to search, and every
+        # swatch cut out of it must still independently pass the
+        # validator before it can become a Tile row.
+        # ----------------------------------------------------------
+        if (
+            region_miner is not None
+            and len(extracted_images) == accepted_before_page
+            and page_has_visual_content(page)
+        ):
+            render_path = (
+                output_directory
+                / f"{pdf_path.stem}_page_{page_number}_render.webp"
+            )
+
+            try:
+                page_bytes, page_width, page_height = render_image_crop(
+                    page, page.rect, dpi=PAGE_RENDER_DPI,
+                )
+
+                with Image.open(BytesIO(page_bytes)) as rendered:
+                    rendered.convert("RGB").save(
+                        render_path, "WEBP",
+                        quality=IMAGE_QUALITY, method=6,
+                    )
+
+                print(
+                    f"  [page-render] page {page_number}: no tile from "
+                    f"embedded images -- searching the rendered page "
+                    f"({page_width}x{page_height} @ {PAGE_RENDER_DPI}dpi)"
+                )
+
+                recovered = mine_tile_regions(
+                    render_path,
+                    page_number,
+                    0,
+                    text_spans,
+                    page.rect,
+                    semantic_validator,
+                    region_miner,
+                    output_directory,
+                    source_type="rendered-page",
+                    trace=region_trace,
+                )
+
+                regions_recovered += len(recovered)
+                page_render_recoveries += len(recovered)
+                image_counter = append_recovered_regions(
+                    recovered, extracted_images, page_number, image_counter,
+                )
+
+            except Exception as exc:  # noqa: BLE001 -- a fallback must never abort the run
+                print(
+                    f"  [page-render] page {page_number} failed: {exc}"
+                )
+
+            finally:
+                # The full-page render is scaffolding, never a product
+                # image -- only the validated regions cut from it survive.
+                render_path.unlink(missing_ok=True)
+
     document.close()
 
-    total_candidates = (
-        len(extracted_images)
-        + duplicates_skipped
-        + room_photos_skipped
-        + semantic_rejections
-    )
-
     print("")
-    print(f"Total PDF images discovered : {total_candidates}")
+    print(f"Total PDF images discovered : {candidates_examined}")
     print(f"Duplicates skipped          : {duplicates_skipped}")
-    print(f"Room/lifestyle (statistical): {room_photos_skipped}")
+    print(f"Room/lifestyle -> mined     : {room_photos_skipped}")
     print(f"Rejected by tile validation : {semantic_rejections}")
     if region_miner is not None:
         print(f"Tile regions recovered      : {regions_recovered}")
+        print(f"  from embedded images      : {regions_recovered - page_render_recoveries}")
+        print(f"  from rendered pages       : {page_render_recoveries}")
     print(f"Accepted tile images        : {len(extracted_images)}")
 
     if rejection_categories:
@@ -1810,6 +2049,31 @@ def extract_images_from_pdf(
         print("Accepted tile images:")
         for accepted in extracted_images:
             print(f"  {accepted['filename']}")
+
+    if region_trace:
+        report_path = output_directory / f"{pdf_path.stem}_extraction_report.json"
+        try:
+            report_path.write_text(
+                json.dumps(
+                    {
+                        "catalog": pdf_path.name,
+                        "images_discovered": candidates_examined,
+                        "candidates": len(region_trace),
+                        "accepted": len(extracted_images),
+                        "regions_recovered": regions_recovered,
+                        "from_rendered_pages": page_render_recoveries,
+                        "duplicates_skipped": duplicates_skipped,
+                        "rejected_by_validation": semantic_rejections,
+                        "trace": region_trace,
+                    },
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+            print("")
+            print(f"Extraction report           : {report_path}")
+        except OSError as exc:
+            print(f"  [report] could not write {report_path}: {exc}")
 
     if semantic_validator is None and not extracted_images and semantic_rejections > 0:
         print(
@@ -2320,6 +2584,26 @@ def process_drive(
     print(
         f"Sheet ID  : {GOOGLE_SHEET_ID}"
     )
+
+    # Checked HERE, before a single page is read, rather than being
+    # discovered one 403 at a time somewhere in the middle of the first
+    # catalog. A misconfigured key does not stop the run -- Drive and
+    # MASTER still work, and the products left unmarked are retried on the
+    # next run once the key is fixed -- but the operator is told up front
+    # which side is wrong, instead of after dozens of uploads.
+    sync_ok, sync_detail = preflight_internal_sync()
+    print("")
+    if sync_ok:
+        print(f"Tile sync : {sync_detail}")
+    else:
+        print(sync_detail)
+        print("")
+        print(
+            "  Extraction will continue: images and MASTER rows are "
+            "unaffected, and every product\n"
+            "  whose Tile row fails is left unmarked so the next run "
+            "retries it automatically."
+        )
 
     # --------------------------------------------------------
     # Initialize local duplicate database
