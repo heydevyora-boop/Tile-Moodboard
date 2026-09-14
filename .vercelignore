@@ -1,0 +1,52 @@
+# Files excluded from the Vercel deployment upload.
+#
+# Scope note: .vercelignore is DEPLOYMENT-WIDE, not per-function. Anything
+# listed here disappears from every build in vercel.json, so only genuinely
+# unused files belong in it.
+#
+# frontend/ is deliberately NOT listed. It is 31 MB and is not needed by the
+# Python function, but vercel.json builds it with @vercel/static and the
+# `filesystem` route serves it -- excluding it would remove the site's UI
+# from the deployment.
+
+# Python bytecode caches
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Local virtual environments
+.venv/
+**/.venv/
+venv/
+**/venv/
+
+# Node dependencies -- Vercel installs these itself during the build
+node_modules/
+**/node_modules/
+
+# Local SQLite state for the pen-drive pipeline. initialize_database() is
+# called only from the CLI --pipeline path (main_step6_complete.py:1933),
+# never at import time, so the deployed function never reads these.
+*.db
+*.sqlite
+*.sqlite3
+
+# Pen-drive pipeline output, written locally at extraction time
+catalog_processor/output/
+
+# Tests and dev-only scripts. Verified that no production module imports any
+# of these: nothing under app/ or main_step6_complete.py imports a test_*
+# module.
+**/test_*.py
+**/*_test.py
+catalog_processor/v2_test.py
+catalog_processor/test_gemini.jpg
+catalog_processor/diagnose_sheet_write.py
+catalog_processor/extract_page.py
+catalog_processor/usb_agent.py
+backend/test-scripts/
+
+# Local build/run artifacts
+.vercel

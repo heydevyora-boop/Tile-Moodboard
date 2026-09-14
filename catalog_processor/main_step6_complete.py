@@ -968,11 +968,13 @@ def classify_image_content(image_bytes, image_rect, page_rect):
 # catalog (not per image) inside extract_images_from_pdf instead.
 # ---------------------------------------------------------------------------
 
-# Scoped ONLY to pick the correction crop's target ratio -- never written to
-# MASTER, the Tile table, or any product metadata field. The authoritative
-# Dimensions value is still produced entirely by the existing, untouched
-# classification pass; this is a purely internal, throwaway signal, same
-# technique as the approved backend/python/extract.py implementation.
+# Picks the correction crop's target ratio, and is also reported upward as
+# the product's detected size so the synced Tile row is not left with a NULL
+# size (an unclassified tile scores far below a classified one when mood
+# board candidates are ranked). Never written to MASTER: the authoritative
+# Dimensions value there is still produced entirely by the existing,
+# untouched classification pass. Same technique as the approved
+# backend/python/extract.py implementation.
 SIZE_TEXT_PATTERN = re.compile(r'(\d{2,4})\s*[xX×]\s*(\d{2,4})\s*(mm|cm)?', re.IGNORECASE)
 
 MAX_LABEL_DISTANCE_PT = 260  # generous enough for a title above / spec line below a photo
@@ -1130,6 +1132,52 @@ def crop_image_to_validated_bbox(image, bbox):
     return image.crop((x1, y1, x2, y2))
 
 
+# Buckets a validator rejection reason into one of the operator-facing
+# categories, purely for the end-of-catalog report. Ordered most specific
+# first: an "installed in a bathroom" reason should read as an installation,
+# not as a room photo. Never changes a decision -- only how it is described.
+REJECTION_CATEGORIES = (
+    ("installed wall/floor scene", (
+        "installed", "installation", "wall scene", "floor scene",
+        "mounted", "applied to", "in situ",
+    )),
+    ("bathroom/room/lifestyle image", (
+        "bathroom", "kitchen", "bedroom", "living", "room interior",
+        "lifestyle", "interior", "restaurant", "cafe", "architectural",
+        "render", "scene",
+    )),
+    ("sanitaryware/fitting, not a tile", (
+        "basin", "toilet", "wc", "urinal", "bathtub", "shower", "faucet",
+        "tap", "mixer", "sanitaryware", "mirror", "fitting", "accessory",
+    )),
+    ("furniture", ("furniture", "sofa", "cabinet", "table", "chair")),
+    ("decorative artwork/mosaic", (
+        "artwork", "mosaic", "decorative", "mural", "collage",
+    )),
+    ("human/face", ("human", "face", "person", "people", "model")),
+    ("logo/text/marketing graphic", (
+        "logo", "banner", "advertisement", "text graphic", "graphic",
+        "brand mark", "colour chart", "color chart", "palette",
+    )),
+    ("multiple products in one image", (
+        "multiple", "more than one", "several products", "product_count",
+    )),
+    ("validation could not run", (
+        "gemini_api_key", "validation unavailable", "validation failed",
+        "needs review", "quota",
+    )),
+)
+
+
+def categorize_rejection(reason):
+    """Maps a free-text rejection reason onto a short operator-facing label."""
+    lowered = str(reason or "").lower()
+    for label, keywords in REJECTION_CATEGORIES:
+        if any(keyword in lowered for keyword in keywords):
+            return label
+    return "not a standalone tile"
+
+
 def load_semantic_tile_validator():
     """Lazily imports the approved Gemini tile-vs-room validator.
 
@@ -1149,7 +1197,11 @@ def load_semantic_tile_validator():
 def validate_and_correct_tile_image(output_path, image_rect, text_spans, semantic_validator):
     """Gates and corrects ONE already-saved candidate image in place.
 
-    Returns (approved, reason). On rejection the caller deletes output_path
+    Returns (approved, reason, metadata). metadata carries the values this
+    function already derives on the way through -- the Gemini-reported
+    product name and the size text detected next to the image -- so the
+    caller can attach them to the synced Tile row instead of discarding
+    them; it is always {} on rejection. On rejection the caller deletes output_path
     and skips this candidate -- the fail-closed posture already approved
     for the UI-upload path: a candidate that cannot be positively confirmed
     as the real product is never kept, including when validation itself
@@ -1159,7 +1211,7 @@ def validate_and_correct_tile_image(output_path, image_rect, text_spans, semanti
     missing one.
     """
     if semantic_validator is None:
-        return False, 'semantic validation unavailable (GEMINI_API_KEY not configured) -- needs review'
+        return False, 'semantic validation unavailable (GEMINI_API_KEY not configured) -- needs review', {}
 
     analyze_product_image, validate_product_decision, validate_bbox = semantic_validator
 
@@ -1168,7 +1220,7 @@ def validate_and_correct_tile_image(output_path, image_rect, text_spans, semanti
     try:
         gemini_result = analyze_product_image(str(output_path), page_text=nearby_text)
     except Exception as exc:  # noqa: BLE001 -- never fail open, see docstring
-        return False, f'Gemini validation failed ({exc}) -- needs review'
+        return False, f'Gemini validation failed ({exc}) -- needs review', {}
 
     # cv_score is accepted by validate_product_decision for signature
     # compatibility with its other caller (catalog_pipeline.py) but is not
@@ -1179,7 +1231,7 @@ def validate_and_correct_tile_image(output_path, image_rect, text_spans, semanti
     # only add a silent-failure risk for a value that is discarded anyway.
     decision = validate_product_decision(None, gemini_result)
     if decision.get('decision') != 'APPROVED':
-        return False, decision.get('reason') or 'not approved as a standalone tile product'
+        return False, decision.get('reason') or 'not approved as a standalone tile product', {}
 
     with Image.open(output_path) as opened:
         opened.load()
@@ -1190,13 +1242,19 @@ def validate_and_correct_tile_image(output_path, image_rect, text_spans, semanti
             if bbox_check.get('valid'):
                 image = crop_image_to_validated_bbox(image, bbox_check['bbox'])
 
-        target_ratio = parse_product_aspect_ratio(detect_nearby_size_text(nearby_text))
+        detected_size = detect_nearby_size_text(nearby_text)
+        target_ratio = parse_product_aspect_ratio(detected_size)
         if target_ratio:
             image = crop_image_to_aspect_ratio(image, target_ratio)
 
         image.save(output_path, 'WEBP', quality=IMAGE_QUALITY, method=6)
 
-    return True, decision.get('reason') or ''
+    metadata = {
+        'product_name': (gemini_result.product_name or '').strip(),
+        'size': detected_size or '',
+    }
+
+    return True, decision.get('reason') or '', metadata
 
 
 def find_repeating_template_rects(document):
@@ -1271,6 +1329,7 @@ def extract_images_from_pdf(
     duplicates_skipped = 0
     room_photos_skipped = 0
     semantic_rejections = 0
+    rejection_categories = {}
 
     # Loaded once per PDF, not per image/page -- see the note on
     # load_semantic_tile_validator(). None means validation could not be
@@ -1400,15 +1459,20 @@ def extract_images_from_pdf(
                     # above) -- see validate_and_correct_tile_image. Also
                     # applies the product aspect-ratio correction in place
                     # on the same saved file when approved.
-                    approved, validation_reason = validate_and_correct_tile_image(
+                    approved, validation_reason, tile_metadata = validate_and_correct_tile_image(
                         output_path, image_rect, text_spans, semantic_validator,
                     )
                     if not approved:
                         semantic_rejections += 1
+                        category = categorize_rejection(validation_reason)
+                        rejection_categories[category] = (
+                            rejection_categories.get(category, 0) + 1
+                        )
                         output_path.unlink(missing_ok=True)
                         print(
-                            f"  [tile-validation] SKIPPED page {page_number} "
-                            f"image {image_counter}: {validation_reason}"
+                            f"  REJECTED -- {category} "
+                            f"(page {page_number} image {image_counter}): "
+                            f"{validation_reason}"
                         )
                         continue
 
@@ -1429,6 +1493,11 @@ def extract_images_from_pdf(
                             ),
                             "width": width,
                             "height": height,
+                            # Carried purely so the backend sync below can
+                            # fill these columns on the Tile row; both are
+                            # already-derived values, and either may be "".
+                            "product_name": tile_metadata.get("product_name", ""),
+                            "size": tile_metadata.get("size", ""),
                         }
                     )
 
@@ -1441,11 +1510,34 @@ def extract_images_from_pdf(
 
     document.close()
 
-    print(
-        f"Extracted {len(extracted_images)} image(s), skipped {duplicates_skipped} "
-        f"duplicate(s), {room_photos_skipped} room/lifestyle photo(s) (statistical), "
-        f"and {semantic_rejections} rejected by tile-only validation"
+    total_candidates = (
+        len(extracted_images)
+        + duplicates_skipped
+        + room_photos_skipped
+        + semantic_rejections
     )
+
+    print("")
+    print(f"Total PDF images discovered : {total_candidates}")
+    print(f"Duplicates skipped          : {duplicates_skipped}")
+    print(f"Room/lifestyle (statistical): {room_photos_skipped}")
+    print(f"Rejected by tile validation : {semantic_rejections}")
+    print(f"Accepted tile images        : {len(extracted_images)}")
+
+    if rejection_categories:
+        print("")
+        print("Rejected by category:")
+        for label, count in sorted(
+            rejection_categories.items(),
+            key=lambda item: (-item[1], item[0]),
+        ):
+            print(f"  {count:4d}  REJECTED -- {label}")
+
+    if extracted_images:
+        print("")
+        print("Accepted tile images:")
+        for accepted in extracted_images:
+            print(f"  {accepted['filename']}")
 
     if semantic_validator is None and not extracted_images and semantic_rejections > 0:
         print(
@@ -1645,12 +1737,14 @@ def process_pdf(
     # 7. Upload each extracted image and add Product row
     # --------------------------------------------------------
 
-    uploaded_count = 0
+    uploaded_count = 0        # completed the FULL chain incl. Tile row
+    drive_uploaded_count = 0  # reached Google Drive
+    master_row_count = 0      # reached the MASTER sheet
     skipped_count = 0
     sheet_failed_count = 0
     sync_failed_count = 0
 
-    for image in images:
+    for position, image in enumerate(images, start=1):
 
         product_id = make_product_id(
             brand,
@@ -1699,8 +1793,8 @@ def process_pdf(
             continue
 
         print(
-            f"Uploading "
-            f"{image['image_index']}/"
+            f"Uploading tile "
+            f"{position}/"
             f"{len(images)}: "
             f"{image['filename']}"
         )
@@ -1715,6 +1809,8 @@ def process_pdf(
             "webViewLink",
             "",
         )
+
+        drive_uploaded_count += 1
 
         # Product data intentionally remains
         # unclassified at this extraction stage.
@@ -1756,6 +1852,8 @@ def process_pdf(
 
             continue
 
+        master_row_count += 1
+
         # The MASTER row exists now. Mirror it into the Node backend's
         # Tile table so this product is actually selectable when
         # combinations are generated -- that generator reads only from
@@ -1764,10 +1862,19 @@ def process_pdf(
         #
         # Deliberately best-effort and AFTER the sheet write: it must
         # never abort a catalog whose row and image already landed.
+        # The optional fields are the ones already derived during
+        # extraction. Without them the Tile row lands with size/collection
+        # NULL, which makes it score far below an older classified tile
+        # when mood board candidates are ranked. backend_sync drops any of
+        # these that is blank, so a product whose size text or name could
+        # not be read syncs exactly as it does today.
         synced = sync_master_product_to_backend(
             product_code=product_id,
             brand=brand,
+            product_name=image.get("product_name", ""),
             image_url=drive_url,
+            size=image.get("size", ""),
+            collection=catalog,
         )
 
         # Same rule the sheet write above follows, for the same reason: a
@@ -1786,9 +1893,20 @@ def process_pdf(
             sync_failed_count += 1
 
             print(
-                f"BACKEND SYNC FAILED for {product_id} "
-                f"(image in Drive, MASTER row written, Tile row NOT "
-                f"created, will retry next run)"
+                f"  {product_id}"
+            )
+            print(
+                f"    Drive upload : SUCCESS"
+            )
+            print(
+                f"    MASTER row   : SUCCESS"
+            )
+            print(
+                f"    Tile row     : FAILED -- see the [backend_sync] line "
+                f"above for the reason"
+            )
+            print(
+                f"    Not marked processed, so the next run retries it."
             )
 
             continue
@@ -1802,38 +1920,66 @@ def process_pdf(
 
     print("")
 
+    # Reported per STAGE rather than as one "uploaded" number. A run where
+    # every image reached Drive and MASTER but no Tile row was created is a
+    # partial failure, and saying so plainly is the only way the operator
+    # can tell it apart from a clean run.
     print(
-        f"Images extracted : {len(images)}"
+        f"Accepted tile images : {len(images)}"
     )
 
     print(
-        f"Images uploaded  : {uploaded_count}"
+        f"Already processed    : {skipped_count}"
     )
 
     print(
-        f"Images skipped   : {skipped_count}"
+        f"Uploaded to Drive    : {drive_uploaded_count}"
     )
 
     print(
-        f"Sheet failures   : {sheet_failed_count}"
+        f"MASTER rows written  : {master_row_count}"
     )
 
     print(
-        f"Backend sync fail: {sync_failed_count}"
+        f"Tile rows created    : {uploaded_count}"
     )
+
+    print(
+        f"Sheet failures       : {sheet_failed_count}"
+    )
+
+    print(
+        f"Backend sync failures: {sync_failed_count}"
+    )
+
+    if uploaded_count:
+        print("")
+        print("Tile rows created for:")
+        for image in images:
+            print(f"  {image['filename']}")
 
     # A run where every product reached Drive and MASTER but none reached
     # Postgres otherwise looks like a complete success -- the mood board
     # simply never shows the new tiles, with nothing in the output saying
     # why. Called out explicitly instead.
-    if sync_failed_count and not uploaded_count:
+    if sync_failed_count:
         print("")
         print(
-            "ERROR -- no product from this catalog reached the backend Tile "
-            "table, so none of them can appear in a mood board. Check that "
-            "INTERNAL_SYNC_API_KEY is set (it is blank by default) and that "
-            "BACKEND_SYNC_URL points at the deployed backend rather than the "
-            "default localhost:5000."
+            f"WARNING -- {sync_failed_count} product(s) reached Drive and MASTER "
+            f"but did NOT get a Tile row, so they cannot appear in a mood "
+            f"board. They are deliberately left unmarked and will be retried "
+            f"on the next run."
+        )
+        print(
+            "  If the reason above is 'Internal sync is not configured on this "
+            "server (INTERNAL_SYNC_API_KEY is unset)', the key is missing on "
+            "the BACKEND, not here -- this extractor did send one. Set "
+            "INTERNAL_SYNC_API_KEY to the same value in the backend's "
+            "environment and in catalog_processor/.env."
+        )
+        print(
+            "  Also confirm BACKEND_SYNC_URL points at the backend you mean "
+            "(it defaults to http://localhost:5000/...)."
         )
 
     return {
@@ -1843,8 +1989,11 @@ def process_pdf(
         "pages": len(pages),
         "images": len(images),
         "uploaded": uploaded_count,
+        "drive_uploaded": drive_uploaded_count,
+        "master_rows": master_row_count,
         "skipped": skipped_count,
         "sheet_failed": sheet_failed_count,
+        "sync_failed": sync_failed_count,
     }
 
 
