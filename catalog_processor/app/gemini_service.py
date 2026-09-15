@@ -1823,6 +1823,8 @@ def detect_tile_regions(image_path, width, height):
         return []
 
     regions = []
+    below_threshold = []
+    unusable_geometry = 0
 
     for raw in (payload or {}).get("regions", []) or []:
         if not isinstance(raw, dict):
@@ -1834,10 +1836,12 @@ def detect_tile_regions(image_path, width, height):
             confidence = 0.0
 
         if confidence < TILE_REGION_MIN_CONFIDENCE:
+            below_threshold.append(confidence)
             continue
 
         corners = _raw_corners(raw.get("quad"))
         if corners is None:
+            unusable_geometry += 1
             continue
 
         # Resolved once from the quad and reused for the occluders, so both
@@ -1861,6 +1865,24 @@ def detect_tile_regions(image_path, width, height):
         })
 
     regions.sort(key=lambda region: region["confidence"], reverse=True)
+
+    # Surfaces the detector DID see and this function then discarded.
+    # Silently dropping them makes a thresholding decision look exactly
+    # like "the model saw nothing", which is the difference between
+    # "tune the floor" and "the tile is not being detected at all".
+    if below_threshold:
+        print(
+            f"  [tile-region] {len(below_threshold)} surface(s) seen but "
+            f"below the {TILE_REGION_MIN_CONFIDENCE} confidence floor "
+            f"(highest {max(below_threshold):.2f}) -- discarded before "
+            f"extraction"
+        )
+
+    if unusable_geometry:
+        print(
+            f"  [tile-region] {unusable_geometry} surface(s) discarded "
+            f"because their quad could not be read"
+        )
 
     return regions[:TILE_REGION_MAX]
 

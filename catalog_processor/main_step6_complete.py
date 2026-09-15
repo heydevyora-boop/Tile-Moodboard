@@ -1316,20 +1316,51 @@ def mine_tile_regions(
 
     detect_tile_regions, extract_tile_region = region_miner
 
+    # Every exit from here to the candidate loop used to be silent, and
+    # they do NOT mean the same thing. "The detector looked and there is
+    # no tile on this page" and "the detector never ran" produce
+    # identical output -- nothing at all -- so a run cannot be read to
+    # tell a missed tile from an unexamined page. Each now says which
+    # it was.
+    where = f"page {page_number} image {image_counter}"
+
     try:
         with Image.open(output_path) as probe:
             width, height = probe.size
-    except Exception:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
+        print(f"  [tile-region] {where}: NOT SEARCHED -- the image could "
+              f"not be opened ({exc})")
         return [], []
 
     try:
         regions = detect_tile_regions(str(output_path), width, height)
     except Exception as exc:  # noqa: BLE001 -- never break extraction over this
-        print(f"  [tile-region] detection failed on page {page_number} "
-              f"image {image_counter}: {exc}")
+        print(f"  [tile-region] {where}: NOT SEARCHED -- detection failed "
+              f"({exc})")
         return [], []
 
     if not regions:
+        try:
+            from app.gemini_service import is_quota_exhausted
+            quota_gone = is_quota_exhausted()
+        except Exception:  # noqa: BLE001
+            quota_gone = False
+
+        if quota_gone:
+            # The decisive case, and the one that reads as "no tile
+            # here" when it is nothing of the sort. Once the quota flag
+            # trips, _generate_content_safe returns None before making
+            # any request, detect_tile_regions turns that into [], and
+            # every page afterwards looks exactly like a page with no
+            # tile on it. A run of consecutive empty pages is far more
+            # likely to be this than a catalog that stopped showing
+            # tiles halfway through.
+            print(f"  [tile-region] {where}: NOT SEARCHED -- Gemini quota "
+                  f"is exhausted, so region detection never ran. This page "
+                  f"has NOT been judged and is NOT 'no tile found'.")
+        else:
+            print(f"  [tile-region] {where}: searched, and the detector "
+                  f"reported no tiled surface in it")
         return [], []
 
     print(f"  [tile-region] page {page_number} image {image_counter}: "
@@ -1351,6 +1382,12 @@ def mine_tile_regions(
 
     image_bgr = cv2.imread(str(output_path), cv2.IMREAD_COLOR)
     if image_bgr is None:
+        # Reached only after the detector found surfaces, so this is
+        # tile that was located and then lost to a decode failure --
+        # worth saying loudly rather than dropping.
+        print(f"  [tile-region] {where}: {len(regions)} surface(s) were "
+              f"found but OpenCV could not decode {output_path.name} to "
+              f"crop them")
         return [], []
 
     source_height, source_width = image_bgr.shape[:2]
