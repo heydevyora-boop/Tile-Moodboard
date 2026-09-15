@@ -1636,6 +1636,12 @@ def mine_tile_regions(
                         validate_and_correct_tile_image(
                             piece_path, image_rect, text_spans,
                             semantic_validator, purity_is_authoritative=True,
+                            # What the whole candidate was judged to be,
+                            # a moment ago, on these same pixels. A
+                            # piece that cannot tell what it is inherits
+                            # that; a piece that positively identifies
+                            # something else does not.
+                            parent_purity=observation,
                         )
                     )
 
@@ -1763,8 +1769,32 @@ def defer_for_revalidation(
     return destination
 
 
+def notify_tile(on_tile, record):
+    """Hands one finished tile straight to the caller's persistence step.
+
+    This is what makes the run incremental: the tile is uploaded and
+    recorded now, not after the whole catalog has been read, so work
+    already done survives a crash later in the PDF.
+
+    A persistence failure must never abort extraction -- the remaining
+    pages still deserve to be searched -- so it is reported and the run
+    continues. The tile stays in the returned list either way, and
+    nothing was marked processed, so a re-run retries it.
+    """
+    if on_tile is None:
+        return
+
+    try:
+        on_tile(record)
+    except Exception as exc:  # noqa: BLE001 -- see docstring
+        print(
+            f"  [persist] immediate upload/record failed for "
+            f"{record.get('filename', '?')}: {exc}"
+        )
+
+
 def append_recovered_regions(
-    recovered, extracted_images, page_number, image_counter,
+    recovered, extracted_images, page_number, image_counter, on_tile=None,
 ):
     """Records validated region swatches as extraction results.
 
@@ -1782,18 +1812,19 @@ def append_recovered_regions(
         with Image.open(region_path) as region_image:
             region_width, region_height = region_image.size
 
-        extracted_images.append(
-            {
-                "path": str(region_path),
-                "filename": region_path.name,
-                "page": page_number,
-                "image_index": image_counter,
-                "width": region_width,
-                "height": region_height,
-                "product_name": region_metadata.get("product_name", ""),
-                "size": region_metadata.get("size", ""),
-            }
-        )
+        record = {
+            "path": str(region_path),
+            "filename": region_path.name,
+            "page": page_number,
+            "image_index": image_counter,
+            "width": region_width,
+            "height": region_height,
+            "product_name": region_metadata.get("product_name", ""),
+            "size": region_metadata.get("size", ""),
+        }
+
+        extracted_images.append(record)
+        notify_tile(on_tile, record)
 
     return image_counter
 
@@ -1856,7 +1887,7 @@ def load_tile_purity_verifier():
 
 def validate_and_correct_tile_image(
     output_path, image_rect, text_spans, semantic_validator,
-    purity_is_authoritative=False,
+    purity_is_authoritative=False, parent_purity=None,
 ):
     """Gates and corrects ONE already-saved candidate image in place.
 
@@ -2022,7 +2053,7 @@ def validate_and_correct_tile_image(
             metadata,
         )
 
-    purity = assess_tile_purity(observation)
+    purity = assess_tile_purity(observation, parent=parent_purity)
     metadata['purity'] = observation
     metadata['purity_state'] = purity['state']
 
@@ -2093,7 +2124,15 @@ def find_repeating_template_rects(document):
 def extract_images_from_pdf(
     pdf_path,
     output_directory,
+    on_tile=None,
 ):
+    """Extracts validated tile-only images from one catalog PDF.
+
+    `on_tile` is called with each finished tile record the moment it is
+    accepted, so the caller can upload and record it immediately rather
+    than waiting for the whole PDF. Extraction does not depend on what
+    it does; a failure there is reported and the search continues.
+    """
     document = fitz.open(
         pdf_path
     )
@@ -2314,7 +2353,7 @@ def extract_images_from_pdf(
                         regions_recovered += len(recovered)
                         image_counter = append_recovered_regions(
                             recovered, extracted_images,
-                            page_number, image_counter,
+                            page_number, image_counter, on_tile,
                         )
                         continue
 
@@ -2447,7 +2486,7 @@ def extract_images_from_pdf(
                         regions_recovered += len(recovered)
                         image_counter = append_recovered_regions(
                             recovered, extracted_images,
-                            page_number, image_counter,
+                            page_number, image_counter, on_tile,
                         )
                         continue
 
@@ -2458,23 +2497,24 @@ def extract_images_from_pdf(
                     with Image.open(output_path) as corrected:
                         width, height = corrected.size
 
-                    extracted_images.append(
-                        {
-                            "page": page_number,
-                            "image_index": image_counter,
-                            "filename": output_filename,
-                            "path": str(
-                                output_path
-                            ),
-                            "width": width,
-                            "height": height,
-                            # Carried purely so the backend sync below can
-                            # fill these columns on the Tile row; both are
-                            # already-derived values, and either may be "".
-                            "product_name": tile_metadata.get("product_name", ""),
-                            "size": tile_metadata.get("size", ""),
-                        }
-                    )
+                    record = {
+                        "page": page_number,
+                        "image_index": image_counter,
+                        "filename": output_filename,
+                        "path": str(
+                            output_path
+                        ),
+                        "width": width,
+                        "height": height,
+                        # Carried purely so the backend sync below can
+                        # fill these columns on the Tile row; both are
+                        # already-derived values, and either may be "".
+                        "product_name": tile_metadata.get("product_name", ""),
+                        "size": tile_metadata.get("size", ""),
+                    }
+
+                    extracted_images.append(record)
+                    notify_tile(on_tile, record)
 
                 except Exception as exc:
 
@@ -2552,6 +2592,7 @@ def extract_images_from_pdf(
                 page_render_recoveries += len(recovered)
                 image_counter = append_recovered_regions(
                     recovered, extracted_images, page_number, image_counter,
+                    on_tile,
                 )
 
             except Exception as exc:  # noqa: BLE001 -- a fallback must never abort the run
@@ -2752,56 +2793,12 @@ def process_pdf(
             )
 
     # --------------------------------------------------------
-    # 2. Extract images
-    # --------------------------------------------------------
-
-    images = extract_images_from_pdf(
-        pdf_path,
-        images_directory,
-    )
-
-    # --------------------------------------------------------
-    # 3. Save image information locally
-    # --------------------------------------------------------
-
-    image_csv = (
-        catalog_output_directory
-        / "images.csv"
-    )
-
-    with open(
-        image_csv,
-        "w",
-        newline="",
-        encoding="utf-8",
-    ) as f:
-
-        writer = csv.writer(f)
-
-        writer.writerow(
-            [
-                "page",
-                "image_index",
-                "filename",
-                "width",
-                "height",
-            ]
-        )
-
-        for image in images:
-
-            writer.writerow(
-                [
-                    image["page"],
-                    image["image_index"],
-                    image["filename"],
-                    image["width"],
-                    image["height"],
-                ]
-            )
-
-    # --------------------------------------------------------
-    # 4. Create/find Brand folder in Google Drive
+    # 2. Create/find Brand folder in Google Drive
+    #
+    # The Drive and Sheets destinations are prepared BEFORE any
+    # extraction, because each tile is now uploaded the moment it is
+    # found. Previously this ran after the whole PDF had been read,
+    # which is precisely why nothing survived a crash mid-catalog.
     # --------------------------------------------------------
 
     brand_folder_id = (
@@ -2816,7 +2813,7 @@ def process_pdf(
     )
 
     # --------------------------------------------------------
-    # 5. Create/find Catalog folder inside Brand
+    # 3. Create/find Catalog folder inside Brand
     # --------------------------------------------------------
 
     catalog_folder_id = (
@@ -2828,7 +2825,7 @@ def process_pdf(
     )
 
     # --------------------------------------------------------
-    # 6. Register Brand and Catalog
+    # 4. Register Brand and Catalog
     # --------------------------------------------------------
 
     brand_id = (
@@ -2860,7 +2857,7 @@ def process_pdf(
     )
 
     # --------------------------------------------------------
-    # 7. Upload each extracted image and add Product row
+    # 5. Per-tile persistence, called during extraction
     # --------------------------------------------------------
 
     uploaded_count = 0        # completed the FULL chain incl. Tile row
@@ -2870,7 +2867,23 @@ def process_pdf(
     sheet_failed_count = 0
     sync_failed_count = 0
 
-    for position, image in enumerate(images, start=1):
+    persisted = 0
+
+    def persist_tile(image):
+        """Uploads ONE finished tile and records it, immediately.
+
+        Called by extract_images_from_pdf the moment a tile passes
+        validation, so each tile reaches Drive and MASTER before the
+        next candidate is looked at. Previously this ran as a loop
+        after the whole PDF had been extracted, so a crash anywhere
+        in extraction meant nothing at all had been uploaded.
+        """
+        nonlocal uploaded_count, drive_uploaded_count, master_row_count
+        nonlocal skipped_count, sheet_failed_count, sync_failed_count
+        nonlocal persisted
+
+        persisted += 1
+        position = persisted
 
         product_id = make_product_id(
             brand,
@@ -2916,12 +2929,13 @@ def process_pdf(
             )
 
             skipped_count += 1
-            continue
+            return
 
+        # A running count, not "n of N": the total is not known while
+        # tiles are still being found, and printing a denominator that
+        # kept growing is what produced the old "Uploading tile 24/23".
         print(
-            f"Uploading tile "
-            f"{position}/"
-            f"{len(images)}: "
+            f"[DRIVE UPLOAD] started  tile {position}: "
             f"{image['filename']}"
         )
 
@@ -2937,6 +2951,11 @@ def process_pdf(
         )
 
         drive_uploaded_count += 1
+
+        print(
+            f"[DRIVE UPLOAD] success  {image['filename']} -> "
+            f"{uploaded.get('id', '?')}"
+        )
 
         # Product data intentionally remains
         # unclassified at this extraction stage.
@@ -2976,9 +2995,11 @@ def process_pdf(
                 f"will retry next run): {exc}"
             )
 
-            continue
+            return
 
         master_row_count += 1
+
+        print(f"[SHEETS] metadata saved  {product_id}  {drive_url}")
 
         # The MASTER row exists now. Mirror it into the Node backend's
         # Tile table so this product is actually selectable when
@@ -3035,7 +3056,7 @@ def process_pdf(
                 f"    Not marked processed, so the next run retries it."
             )
 
-            continue
+            return
 
         mark_processed(
             file_hash=file_hash,
@@ -3051,6 +3072,57 @@ def process_pdf(
         print(f"    Tile row     : SUCCESS")
 
         uploaded_count += 1
+
+    # --------------------------------------------------------
+    # 6. Extract images -- each accepted tile is uploaded and
+    #    recorded immediately, through persist_tile above
+    # --------------------------------------------------------
+
+    images = extract_images_from_pdf(
+        pdf_path,
+        images_directory,
+        on_tile=persist_tile,
+    )
+
+    # --------------------------------------------------------
+    # 7. Save image information locally
+    # --------------------------------------------------------
+
+    image_csv = (
+        catalog_output_directory
+        / "images.csv"
+    )
+
+    with open(
+        image_csv,
+        "w",
+        newline="",
+        encoding="utf-8",
+    ) as f:
+
+        writer = csv.writer(f)
+
+        writer.writerow(
+            [
+                "page",
+                "image_index",
+                "filename",
+                "width",
+                "height",
+            ]
+        )
+
+        for image in images:
+
+            writer.writerow(
+                [
+                    image["page"],
+                    image["image_index"],
+                    image["filename"],
+                    image["width"],
+                    image["height"],
+                ]
+            )
 
     print("")
 

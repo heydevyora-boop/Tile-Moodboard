@@ -606,6 +606,7 @@ def main():
         total_saved >= 10, f"{total_saved} tiles recovered",
     ))
 
+    results.extend(inheritance_matrix())
     results.extend(size_gate_matrix())
     results.extend(splitter_matrix())
     results.extend(decision_matrix())
@@ -616,6 +617,74 @@ def main():
 
     contact_sheet(sources, accepted_by_scene)
     return 0 if passed == len(results) else 1
+
+
+def inheritance_matrix():
+    """A split piece that cannot identify itself inherits the parent's material.
+
+    Straight from the catalog log: a candidate reading material=TILE at
+    100% tile fraction was split because it held two designs, and BOTH
+    pieces came back OTHER and were thrown away. Two halves of a surface
+    just called tile do not stop being tile by being looked at
+    separately -- the verifier simply has less to go on once the piece
+    is smaller and stripped of context.
+
+    The inheritance is narrow on purpose. It applies only where the
+    piece said "I cannot tell", and only from a parent that was
+    confidently tile. A piece that positively identifies a countertop,
+    a slab, architecture, a painted wall or artwork keeps its own answer
+    -- next to a tiled wall, that piece really might be the worktop.
+    """
+    print("")
+    print("=" * 72)
+    print("PARENT EVIDENCE (split pieces)")
+    print("=" * 72)
+
+    confident_parent = observe(material="TILE", fraction=1.0)
+    weak_parent = observe(material="TILE", fraction=0.5)
+
+    cases = [
+        ("piece OTHER        + parent TILE 100%  -> CLEAN",
+         observe(material="OTHER"), confident_parent, "CLEAN"),
+        ("piece UNKNOWN      + parent TILE 100%  -> CLEAN",
+         observe(material="UNKNOWN"), confident_parent, "CLEAN"),
+        ("piece OTHER        + no parent         -> NOT_TILE",
+         observe(material="OTHER"), None, "NOT_TILE"),
+        ("piece OTHER        + weak parent       -> NOT_TILE",
+         observe(material="OTHER"), weak_parent, "NOT_TILE"),
+
+        # The guards: a positive identification is never overridden.
+        ("piece COUNTERTOP   + parent TILE 100%  -> NOT_TILE",
+         observe(material="COUNTERTOP"), confident_parent, "NOT_TILE"),
+        ("piece STONE_SLAB   + parent TILE 100%  -> NOT_TILE",
+         observe(material="STONE_SLAB"), confident_parent, "NOT_TILE"),
+        ("piece ARCHITECTURE + parent TILE 100%  -> NOT_TILE",
+         observe(material="ARCHITECTURE"), confident_parent, "NOT_TILE"),
+        ("piece PAINTED_WALL + parent TILE 100%  -> NOT_TILE",
+         observe(material="PAINTED_WALL"), confident_parent, "NOT_TILE"),
+        ("piece ARTWORK      + parent TILE 100%  -> NOT_TILE",
+         observe(material="ARTWORK"), confident_parent, "NOT_TILE"),
+
+        # Inheriting material does not excuse anything else.
+        ("inherited piece with a person          -> CONTAMINATED",
+         observe(material="OTHER", contains_person=True), confident_parent,
+         "CONTAMINATED"),
+        ("inherited piece with text              -> CONTAMINATED",
+         observe(material="OTHER", contains_text=True), confident_parent,
+         "CONTAMINATED"),
+        ("inherited piece still holding 2 designs -> CONTAMINATED",
+         observe(material="OTHER", distinct_tile_designs=2), confident_parent,
+         "CONTAMINATED"),
+    ]
+
+    outcomes = []
+    for label, piece, parent, expected in cases:
+        actual = assess_tile_purity(piece, parent=parent)["state"]
+        outcomes.append(check(
+            label, actual == expected,
+            "" if actual == expected else f"got {actual}",
+        ))
+    return outcomes
 
 
 def splitter_matrix():

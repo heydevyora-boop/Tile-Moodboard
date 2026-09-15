@@ -287,16 +287,54 @@ def describe_contaminants(observation):
     ]
 
 
-def assess_tile_purity(observation):
+# Materials that mean "I could not tell", as opposed to a positive
+# identification of something that is not tile. Only these can be
+# overridden by a parent's evidence below.
+UNDECIDED_MATERIALS = {"OTHER", "UNKNOWN", ""}
+
+
+def assess_tile_purity(observation, parent=None):
     """Decides whether one frame is a tile-only swatch.
 
     `observation` is a gemini_service.verify_tile_only result. Returns
     {state, reason, contaminants} where state is PURITY_CLEAN (save it),
     PURITY_CONTAMINATED (real tile, wrong framing -- go isolate it) or
     PURITY_NOT_TILE (no tile product here).
+
+    `parent` is the observation of the frame this one was cut out of,
+    when there is one. It exists for the split path: a candidate judged
+    100% TILE that contained two designs gets divided, and the pieces --
+    smaller, and stripped of the surrounding context the verifier reads
+    material from -- came back OTHER and were thrown away. Both halves
+    of a surface that was just called tile cannot stop being tile by
+    being looked at separately.
+
+    So a piece may inherit its parent's material, and ONLY when the
+    piece's own answer was "I cannot tell". A positive call of
+    countertop, stone slab, architecture, painted wall or artwork stands
+    on its own and is never overridden -- the piece really might be the
+    worktop next to the tile. Everything else the piece is judged on
+    itself: its contaminants, its scene reading, its design count.
     """
     material = str(observation.get("material") or "OTHER").strip().upper()
     contaminants = describe_contaminants(observation)
+
+    inherited = False
+    if (
+        parent is not None
+        and material in UNDECIDED_MATERIALS
+        and str(parent.get("material") or "").strip().upper() == "TILE"
+    ):
+        try:
+            parent_fraction = float(parent.get("tile_fraction", 0.0))
+        except (TypeError, ValueError):
+            parent_fraction = 0.0
+
+        # Only a parent that was confidently, overwhelmingly tile. A
+        # borderline parent has no evidence to lend.
+        if parent_fraction >= MIN_TILE_FRACTION:
+            material = "TILE"
+            inherited = True
 
     try:
         tile_fraction = float(observation.get("tile_fraction", 0.0))
@@ -393,8 +431,15 @@ def assess_tile_purity(observation):
     return {
         "state": PURITY_CLEAN,
         "reason": (
-            observation.get("reason")
-            or f"{tile_fraction:.0%} tile surface, nothing else in frame"
+            (
+                f"{tile_fraction:.0%} tile surface, nothing else in frame "
+                f"(material taken from the candidate it was cut from, "
+                f"which read as tile)"
+            )
+            if inherited else (
+                observation.get("reason")
+                or f"{tile_fraction:.0%} tile surface, nothing else in frame"
+            )
         ),
         "contaminants": [],
     }
