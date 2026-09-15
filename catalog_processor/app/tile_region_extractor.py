@@ -35,20 +35,43 @@ import cv2
 import numpy as np
 
 
-# A rectified surface smaller than this fraction of the source image's
-# area is not a usable swatch -- it is a sliver of wall between two
-# cupboards, and upscaling it would only magnify compression artefacts.
-MIN_REGION_AREA_FRACTION = 0.02
+# WHY THERE IS NO SOURCE-RELATIVE AREA GATE
+#
+# There used to be one: a region under 2% of the source image's area was
+# rejected outright. It threw away real products. A catalog page that
+# lays six tile samples out on one sheet gives each sample about 1% of
+# that sheet, so all six were refused for being "too small" while each
+# was a perfectly good 200x200px swatch.
+#
+# The size that matters is the candidate's OWN size in pixels -- that is
+# what decides whether a usable swatch can be cut from it. How large the
+# page around it happened to be says nothing about the tile. So the
+# thresholds below are absolute, and the source-relative fraction is
+# still computed and reported as a signal for the log, but never
+# rejects anything by itself.
+#
+# This is not the same as having no area validation: a 40x40px speck
+# still fails, on its own dimensions.
 
-# The clean sub-rectangle must keep at least this much of the rectified
-# surface. Below it, occluders dominate the region and whatever is left
-# is too fragmentary to represent the tile.
-MIN_CLEAN_AREA_FRACTION = 0.25
+# Smallest rectified surface worth trying to cut a swatch out of.
+MIN_REGION_PIXELS = 150 * 150
 
-# Preferred pixel floor for a saved swatch, matched to the extractor's
-# existing MIN_IMAGE_WIDTH/MIN_IMAGE_HEIGHT so this stage cannot emit
-# something the caller would immediately discard.
-MIN_OUTPUT_SIDE_PX = 200
+# Smallest unobstructed area that can still yield a usable swatch. A
+# region that is mostly hidden behind a sofa can still hand over a clean
+# 200x200 piece of tile, and that piece is a better product image than
+# nothing at all -- so the test is whether what remains is big enough,
+# not what proportion of the region it represents.
+MIN_CLEAN_PIXELS = 130 * 130
+
+# Preferred pixel floor for a saved swatch.
+#
+# 150 rather than 200: a band of tile left between two fixtures is
+# routinely ~190px tall on a real catalog page and reads the pattern
+# perfectly well, and a small sample laid out six-to-a-sheet lands near
+# the same figure. At 200 both were refused. Whether the crop is
+# actually a tile is decided by the purity gate downstream, not by this
+# number -- this only rules out crops too small to show a pattern at all.
+MIN_OUTPUT_SIDE_PX = 150
 
 # ...but a flat 200px floor is wrong when the SOURCE is small: a 320px
 # catalog thumbnail cannot yield a 200px clean rectangle once occluders
@@ -167,6 +190,64 @@ def quad_bounds(quad):
         int(np.ceil(points[:, 0].max())),
         int(np.ceil(points[:, 1].max())),
     )
+
+
+def _box_iou(first, second):
+    """Intersection-over-union of two (x1, y1, x2, y2) boxes."""
+    ax1, ay1, ax2, ay2 = first
+    bx1, by1, bx2, by2 = second
+
+    overlap_width = min(ax2, bx2) - max(ax1, bx1)
+    overlap_height = min(ay2, by2) - max(ay1, by1)
+
+    if overlap_width <= 0 or overlap_height <= 0:
+        return 0.0
+
+    overlap = overlap_width * overlap_height
+    union = ((ax2 - ax1) * (ay2 - ay1)
+             + (bx2 - bx1) * (by2 - by1)
+             - overlap)
+
+    return overlap / union if union > 0 else 0.0
+
+
+# Above this overlap two detections are describing the same surface.
+# Set well clear of the incidental overlap between a wall and the floor
+# meeting it, which share an edge but almost no area.
+REGION_OVERLAP_LIMIT = 0.55
+
+
+def deduplicate_regions(regions, overlap_limit=REGION_OVERLAP_LIMIT):
+    """Drops detections that describe a surface already covered.
+
+    A detector asked for "every tiled surface" will happily return the
+    same wall five times with slightly different corners, and each copy
+    would otherwise be rectified, saved and sent for classification --
+    five API calls and five identical swatches for one tile.
+
+    `regions` is expected in the detector's confidence order, so the
+    first sighting of a surface is the best-scored one and is the copy
+    that survives. Returns (kept, dropped), where each dropped entry is
+    (region, index_of_the_region_it_duplicates).
+    """
+    kept = []
+    dropped = []
+
+    for region in regions:
+        box = quad_bounds(region["quad"])
+
+        duplicate_of = None
+        for position, existing in enumerate(kept, start=1):
+            if _box_iou(box, quad_bounds(existing["quad"])) >= overlap_limit:
+                duplicate_of = position
+                break
+
+        if duplicate_of is None:
+            kept.append(region)
+        else:
+            dropped.append((region, duplicate_of))
+
+    return kept, dropped
 
 
 def rectify_quad(image_bgr: np.ndarray, quad) -> np.ndarray | None:
@@ -394,11 +475,12 @@ def extract_tile_region(image_bgr, quad, occluders=None):
     area_fraction = region_area / source_area if source_area else 0.0
     info["region_area_fraction"] = round(area_fraction, 4)
 
-    if area_fraction < MIN_REGION_AREA_FRACTION:
+    if region_area < MIN_REGION_PIXELS:
         info["stage"] = "region_area"
         info["reason"] = (
-            f"region covers {area_fraction:.1%} of the image, "
-            f"below the {MIN_REGION_AREA_FRACTION:.0%} minimum"
+            f"region is {width}x{height}px ({int(region_area)}px), below the "
+            f"{MIN_REGION_PIXELS}px minimum -- too small to cut a swatch "
+            f"from, regardless of the page size around it"
         )
         return None, info
 
@@ -441,11 +523,12 @@ def extract_tile_region(image_bgr, quad, occluders=None):
     clean_fraction = (clean_width * clean_height) / region_area if region_area else 0.0
     info["clean_area_fraction"] = round(clean_fraction, 4)
 
-    if clean_fraction < MIN_CLEAN_AREA_FRACTION:
+    if clean_width * clean_height < MIN_CLEAN_PIXELS:
         info["stage"] = "occlusion"
         info["reason"] = (
-            f"only {clean_fraction:.1%} of the region is unobstructed, "
-            f"below the {MIN_CLEAN_AREA_FRACTION:.0%} minimum"
+            f"the unobstructed area is {clean_width}x{clean_height}px "
+            f"({clean_fraction:.1%} of the region), below the "
+            f"{MIN_CLEAN_PIXELS}px minimum for a usable swatch"
         )
         return None, info
 

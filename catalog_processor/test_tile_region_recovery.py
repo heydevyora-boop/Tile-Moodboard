@@ -244,6 +244,7 @@ def install_fakes():
     from app.image_validator import assess_tile_purity
 
     def fake_purity(image_path):
+        name = Path(image_path).name
         return {
             "tile_fraction": 1.0,
             "material": "TILE",
@@ -254,6 +255,11 @@ def install_fakes():
             "contains_fixture": False,
             "contains_object": False,
             "is_scene": False,
+            # Page 4 lays four different products out together, so a crop
+            # spanning them shows four designs. That is what stops it
+            # being saved as one tile -- the source being "a collage" no
+            # longer rejects anything by itself.
+            "distinct_tile_designs": 4 if "page_4" in name else 1,
             "reason": "synthetic tile grid",
         }
 

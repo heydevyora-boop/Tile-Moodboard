@@ -1559,10 +1559,17 @@ Report:
   GLASS         glass or mirror
   METAL         metal panel or appliance
   ARTWORK       a printed picture, poster, mural or decorative panel
+  ARCHITECTURE  a building, facade, monument, landmark or structure seen
+                as an object -- the Dubai Frame, a tower, an archway, a
+                window frame. Clad in tile or not, a photograph OF A
+                BUILDING is not a tile sample.
   OTHER         anything else
   A COUNTERTOP or STONE_SLAB is NOT a tile even when it is stone and
   even when it is beautiful. Only call it TILE if you can see the
   repeating units or the joints between them.
+  Report TILE only when the frame is filled by the surface itself, close
+  enough to read its pattern. If you are looking AT a structure rather
+  than at its material, that is ARCHITECTURE.
 
 - contains_person: a human, or any part of one -- face, hand, leg,
   hair, clothing.
@@ -1579,6 +1586,14 @@ Report:
   kitchen, a bathroom, an elevation, an interior view) rather than a
   flat piece of surface. A whole wall or a whole floor photographed as
   part of a room is a scene.
+
+- distinct_tile_designs: how many DIFFERENT tile designs are visible.
+  One tile repeated across the whole frame is 1, however many individual
+  units you can count. Two panels of different colour, pattern or
+  format side by side is 2, and so on. A catalog sheet showing six
+  samples is 6. This must be 1 for the frame to be a swatch of one
+  product -- several designs in one picture is a layout of products,
+  not a product.
 
 - reason: one short sentence naming what is actually in the frame.
 
@@ -1601,6 +1616,7 @@ TILE_PURITY_SCHEMA = {
         "contains_fixture": {"type": "BOOLEAN"},
         "contains_object": {"type": "BOOLEAN"},
         "is_scene": {"type": "BOOLEAN"},
+        "distinct_tile_designs": {"type": "INTEGER"},
         "reason": {"type": "STRING"},
     },
     "required": ["tile_fraction", "material", "is_scene", "reason"],
@@ -1910,7 +1926,13 @@ def verify_tile_only(image_path):
     if not math.isfinite(tile_fraction):
         tile_fraction = 0.0
 
+    try:
+        distinct_designs = int(payload.get("distinct_tile_designs", 1))
+    except (TypeError, ValueError):
+        distinct_designs = 1
+
     return {
+        "distinct_tile_designs": max(1, distinct_designs),
         "tile_fraction": max(0.0, min(1.0, tile_fraction)),
         "material": str(payload.get("material") or "OTHER").strip().upper(),
         "contains_person": bool(payload.get("contains_person")),

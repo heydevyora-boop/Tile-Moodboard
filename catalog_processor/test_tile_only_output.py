@@ -60,15 +60,31 @@ GROUT = (112, 104, 92)
 PERSON = (222, 40, 142)
 TEXT = (12, 12, 14)
 FURNITURE = (92, 58, 38)
-FIXTURE = (248, 248, 252)
+# Deliberately a colour no neutral surface can compress into. It stood
+# in for white sanitaryware at first, which sat close enough to the page
+# background that WEBP ringing around a fine tile grid registered as a
+# basin. A marker's only job is to be unmistakably itself.
+FIXTURE = (48, 196, 212)
 OBJECT = (38, 142, 62)
 WALL = (232, 228, 220)
+SKY = (140, 186, 226)
+# A second, visibly different tile design. Two of these in one frame
+# means a layout of products rather than one product.
+TILE_C = (128, 152, 168)
+TILE_D = (104, 128, 146)
 
 SIZE = 900
 
+# A full catalog sheet, for the small-sample case. Six 190px samples on
+# a page this size are ~1.1% of it each -- the exact figure the real
+# catalog logs showed being rejected.
+PAGE = 1800
+SAMPLE = 190
 
-def tile_field(draw, box, cell=72, joint=6):
+
+def tile_field(draw, box, cell=72, joint=6, palette=(TILE_A, TILE_B)):
     """Paints a real tiled surface: repeating units with grout joints."""
+    first, second = palette
     x1, y1, x2, y2 = box
     for y in range(y1, y2):
         for x in range(x1, x2):
@@ -76,7 +92,7 @@ def tile_field(draw, box, cell=72, joint=6):
             if local_x % cell < joint or local_y % cell < joint:
                 colour = GROUT
             else:
-                colour = TILE_A if ((local_x // cell) + (local_y // cell)) % 2 == 0 else TILE_B
+                colour = first if ((local_x // cell) + (local_y // cell)) % 2 == 0 else second
             draw.point((x, y), fill=colour)
 
 
@@ -104,8 +120,8 @@ def font(size):
     return ImageFont.load_default()
 
 
-def scene(name, paint):
-    image = Image.new("RGB", (SIZE, SIZE), WALL)
+def scene(name, paint, size=SIZE):
+    image = Image.new("RGB", (size, size), WALL)
     draw = ImageDraw.Draw(image)
     regions = paint(draw)
     path = OUT / f"{name}.webp"
@@ -198,6 +214,64 @@ def paint_artwork(draw):
     }]
 
 
+def paint_dubai_frame(draw):
+    """An architectural landmark, clad in tile, against the sky.
+
+    The detector calls this EXTERIOR at 0.95 and it is not wrong -- it
+    IS an exterior clad surface. It is also a building, and a photograph
+    of a building is not a tile sample.
+    """
+    draw.rectangle([0, 0, SIZE, SIZE], fill=SKY)
+    tile_field(draw, (170, 90, 730, 810), cell=40, joint=4)
+    draw.rectangle([250, 170, 650, 730], fill=SKY)
+    return [{
+        "surface": "EXTERIOR", "confidence": 0.95,
+        "quad": [(170, 90), (730, 90), (730, 810), (170, 810)],
+        "occluders": [],
+    }]
+
+
+def paint_two_designs(draw):
+    """Two different tile products side by side -- a layout, not a product."""
+    tile_field(draw, (0, 0, SIZE // 2, SIZE))
+    tile_field(draw, (SIZE // 2, 0, SIZE, SIZE), palette=(TILE_C, TILE_D))
+    return [{
+        "surface": "SAMPLE", "confidence": 0.85,
+        "quad": [(0, 0), (SIZE, 0), (SIZE, SIZE), (0, SIZE)],
+        "occluders": [],
+    }]
+
+
+def paint_heavily_occluded(draw):
+    """A tiled wall almost entirely hidden behind a sofa.
+
+    What is left is a 900x160 band -- 17.8% of the region, which the old
+    25% occlusion rule refused outright, and a perfectly good swatch.
+    """
+    tile_field(draw, (0, 0, SIZE, SIZE))
+    draw.rectangle([0, 160, SIZE, SIZE], fill=FURNITURE)
+    return [{
+        "surface": "WALL", "confidence": 0.9,
+        "quad": [(0, 0), (SIZE, 0), (SIZE, SIZE), (0, SIZE)],
+        "occluders": [(0, 160, SIZE, SIZE)],
+    }]
+
+
+def paint_duplicate_detections(draw):
+    """One tiled wall that the detector reports five times over."""
+    tile_field(draw, (0, 0, SIZE, SIZE))
+    jitter = [0, 6, -5, 9, -8]
+    return [
+        {
+            "surface": "WALL", "confidence": 0.95 - index * 0.02,
+            "quad": [(offset, offset), (SIZE + offset, offset),
+                     (SIZE + offset, SIZE + offset), (offset, SIZE + offset)],
+            "occluders": [],
+        }
+        for index, offset in enumerate(jitter)
+    ]
+
+
 SCENES = [
     ("tile_with_person", paint_tile_with_person, "tile + person"),
     ("tile_with_text", paint_tile_with_text, "tile + text overlay"),
@@ -205,7 +279,39 @@ SCENES = [
     ("bathroom_with_tile", paint_bathroom_with_tile, "bathroom + fixtures"),
     ("clean_tile", paint_clean_tile, "standalone tile"),
     ("artwork", paint_artwork, "decorative artwork, no tile"),
+    ("dubai_frame", paint_dubai_frame, "architectural landmark"),
+    ("two_designs", paint_two_designs, "two different tiles in one frame"),
+    ("heavily_occluded", paint_heavily_occluded, "tile 82% hidden by a sofa"),
+    ("duplicate_detections", paint_duplicate_detections,
+     "one wall, detected 5 times"),
 ]
+
+
+def paint_small_samples(draw):
+    """A catalog sheet laying six small tile samples out on one page.
+
+    Each is ~1.1% of the sheet. Under the old source-relative area rule
+    all six were rejected as "too small"; each is a 190px swatch.
+    """
+    draw.rectangle([0, 0, PAGE, PAGE], fill=WALL)
+    regions = []
+    # Six DIFFERENT products, so six different tile formats. Painting
+    # them identically would have them collapse into one under the
+    # duplicate-crop rule, and would be testing the wrong thing: the
+    # question here is whether six small samples survive the size gates.
+    formats = [26, 34, 42, 50, 58, 66]
+    for index, cell in enumerate(formats):
+        row, column = divmod(index, 3)
+        x = 150 + column * 520
+        y = 260 + row * 700
+        tile_field(draw, (x, y, x + SAMPLE, y + SAMPLE), cell=cell, joint=4)
+        regions.append({
+            "surface": "WALL", "confidence": 0.95,
+            "quad": [(x, y), (x + SAMPLE, y),
+                     (x + SAMPLE, y + SAMPLE), (x, y + SAMPLE)],
+            "occluders": [],
+        })
+    return regions
 
 
 # ----------------------------------------------------------------------
@@ -224,9 +330,19 @@ def oracle_verify_tile_only(image_path):
 
     total = pixels.shape[0] * pixels.shape[1]
 
-    tile_pixels = (near(pixels, TILE_A) | near(pixels, TILE_B)
-                   | near(pixels, GROUT)).sum()
+    design_one = (near(pixels, TILE_A) | near(pixels, TILE_B)).sum()
+    design_two = (near(pixels, TILE_C) | near(pixels, TILE_D)).sum()
     grout_pixels = near(pixels, GROUT).sum()
+    tile_pixels = design_one + design_two + grout_pixels
+    sky_pixels = near(pixels, SKY).sum()
+
+    # A design counts as present only if it occupies a real share of the
+    # frame, so a few edge pixels bleeding across a seam do not read as
+    # a second product.
+    designs = sum(
+        1 for count in (design_one, design_two)
+        if count > total * 0.08
+    )
 
     flags = {
         "contains_person": bool(near(pixels, PERSON).sum() > 0),
@@ -239,9 +355,15 @@ def oracle_verify_tile_only(image_path):
 
     tile_fraction = float(tile_pixels) / total if total else 0.0
 
-    # Joints are what make a tile a tile. A veined stone surface with no
-    # joints is a slab -- the kitchen-worktop distinction, measured.
-    if grout_pixels > total * 0.01:
+    # Sky in the frame means you are looking AT a structure, not at a
+    # surface -- the Dubai Frame case. Checked before the joints rule,
+    # because a tile-clad landmark has joints too and would otherwise
+    # read as a swatch.
+    if sky_pixels > total * 0.15:
+        material = "ARCHITECTURE"
+    elif grout_pixels > total * 0.01:
+        # Joints are what make a tile a tile. A veined stone surface with
+        # no joints is a slab -- the kitchen-worktop distinction.
         material = "TILE"
     elif near(pixels, WALL).sum() > total * 0.5:
         material = "PAINTED_WALL"
@@ -256,6 +378,7 @@ def oracle_verify_tile_only(image_path):
         "tile_fraction": tile_fraction,
         "material": material,
         "is_scene": present >= 2 or tile_fraction < 0.45,
+        "distinct_tile_designs": max(1, designs),
         "reason": f"{tile_fraction:.0%} tile surface",
         **flags,
     }
@@ -321,6 +444,15 @@ def main():
         path, regions = scene(name, paint)
         regions_by_stem[path.stem] = regions
         sources.append((name, path, description))
+
+    # Built separately: it is a full catalog sheet, not a single photo.
+    path, regions = scene("small_samples", paint_small_samples, size=PAGE)
+    regions_by_stem[path.stem] = regions
+    sources.append((
+        "small_samples", path,
+        f"six {SAMPLE}px samples on a {PAGE}px sheet "
+        f"({(SAMPLE * SAMPLE) / (PAGE * PAGE):.1%} each)",
+    ))
 
     install(regions_by_stem)
 
@@ -407,10 +539,41 @@ def main():
         f"{len(accepted_by_scene['artwork'])} saved",
     ))
 
+    # The gates this round changed, each checked against the exact
+    # numbers the real catalog logs reported.
+    print("")
+    results.append(check(
+        f"six {SAMPLE}px samples at "
+        f"{(SAMPLE * SAMPLE) / (PAGE * PAGE):.1%} of the page -> all kept",
+        len(accepted_by_scene["small_samples"]) == 6,
+        f"{len(accepted_by_scene['small_samples'])}/6 "
+        f"(the old 2%-of-source rule rejected all six)",
+    ))
+    results.append(check(
+        "tile 82% hidden by a sofa -> the visible band is still extracted",
+        len(accepted_by_scene["heavily_occluded"]) == 1,
+        "(the old 25%-unobstructed rule rejected it)",
+    ))
+    results.append(check(
+        "architectural landmark -> rejected despite EXTERIOR at 0.95",
+        len(accepted_by_scene["dubai_frame"]) == 0,
+        f"{len(accepted_by_scene['dubai_frame'])} saved",
+    ))
+    results.append(check(
+        "two designs in one frame -> not saved as one product",
+        len(accepted_by_scene["two_designs"]) == 0,
+        f"{len(accepted_by_scene['two_designs'])} saved",
+    ))
+    results.append(check(
+        "one wall detected 5 times -> one swatch, not five",
+        len(accepted_by_scene["duplicate_detections"]) == 1,
+        f"{len(accepted_by_scene['duplicate_detections'])} saved",
+    ))
+
     total_saved = sum(len(v) for v in accepted_by_scene.values())
     results.append(check(
         "the fix does not work by extracting nothing",
-        total_saved >= 4, f"{total_saved} tiles recovered",
+        total_saved >= 10, f"{total_saved} tiles recovered",
     ))
 
     results.extend(decision_matrix())

@@ -1300,6 +1300,8 @@ def mine_tile_regions(
     """
     import cv2  # local: only needed when mining actually runs
 
+    from app.tile_region_extractor import deduplicate_regions, quad_bounds
+
     try:
         from app.image_validator import describe_contaminants
     except Exception:  # noqa: BLE001 -- logging helper only, never fatal
@@ -1327,9 +1329,26 @@ def mine_tile_regions(
     print(f"  [tile-region] page {page_number} image {image_counter}: "
           f"{len(regions)} candidate tile surface(s)")
 
+    # One surface reported five times costs five rectifications, five
+    # saves and five classifications, and yields five copies of the same
+    # tile. Collapse them before any of that is spent.
+    regions, duplicate_regions = deduplicate_regions(regions)
+
+    for duplicate, duplicates_index in duplicate_regions:
+        print(f"    CANDIDATE -- {duplicate['surface']} "
+              f"({duplicate['confidence']:.2f}) overlaps candidate "
+              f"{duplicates_index}; same surface, dropped")
+
+    if duplicate_regions:
+        print(f"  [tile-region] {len(regions)} distinct surface(s) after "
+              f"removing {len(duplicate_regions)} duplicate detection(s)")
+
     image_bgr = cv2.imread(str(output_path), cv2.IMREAD_COLOR)
     if image_bgr is None:
         return [], []
+
+    source_height, source_width = image_bgr.shape[:2]
+    source_area = float(source_width * source_height)
 
     accepted = []
     deferred = []
@@ -1351,14 +1370,31 @@ def mine_tile_regions(
                 "detector_confidence": round(region["confidence"], 3),
                 "coordinate_space": region.get("coordinate_space"),
                 "occluder_boxes": len(region["occluders"]),
+                "candidate_size": [region_width, region_height],
+                # Recorded so a run can be audited for it, never applied.
+                "source_relative_area": round(relative_area, 5),
                 "final": final,
             }
             entry.update(extra)
             trace.append(entry)
 
+        region_box = quad_bounds(region["quad"])
+        region_width = region_box[2] - region_box[0]
+        region_height = region_box[3] - region_box[1]
+        relative_area = (
+            (region_width * region_height) / source_area if source_area else 0.0
+        )
+
         print(f"    CANDIDATE -- {label}")
+        print(f"      source             : page {page_number} image "
+              f"{image_counter} ({source_type})")
         print(f"      detected surface   : {region['surface']}")
         print(f"      detector confidence: {region['confidence']:.2f}")
+        print(f"      candidate size     : {region_width}x{region_height}px")
+        # Printed, never enforced. A small sample on a big sheet is a
+        # real product; this figure is here to be read, not to reject.
+        print(f"      source-relative    : {relative_area:.2%} of the image "
+              f"(signal only, not a gate)")
         print(f"      coordinate space   : {region.get('coordinate_space', '?')}")
         print(f"      occluder box(es)   : {len(region['occluders'])}")
 
@@ -1429,6 +1465,7 @@ def mine_tile_regions(
         # image got earlier is not visible to it and cannot leak in.
         status, reason, metadata = validate_and_correct_tile_image(
             region_path, image_rect, text_spans, semantic_validator,
+            purity_is_authoritative=True,
         )
 
         region_type = metadata.get('image_type', '?')
@@ -1447,15 +1484,20 @@ def mine_tile_regions(
         # failure that went unnoticed before.
         observation = metadata.get('purity') or {}
         if observation:
-            contaminants = ", ".join(
-                describe_contaminants(observation)
-            ) or "none"
+            def flag(key):
+                return 'YES' if observation.get(key) else 'no'
+
             print(f"      material           : {observation.get('material', '?')}")
             print(f"      tile fraction      : "
-                  f"{observation.get('tile_fraction', 0.0):.0%}")
-            print(f"      non-tile content   : {contaminants}")
-            print(f"      reads as a scene   : "
-                  f"{'YES' if observation.get('is_scene') else 'no'}")
+                  f"{observation.get('tile_fraction', 0.0):.0%} of the candidate")
+            print(f"      person detected    : {flag('contains_person')}")
+            print(f"      text detected      : {flag('contains_text')}")
+            print(f"      logo detected      : {flag('contains_logo')}")
+            print(f"      objects detected   : "
+                  f"{', '.join(describe_contaminants(observation)) or 'none'}")
+            print(f"      reads as a scene   : {flag('is_scene')}")
+        else:
+            print(f"      purity             : not measured")
 
         print(f"      masking applied    : "
               f"{'YES' if region['occluders'] else 'no'}")
@@ -1665,7 +1707,10 @@ def load_tile_purity_verifier():
         return None
 
 
-def validate_and_correct_tile_image(output_path, image_rect, text_spans, semantic_validator):
+def validate_and_correct_tile_image(
+    output_path, image_rect, text_spans, semantic_validator,
+    purity_is_authoritative=False,
+):
     """Gates and corrects ONE already-saved candidate image in place.
 
     Returns (status, reason, metadata) where status is one of
@@ -1734,7 +1779,7 @@ def validate_and_correct_tile_image(output_path, image_rect, text_spans, semanti
             classifier_info,
         )
 
-    if verdict != 'APPROVED':
+    if verdict != 'APPROVED' and not purity_is_authoritative:
         detail = decision.get('reason') or 'not approved as a standalone tile product'
         return (
             VALIDATION_REJECTED,
@@ -1743,11 +1788,27 @@ def validate_and_correct_tile_image(output_path, image_rect, text_spans, semanti
             classifier_info,
         )
 
+    # On a region candidate the broad classifier does NOT get the casting
+    # vote. It answers "what is this image?" about a swatch that was cut
+    # out of a page, and it routinely answers OTHER or GRAPHIC at high
+    # confidence for a genuine tile sample -- there is no room, no
+    # product staging and no context left in the crop for it to
+    # recognise. Rejecting on that verdict discarded real tiles.
+    #
+    # The question that actually applies to a candidate is the purity
+    # one below: is this specific patch a tile surface, and only a tile
+    # surface? The classifier's opinion is kept for the log and for the
+    # product name, not for the decision.
+    classifier_info['classifier_verdict'] = verdict
+
     with Image.open(output_path) as opened:
         opened.load()
         image = opened.convert('RGB') if opened.mode not in ('RGB', 'RGBA') else opened
 
-        if gemini_result.product_bbox:
+        # Only trust the classifier's product box when the classifier
+        # actually recognised a product. On a candidate it rejected, its
+        # box points at nothing in particular.
+        if gemini_result.product_bbox and verdict == 'APPROVED':
             bbox_check = validate_bbox(gemini_result.product_bbox, image.width, image.height)
             if bbox_check.get('valid'):
                 image = crop_image_to_validated_bbox(image, bbox_check['bbox'])
@@ -1778,6 +1839,18 @@ def validate_and_correct_tile_image(output_path, image_rect, text_spans, semanti
     # cropped the person away should pass, and does.
     purity_verifier = load_tile_purity_verifier()
     if purity_verifier is None:
+        if verdict != 'APPROVED':
+            # The classifier's rejection was set aside a moment ago only
+            # because purity was going to decide instead. With purity
+            # unavailable there is nothing left to decide with, so the
+            # rejection stands rather than becoming an approval by
+            # default.
+            return (
+                VALIDATION_REJECTED,
+                f"{decision.get('reason') or 'not a tile product'} "
+                f"(purity verification unavailable)",
+                classifier_info,
+            )
         return VALIDATION_APPROVED, decision.get('reason') or '', metadata
 
     verify_tile_only, assess_tile_purity = purity_verifier

@@ -261,6 +261,12 @@ MIN_TILE_FRACTION = 0.80
 # the log can say why a handsome marble surface was turned down.
 SLAB_MATERIALS = {"COUNTERTOP", "STONE_SLAB"}
 
+# A photograph of a BUILDING. Named separately for the same reason: a
+# landmark clad in tile draws a confident EXTERIOR detection and a high
+# detector score, and neither is evidence that the frame is a tile
+# sample. The Dubai Frame is the case this exists for.
+ARCHITECTURE_MATERIALS = {"ARCHITECTURE", "BUILDING", "FACADE"}
+
 # What each contamination flag is called in a log line.
 CONTAMINANT_LABELS = (
     ("contains_person", "a person"),
@@ -302,6 +308,16 @@ def assess_tile_purity(observation):
     # A countertop and a stone slab get their own message because they
     # are the convincing near-miss: stone, patterned, photogenic, and
     # routinely shot in the same catalogs. They are still not the tile.
+    if material in ARCHITECTURE_MATERIALS:
+        return {
+            "state": PURITY_NOT_TILE,
+            "reason": (
+                "this is a photograph of a structure, not of a tile "
+                "surface -- a landmark clad in tile is still a landmark"
+            ),
+            "contaminants": contaminants,
+        }
+
     if material in SLAB_MATERIALS:
         return {
             "state": PURITY_NOT_TILE,
@@ -332,7 +348,30 @@ def assess_tile_purity(observation):
             "contaminants": contaminants,
         }
 
-    # RULE 3 -- anything present that is not tile.
+    # RULE 3 -- one product per image.
+    #
+    # A frame showing several different tile designs is a LAYOUT of
+    # products, not a product: saved as one swatch it would be a Tile row
+    # whose image shows four other tiles alongside the one it names.
+    # Contaminated rather than rejected, because those designs are real
+    # products -- they just have to be cut out one at a time.
+    try:
+        distinct_designs = int(observation.get("distinct_tile_designs", 1))
+    except (TypeError, ValueError):
+        distinct_designs = 1
+
+    if distinct_designs > 1:
+        return {
+            "state": PURITY_CONTAMINATED,
+            "reason": (
+                f"{distinct_designs} different tile designs are in this "
+                f"frame; each is a separate product and has to be "
+                f"extracted on its own"
+            ),
+            "contaminants": contaminants,
+        }
+
+    # RULE 4 -- anything present that is not tile.
     if contaminants:
         return {
             "state": PURITY_CONTAMINATED,
@@ -340,7 +379,7 @@ def assess_tile_purity(observation):
             "contaminants": contaminants,
         }
 
-    # RULE 4 -- mostly tile, but not tile enough.
+    # RULE 5 -- mostly tile, but not tile enough.
     if tile_fraction < MIN_TILE_FRACTION:
         return {
             "state": PURITY_CONTAMINATED,
