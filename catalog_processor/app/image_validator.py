@@ -26,6 +26,18 @@ ALLOWED_TILE_TYPES = {
 }
 
 
+# Returned when the classifier could not reach a verdict at all -- Gemini
+# quota exhausted, rate limited, or otherwise unavailable. It is NOT a
+# rejection: nothing has judged the image, so the only honest answer is
+# "not decided yet, ask again later".
+#
+# The string matches catalog_pipeline.STATUS_REVIEW_REQUIRED's vocabulary
+# so both pipelines describe this state the same way.
+DECISION_REVIEW = "REVIEW"
+DECISION_APPROVED = "APPROVED"
+DECISION_REJECTED = "REJECTED"
+
+
 # ============================================================
 # PRODUCT DECISION VALIDATOR
 #
@@ -95,6 +107,50 @@ def validate_product_decision(
         )
         or ""
     )
+
+    # ========================================================
+    # RULE 0
+    #
+    # Did the classifier actually reach a verdict?
+    #
+    # When Gemini is quota-exhausted or rate limited,
+    # analyze_product_image returns decision="REVIEW" with
+    # image_type="UNKNOWN" and is_product_image=False -- not because the
+    # image was examined and found wanting, but because it was never
+    # examined at all.
+    #
+    # Reading only image_type/is_product_image below cannot tell that
+    # apart from a genuine "this is a bathroom photo" rejection, and
+    # collapsing the two makes an unreviewed image indistinguishable
+    # from a refused one. Callers then delete a perfectly good tile
+    # because the API ran out of quota. So the undecided case is passed
+    # through as its own verdict and left for the caller to handle.
+    # ========================================================
+
+    decision = str(
+        getattr(
+            gemini_result,
+            "decision",
+            ""
+        )
+        or ""
+    ).strip().upper()
+
+    if decision == DECISION_REVIEW:
+
+        return {
+
+            "decision":
+                DECISION_REVIEW,
+
+            "reason":
+                reason
+                or
+                (
+                    "Classification did not run; "
+                    "the image has not been judged."
+                )
+        }
 
     # ========================================================
     # RULE 1

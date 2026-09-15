@@ -1293,7 +1293,10 @@ def mine_tile_regions(
     exactly as the original did. Only a crop that independently reads as a
     tile product survives.
 
-    Returns a list of (path, reason, metadata) for accepted swatches.
+    Returns (accepted, deferred) -- each a list of (path, reason,
+    metadata). Deferred swatches are ones no classifier got to see (Gemini
+    quota/rate limit): their files are kept for a later run but they are
+    NOT catalog entries, so the caller must not publish them.
     """
     import cv2  # local: only needed when mining actually runs
 
@@ -1303,26 +1306,27 @@ def mine_tile_regions(
         with Image.open(output_path) as probe:
             width, height = probe.size
     except Exception:  # noqa: BLE001
-        return []
+        return [], []
 
     try:
         regions = detect_tile_regions(str(output_path), width, height)
     except Exception as exc:  # noqa: BLE001 -- never break extraction over this
         print(f"  [tile-region] detection failed on page {page_number} "
               f"image {image_counter}: {exc}")
-        return []
+        return [], []
 
     if not regions:
-        return []
+        return [], []
 
     print(f"  [tile-region] page {page_number} image {image_counter}: "
           f"{len(regions)} candidate tile surface(s)")
 
     image_bgr = cv2.imread(str(output_path), cv2.IMREAD_COLOR)
     if image_bgr is None:
-        return []
+        return [], []
 
     accepted = []
+    deferred = []
     seen_signatures = set()
 
     for index, region in enumerate(regions, start=1):
@@ -1417,7 +1421,7 @@ def mine_tile_regions(
         # REJECT. It re-classifies the SAVED CROP FILE from scratch: this
         # call receives region_path, so whatever verdict the whole source
         # image got earlier is not visible to it and cannot leak in.
-        approved, reason, metadata = validate_and_correct_tile_image(
+        status, reason, metadata = validate_and_correct_tile_image(
             region_path, image_rect, text_spans, semantic_validator,
         )
 
@@ -1441,7 +1445,18 @@ def mine_tile_regions(
             "region_confidence": region_confidence,
         }
 
-        if not approved:
+        if status == VALIDATION_DEFERRED:
+            # Nothing classified this crop, so it is neither a tile nor
+            # not-a-tile yet. Hand it to the caller as deferred: the file
+            # survives for a later run, but it does not enter the catalog.
+            print(f"      region validation  : DEFERRED -- {reason}")
+            print(f"      FINAL              : DEFERRED (awaiting validation)")
+            note("DEFERRED", validation="DEFERRED", validation_reason=reason,
+                 **geometry_fields)
+            deferred.append((region_path, reason, metadata))
+            continue
+
+        if status != VALIDATION_APPROVED:
             region_path.unlink(missing_ok=True)
             print(f"      region validation  : FAIL -- {reason}")
             print(f"      FINAL              : REJECTED")
@@ -1459,7 +1474,63 @@ def mine_tile_regions(
 
         accepted.append((region_path, reason, metadata))
 
-    return accepted
+    return accepted, deferred
+
+
+# Where images that could not be validated are kept. A sibling of the
+# extracted-images directory rather than a mix-in, so nothing downstream
+# that globs the images folder can mistake an unvalidated candidate for an
+# accepted tile. Mirrors catalog_pipeline.py's directories["review"].
+DEFERRED_DIRECTORY_NAME = "review_required"
+
+
+def defer_for_revalidation(
+    source_path, page_number, image_index, reason, metadata,
+    output_directory, deferred_records,
+):
+    """Preserves one unvalidated image and records how to revalidate it.
+
+    Called when Gemini could not classify a candidate. The file is MOVED
+    out of the extraction folder into review_required/ -- moved, not
+    copied, so the same image cannot be picked up as an accepted tile by
+    anything scanning the images directory, and not deleted, because a
+    quota error is not evidence about the image.
+
+    The manifest entry carries what a later run needs to finish the job:
+    which PDF page and image slot it came from, why it was deferred, and
+    whatever the classifier managed to report before giving up.
+
+    Returns the new path, or None if the file could not be preserved.
+    """
+    review_directory = output_directory / DEFERRED_DIRECTORY_NAME
+    review_directory.mkdir(parents=True, exist_ok=True)
+
+    destination = review_directory / source_path.name
+
+    try:
+        # replace() rather than rename(): a re-run that defers the same
+        # page/slot again should overwrite its earlier copy, not fail.
+        source_path.replace(destination)
+    except OSError as exc:
+        print(f"  [deferred] could not preserve {source_path.name}: {exc}")
+        return None
+
+    deferred_records.append(
+        {
+            "filename": destination.name,
+            "path": str(destination),
+            "page": page_number,
+            "image_index": image_index,
+            "status": VALIDATION_DEFERRED,
+            "reason": reason,
+            "classifier_type": metadata.get("image_type", ""),
+            "classifier_confidence": metadata.get("confidence", 0.0),
+            "product_name": metadata.get("product_name", ""),
+            "size": metadata.get("size", ""),
+        }
+    )
+
+    return destination
 
 
 def append_recovered_regions(
@@ -1513,24 +1584,48 @@ def load_semantic_tile_validator():
         return None
 
 
+# Validation outcomes, in the vocabulary catalog_pipeline.py already uses
+# for the UI-upload path (its STATUS_* constants, lines ~245-257). Three
+# states, not two, because "Gemini says this is a bathroom photo" and
+# "Gemini never answered" are different facts about an image and the
+# pipeline must be able to act on them differently.
+VALIDATION_APPROVED = "GEMINI_APPROVED"
+VALIDATION_REJECTED = "GEMINI_REJECTED"
+VALIDATION_DEFERRED = "REVIEW_REQUIRED"
+
+
 def validate_and_correct_tile_image(output_path, image_rect, text_spans, semantic_validator):
     """Gates and corrects ONE already-saved candidate image in place.
 
-    Returns (approved, reason, metadata). metadata carries the values this
-    function already derives on the way through -- the Gemini-reported
-    product name and the size text detected next to the image -- so the
-    caller can attach them to the synced Tile row instead of discarding
-    them; it is always {} on rejection. On rejection the caller deletes output_path
-    and skips this candidate -- the fail-closed posture already approved
-    for the UI-upload path: a candidate that cannot be positively confirmed
-    as the real product is never kept, including when validation itself
-    could not run (missing key, API error, quota, unreadable response).
-    "Could not confirm" and "confirmed not a tile" are treated identically,
-    because a wrong/lifestyle image reaching Drive/MASTER is worse than a
-    missing one.
+    Returns (status, reason, metadata) where status is one of
+    VALIDATION_APPROVED, VALIDATION_REJECTED or VALIDATION_DEFERRED.
+
+    APPROVED and REJECTED are verdicts: the classifier looked at the image
+    and decided. The caller keeps an approved image and deletes a rejected
+    one -- the fail-closed posture the UI-upload path already takes, since
+    a lifestyle photo reaching Drive/MASTER is worse than a missing one.
+
+    DEFERRED is NOT a verdict. It means no classifier ran -- quota
+    exhausted, rate limited, key missing, API error -- so nothing has
+    judged this image yet. Deleting it here would discard a real tile for
+    an infrastructure reason, so the caller preserves the file for a later
+    run instead. What it must NOT do is publish it: an unvalidated image
+    is exactly the room photo or logo this pipeline exists to keep out of
+    the catalog, so deferred candidates stay out of Drive, MASTER and the
+    Tile table until a classifier has actually seen them.
+
+    metadata carries values derived on the way through (Gemini's product
+    name, the size text near the image) plus the classifier type and
+    confidence, so the caller can attach them to a synced Tile row.
     """
     if semantic_validator is None:
-        return False, 'semantic validation unavailable (GEMINI_API_KEY not configured) -- needs review', {}
+        # A missing key is a configuration problem, not a judgement about
+        # the image -- defer rather than destroy, same as a dead quota.
+        return (
+            VALIDATION_DEFERRED,
+            'semantic validation unavailable (GEMINI_API_KEY not configured)',
+            {},
+        )
 
     analyze_product_image, validate_product_decision, validate_bbox = semantic_validator
 
@@ -1538,8 +1633,10 @@ def validate_and_correct_tile_image(output_path, image_rect, text_spans, semanti
 
     try:
         gemini_result = analyze_product_image(str(output_path), page_text=nearby_text)
-    except Exception as exc:  # noqa: BLE001 -- never fail open, see docstring
-        return False, f'Gemini validation failed ({exc}) -- needs review', {}
+    except Exception as exc:  # noqa: BLE001 -- see docstring
+        # The call itself blew up after its own retries, so again: no
+        # verdict was reached. Defer rather than reject.
+        return VALIDATION_DEFERRED, f'Gemini validation failed ({exc})', {}
 
     # cv_score is accepted by validate_product_decision for signature
     # compatibility with its other caller (catalog_pipeline.py) but is not
@@ -1554,10 +1651,22 @@ def validate_and_correct_tile_image(output_path, image_rect, text_spans, semanti
     }
 
     decision = validate_product_decision(None, gemini_result)
-    if decision.get('decision') != 'APPROVED':
+    verdict = decision.get('decision')
+
+    if verdict == 'REVIEW':
+        # No classification happened (quota/rate limit). Report it as its
+        # own state so the caller preserves the file instead of deleting
+        # a tile nobody has actually looked at.
+        return (
+            VALIDATION_DEFERRED,
+            decision.get('reason') or 'classification did not run',
+            classifier_info,
+        )
+
+    if verdict != 'APPROVED':
         detail = decision.get('reason') or 'not approved as a standalone tile product'
         return (
-            False,
+            VALIDATION_REJECTED,
             f"{detail} [type={classifier_info['image_type']} "
             f"confidence={classifier_info['confidence']:.2f}]",
             classifier_info,
@@ -1585,7 +1694,7 @@ def validate_and_correct_tile_image(output_path, image_rect, text_spans, semanti
         **classifier_info,
     }
 
-    return True, decision.get('reason') or '', metadata
+    return VALIDATION_APPROVED, decision.get('reason') or '', metadata
 
 
 def find_repeating_template_rects(document):
@@ -1681,6 +1790,12 @@ def extract_images_from_pdf(
     region_miner = load_tile_region_miner() if semantic_validator else None
     regions_recovered = 0
     page_render_recoveries = 0
+
+    # Candidates whose file was kept but which no classifier judged --
+    # counted and manifested separately from rejections, because a
+    # rejection is a decision and this is the absence of one.
+    validation_deferred = 0
+    deferred_records = []
 
     # One entry per tile-surface candidate examined, whatever became of
     # it. Written out at the end of the catalog so a run that recovered
@@ -1825,9 +1940,9 @@ def extract_images_from_pdf(
                             f"surfaces rather than discarding it"
                         )
 
-                        recovered = []
+                        recovered, region_deferred = [], []
                         if region_miner is not None:
-                            recovered = mine_tile_regions(
+                            recovered, region_deferred = mine_tile_regions(
                                 output_path,
                                 page_number,
                                 image_counter,
@@ -1840,6 +1955,14 @@ def extract_images_from_pdf(
                             )
 
                         output_path.unlink(missing_ok=True)
+
+                        for deferred_path, deferred_reason, deferred_meta in region_deferred:
+                            if defer_for_revalidation(
+                                deferred_path, page_number, image_counter,
+                                deferred_reason, deferred_meta,
+                                output_directory, deferred_records,
+                            ) is not None:
+                                validation_deferred += 1
 
                         regions_recovered += len(recovered)
                         image_counter = append_recovered_regions(
@@ -1854,10 +1977,37 @@ def extract_images_from_pdf(
                     # above) -- see validate_and_correct_tile_image. Also
                     # applies the product aspect-ratio correction in place
                     # on the same saved file when approved.
-                    approved, validation_reason, tile_metadata = validate_and_correct_tile_image(
+                    validation_status, validation_reason, tile_metadata = validate_and_correct_tile_image(
                         output_path, image_rect, text_spans, semantic_validator,
                     )
-                    if not approved:
+
+                    if validation_status == VALIDATION_DEFERRED:
+                        # Gemini never classified this image, so there is
+                        # no verdict to act on. Keep the file and record
+                        # how to finish the job later -- deleting a tile
+                        # because an API ran out of quota is the bug this
+                        # branch exists to prevent. It stays out of Drive,
+                        # MASTER and the Tile table until something has
+                        # actually looked at it.
+                        print(
+                            f"  DEFERRED -- validation could not run "
+                            f"(page {page_number} image {image_counter}): "
+                            f"{validation_reason}"
+                        )
+                        kept = defer_for_revalidation(
+                            output_path, page_number, image_counter,
+                            validation_reason, tile_metadata,
+                            output_directory, deferred_records,
+                        )
+                        if kept is not None:
+                            validation_deferred += 1
+                            print(
+                                f"    image preserved for revalidation: "
+                                f"{DEFERRED_DIRECTORY_NAME}/{kept.name}"
+                            )
+                        continue
+
+                    if validation_status != VALIDATION_APPROVED:
                         category = categorize_rejection(validation_reason)
                         print(
                             f"  REJECTED -- {category} "
@@ -1874,7 +2024,7 @@ def extract_images_from_pdf(
                         # recovered swatch is independently re-validated
                         # inside mine_tile_regions -- on the swatch itself,
                         # not on this verdict.
-                        recovered = []
+                        recovered, region_deferred = [], []
                         if region_miner is not None:
                             would_have_skipped = (
                                 category not in LEGACY_REGION_MINEABLE_CATEGORIES
@@ -1889,7 +2039,7 @@ def extract_images_from_pdf(
                                     if would_have_skipped else ""
                                 )
                             )
-                            recovered = mine_tile_regions(
+                            recovered, region_deferred = mine_tile_regions(
                                 output_path,
                                 page_number,
                                 image_counter,
@@ -1909,6 +2059,14 @@ def extract_images_from_pdf(
                                 rejection_categories.get(category, 0) + 1
                             )
                             continue
+
+                        for deferred_path, deferred_reason, deferred_meta in region_deferred:
+                            if defer_for_revalidation(
+                                deferred_path, page_number, image_counter,
+                                deferred_reason, deferred_meta,
+                                output_directory, deferred_records,
+                            ) is not None:
+                                validation_deferred += 1
 
                         regions_recovered += len(recovered)
                         image_counter = append_recovered_regions(
@@ -1993,7 +2151,7 @@ def extract_images_from_pdf(
                     f"({page_width}x{page_height} @ {PAGE_RENDER_DPI}dpi)"
                 )
 
-                recovered = mine_tile_regions(
+                recovered, region_deferred = mine_tile_regions(
                     render_path,
                     page_number,
                     0,
@@ -2005,6 +2163,14 @@ def extract_images_from_pdf(
                     source_type="rendered-page",
                     trace=region_trace,
                 )
+
+                for deferred_path, deferred_reason, deferred_meta in region_deferred:
+                    if defer_for_revalidation(
+                        deferred_path, page_number, 0,
+                        deferred_reason, deferred_meta,
+                        output_directory, deferred_records,
+                    ) is not None:
+                        validation_deferred += 1
 
                 regions_recovered += len(recovered)
                 page_render_recoveries += len(recovered)
@@ -2029,6 +2195,7 @@ def extract_images_from_pdf(
     print(f"Duplicates skipped          : {duplicates_skipped}")
     print(f"Room/lifestyle -> mined     : {room_photos_skipped}")
     print(f"Rejected by tile validation : {semantic_rejections}")
+    print(f"Deferred (not validated)    : {validation_deferred}")
     if region_miner is not None:
         print(f"Tile regions recovered      : {regions_recovered}")
         print(f"  from embedded images      : {regions_recovered - page_render_recoveries}")
@@ -2050,6 +2217,52 @@ def extract_images_from_pdf(
         for accepted in extracted_images:
             print(f"  {accepted['filename']}")
 
+    if deferred_records:
+        manifest_path = (
+            output_directory
+            / DEFERRED_DIRECTORY_NAME
+            / f"{pdf_path.stem}_deferred.json"
+        )
+        try:
+            manifest_path.write_text(
+                json.dumps(
+                    {
+                        "catalog": pdf_path.name,
+                        "status": VALIDATION_DEFERRED,
+                        "reason": (
+                            "Gemini classification did not run for these "
+                            "images. They are NOT rejected and NOT "
+                            "published; re-run this catalog once Gemini is "
+                            "available and they will be validated normally."
+                        ),
+                        "count": len(deferred_records),
+                        "images": deferred_records,
+                    },
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+            print("")
+            print("=" * 70)
+            print(f"{len(deferred_records)} IMAGE(S) AWAITING VALIDATION")
+            print("=" * 70)
+            print(
+                "These were extracted successfully but never classified, "
+                "because Gemini was\nunavailable. They are preserved, not "
+                "rejected, and are not in the catalog yet."
+            )
+            print("")
+            print(f"  Files    : {manifest_path.parent}")
+            print(f"  Manifest : {manifest_path}")
+            print("")
+            print(
+                "  Re-run this catalog once Gemini quota resets to validate "
+                "and publish them."
+            )
+            print("=" * 70)
+        except OSError as exc:
+            print(f"  [deferred] could not write {manifest_path}: {exc}")
+
     if region_trace:
         report_path = output_directory / f"{pdf_path.stem}_extraction_report.json"
         try:
@@ -2064,6 +2277,7 @@ def extract_images_from_pdf(
                         "from_rendered_pages": page_render_recoveries,
                         "duplicates_skipped": duplicates_skipped,
                         "rejected_by_validation": semantic_rejections,
+                        "deferred_for_validation": validation_deferred,
                         "trace": region_trace,
                     },
                     indent=2,
@@ -2451,6 +2665,14 @@ def process_pdf(
             file_hash=file_hash,
             filename=image["filename"],
         )
+
+        # Reported in the same shape as the failure case above, so a run
+        # can be read stage by stage rather than by noticing which lines
+        # are absent.
+        print(f"  {product_id}")
+        print(f"    Drive upload : SUCCESS")
+        print(f"    MASTER row   : SUCCESS")
+        print(f"    Tile row     : SUCCESS")
 
         uploaded_count += 1
 

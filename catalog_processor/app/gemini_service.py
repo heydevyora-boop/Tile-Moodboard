@@ -49,6 +49,16 @@ client = genai.Client(
 GEMINI_QUOTA_EXHAUSTED = False
 
 
+def is_quota_exhausted():
+    """True once this process has hit Gemini's quota/rate limit.
+
+    Callers use it to skip work that can only end in a deferred verdict --
+    every further Gemini call this run returns None immediately, so
+    spending time preparing images for classification is pure waste.
+    """
+    return GEMINI_QUOTA_EXHAUSTED
+
+
 def _is_gemini_quota_error(error):
     """
     Return True when the Gemini SDK error indicates a quota/rate-limit
