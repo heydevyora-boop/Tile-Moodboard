@@ -1,0 +1,531 @@
+"""Regression: what gets saved must be the TILE, not the scene around it.
+
+The production failures this covers, all four of them saved into the
+catalog as tile products:
+
+  a kitchen worktop        (stone, patterned -- but not a tile)
+  a tile with the product name printed across it
+  a tiled wall with a girl standing in front of it
+  a tiled floor with equipment sitting on it
+
+Each was approved because the only question ever asked was "is this
+image ABOUT a tile product?", and all four are. The question that was
+missing is "what is actually IN this frame?".
+
+HOW THIS TEST AVOIDS RUBBER-STAMPING ITSELF
+-------------------------------------------
+Gemini is stubbed, so a lazy stub could simply agree with whatever the
+pipeline did and the test would pass while the images stayed filthy.
+
+It is instead an ORACLE that reads the pixels of the crop the pipeline
+actually saved. Every non-tile element is drawn in a reserved colour, so
+"is there a person in this crop" is a real measurement, not an opinion:
+if one magenta pixel of the girl survives into the output, the oracle
+says so and the candidate is refused. A PASS here means the saved file
+genuinely contains no person, no text, no furniture.
+
+The geometry (app/tile_region_extractor) and the decision rule
+(image_validator.assess_tile_purity) are the REAL implementations. Only
+the two Gemini calls are replaced.
+
+Run:  GEMINI_API_KEY=test python3 test_tile_only_output.py
+"""
+
+import os
+import shutil
+import sys
+from pathlib import Path
+
+os.environ.setdefault("GEMINI_API_KEY", "test-key-not-used")
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import numpy as np  # noqa: E402
+from PIL import Image, ImageDraw, ImageFont  # noqa: E402
+
+import main_step6_complete as pipeline  # noqa: E402
+from app.image_validator import (  # noqa: E402
+    assess_tile_purity,
+    validate_bbox,
+    validate_product_decision,
+)
+
+OUT = Path(__file__).resolve().parent / "output" / "tile_only_test"
+
+# Reserved colours. Nothing else in a scene uses these, so finding one in
+# a saved crop is proof that contamination survived.
+TILE_A = (198, 188, 172)
+TILE_B = (176, 166, 150)
+GROUT = (112, 104, 92)
+PERSON = (222, 40, 142)
+TEXT = (12, 12, 14)
+FURNITURE = (92, 58, 38)
+FIXTURE = (248, 248, 252)
+OBJECT = (38, 142, 62)
+WALL = (232, 228, 220)
+
+SIZE = 900
+
+
+def tile_field(draw, box, cell=72, joint=6):
+    """Paints a real tiled surface: repeating units with grout joints."""
+    x1, y1, x2, y2 = box
+    for y in range(y1, y2):
+        for x in range(x1, x2):
+            local_x, local_y = x - x1, y - y1
+            if local_x % cell < joint or local_y % cell < joint:
+                colour = GROUT
+            else:
+                colour = TILE_A if ((local_x // cell) + (local_y // cell)) % 2 == 0 else TILE_B
+            draw.point((x, y), fill=colour)
+
+
+def stone_field(draw, box):
+    """Paints a continuous stone slab -- veined, but NO joints.
+
+    This is the kitchen-worktop case. It is stone, it is patterned, it
+    photographs beautifully, and it is not a tile. The absence of joints
+    is the whole difference and the oracle keys on exactly that.
+    """
+    x1, y1, x2, y2 = box
+    for y in range(y1, y2):
+        for x in range(x1, x2):
+            vein = int(14 * np.sin((x * 0.05) + (y * 0.017)))
+            draw.point((x, y), fill=(206 + vein, 198 + vein, 186 + vein))
+
+
+def font(size):
+    for candidate in (
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    ):
+        if Path(candidate).is_file():
+            return ImageFont.truetype(candidate, size)
+    return ImageFont.load_default()
+
+
+def scene(name, paint):
+    image = Image.new("RGB", (SIZE, SIZE), WALL)
+    draw = ImageDraw.Draw(image)
+    regions = paint(draw)
+    path = OUT / f"{name}.webp"
+    image.save(path, "WEBP", quality=92, method=6)
+    return path, regions
+
+
+# ----------------------------------------------------------------------
+# The scenes. Each returns the detector's answer for itself: the tile
+# plane and the boxes of whatever sits on top of it.
+# ----------------------------------------------------------------------
+
+def paint_tile_with_person(draw):
+    tile_field(draw, (0, 0, SIZE, SIZE))
+    draw.ellipse([330, 250, 560, 480], fill=PERSON)
+    draw.rectangle([360, 470, 530, SIZE], fill=PERSON)
+    return [{
+        "surface": "WALL", "confidence": 0.93,
+        "quad": [(0, 0), (SIZE, 0), (SIZE, SIZE), (0, SIZE)],
+        "occluders": [(320, 240, 570, SIZE)],
+    }]
+
+
+def paint_tile_with_text(draw):
+    tile_field(draw, (0, 0, SIZE, SIZE))
+    draw.rectangle([0, 620, SIZE, 780], fill=WALL)
+    draw.text((50, 650), "STATUARIO GOLD", fill=TEXT, font=font(58))
+    draw.text((50, 720), "600 x 1200 mm", fill=TEXT, font=font(40))
+    return [{
+        "surface": "WALL", "confidence": 0.91,
+        "quad": [(0, 0), (SIZE, 0), (SIZE, SIZE), (0, SIZE)],
+        "occluders": [(0, 610, SIZE, 790)],
+    }]
+
+
+def paint_kitchen_countertop(draw):
+    """A kitchen. The worktop is stone; there is no tile anywhere."""
+    draw.rectangle([0, 0, SIZE, 430], fill=WALL)
+    stone_field(draw, (0, 430, SIZE, 600))
+    draw.rectangle([0, 600, SIZE, SIZE], fill=FURNITURE)
+    draw.ellipse([620, 460, 760, 560], fill=FIXTURE)
+    return [{
+        "surface": "OTHER", "confidence": 0.72,
+        "quad": [(0, 430), (SIZE, 430), (SIZE, 600), (0, 600)],
+        "occluders": [(610, 450, 770, 570)],
+    }]
+
+
+def paint_bathroom_with_tile(draw):
+    """A real bathroom: tiled wall, basin and WC in front of it."""
+    tile_field(draw, (0, 0, SIZE, 620))
+    draw.rectangle([0, 620, SIZE, SIZE], fill=FURNITURE)
+    draw.ellipse([80, 380, 330, 610], fill=FIXTURE)
+    draw.rectangle([600, 400, 820, 620], fill=FIXTURE)
+    draw.ellipse([420, 60, 520, 170], fill=OBJECT)
+    return [{
+        "surface": "WALL", "confidence": 0.95,
+        "quad": [(0, 0), (SIZE, 0), (SIZE, 620), (0, 620)],
+        "occluders": [
+            (70, 370, 340, 620),
+            (590, 390, 830, 620),
+            (410, 50, 530, 180),
+        ],
+    }]
+
+
+def paint_clean_tile(draw):
+    """A standalone tile product shot. Already a swatch."""
+    tile_field(draw, (0, 0, SIZE, SIZE))
+    return [{
+        "surface": "SAMPLE", "confidence": 0.97,
+        "quad": [(0, 0), (SIZE, 0), (SIZE, SIZE), (0, SIZE)],
+        "occluders": [],
+    }]
+
+
+def paint_artwork(draw):
+    """A decorative panel: no repeating units, no joints. Not a tile."""
+    draw.rectangle([0, 0, SIZE, SIZE], fill=WALL)
+    for index in range(9):
+        draw.ellipse(
+            [90 + index * 74, 300 + (index % 3) * 60,
+             170 + index * 74, 380 + (index % 3) * 60],
+            fill=OBJECT,
+        )
+    return [{
+        "surface": "OTHER", "confidence": 0.61,
+        "quad": [(0, 0), (SIZE, 0), (SIZE, SIZE), (0, SIZE)],
+        "occluders": [],
+    }]
+
+
+SCENES = [
+    ("tile_with_person", paint_tile_with_person, "tile + person"),
+    ("tile_with_text", paint_tile_with_text, "tile + text overlay"),
+    ("kitchen_countertop", paint_kitchen_countertop, "kitchen worktop, no tile"),
+    ("bathroom_with_tile", paint_bathroom_with_tile, "bathroom + fixtures"),
+    ("clean_tile", paint_clean_tile, "standalone tile"),
+    ("artwork", paint_artwork, "decorative artwork, no tile"),
+]
+
+
+# ----------------------------------------------------------------------
+# The oracle. Measures the saved crop instead of trusting the pipeline.
+# ----------------------------------------------------------------------
+
+def near(pixels, colour, tolerance=26):
+    return (np.abs(pixels.astype(np.int16) - np.array(colour, np.int16))
+            .max(axis=-1) <= tolerance)
+
+
+def oracle_verify_tile_only(image_path):
+    """gemini_service.verify_tile_only, answered from real pixels."""
+    with Image.open(image_path) as opened:
+        pixels = np.asarray(opened.convert("RGB"))
+
+    total = pixels.shape[0] * pixels.shape[1]
+
+    tile_pixels = (near(pixels, TILE_A) | near(pixels, TILE_B)
+                   | near(pixels, GROUT)).sum()
+    grout_pixels = near(pixels, GROUT).sum()
+
+    flags = {
+        "contains_person": bool(near(pixels, PERSON).sum() > 0),
+        "contains_text": bool(near(pixels, TEXT).sum() > 0),
+        "contains_logo": False,
+        "contains_furniture": bool(near(pixels, FURNITURE).sum() > 0),
+        "contains_fixture": bool(near(pixels, FIXTURE).sum() > 0),
+        "contains_object": bool(near(pixels, OBJECT).sum() > 0),
+    }
+
+    tile_fraction = float(tile_pixels) / total if total else 0.0
+
+    # Joints are what make a tile a tile. A veined stone surface with no
+    # joints is a slab -- the kitchen-worktop distinction, measured.
+    if grout_pixels > total * 0.01:
+        material = "TILE"
+    elif near(pixels, WALL).sum() > total * 0.5:
+        material = "PAINTED_WALL"
+    elif tile_fraction > 0.3:
+        material = "STONE_SLAB"
+    else:
+        material = "OTHER"
+
+    present = sum(1 for value in flags.values() if value)
+
+    return {
+        "tile_fraction": tile_fraction,
+        "material": material,
+        "is_scene": present >= 2 or tile_fraction < 0.45,
+        "reason": f"{tile_fraction:.0%} tile surface",
+        **flags,
+    }
+
+
+class Analysis:
+    """The permissive product classifier, reproduced faithfully.
+
+    Its real prompt approves a product "occupying only part of the
+    image", so it says TILE for a bathroom photo and for a worktop. The
+    bug was trusting it alone; the test keeps it permissive on purpose so
+    the purity gate is what has to do the work.
+    """
+
+    def __init__(self, image_type, decision):
+        self.image_type = image_type
+        self.is_product_image = decision == "APPROVED"
+        self.decision = decision
+        self.confidence = 0.9
+        self.product_name = "Statuario Gold"
+        self.product_bbox = None
+        self.reason = "tile product"
+
+
+def analyze_product_image(image_path, page_text=""):
+    observation = oracle_verify_tile_only(image_path)
+    if observation["material"] in ("PAINTED_WALL", "OTHER"):
+        return Analysis("GRAPHIC", "REJECTED")
+    return Analysis("TILE", "APPROVED")
+
+
+def install(regions_by_stem):
+    def detect_tile_regions(image_path, width, height):
+        return regions_by_stem.get(Path(image_path).stem, [])
+
+    from app.tile_region_extractor import extract_tile_region
+
+    pipeline.load_semantic_tile_validator = lambda: (
+        analyze_product_image, validate_product_decision, validate_bbox,
+    )
+    pipeline.load_tile_region_miner = lambda: (
+        detect_tile_regions, extract_tile_region,
+    )
+    pipeline.load_tile_purity_verifier = lambda: (
+        oracle_verify_tile_only, assess_tile_purity,
+    )
+
+
+def check(label, condition, detail=""):
+    mark = "PASS" if condition else "FAIL"
+    print(f"  [{mark}] {label}" + (f" -- {detail}" if detail else ""))
+    return bool(condition)
+
+
+def main():
+    if OUT.exists():
+        shutil.rmtree(OUT)
+    OUT.mkdir(parents=True, exist_ok=True)
+
+    regions_by_stem = {}
+    sources = []
+    for name, paint, description in SCENES:
+        path, regions = scene(name, paint)
+        regions_by_stem[path.stem] = regions
+        sources.append((name, path, description))
+
+    install(regions_by_stem)
+
+    semantic = pipeline.load_semantic_tile_validator()
+    miner = pipeline.load_tile_region_miner()
+
+    results = []
+    accepted_by_scene = {}
+
+    for name, path, description in sources:
+        print("")
+        print("=" * 72)
+        print(f"{description}  ({name})")
+        print("=" * 72)
+
+        # Stage 1 -- the whole image, exactly as the pipeline judges it.
+        status, reason, _meta = pipeline.validate_and_correct_tile_image(
+            path, None, [], semantic,
+        )
+        print(f"  whole image: {status} -- {reason}")
+
+        accepted = []
+        if status == pipeline.VALIDATION_APPROVED:
+            accepted = [(path, reason, _meta)]
+        elif status in (pipeline.VALIDATION_IMPURE, pipeline.VALIDATION_REJECTED):
+            # Both route to isolation: a dirty frame gets its tile cut
+            # out, and a "not a tile" frame still gets searched in case a
+            # real tile is somewhere inside it.
+            accepted, _deferred = pipeline.mine_tile_regions(
+                path, 1, 1, [], None, semantic, miner, OUT,
+            )
+
+        accepted_by_scene[name] = accepted
+
+    print("")
+    print("=" * 72)
+    print("INSPECTING EVERY SAVED IMAGE")
+    print("=" * 72)
+
+    # The real assertions: measure what is on disk.
+    for name, _path, description in sources:
+        for saved_path, _reason, _meta in accepted_by_scene[name]:
+            observation = oracle_verify_tile_only(saved_path)
+            dirt = [
+                key.replace("contains_", "")
+                for key in ("contains_person", "contains_text",
+                            "contains_furniture", "contains_fixture",
+                            "contains_object")
+                if observation[key]
+            ]
+            results.append(check(
+                f"{name}: saved image is tile-only",
+                not dirt and observation["material"] == "TILE",
+                f"material={observation['material']} "
+                f"tile={observation['tile_fraction']:.0%}"
+                + (f" CONTAMINATED BY {', '.join(dirt)}" if dirt else ""),
+            ))
+
+    print("")
+    results.append(check(
+        "tile + person      -> a tile-only swatch is recovered",
+        len(accepted_by_scene["tile_with_person"]) == 1,
+    ))
+    results.append(check(
+        "tile + text        -> a tile-only swatch is recovered",
+        len(accepted_by_scene["tile_with_text"]) == 1,
+    ))
+    results.append(check(
+        "bathroom + tile    -> a tile-only swatch is recovered",
+        len(accepted_by_scene["bathroom_with_tile"]) == 1,
+    ))
+    results.append(check(
+        "standalone tile    -> kept",
+        len(accepted_by_scene["clean_tile"]) == 1,
+    ))
+    results.append(check(
+        "kitchen worktop    -> nothing saved (stone slab is not a tile)",
+        len(accepted_by_scene["kitchen_countertop"]) == 0,
+        f"{len(accepted_by_scene['kitchen_countertop'])} saved",
+    ))
+    results.append(check(
+        "artwork, no tile   -> nothing saved",
+        len(accepted_by_scene["artwork"]) == 0,
+        f"{len(accepted_by_scene['artwork'])} saved",
+    ))
+
+    total_saved = sum(len(v) for v in accepted_by_scene.values())
+    results.append(check(
+        "the fix does not work by extracting nothing",
+        total_saved >= 4, f"{total_saved} tiles recovered",
+    ))
+
+    results.extend(decision_matrix())
+
+    passed = sum(1 for r in results if r)
+    print("")
+    print(f"{passed}/{len(results)} checks passed")
+
+    contact_sheet(sources, accepted_by_scene)
+    return 0 if passed == len(results) else 1
+
+
+def observe(material="TILE", fraction=1.0, scene=False, **flags):
+    base = {
+        "tile_fraction": fraction, "material": material, "is_scene": scene,
+        "contains_person": False, "contains_text": False,
+        "contains_logo": False, "contains_furniture": False,
+        "contains_fixture": False, "contains_object": False,
+        "reason": "",
+    }
+    base.update(flags)
+    return base
+
+
+# The catalogue of situations this pipeline has to get right, as a table.
+# CONTAMINATED is not a rejection -- it is "the tile is real, go isolate
+# it" -- so the three outcomes below are genuinely distinct verdicts.
+MATRIX = [
+    ("wall tile + sofa", observe(contains_furniture=True), "CONTAMINATED"),
+    ("floor tile + table/chair", observe(contains_furniture=True), "CONTAMINATED"),
+    ("bathroom tile + toilet/sink", observe(contains_fixture=True), "CONTAMINATED"),
+    ("tile + person", observe(contains_person=True), "CONTAMINATED"),
+    ("tile + text overlay", observe(contains_text=True), "CONTAMINATED"),
+    ("tile + logo", observe(contains_logo=True), "CONTAMINATED"),
+    ("tile + decorative objects", observe(contains_object=True), "CONTAMINATED"),
+    ("complete room with tile", observe(scene=True, fraction=0.5), "CONTAMINATED"),
+    ("tile mostly covered", observe(fraction=0.4), "CONTAMINATED"),
+    ("marketing image, genuine tile", observe(contains_text=True, fraction=0.7),
+     "CONTAMINATED"),
+
+    ("standalone tile", observe(), "CLEAN"),
+    ("tile shown in perspective", observe(fraction=0.95), "CLEAN"),
+    ("exterior wall tile", observe(), "CLEAN"),
+    ("terrace / roof tile", observe(), "CLEAN"),
+
+    ("kitchen countertop", observe(material="COUNTERTOP"), "NOT_TILE"),
+    ("marble / stone slab", observe(material="STONE_SLAB"), "NOT_TILE"),
+    ("wooden floor", observe(material="WOOD"), "NOT_TILE"),
+    ("painted wall", observe(material="PAINTED_WALL"), "NOT_TILE"),
+    ("carpet / fabric", observe(material="FABRIC"), "NOT_TILE"),
+    ("decorative artwork", observe(material="ARTWORK"), "NOT_TILE"),
+    ("glass / mirror", observe(material="GLASS"), "NOT_TILE"),
+    ("countertop, even when clean", observe(material="COUNTERTOP", fraction=1.0),
+     "NOT_TILE"),
+]
+
+
+def decision_matrix():
+    print("")
+    print("=" * 72)
+    print("DECISION MATRIX")
+    print("=" * 72)
+
+    outcomes = []
+    for label, observation, expected in MATRIX:
+        actual = assess_tile_purity(observation)["state"]
+        outcomes.append(check(
+            f"{label:32s} -> {expected}",
+            actual == expected,
+            "" if actual == expected else f"got {actual}",
+        ))
+    return outcomes
+
+
+def contact_sheet(sources, accepted_by_scene):
+    """Renders source -> saved pairs so the images can be eyeballed."""
+    cell, bar, gap = 260, 26, 12
+    width = gap + (cell + gap) * 2
+    height = gap + (cell + bar + gap) * len(sources)
+    sheet = Image.new("RGB", (width, height), (238, 238, 238))
+    draw = ImageDraw.Draw(sheet)
+    label_font = font(13)
+
+    for row, (name, path, description) in enumerate(sources):
+        y = gap + row * (cell + bar + gap)
+
+        with Image.open(path) as opened:
+            thumb = opened.convert("RGB").copy()
+        thumb.thumbnail((cell, cell))
+        draw.rectangle([gap, y, gap + cell, y + bar], fill=(30, 30, 30))
+        draw.text((gap + 6, y + 6), f"SOURCE  {description}",
+                  fill=(255, 255, 255), font=label_font)
+        sheet.paste(thumb, (gap, y + bar))
+
+        x = gap + cell + gap
+        saved = accepted_by_scene[name]
+        if saved:
+            with Image.open(saved[0][0]) as opened:
+                out = opened.convert("RGB").copy()
+            out.thumbnail((cell, cell))
+            draw.rectangle([x, y, x + cell, y + bar], fill=(20, 90, 40))
+            draw.text((x + 6, y + 6), "SAVED  tile-only",
+                      fill=(255, 255, 255), font=label_font)
+            sheet.paste(out, (x, y + bar))
+        else:
+            draw.rectangle([x, y, x + cell, y + bar], fill=(120, 30, 30))
+            draw.text((x + 6, y + 6), "SAVED  nothing (correct)",
+                      fill=(255, 255, 255), font=label_font)
+            draw.rectangle([x, y + bar, x + cell, y + bar + cell],
+                           fill=(214, 214, 214))
+
+    path = OUT / "contact_sheet.png"
+    sheet.save(path)
+    print(f"contact sheet: {path}")
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -204,6 +204,14 @@ def rectify_quad(image_bgr: np.ndarray, quad) -> np.ndarray | None:
             transform,
             (width, height),
             flags=cv2.INTER_AREA,
+            # A quad that reaches the image edge samples a fraction of a
+            # pixel beyond it, and the default border fill is BLACK -- so
+            # every such swatch came out with a black seam down one side.
+            # Replicating the edge pixel keeps the border the colour of
+            # the tile it belongs to. This copies a real neighbouring
+            # pixel rather than inventing pattern, so the tile's own
+            # appearance is untouched.
+            borderMode=cv2.BORDER_REPLICATE,
         )
     except cv2.error:
         return None

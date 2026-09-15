@@ -36,7 +36,11 @@ from PIL import Image  # noqa: E402
 
 import app.gemini_service as gemini_service  # noqa: E402
 import main_step6_complete as pipeline  # noqa: E402
-from app.image_validator import validate_bbox, validate_product_decision  # noqa: E402
+from app.image_validator import (  # noqa: E402
+    assess_tile_purity,
+    validate_bbox,
+    validate_product_decision,
+)
 
 
 OUT = Path(__file__).resolve().parent / "output" / "quota_deferral_test"
@@ -120,6 +124,27 @@ def install(mode):
     pipeline.load_semantic_tile_validator = lambda: (
         analyze, validate_product_decision, validate_bbox,
     )
+
+    # Purity runs on whatever the classifier approves. Under quota it is
+    # never reached (nothing gets approved), and it is quota-bound itself,
+    # so it reports "no verdict" for the same reason.
+    def purity(image_path):
+        if mode == "quota":
+            return None
+        return {
+            "tile_fraction": 1.0,
+            "material": "TILE",
+            "contains_person": False,
+            "contains_text": False,
+            "contains_logo": False,
+            "contains_furniture": False,
+            "contains_fixture": False,
+            "contains_object": False,
+            "is_scene": False,
+            "reason": "synthetic tile grid",
+        }
+
+    pipeline.load_tile_purity_verifier = lambda: (purity, assess_tile_purity)
     # Region mining is irrelevant here and would need cv2 + a detector;
     # switching it off keeps this test about the quota path only.
     pipeline.load_tile_region_miner = lambda: None

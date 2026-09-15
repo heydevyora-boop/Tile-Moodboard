@@ -223,6 +223,145 @@ def validate_product_decision(
 
 
 # ============================================================
+# TILE PURITY GATE
+#
+# validate_product_decision above answers "is this image ABOUT a tile
+# product?". That is the wrong question for deciding what pixels to
+# save, and asking only it is what put a kitchen, a caption and a
+# person into the catalog:
+#
+#   a bathroom photo with a girl in front of a tiled wall IS about a
+#   tile product -- the classifier is even instructed to approve a
+#   product "occupying only part of the image" -- so it was approved,
+#   and the girl was saved with it.
+#
+# This gate answers the other question: is this frame ACTUALLY a tile
+# surface and nothing else? It reads the observations from
+# gemini_service.verify_tile_only and applies the rule here, in pure
+# code, so the policy can be tested without an API key.
+#
+# Three outcomes, and the middle one is the point. A dirty frame is NOT
+# rejected: the tile in it is real, so the caller is told to go isolate
+# it. Rejecting here would recreate the "extract nothing" failure.
+# ============================================================
+
+PURITY_CLEAN = "CLEAN"
+PURITY_CONTAMINATED = "CONTAMINATED"
+PURITY_NOT_TILE = "NOT_TILE"
+
+
+# The frame must be overwhelmingly tile surface. This is deliberately
+# high: the output is a material swatch, and anything that leaves room
+# for a sofa in the corner is not one. Tile genuinely present below this
+# is not lost -- it routes to isolation instead.
+MIN_TILE_FRACTION = 0.80
+
+# Materials that are stone/marble/continuous but are NOT the catalog's
+# tile product. Named separately from the generic non-tile materials so
+# the log can say why a handsome marble surface was turned down.
+SLAB_MATERIALS = {"COUNTERTOP", "STONE_SLAB"}
+
+# What each contamination flag is called in a log line.
+CONTAMINANT_LABELS = (
+    ("contains_person", "a person"),
+    ("contains_text", "text"),
+    ("contains_logo", "a logo"),
+    ("contains_furniture", "furniture"),
+    ("contains_fixture", "a fixture"),
+    ("contains_object", "an object"),
+)
+
+
+def describe_contaminants(observation):
+    """Names everything the verifier saw that is not tile."""
+    return [
+        label
+        for key, label in CONTAMINANT_LABELS
+        if observation.get(key)
+    ]
+
+
+def assess_tile_purity(observation):
+    """Decides whether one frame is a tile-only swatch.
+
+    `observation` is a gemini_service.verify_tile_only result. Returns
+    {state, reason, contaminants} where state is PURITY_CLEAN (save it),
+    PURITY_CONTAMINATED (real tile, wrong framing -- go isolate it) or
+    PURITY_NOT_TILE (no tile product here).
+    """
+    material = str(observation.get("material") or "OTHER").strip().upper()
+    contaminants = describe_contaminants(observation)
+
+    try:
+        tile_fraction = float(observation.get("tile_fraction", 0.0))
+    except (TypeError, ValueError):
+        tile_fraction = 0.0
+
+    # RULE 1 -- the surface has to be tile at all.
+    #
+    # A countertop and a stone slab get their own message because they
+    # are the convincing near-miss: stone, patterned, photogenic, and
+    # routinely shot in the same catalogs. They are still not the tile.
+    if material in SLAB_MATERIALS:
+        return {
+            "state": PURITY_NOT_TILE,
+            "reason": (
+                f"the surface is a {material.lower().replace('_', ' ')}, "
+                f"not a tile"
+            ),
+            "contaminants": contaminants,
+        }
+
+    if material != "TILE":
+        return {
+            "state": PURITY_NOT_TILE,
+            "reason": (
+                f"the surface is {material.lower().replace('_', ' ')}, "
+                f"not tile"
+            ),
+            "contaminants": contaminants,
+        }
+
+    # RULE 2 -- a photograph of a space is never a swatch, however much
+    # tile it contains. This is the "complete room / complete wall /
+    # complete floor" case: the tile is real, so it routes to isolation.
+    if observation.get("is_scene"):
+        return {
+            "state": PURITY_CONTAMINATED,
+            "reason": "this is a view of a space, not a piece of surface",
+            "contaminants": contaminants,
+        }
+
+    # RULE 3 -- anything present that is not tile.
+    if contaminants:
+        return {
+            "state": PURITY_CONTAMINATED,
+            "reason": f"the frame also contains {', '.join(contaminants)}",
+            "contaminants": contaminants,
+        }
+
+    # RULE 4 -- mostly tile, but not tile enough.
+    if tile_fraction < MIN_TILE_FRACTION:
+        return {
+            "state": PURITY_CONTAMINATED,
+            "reason": (
+                f"only {tile_fraction:.0%} of the frame is tile surface, "
+                f"below the {MIN_TILE_FRACTION:.0%} minimum"
+            ),
+            "contaminants": contaminants,
+        }
+
+    return {
+        "state": PURITY_CLEAN,
+        "reason": (
+            observation.get("reason")
+            or f"{tile_fraction:.0%} tile surface, nothing else in frame"
+        ),
+        "contaminants": [],
+    }
+
+
+# ============================================================
 # BBOX VALIDATOR
 #
 # ONLY validates coordinates.

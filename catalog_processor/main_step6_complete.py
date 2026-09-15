@@ -1300,6 +1300,12 @@ def mine_tile_regions(
     """
     import cv2  # local: only needed when mining actually runs
 
+    try:
+        from app.image_validator import describe_contaminants
+    except Exception:  # noqa: BLE001 -- logging helper only, never fatal
+        def describe_contaminants(_observation):
+            return []
+
     detect_tile_regions, extract_tile_region = region_miner
 
     try:
@@ -1434,6 +1440,28 @@ def mine_tile_regions(
         print(f"      region classification: {region_type} "
               f"(confidence {confidence_text})")
 
+        # What the purity verifier actually saw inside the finished crop.
+        # Printed for every candidate, accepted or not, because "why did
+        # this one survive" needs the same evidence as "why did that one
+        # die" -- and an accepted swatch with text in it is exactly the
+        # failure that went unnoticed before.
+        observation = metadata.get('purity') or {}
+        if observation:
+            contaminants = ", ".join(
+                describe_contaminants(observation)
+            ) or "none"
+            print(f"      material           : {observation.get('material', '?')}")
+            print(f"      tile fraction      : "
+                  f"{observation.get('tile_fraction', 0.0):.0%}")
+            print(f"      non-tile content   : {contaminants}")
+            print(f"      reads as a scene   : "
+                  f"{'YES' if observation.get('is_scene') else 'no'}")
+
+        print(f"      masking applied    : "
+              f"{'YES' if region['occluders'] else 'no'}")
+        print(f"      perspective corr.  : "
+              f"{'YES' if info.get('surface_source') == 'rectified' else 'no'}")
+
         geometry_fields = {
             "geometry_in": info.get("quad_in"),
             "geometry_normalized": info.get("quad_normalized"),
@@ -1457,10 +1485,20 @@ def mine_tile_regions(
             continue
 
         if status != VALIDATION_APPROVED:
+            # A crop that is STILL contaminated has already had its one
+            # chance at isolation -- this IS the isolated result. Mining
+            # it again would just re-cut the same pixels, so it is
+            # dropped here, which is what "reject that specific candidate
+            # rather than producing a bad image" means in practice.
             region_path.unlink(missing_ok=True)
-            print(f"      region validation  : FAIL -- {reason}")
+            if status == VALIDATION_IMPURE:
+                print(f"      region validation  : FAIL -- could not be "
+                      f"isolated cleanly: {reason}")
+            else:
+                print(f"      region validation  : FAIL -- {reason}")
             print(f"      FINAL              : REJECTED")
             note("REJECTED", validation="FAIL", validation_reason=reason,
+                 purity_state=metadata.get("purity_state"),
                  **geometry_fields)
             continue
 
@@ -1470,6 +1508,9 @@ def mine_tile_regions(
         note("ACCEPTED", validation="PASS", validation_reason=reason,
              image_path=str(region_path),
              product_name=metadata.get("product_name", ""),
+             purity_state=metadata.get("purity_state"),
+             material=(metadata.get("purity") or {}).get("material"),
+             tile_fraction=(metadata.get("purity") or {}).get("tile_fraction"),
              **geometry_fields)
 
         accepted.append((region_path, reason, metadata))
@@ -1593,6 +1634,36 @@ VALIDATION_APPROVED = "GEMINI_APPROVED"
 VALIDATION_REJECTED = "GEMINI_REJECTED"
 VALIDATION_DEFERRED = "REVIEW_REQUIRED"
 
+# A fourth outcome, and the one that fixes the bad crops.
+#
+# IMPURE means: there IS tile here, but this framing is not a swatch --
+# a person, a caption, a sofa or a whole room came with it. It is
+# neither an approval nor a rejection. The caller must go and isolate
+# the tile surface out of the frame (mine_tile_regions) rather than
+# either saving the contaminated image or discarding a real tile.
+VALIDATION_IMPURE = "NEEDS_ISOLATION"
+
+
+def load_tile_purity_verifier():
+    """Lazily imports the frame-purity verifier and its decision rule.
+
+    Returns (verify_tile_only, assess_tile_purity) or None. None means
+    the purity gate is skipped, which restores exactly the previous
+    behaviour -- so a missing key or a failed import can never turn into
+    a crash, only into the older, looser acceptance.
+
+    Deliberately NOT cached: one process legitimately runs the pipeline
+    more than once (tests do), and a cached verifier would leak the
+    first run's Gemini state into the second.
+    """
+    try:
+        from app.gemini_service import verify_tile_only
+        from app.image_validator import assess_tile_purity
+        return verify_tile_only, assess_tile_purity
+    except Exception as exc:  # noqa: BLE001 -- missing key raises RuntimeError
+        print(f"  [tile-purity] Purity verification unavailable: {exc}")
+        return None
+
 
 def validate_and_correct_tile_image(output_path, image_rect, text_spans, semantic_validator):
     """Gates and corrects ONE already-saved candidate image in place.
@@ -1694,7 +1765,58 @@ def validate_and_correct_tile_image(output_path, image_rect, text_spans, semanti
         **classifier_info,
     }
 
-    return VALIDATION_APPROVED, decision.get('reason') or '', metadata
+    # THE PURITY GATE.
+    #
+    # Everything above decided that this image is ABOUT a tile product.
+    # That was the only question the pipeline used to ask, and it is why
+    # a kitchen, a caption and a person reached the catalog: all three
+    # are images about a tile.
+    #
+    # Now ask what is actually in the frame. It runs here, after the
+    # bbox and aspect-ratio corrections have been written, so it judges
+    # the exact pixels that would be saved -- a correction that already
+    # cropped the person away should pass, and does.
+    purity_verifier = load_tile_purity_verifier()
+    if purity_verifier is None:
+        return VALIDATION_APPROVED, decision.get('reason') or '', metadata
+
+    verify_tile_only, assess_tile_purity = purity_verifier
+
+    try:
+        observation = verify_tile_only(str(output_path))
+    except Exception as exc:  # noqa: BLE001 -- no verdict, not a dirty verdict
+        observation = None
+        purity_error = str(exc)
+    else:
+        purity_error = ''
+
+    if observation is None:
+        # Nothing inspected the frame, so its contents are unknown. An
+        # unknown frame must not be published -- that is how the girl
+        # got in -- but it must not be deleted either. Same posture as a
+        # missing classification: defer and look again later.
+        return (
+            VALIDATION_DEFERRED,
+            'purity verification did not run'
+            + (f' ({purity_error})' if purity_error else ''),
+            metadata,
+        )
+
+    purity = assess_tile_purity(observation)
+    metadata['purity'] = observation
+    metadata['purity_state'] = purity['state']
+
+    from app.image_validator import PURITY_CLEAN, PURITY_CONTAMINATED
+
+    if purity['state'] == PURITY_CLEAN:
+        return VALIDATION_APPROVED, purity['reason'], metadata
+
+    if purity['state'] == PURITY_CONTAMINATED:
+        # Real tile, wrong framing. Not a rejection -- the caller goes
+        # and cuts the tile surface out of it.
+        return VALIDATION_IMPURE, purity['reason'], metadata
+
+    return VALIDATION_REJECTED, purity['reason'], metadata
 
 
 def find_repeating_template_rects(document):
@@ -2008,12 +2130,29 @@ def extract_images_from_pdf(
                         continue
 
                     if validation_status != VALIDATION_APPROVED:
-                        category = categorize_rejection(validation_reason)
-                        print(
-                            f"  REJECTED -- {category} "
-                            f"(page {page_number} image {image_counter}): "
-                            f"{validation_reason}"
-                        )
+                        if validation_status == VALIDATION_IMPURE:
+                            # Not a rejection. The tile is real; this
+                            # framing just is not a swatch, so the mining
+                            # below goes and cuts the surface out of it.
+                            # Saying "REJECTED" here would describe the
+                            # exact bug this branch fixes.
+                            category = "needs tile isolation"
+                            print(
+                                f"  NOT TILE-ONLY -- "
+                                f"(page {page_number} image {image_counter}): "
+                                f"{validation_reason}"
+                            )
+                            print(
+                                f"    isolating the tile surface instead of "
+                                f"saving the frame as-is"
+                            )
+                        else:
+                            category = categorize_rejection(validation_reason)
+                            print(
+                                f"  REJECTED -- {category} "
+                                f"(page {page_number} image {image_counter}): "
+                                f"{validation_reason}"
+                            )
 
                         # The image is not a tile product, but it may
                         # SHOW tile. Mine it for surfaces before discarding

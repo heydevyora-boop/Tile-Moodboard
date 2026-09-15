@@ -1515,6 +1515,98 @@ TILE_REGION_MIN_CONFIDENCE = 0.55
 TILE_REGION_MAX = 6
 
 
+# ============================================================
+# TILE PURITY VERIFIER
+#
+# A SECOND, DIFFERENT QUESTION from analyze_product_image.
+#
+# analyze_product_image asks "which catalog PRODUCT is this image
+# about?", and its own prompt tells it to approve a product that is
+# "occupying only part of the image". For a tile that is exactly wrong:
+# a bathroom photo with a girl standing in front of a tiled wall IS an
+# image about a tile product, so it is approved, and the girl is saved
+# into the catalog with it.
+#
+# This prompt asks about the FRAME instead: forget what is being sold,
+# what is actually IN this picture? It is the difference between "the
+# area where a tile exists" and "a tile image", and nothing else in the
+# pipeline was asking it.
+# ============================================================
+
+TILE_PURITY_PROMPT = """
+You are inspecting ONE image that is about to be saved as a tile swatch
+in a product catalog. It must show the TILE SURFACE ITSELF and nothing
+else, like a material sample.
+
+Do NOT ask what product this picture advertises. Ask only what is
+physically visible inside this frame.
+
+Report:
+
+- tile_fraction: 0.0-1.0, how much of the frame is actual tile/clad
+  surface. A photo of a room with a tiled wall in it has a LOW value
+  even though the room is full of tile, because floor, ceiling,
+  furniture and fittings are not tile surface.
+
+- material: what the main surface really is, one of
+  TILE          repeating tile/paved/clad units, with joints
+  COUNTERTOP    a kitchen worktop / vanity top / island top
+  STONE_SLAB    a continuous stone or marble slab, no tile joints
+  WOOD          wooden floor, panel or furniture surface
+  PAINTED_WALL  plain painted or plastered wall
+  CONCRETE      bare concrete or screed
+  FABRIC        carpet, rug, curtain, upholstery
+  GLASS         glass or mirror
+  METAL         metal panel or appliance
+  ARTWORK       a printed picture, poster, mural or decorative panel
+  OTHER         anything else
+  A COUNTERTOP or STONE_SLAB is NOT a tile even when it is stone and
+  even when it is beautiful. Only call it TILE if you can see the
+  repeating units or the joints between them.
+
+- contains_person: a human, or any part of one -- face, hand, leg,
+  hair, clothing.
+- contains_text: readable text, product names, sizes, SKU codes,
+  headings, captions, marketing copy, watermarks.
+- contains_logo: a brand mark, emblem or logotype.
+- contains_furniture: sofa, table, chair, bed, cabinet, shelving.
+- contains_fixture: toilet, basin, bath, shower, tap, mirror, sink,
+  radiator, door, window frame.
+- contains_object: plant, vase, bottle, lamp, appliance, equipment,
+  ornament or any other loose object.
+
+- is_scene: true when this reads as a photograph OF A SPACE (a room, a
+  kitchen, a bathroom, an elevation, an interior view) rather than a
+  flat piece of surface. A whole wall or a whole floor photographed as
+  part of a room is a scene.
+
+- reason: one short sentence naming what is actually in the frame.
+
+Be strict. Something that is small, blurred, in shadow, or at the very
+edge of the frame still counts as present -- say true.
+
+Return ONLY valid JSON.
+"""
+
+
+TILE_PURITY_SCHEMA = {
+    "type": "OBJECT",
+    "properties": {
+        "tile_fraction": {"type": "NUMBER"},
+        "material": {"type": "STRING"},
+        "contains_person": {"type": "BOOLEAN"},
+        "contains_text": {"type": "BOOLEAN"},
+        "contains_logo": {"type": "BOOLEAN"},
+        "contains_furniture": {"type": "BOOLEAN"},
+        "contains_fixture": {"type": "BOOLEAN"},
+        "contains_object": {"type": "BOOLEAN"},
+        "is_scene": {"type": "BOOLEAN"},
+        "reason": {"type": "STRING"},
+    },
+    "required": ["tile_fraction", "material", "is_scene", "reason"],
+}
+
+
 # Gemini emits spatial coordinates in more than one convention, and which
 # one arrives is not something the prompt reliably controls. The vision
 # models are trained to report points and boxes normalized to 0-1000, and
@@ -1755,3 +1847,78 @@ def detect_tile_regions(image_path, width, height):
     regions.sort(key=lambda region: region["confidence"], reverse=True)
 
     return regions[:TILE_REGION_MAX]
+
+
+def verify_tile_only(image_path):
+    """Inspects what is physically inside one candidate swatch.
+
+    Returns a dict of observations (see TILE_PURITY_PROMPT) or None when
+    no verdict could be reached -- quota exhausted, API error, or an
+    unparseable response. None is deliberately distinct from "the frame
+    is dirty": the caller must defer on None rather than delete, for the
+    same reason analyze_product_image's REVIEW path exists.
+
+    This makes NO accept/reject decision. It reports what it sees and
+    leaves the judgement to image_validator.assess_tile_purity, so the
+    rule can be tested without an API key.
+    """
+    try:
+        with open(image_path, "rb") as handle:
+            image_bytes = handle.read()
+    except OSError:
+        return None
+
+    suffix = str(image_path).lower()
+    if suffix.endswith(".png"):
+        mime_type = "image/png"
+    elif suffix.endswith((".jpg", ".jpeg")):
+        mime_type = "image/jpeg"
+    else:
+        mime_type = "image/webp"
+
+    try:
+        response = _generate_content_safe(
+            model=GEMINI_MODEL,
+            contents=[
+                types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
+                TILE_PURITY_PROMPT,
+            ],
+            config={
+                "response_mime_type": "application/json",
+                "response_schema": TILE_PURITY_SCHEMA,
+            },
+        )
+    except Exception:  # noqa: BLE001 -- treated as "no verdict", never as clean
+        return None
+
+    if response is None:
+        return None
+
+    try:
+        payload = json.loads(response.text)
+    except (AttributeError, ValueError, TypeError):
+        return None
+
+    if not isinstance(payload, dict):
+        return None
+
+    try:
+        tile_fraction = float(payload.get("tile_fraction", 0.0))
+    except (TypeError, ValueError):
+        tile_fraction = 0.0
+
+    if not math.isfinite(tile_fraction):
+        tile_fraction = 0.0
+
+    return {
+        "tile_fraction": max(0.0, min(1.0, tile_fraction)),
+        "material": str(payload.get("material") or "OTHER").strip().upper(),
+        "contains_person": bool(payload.get("contains_person")),
+        "contains_text": bool(payload.get("contains_text")),
+        "contains_logo": bool(payload.get("contains_logo")),
+        "contains_furniture": bool(payload.get("contains_furniture")),
+        "contains_fixture": bool(payload.get("contains_fixture")),
+        "contains_object": bool(payload.get("contains_object")),
+        "is_scene": bool(payload.get("is_scene")),
+        "reason": str(payload.get("reason") or "").strip(),
+    }

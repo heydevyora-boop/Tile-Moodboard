@@ -237,6 +237,28 @@ def install_fakes():
 
     pipeline.load_tile_region_miner = lambda: (tracking_detect, extract_tile_region)
 
+    # The crops this test cuts are synthetic tile grids with nothing laid
+    # on top of them, so frame purity is not what it is exercising --
+    # report a clean tile and leave the deciding to the region rules
+    # above. test_tile_only_output.py is where purity itself is tested.
+    from app.image_validator import assess_tile_purity
+
+    def fake_purity(image_path):
+        return {
+            "tile_fraction": 1.0,
+            "material": "TILE",
+            "contains_person": False,
+            "contains_text": False,
+            "contains_logo": False,
+            "contains_furniture": False,
+            "contains_fixture": False,
+            "contains_object": False,
+            "is_scene": False,
+            "reason": "synthetic tile grid",
+        }
+
+    pipeline.load_tile_purity_verifier = lambda: (fake_purity, assess_tile_purity)
+
 
 def assert_true(label, condition, detail=""):
     mark = "PASS" if condition else "FAIL"
