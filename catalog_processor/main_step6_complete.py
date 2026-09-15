@@ -1300,7 +1300,13 @@ def mine_tile_regions(
     """
     import cv2  # local: only needed when mining actually runs
 
-    from app.tile_region_extractor import deduplicate_regions, quad_bounds
+    from app.tile_region_extractor import (
+        MIN_CLEAN_PIXELS,
+        MIN_OUTPUT_SIDE_PX,
+        deduplicate_regions,
+        quad_bounds,
+        split_tile_designs,
+    )
 
     try:
         from app.image_validator import describe_contaminants
@@ -1525,6 +1531,96 @@ def mine_tile_regions(
                  **geometry_fields)
             deferred.append((region_path, reason, metadata))
             continue
+
+        designs = (metadata.get('purity') or {}).get('distinct_tile_designs', 1)
+        try:
+            designs = int(designs)
+        except (TypeError, ValueError):
+            designs = 1
+
+        if status == VALIDATION_IMPURE and designs > 1:
+            # Several products butted together in one frame. Saving it
+            # whole would give one Tile row a picture of its neighbours;
+            # rejecting it would throw away every product in it. Cut it
+            # along the seams and judge each piece on its own.
+            pieces = split_tile_designs(crop, max_pieces=max(2, min(designs, 4)))
+
+            if pieces:
+                print(f"      region validation  : {designs} designs here -- "
+                      f"splitting into {len(pieces)} piece(s) and judging "
+                      f"each separately")
+                region_path.unlink(missing_ok=True)
+
+                for piece_index, (px1, py1, px2, py2) in enumerate(pieces, start=1):
+                    piece = crop[py1:py2, px1:px2]
+                    piece_height, piece_width = piece.shape[:2]
+                    piece_label = f"{index}.{piece_index}"
+
+                    if (min(piece_width, piece_height) < MIN_OUTPUT_SIDE_PX
+                            or piece_width * piece_height < MIN_CLEAN_PIXELS):
+                        print(f"      piece {piece_label}          : "
+                              f"{piece_width}x{piece_height}px -- too small to "
+                              f"be a swatch, dropped")
+                        note("REJECTED", piece=piece_label,
+                             validation="FAIL",
+                             validation_reason="split piece below size floor",
+                             **geometry_fields)
+                        continue
+
+                    piece_path = (
+                        output_directory
+                        / f"{output_path.stem}_region_{index}_{piece_index}.webp"
+                    )
+
+                    try:
+                        Image.fromarray(
+                            cv2.cvtColor(piece, cv2.COLOR_BGR2RGB)
+                        ).save(piece_path, "WEBP", quality=IMAGE_QUALITY, method=6)
+                    except Exception as exc:  # noqa: BLE001
+                        print(f"      piece {piece_label}          : could not "
+                              f"save ({exc})")
+                        continue
+
+                    piece_status, piece_reason, piece_metadata = (
+                        validate_and_correct_tile_image(
+                            piece_path, image_rect, text_spans,
+                            semantic_validator, purity_is_authoritative=True,
+                        )
+                    )
+
+                    piece_purity = piece_metadata.get('purity') or {}
+                    print(f"      piece {piece_label}          : "
+                          f"{piece_width}x{piece_height}px  "
+                          f"material={piece_purity.get('material', '?')}  "
+                          f"tile={piece_purity.get('tile_fraction', 0.0):.0%}")
+
+                    if piece_status == VALIDATION_DEFERRED:
+                        print(f"        -> DEFERRED -- {piece_reason}")
+                        note("DEFERRED", piece=piece_label,
+                             validation="DEFERRED",
+                             validation_reason=piece_reason, **geometry_fields)
+                        deferred.append((piece_path, piece_reason, piece_metadata))
+                        continue
+
+                    if piece_status != VALIDATION_APPROVED:
+                        piece_path.unlink(missing_ok=True)
+                        print(f"        -> REJECTED -- {piece_reason}")
+                        note("REJECTED", piece=piece_label, validation="FAIL",
+                             validation_reason=piece_reason, **geometry_fields)
+                        continue
+
+                    print(f"        -> ACCEPTED -> {piece_path.name}")
+                    note("ACCEPTED", piece=piece_label, validation="PASS",
+                         validation_reason=piece_reason,
+                         image_path=str(piece_path),
+                         product_name=piece_metadata.get("product_name", ""),
+                         **geometry_fields)
+                    accepted.append((piece_path, piece_reason, piece_metadata))
+
+                continue
+
+            print(f"      region validation  : {designs} designs reported, but "
+                  f"no clear seam between them -- cannot split")
 
         if status != VALIDATION_APPROVED:
             # A crop that is STILL contaminated has already had its one

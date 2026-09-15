@@ -53,9 +53,6 @@ import numpy as np
 # This is not the same as having no area validation: a 40x40px speck
 # still fails, on its own dimensions.
 
-# Smallest rectified surface worth trying to cut a swatch out of.
-MIN_REGION_PIXELS = 150 * 150
-
 # Smallest unobstructed area that can still yield a usable swatch. A
 # region that is mostly hidden behind a sofa can still hand over a clean
 # 200x200 piece of tile, and that piece is a better product image than
@@ -63,15 +60,35 @@ MIN_REGION_PIXELS = 150 * 150
 # not what proportion of the region it represents.
 MIN_CLEAN_PIXELS = 130 * 130
 
-# Preferred pixel floor for a saved swatch.
+# Smallest rectified surface worth trying to cut a swatch out of.
 #
-# 150 rather than 200: a band of tile left between two fixtures is
-# routinely ~190px tall on a real catalog page and reads the pattern
-# perfectly well, and a small sample laid out six-to-a-sheet lands near
-# the same figure. At 200 both were refused. Whether the crop is
-# actually a tile is decided by the purity gate downstream, not by this
-# number -- this only rules out crops too small to show a pattern at all.
-MIN_OUTPUT_SIDE_PX = 150
+# It must never exceed MIN_CLEAN_PIXELS. The clean area is a SUBSET of
+# the region, so a region floor above it rejects candidates that would
+# have passed the real test -- a 128x170 sample died here, at 21,760px
+# against a 22,500px floor, while comfortably clearing the 16,900px one
+# that actually decides. Tying them together makes that impossible.
+MIN_REGION_PIXELS = MIN_CLEAN_PIXELS
+
+# Pixel floor for the SHORTER side of a saved swatch.
+#
+# Two numbers gate size now, and they do different jobs: this one asks
+# "can the pattern still be read across the narrow direction", and
+# MIN_CLEAN_PIXELS asks "is there enough tile here at all". A candidate
+# has to satisfy both, which is what lets a long thin strip of tile --
+# 1075x110 in the catalog logs, a perfectly usable sample -- through,
+# while a 70x154 sliver is refused for being too narrow to read and a
+# 96x96 chip is refused on area.
+#
+# 96 rather than 150 because at 150 that 1075x110 strip was rejected on
+# its narrow side alone, with 118,000 pixels of clean tile in it.
+MIN_OUTPUT_SIDE_PX = 96
+
+# Small-but-valid crops are enlarged to roughly this, so downstream
+# consumers get a usable image. Lanczos resampling of the real pixels:
+# it interpolates what was photographed and invents no pattern. Capped
+# by SAFE_UPSCALE_LIMIT because past that it is just blur.
+UPSCALE_TARGET_SIDE_PX = 200
+SAFE_UPSCALE_LIMIT = 2.0
 
 # ...but a flat 200px floor is wrong when the SOURCE is small: a 320px
 # catalog thumbnail cannot yield a 200px clean rectangle once occluders
@@ -404,6 +421,201 @@ def largest_clean_rectangle(width, height, occluders):
     )
 
 
+# A design boundary has to be a STEP, not a slope. Two tile products
+# butted together change appearance abruptly across a seam; a wall lit
+# from one side changes just as much from end to end, but gradually.
+# Comparing narrow windows either side of a candidate seam separates the
+# two -- a gradient looks almost identical across a short span, a seam
+# does not.
+SPLIT_WINDOW_FRACTION = 0.08
+
+# Distance (in the combined colour + edge-density space below) that a
+# seam must exceed. Tuned so two visibly different tile products split
+# and one product under uneven lighting does not.
+SPLIT_MIN_STEP = 22.0
+
+# Neither piece of a split may be slimmer than this fraction of the
+# candidate, so a sliver at one edge is never mistaken for a product.
+SPLIT_MIN_PIECE_FRACTION = 0.22
+
+
+def _dominant_period(signal):
+    """Length of the repeating unit in a profile, or 0 if not periodic.
+
+    A tiled surface is periodic BY DEFINITION -- that is what makes it a
+    tile -- so its profile swings between grout and face every cell. To
+    a step detector each of those swings looks exactly like a seam
+    between two products, and an unsmoothed detector duly cuts a plain
+    tiled wall into pieces. Finding the period is what lets the next
+    step average it away.
+
+    Autocorrelation of the mean-removed signal; the first clear peak is
+    the cell size.
+    """
+    centred = signal - signal.mean()
+    if not np.any(centred):
+        return 0
+
+    correlation = np.correlate(centred, centred, mode="full")
+    correlation = correlation[len(centred) - 1:]
+
+    if correlation[0] <= 0:
+        return 0
+
+    correlation = correlation / correlation[0]
+
+    high = min(len(correlation) - 1, max(8, len(centred) // 4))
+    if high <= 4:
+        return 0
+
+    window = correlation[4:high]
+    if window.size == 0:
+        return 0
+
+    peak = int(np.argmax(window)) + 4
+
+    # A weak peak means the surface is not really periodic (a plain
+    # wall, a slab); there is then nothing to average away.
+    return peak if correlation[peak] > 0.2 else 0
+
+
+def _slice_profile(image_bgr, axis):
+    """Per-slice [B, G, R, edge-density] features along one axis.
+
+    axis=0 profiles columns (a vertical seam), axis=1 profiles rows.
+    Edge density carries the cases colour alone misses: two tiles in the
+    same colourway but different formats differ in how much grout line
+    per unit area they show.
+
+    The profile is smoothed over whole tile periods before it is
+    returned, so the tile's own grid cannot read as a design change.
+    """
+    grey = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
+    edges = np.abs(cv2.Laplacian(grey, cv2.CV_32F, ksize=3))
+
+    reduce_axis = 0 if axis == 0 else 1
+
+    colour = image_bgr.astype(np.float32).mean(axis=reduce_axis)
+    edge = edges.mean(axis=reduce_axis).reshape(-1, 1)
+    profile = np.hstack([colour, edge])
+
+    period = _dominant_period(profile[:, :3].mean(axis=1))
+    if period < 2:
+        return profile
+
+    # Average over two whole periods: one leaves the result sensitive to
+    # where the window happens to start relative to the grout.
+    span = min(period * 2, max(2, profile.shape[0] // 3))
+    kernel = np.ones(span, dtype=np.float32) / span
+
+    smoothed = np.empty_like(profile)
+    for column in range(profile.shape[1]):
+        smoothed[:, column] = np.convolve(
+            profile[:, column], kernel, mode="same",
+        )
+
+    # Convolution tapers at the two ends, which invents a step there.
+    # Trimming is not an option (positions must stay comparable), so the
+    # ends are held at the first and last fully-covered value.
+    edge_pad = span // 2 + 1
+    if smoothed.shape[0] > 2 * edge_pad:
+        smoothed[:edge_pad] = smoothed[edge_pad]
+        smoothed[-edge_pad:] = smoothed[-edge_pad - 1]
+
+    return smoothed
+
+
+def _best_seam(profile):
+    """Strongest step in a profile: (position, strength).
+
+    Returns (None, 0.0) when the profile is too short to judge.
+    """
+    length = profile.shape[0]
+    window = max(4, int(length * SPLIT_WINDOW_FRACTION))
+    margin = max(window, int(length * SPLIT_MIN_PIECE_FRACTION))
+
+    if length < 2 * margin + 2:
+        return None, 0.0
+
+    best_position = None
+    best_strength = 0.0
+
+    for position in range(margin, length - margin):
+        before = profile[position - window:position].mean(axis=0)
+        after = profile[position:position + window].mean(axis=0)
+        strength = float(np.linalg.norm(after - before))
+
+        if strength > best_strength:
+            best_strength = strength
+            best_position = position
+
+    return best_position, best_strength
+
+
+def split_tile_designs(image_bgr, max_pieces=4):
+    """Cuts a candidate showing several tile designs into one box each.
+
+    A catalog routinely shows two products butted together, or a strip
+    of four. Such a frame is not a swatch of anything -- saved whole it
+    would be a Tile row whose picture shows the neighbouring products
+    too -- but the designs in it are real, and rejecting the candidate
+    throws all of them away.
+
+    So the frame is cut along the seams between them. Pieces are found
+    by locating the strongest colour/texture STEP across the candidate
+    and recursing into each side, which handles a 2-up and a 4-up alike.
+    Every piece is real pixels from the original crop; nothing is
+    redrawn, resampled or invented, and each still has to pass the same
+    purity check on its own afterwards.
+
+    Returns a list of (x1, y1, x2, y2) boxes in the crop's own
+    coordinates, or [] when no seam is convincing enough -- in which
+    case the caller keeps treating the candidate as one frame.
+
+    LIMIT: seams are found from row and column averages, so designs laid
+    out such that those averages match -- two products alternating in a
+    checkerboard, say -- are invisible here and the candidate is left
+    whole (and then refused by the purity gate, not saved dirty). Grids
+    and strips, which is how catalogs actually lay products out, split
+    correctly.
+    """
+    height, width = image_bgr.shape[:2]
+    boxes = [(0, 0, width, height)]
+
+    # Breadth-first: split the strongest seam anywhere in the current
+    # set, then look again, until nothing is convincing or the cap is
+    # reached. This finds a 4-up as two rounds of halving.
+    while len(boxes) < max_pieces:
+        best = None
+
+        for index, (x1, y1, x2, y2) in enumerate(boxes):
+            piece = image_bgr[y1:y2, x1:x2]
+            if piece.shape[0] < 16 or piece.shape[1] < 16:
+                continue
+
+            for axis in (0, 1):
+                position, strength = _best_seam(_slice_profile(piece, axis))
+                if position is None or strength < SPLIT_MIN_STEP:
+                    continue
+                if best is None or strength > best[0]:
+                    best = (strength, index, axis, position)
+
+        if best is None:
+            break
+
+        _strength, index, axis, position = best
+        x1, y1, x2, y2 = boxes.pop(index)
+
+        if axis == 0:
+            boxes.append((x1, y1, x1 + position, y2))
+            boxes.append((x1 + position, y1, x2, y2))
+        else:
+            boxes.append((x1, y1, x2, y1 + position))
+            boxes.append((x1, y1 + position, x2, y2))
+
+    return [] if len(boxes) < 2 else boxes
+
+
 def extract_tile_region(image_bgr, quad, occluders=None):
     """Rectifies one candidate region and returns a clean tile-only crop.
 
@@ -544,7 +756,26 @@ def extract_tile_region(image_bgr, quad, occluders=None):
         )
         return None, info
 
+    crop = rectified[y1:y2, x1:x2].copy()
+
+    # A small crop that passed both gates is real tile, just not many
+    # pixels of it. Enlarging the pixels that are there beats handing
+    # downstream a 110px-tall image; it adds no detail and claims none.
+    shorter = min(clean_width, clean_height)
+    if shorter < UPSCALE_TARGET_SIDE_PX:
+        scale = min(UPSCALE_TARGET_SIDE_PX / shorter, SAFE_UPSCALE_LIMIT)
+        if scale > 1.01:
+            crop = cv2.resize(
+                crop,
+                (int(round(clean_width * scale)),
+                 int(round(clean_height * scale))),
+                interpolation=cv2.INTER_LANCZOS4,
+            )
+            info["upscaled"] = round(scale, 2)
+            info["upscaled_from"] = (clean_width, clean_height)
+
     info["stage"] = "extracted"
     info["crop_size"] = (clean_width, clean_height)
+    info["output_size"] = (crop.shape[1], crop.shape[0])
 
-    return rectified[y1:y2, x1:x2].copy(), info
+    return crop, info

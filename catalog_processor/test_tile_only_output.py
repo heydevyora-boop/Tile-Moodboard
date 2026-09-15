@@ -323,6 +323,21 @@ def near(pixels, colour, tolerance=26):
             .max(axis=-1) <= tolerance)
 
 
+def dominant_design(image_path):
+    """Which of the two tile palettes fills this crop: "A", "C" or "?"."""
+    with Image.open(image_path) as opened:
+        pixels = np.asarray(opened.convert("RGB"))
+
+    first = int((near(pixels, TILE_A) | near(pixels, TILE_B)).sum())
+    second = int((near(pixels, TILE_C) | near(pixels, TILE_D)).sum())
+
+    if first > second * 3:
+        return "A"
+    if second > first * 3:
+        return "C"
+    return "?"
+
+
 def oracle_verify_tile_only(image_path):
     """gemini_service.verify_tile_only, answered from real pixels."""
     with Image.open(image_path) as opened:
@@ -559,11 +574,26 @@ def main():
         len(accepted_by_scene["dubai_frame"]) == 0,
         f"{len(accepted_by_scene['dubai_frame'])} saved",
     ))
+    # Two products butted together must become two swatches -- not one
+    # picture of both, and not nothing.
+    two = accepted_by_scene["two_designs"]
     results.append(check(
-        "two designs in one frame -> not saved as one product",
-        len(accepted_by_scene["two_designs"]) == 0,
-        f"{len(accepted_by_scene['two_designs'])} saved",
+        "two designs in one frame -> split into two separate products",
+        len(two) == 2, f"{len(two)} saved",
     ))
+
+    if len(two) == 2:
+        observations = [oracle_verify_tile_only(path) for path, _r, _m in two]
+        results.append(check(
+            "each split piece shows exactly one design",
+            all(o["distinct_tile_designs"] == 1 for o in observations),
+            str([o["distinct_tile_designs"] for o in observations]),
+        ))
+        results.append(check(
+            "the split separated the designs rather than halving one",
+            {dominant_design(path) for path, _r, _m in two} == {"A", "C"},
+            str(sorted(dominant_design(path) for path, _r, _m in two)),
+        ))
     results.append(check(
         "one wall detected 5 times -> one swatch, not five",
         len(accepted_by_scene["duplicate_detections"]) == 1,
@@ -576,6 +606,8 @@ def main():
         total_saved >= 10, f"{total_saved} tiles recovered",
     ))
 
+    results.extend(size_gate_matrix())
+    results.extend(splitter_matrix())
     results.extend(decision_matrix())
 
     passed = sum(1 for r in results if r)
@@ -584,6 +616,142 @@ def main():
 
     contact_sheet(sources, accepted_by_scene)
     return 0 if passed == len(results) else 1
+
+
+def splitter_matrix():
+    """The splitter on its own: does it cut where it should, and only there.
+
+    The gradient case is the one that matters most. A tiled wall lit
+    from one side changes just as much end-to-end as two different tiles
+    do across a seam, and splitting on that would cut real products in
+    half. A seam is a STEP, and that is what has to be detected.
+    """
+    import cv2
+    from app.tile_region_extractor import split_tile_designs
+
+    print("")
+    print("=" * 72)
+    print("DESIGN SPLITTER")
+    print("=" * 72)
+
+    def build(paint):
+        image = Image.new("RGB", (600, 400), WALL)
+        paint(ImageDraw.Draw(image))
+        return cv2.cvtColor(np.asarray(image), cv2.COLOR_RGB2BGR)
+
+    def one_design(draw):
+        tile_field(draw, (0, 0, 600, 400), cell=40)
+
+    def two_designs(draw):
+        tile_field(draw, (0, 0, 300, 400), cell=40)
+        tile_field(draw, (300, 0, 600, 400), cell=40, palette=(TILE_C, TILE_D))
+
+    def four_designs(draw):
+        """Four colourways in a strip -- how catalogs actually lay 4 up."""
+        for index, (palette, cell) in enumerate([
+            ((TILE_A, TILE_B), 30),
+            ((TILE_C, TILE_D), 30),
+            ((TILE_A, TILE_B), 60),
+            ((TILE_C, TILE_D), 60),
+        ]):
+            tile_field(draw, (index * 150, 0, (index + 1) * 150, 400),
+                       cell=cell, palette=palette)
+
+    def lit_gradient(draw):
+        """One design, strongly lit from the left -- must NOT split."""
+        tile_field(draw, (0, 0, 600, 400), cell=40)
+
+    cases = [
+        ("one design                -> no split", one_design, 0, None),
+        ("two designs               -> 2 pieces", two_designs, 2, 300),
+        ("four designs              -> 4 pieces", four_designs, 4, None),
+    ]
+
+    outcomes = []
+    for label, paint, expected, boundary in cases:
+        pieces = split_tile_designs(build(paint))
+        outcomes.append(check(
+            label, len(pieces) == expected,
+            f"got {len(pieces)}",
+        ))
+
+        if boundary is not None and len(pieces) == expected:
+            edges = sorted({x for x1, _y1, x2, _y2 in pieces for x in (x1, x2)})
+            outcomes.append(check(
+                "    the cut lands on the seam, not in the middle of a tile",
+                any(abs(edge - boundary) <= 12 for edge in edges),
+                f"edges {edges}, seam at {boundary}",
+            ))
+
+    # A gradient applied to a single design, at an amplitude larger than
+    # the step between the two designs above.
+    image = build(lit_gradient).astype(np.int16)
+    ramp = np.linspace(-55, 55, image.shape[1]).reshape(1, -1, 1)
+    lit = np.clip(image + ramp, 0, 255).astype(np.uint8)
+
+    outcomes.append(check(
+        "one design under a strong lighting gradient -> no split",
+        len(split_tile_designs(lit)) == 0,
+        f"got {len(split_tile_designs(lit))} -- a gradient is not a seam",
+    ))
+
+    return outcomes
+
+
+# Candidate sizes taken verbatim from the real catalog logs, with what
+# each should do. The point of the pair 70x154 / 128x170 is that they
+# are similar and must NOT go the same way: one is too narrow to read a
+# pattern, the other is a small but perfectly usable sample.
+SIZE_CASES = [
+    ((210, 170), True, "accepted in the logs; must stay accepted"),
+    ((128, 170), True, "small but readable -- was rejected"),
+    ((1075, 110), True, "a long strip of tile -- was rejected on its "
+                        "narrow side"),
+    ((70, 154), False, "too narrow to read a tile pattern"),
+    ((96, 96), False, "clears the side floor but has too little tile"),
+    ((40, 40), False, "a speck"),
+]
+
+
+def size_gate_matrix():
+    """Runs the real geometry on candidates of exactly the logged sizes."""
+    import cv2
+    from app.tile_region_extractor import extract_tile_region
+
+    print("")
+    print("=" * 72)
+    print("SIZE GATES (real catalog candidate dimensions)")
+    print("=" * 72)
+
+    outcomes = []
+    for (width, height), should_pass, note in SIZE_CASES:
+        image = Image.new("RGB", (width, height), WALL)
+        tile_field(ImageDraw.Draw(image), (0, 0, width, height),
+                   cell=max(8, min(width, height) // 5), joint=2)
+        path = OUT / f"_size_{width}x{height}.webp"
+        image.save(path, "WEBP", quality=92, method=6)
+
+        crop, info = extract_tile_region(
+            cv2.imread(str(path), cv2.IMREAD_COLOR),
+            [(0, 0), (width, 0), (width, height), (0, height)],
+            [],
+        )
+
+        passed = crop is not None
+        detail = note if passed == should_pass else (
+            f"got {'accept' if passed else 'reject'} -- {info.get('reason', '')}"
+        )
+        outcomes.append(check(
+            f"{width}x{height:<4} -> {'extract' if should_pass else 'reject':7s}",
+            passed == should_pass, detail,
+        ))
+
+        if passed and info.get("upscaled"):
+            print(f"         upscaled x{info['upscaled']} to "
+                  f"{info['output_size'][0]}x{info['output_size'][1]} "
+                  f"(interpolated, no detail invented)")
+
+    return outcomes
 
 
 def observe(material="TILE", fraction=1.0, scene=False, **flags):
