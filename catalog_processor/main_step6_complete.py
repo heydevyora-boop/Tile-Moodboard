@@ -1337,7 +1337,11 @@ def mine_tile_regions(
     except Exception as exc:  # noqa: BLE001 -- never break extraction over this
         print(f"  [tile-region] {where}: NOT SEARCHED -- detection failed "
               f"({exc})")
-        return [], []
+        return [], [(
+            output_path,
+            f"region detection did not run -- {exc}",
+            {"undetected": True},
+        )]
 
     if not regions:
         try:
@@ -1358,9 +1362,19 @@ def mine_tile_regions(
             print(f"  [tile-region] {where}: NOT SEARCHED -- Gemini quota "
                   f"is exhausted, so region detection never ran. This page "
                   f"has NOT been judged and is NOT 'no tile found'.")
-        else:
-            print(f"  [tile-region] {where}: searched, and the detector "
-                  f"reported no tiled surface in it")
+            print(f"    preserved for a later run rather than dropped")
+            # Handed back as deferred for the same reason an unclassified
+            # image is: nothing looked at it, so "no tile here" is not a
+            # finding anyone made. Dropping it silently is what lost
+            # whole pages of a catalog to a dead quota.
+            return [], [(
+                output_path,
+                "region detection did not run -- Gemini quota exhausted",
+                {"undetected": True},
+            )]
+
+        print(f"  [tile-region] {where}: searched, and the detector "
+              f"reported no tiled surface in it")
         return [], []
 
     print(f"  [tile-region] page {page_number} image {image_counter}: "
@@ -2282,8 +2296,11 @@ def extract_images_from_pdf(
                                 trace=region_trace,
                             )
 
-                        output_path.unlink(missing_ok=True)
-
+                        # Deferrals are preserved BEFORE the source is
+                        # deleted. A deferred entry can BE the source
+                        # image -- that is what mining hands back when
+                        # detection never ran -- and unlinking first
+                        # deleted the very file being preserved.
                         for deferred_path, deferred_reason, deferred_meta in region_deferred:
                             if defer_for_revalidation(
                                 deferred_path, page_number, image_counter,
@@ -2291,6 +2308,8 @@ def extract_images_from_pdf(
                                 output_directory, deferred_records,
                             ) is not None:
                                 validation_deferred += 1
+
+                        output_path.unlink(missing_ok=True)
 
                         regions_recovered += len(recovered)
                         image_counter = append_recovered_regions(
@@ -2396,15 +2415,13 @@ def extract_images_from_pdf(
                                 trace=region_trace,
                             )
 
-                        output_path.unlink(missing_ok=True)
-
-                        if not recovered:
-                            semantic_rejections += 1
-                            rejection_categories[category] = (
-                                rejection_categories.get(category, 0) + 1
-                            )
-                            continue
-
+                        # Before the unlink, and before the early exit
+                        # below. This loop used to sit after both: the
+                        # source was deleted first, and then skipped
+                        # entirely whenever nothing was recovered --
+                        # which is precisely the case a deferral exists
+                        # for. A quota-killed image hit both bugs at
+                        # once and vanished without a record.
                         for deferred_path, deferred_reason, deferred_meta in region_deferred:
                             if defer_for_revalidation(
                                 deferred_path, page_number, image_counter,
@@ -2412,6 +2429,20 @@ def extract_images_from_pdf(
                                 output_directory, deferred_records,
                             ) is not None:
                                 validation_deferred += 1
+
+                        output_path.unlink(missing_ok=True)
+
+                        if not recovered:
+                            # Only a rejection when something actually
+                            # judged it. A deferred image was never
+                            # looked at, so counting it as rejected
+                            # would report a verdict nobody reached.
+                            if not region_deferred:
+                                semantic_rejections += 1
+                                rejection_categories[category] = (
+                                    rejection_categories.get(category, 0) + 1
+                                )
+                            continue
 
                         regions_recovered += len(recovered)
                         image_counter = append_recovered_regions(

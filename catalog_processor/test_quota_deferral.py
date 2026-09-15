@@ -264,10 +264,75 @@ def main():
         with Image.open(path) as opened:
             print(f"  {path.name}  {opened.width}x{opened.height}")
 
+    results.extend(detection_quota_check())
+
     passed = sum(1 for r in results if r)
     print("")
     print(f"{passed}/{len(results)} checks passed")
     return 0 if passed == len(results) else 1
+
+
+def detection_quota_check():
+    """Quota dying during REGION DETECTION must not read as 'no tile'.
+
+    The classification path already treated a dead quota as deferred.
+    Detection did not: _generate_content_safe returns None the moment
+    the quota flag trips, detect_tile_regions turns that into [], and
+    the page was dropped with no file and no record -- indistinguishable
+    in the log from a page that genuinely has no tile on it. On a real
+    catalog that silently lost every page after the quota ran out.
+    """
+    print("")
+    print("=" * 72)
+    print("RUN 3 -- quota dies during region DETECTION")
+    print("=" * 72)
+
+    directory = OUT / "detection_quota"
+    if directory.exists():
+        shutil.rmtree(directory)
+    directory.mkdir(parents=True, exist_ok=True)
+
+    source = directory / "onery_page_5_render.webp"
+    build_tile_photo().save(source, "WEBP", quality=92, method=6)
+
+    gemini_service.GEMINI_QUOTA_EXHAUSTED = True
+
+    # Exactly what detect_tile_regions does with a None response.
+    accepted, deferred = pipeline.mine_tile_regions(
+        source, 5, 0, [], None,
+        (lambda *a, **k: None, validate_product_decision, validate_bbox),
+        (lambda path, width, height: [], lambda *a, **k: (None, {})),
+        directory,
+        source_type="rendered-page",
+    )
+
+    records = []
+    preserved = None
+    for path, reason, metadata in deferred:
+        preserved = pipeline.defer_for_revalidation(
+            path, 5, 0, reason, metadata, directory, records,
+        )
+
+    gemini_service.GEMINI_QUOTA_EXHAUSTED = False
+
+    print("")
+    outcomes = [
+        check("the page is deferred, not silently dropped", len(deferred) == 1,
+              f"{len(deferred)} deferred"),
+        check("nothing is published from an unsearched page",
+              len(accepted) == 0),
+        check("the page image survives on disk",
+              preserved is not None and preserved.is_file(),
+              str(preserved)),
+        check("the source file is not left behind in the output folder",
+              not source.exists()),
+        check("the reason names the quota, not the tile",
+              bool(deferred) and "quota" in deferred[0][1].lower()
+              and "no tile" not in deferred[0][1].lower(),
+              deferred[0][1] if deferred else ""),
+        check("a revalidation record is written", len(records) == 1),
+    ]
+    return outcomes
 
 
 if __name__ == "__main__":
