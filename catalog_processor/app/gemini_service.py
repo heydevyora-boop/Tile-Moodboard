@@ -30,8 +30,32 @@ if not GEMINI_API_KEY:
     )
 
 
+# How long any single Gemini request may take before it is abandoned.
+#
+# WHY THIS EXISTS: the client was built with no http_options, so the
+# SDK's timeout defaulted to None -- meaning generate_content() would
+# wait on a stalled connection FOREVER. The retry logic below never
+# helped, because a hang raises nothing to retry. A catalog run that
+# hit one bad connection sat there until someone pressed Ctrl-C, and
+# the KeyboardInterrupt took the whole run down mid-extraction.
+#
+# A bounded timeout turns that hang into an ordinary transient error.
+# "TIMEOUT" is already in GEMINI_TRANSIENT_MARKERS, so the existing
+# retry path picks it up, and when the retries are spent the callers
+# treat it as "no verdict reached" and DEFER the image rather than
+# dropping it. Worst case per image is therefore bounded at roughly
+# GEMINI_TRANSIENT_RETRIES x this, plus backoff, instead of unbounded.
+GEMINI_REQUEST_TIMEOUT_SECONDS = float(
+    os.getenv("GEMINI_REQUEST_TIMEOUT_SECONDS", "45")
+)
+
+
 client = genai.Client(
-    api_key=GEMINI_API_KEY
+    api_key=GEMINI_API_KEY,
+    http_options=types.HttpOptions(
+        # The SDK takes milliseconds.
+        timeout=int(GEMINI_REQUEST_TIMEOUT_SECONDS * 1000),
+    ),
 )
 
 

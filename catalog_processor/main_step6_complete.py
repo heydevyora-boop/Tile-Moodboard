@@ -1932,6 +1932,28 @@ def validate_and_correct_tile_image(
         # verdict was reached. Defer rather than reject.
         return VALIDATION_DEFERRED, f'Gemini validation failed ({exc})', {}
 
+    # A structurally malformed result is a MALFUNCTION, not a verdict.
+    #
+    # validate_product_decision reads its fields with getattr defaults,
+    # so an object that carries none of them -- a truncated response, a
+    # parse that half-failed, an SDK shape change -- silently becomes
+    # image_type="" and is_product_image=False, which reads exactly like
+    # a confident "this is not a tile" and the image gets DELETED.
+    #
+    # A real ProductAnalysis always carries both fields (they have
+    # defaults). Neither present means nothing classified this image,
+    # which is the deferral case, not the rejection case.
+    if not (
+        str(getattr(gemini_result, 'decision', '') or '').strip()
+        or str(getattr(gemini_result, 'image_type', '') or '').strip()
+    ):
+        return (
+            VALIDATION_DEFERRED,
+            'classifier returned an unusable result (no decision and no '
+            'image_type) -- nothing judged this image',
+            {},
+        )
+
     # cv_score is accepted by validate_product_decision for signature
     # compatibility with its other caller (catalog_pipeline.py) but is not
     # read by its current decision logic (image_type + is_product_image
