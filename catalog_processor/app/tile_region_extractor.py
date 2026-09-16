@@ -60,6 +60,12 @@ import numpy as np
 # not what proportion of the region it represents.
 MIN_CLEAN_PIXELS = 130 * 130
 
+# An occluder box covering at least this much of the region is treated as
+# a detector error rather than an object on the tile -- see the note at
+# the point of use in extract_tile_region. Set high on purpose: a genuine
+# sofa across a floor covers a lot, and must still count.
+OCCLUDER_MAX_COVERAGE = 0.85
+
 # Smallest rectified surface worth trying to cut a swatch out of.
 #
 # It must never exceed MIN_CLEAN_PIXELS. The clean area is a SUBSET of
@@ -720,12 +726,48 @@ def extract_tile_region(image_bgr, quad, occluders=None):
             float(np.max(xs)), float(np.max(ys)),
         ))
 
+    # AN OCCLUDER THAT SWALLOWS THE REGION CONTRADICTS THE REGION.
+    #
+    # For each region the detector asserts two things at once: this quad
+    # IS a tiled surface, and these boxes are objects sitting ON TOP of
+    # it. A box covering essentially the whole quad cannot be both --
+    # either it is the surface itself boxed by mistake, or the detector
+    # boxed the entire scene. The prompt asks it to be generous with
+    # occluders, so on a busy lifestyle photograph it does exactly that.
+    #
+    # Resolving that contradiction in the occluder's favour annihilated
+    # the candidate: a real catalog page reported five tiled surfaces of
+    # ~474x595 and lost all five to "occluders cover the whole region".
+    #
+    # It is safe to resolve it the other way instead, because this is not
+    # the gate that decides what gets saved. Whatever survives here is
+    # re-examined by the purity check on the FINAL crop, which rejects it
+    # if it turns out to be a basin or a wall. Being permissive here can
+    # only give a tile the chance to be looked at; it cannot put a dirty
+    # image in the catalog.
+    region_area_px = float(width * height)
+    swallowing = [
+        box for box in projected
+        if region_area_px
+        and (box[2] - box[0]) * (box[3] - box[1]) >= region_area_px * OCCLUDER_MAX_COVERAGE
+    ]
+
+    if swallowing:
+        projected = [box for box in projected if box not in swallowing]
+        info["occluders_ignored"] = len(swallowing)
+
     info["occluders"] = len(projected)
 
     clean = largest_clean_rectangle(width, height, projected)
     if clean is None:
         info["stage"] = "occlusion"
-        info["reason"] = "occluders cover the whole region"
+        info["reason"] = (
+            "occluders cover the whole region"
+            + (
+                f" (after ignoring {len(swallowing)} box(es) that covered "
+                f"the region entirely)" if swallowing else ""
+            )
+        )
         return None, info
 
     x1, y1, x2, y2 = clean

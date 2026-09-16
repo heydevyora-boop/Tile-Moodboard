@@ -606,6 +606,7 @@ def main():
         total_saved >= 10, f"{total_saved} tiles recovered",
     ))
 
+    results.extend(occluder_matrix())
     results.extend(material_matrix())
     results.extend(size_gate_matrix())
     results.extend(splitter_matrix())
@@ -617,6 +618,83 @@ def main():
 
     contact_sheet(sources, accepted_by_scene)
     return 0 if passed == len(results) else 1
+
+
+def occluder_matrix():
+    """A box covering the whole region is a detector error, not a verdict.
+
+    Straight from a real catalog page: five tiled surfaces of ~474x595
+    were detected and all five died at "occluders cover the whole
+    region". The detector had asserted both that the quad IS a tiled
+    surface and that something covers all of it -- a contradiction, and
+    it was always resolved in the occluder's favour.
+
+    The last two cases are the guard rails: a genuine large occluder
+    still bites, and a region genuinely covered by several ordinary
+    boxes is still refused. Otherwise this would just be "ignore
+    occlusion", which would put sinks and sofas in the catalog.
+    """
+    import cv2
+    from app.tile_region_extractor import extract_tile_region
+
+    print("")
+    print("=" * 72)
+    print("OCCLUDER HANDLING")
+    print("=" * 72)
+
+    size = 600
+    image = Image.new("RGB", (size, size), WALL)
+    tile_field(ImageDraw.Draw(image), (0, 0, size, size), cell=40)
+    path = OUT / "_occ.webp"
+    image.save(path, "WEBP", quality=92, method=6)
+    source = cv2.imread(str(path), cv2.IMREAD_COLOR)
+    quad = [(0, 0), (size, 0), (size, size), (0, size)]
+
+    cases = [
+        ("no occluders", [], True),
+        ("one box covering the ENTIRE region", [(0, 0, size, size)], True),
+        ("one box covering 95%", [(0, 0, int(size * 0.98), int(size * 0.97))],
+         True),
+        ("a fixture across the lower half",
+         [(0, int(size * 0.55), size, size)], True),
+        # Guard rails.
+        ("a genuine large occluder still bites",
+         [(0, 0, size, int(size * 0.8))], True),
+        ("many ordinary boxes that together cover everything",
+         [(0, 0, size, size // 2), (0, size // 2, size, size)], False),
+    ]
+
+    outcomes = []
+    for label, occluders, should_extract in cases:
+        crop, info = extract_tile_region(source, quad, occluders)
+        extracted = crop is not None
+        detail = (
+            f"{info.get('crop_size')}"
+            + (f", ignored {info['occluders_ignored']} swallowing box(es)"
+               if info.get("occluders_ignored") else "")
+        ) if extracted else info.get("reason", "")
+        outcomes.append(check(
+            f"{label:46s} -> {'extract' if should_extract else 'reject'}",
+            extracted == should_extract, detail,
+        ))
+
+    # The safety property that makes the above acceptable: whatever
+    # survives occlusion is still judged on its pixels afterwards.
+    crop, _info = extract_tile_region(source, quad, [(0, 0, size, size)])
+    if crop is not None:
+        recovered = OUT / "_occ_recovered.webp"
+        Image.fromarray(cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)).save(
+            recovered, "WEBP", quality=92, method=6,
+        )
+        observation = oracle_verify_tile_only(recovered)
+        outcomes.append(check(
+            "the recovered crop is still judged on its own pixels",
+            observation["material"] == "TILE",
+            f"material={observation['material']} "
+            f"tile={observation['tile_fraction']:.0%}",
+        ))
+
+    return outcomes
 
 
 def material_matrix():
