@@ -287,13 +287,63 @@ def describe_contaminants(observation):
     ]
 
 
-# Materials that mean "I could not tell", as opposed to a positive
-# identification of something that is not tile. Only these can be
-# overridden by a parent's evidence below.
+# Words that all mean "this is tile".
+#
+# The verifier is offered a fixed vocabulary, but a model does not
+# reliably answer inside one -- a close-up of a tile face draws
+# PORCELAIN, CERAMIC, VITRIFIED, MOSAIC, TEXTURE, SAMPLE or a plural
+# TILES just as readily as the exact token TILE. Matching one exact
+# string threw all of those away as though the surface had been
+# positively identified as something else.
+TILE_MATERIALS = {
+    "TILE", "TILES", "TILE_SAMPLE", "TILE_SURFACE", "TILED",
+    "CERAMIC", "CERAMIC_TILE", "PORCELAIN", "PORCELAIN_TILE",
+    "VITRIFIED", "VITRIFIED_TILE", "MOSAIC", "MOSAIC_TILE",
+    "STONE_TILE", "MARBLE_TILE", "CLADDING", "PAVER", "PAVING",
+    "TERRACOTTA", "QUARRY_TILE", "SUBWAY_TILE",
+}
+
+# Materials that are a POSITIVE identification of something that is not
+# the catalog's tile. These reject; nothing else does.
+NON_TILE_MATERIALS = {
+    "COUNTERTOP", "WORKTOP", "STONE_SLAB", "SLAB", "MARBLE_SLAB",
+    "ARCHITECTURE", "BUILDING", "FACADE",
+    "WOOD", "WOODEN", "TIMBER", "LAMINATE",
+    "PAINTED_WALL", "PAINT", "PLASTER", "WALLPAPER",
+    "CONCRETE", "SCREED",
+    "FABRIC", "CARPET", "RUG", "TEXTILE",
+    "GLASS", "MIRROR", "METAL", "STEEL",
+    "ARTWORK", "POSTER", "PRINT", "GRAPHIC",
+}
+
+# Everything else -- OTHER, UNKNOWN, a blank field, a word nobody
+# anticipated. NOT a rejection: it means the verifier could not name
+# the surface, which is a different fact from naming a countertop.
+# These fall through to be judged on the rest of the evidence.
 UNDECIDED_MATERIALS = {"OTHER", "UNKNOWN", ""}
 
+MATERIAL_TILE = "TILE"
+MATERIAL_UNDECIDED = "UNDECIDED"
 
-def assess_tile_purity(observation, parent=None):
+
+def normalize_material(raw):
+    """Folds a reported material into TILE, a named non-tile, or UNDECIDED."""
+    material = str(raw or "").strip().upper().replace(" ", "_").replace("-", "_")
+
+    if material in TILE_MATERIALS:
+        return MATERIAL_TILE
+
+    if material in NON_TILE_MATERIALS:
+        return material
+
+    # A word ending in _TILE that nothing above caught is still a tile.
+    if material.endswith("_TILE") or material.startswith("TILE_"):
+        return MATERIAL_TILE
+
+    return MATERIAL_UNDECIDED
+
+
+def assess_tile_purity(observation):
     """Decides whether one frame is a tile-only swatch.
 
     `observation` is a gemini_service.verify_tile_only result. Returns
@@ -301,40 +351,16 @@ def assess_tile_purity(observation, parent=None):
     PURITY_CONTAMINATED (real tile, wrong framing -- go isolate it) or
     PURITY_NOT_TILE (no tile product here).
 
-    `parent` is the observation of the frame this one was cut out of,
-    when there is one. It exists for the split path: a candidate judged
-    100% TILE that contained two designs gets divided, and the pieces --
-    smaller, and stripped of the surrounding context the verifier reads
-    material from -- came back OTHER and were thrown away. Both halves
-    of a surface that was just called tile cannot stop being tile by
-    being looked at separately.
-
-    So a piece may inherit its parent's material, and ONLY when the
-    piece's own answer was "I cannot tell". A positive call of
-    countertop, stone slab, architecture, painted wall or artwork stands
-    on its own and is never overridden -- the piece really might be the
-    worktop next to the tile. Everything else the piece is judged on
-    itself: its contaminants, its scene reading, its design count.
+    There was briefly a `parent` argument here, so a split piece could
+    inherit the material of the candidate it was cut from. Normalizing
+    the material made it redundant: an unnamed piece and a piece named
+    TILE now take exactly the same path through every rule below, so
+    inheriting the word changed no outcome. It was removed rather than
+    left looking load-bearing.
     """
-    material = str(observation.get("material") or "OTHER").strip().upper()
+    reported_material = str(observation.get("material") or "OTHER").strip().upper()
+    material = normalize_material(reported_material)
     contaminants = describe_contaminants(observation)
-
-    inherited = False
-    if (
-        parent is not None
-        and material in UNDECIDED_MATERIALS
-        and str(parent.get("material") or "").strip().upper() == "TILE"
-    ):
-        try:
-            parent_fraction = float(parent.get("tile_fraction", 0.0))
-        except (TypeError, ValueError):
-            parent_fraction = 0.0
-
-        # Only a parent that was confidently, overwhelmingly tile. A
-        # borderline parent has no evidence to lend.
-        if parent_fraction >= MIN_TILE_FRACTION:
-            material = "TILE"
-            inherited = True
 
     try:
         tile_fraction = float(observation.get("tile_fraction", 0.0))
@@ -366,7 +392,23 @@ def assess_tile_purity(observation, parent=None):
             "contaminants": contaminants,
         }
 
-    if material != "TILE":
+    # Any OTHER positively-named non-tile material.
+    #
+    # Note what is NOT here: an unrecognised word. This used to read
+    # `material != "TILE"`, which rejected everything that was not that
+    # one exact token -- so PORCELAIN, CERAMIC, VITRIFIED, MOSAIC, a
+    # plural TILES, and the OTHER that this parser substitutes whenever
+    # the field is missing or off-vocabulary were all thrown out as
+    # though the surface had been identified as something else. "I could
+    # not name this" is not evidence against a tile, and it was the
+    # single biggest source of genuine tiles being refused.
+    #
+    # An unnamed surface now falls through to the rules below, where it
+    # still has to be overwhelmingly tile, free of people, text, logos,
+    # furniture and fixtures, not a view of a room, and a single design.
+    # That is a real bar -- a painted wall reports ~0% tile fraction and
+    # fails it -- it simply is not decided by one word.
+    if material in NON_TILE_MATERIALS:
         return {
             "state": PURITY_NOT_TILE,
             "reason": (
@@ -431,15 +473,8 @@ def assess_tile_purity(observation, parent=None):
     return {
         "state": PURITY_CLEAN,
         "reason": (
-            (
-                f"{tile_fraction:.0%} tile surface, nothing else in frame "
-                f"(material taken from the candidate it was cut from, "
-                f"which read as tile)"
-            )
-            if inherited else (
-                observation.get("reason")
-                or f"{tile_fraction:.0%} tile surface, nothing else in frame"
-            )
+            observation.get("reason")
+            or f"{tile_fraction:.0%} tile surface, nothing else in frame"
         ),
         "contaminants": [],
     }

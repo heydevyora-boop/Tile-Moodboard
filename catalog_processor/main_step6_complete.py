@@ -1636,12 +1636,6 @@ def mine_tile_regions(
                         validate_and_correct_tile_image(
                             piece_path, image_rect, text_spans,
                             semantic_validator, purity_is_authoritative=True,
-                            # What the whole candidate was judged to be,
-                            # a moment ago, on these same pixels. A
-                            # piece that cannot tell what it is inherits
-                            # that; a piece that positively identifies
-                            # something else does not.
-                            parent_purity=observation,
                         )
                     )
 
@@ -1887,7 +1881,7 @@ def load_tile_purity_verifier():
 
 def validate_and_correct_tile_image(
     output_path, image_rect, text_spans, semantic_validator,
-    purity_is_authoritative=False, parent_purity=None,
+    purity_is_authoritative=False,
 ):
     """Gates and corrects ONE already-saved candidate image in place.
 
@@ -2075,7 +2069,7 @@ def validate_and_correct_tile_image(
             metadata,
         )
 
-    purity = assess_tile_purity(observation, parent=parent_purity)
+    purity = assess_tile_purity(observation)
     metadata['purity'] = observation
     metadata['purity_state'] = purity['state']
 
