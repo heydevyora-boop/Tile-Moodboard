@@ -30,6 +30,32 @@ if not GEMINI_API_KEY:
     )
 
 
+# ============================================================
+# GEMINI CALL TRACING
+#
+# Set GEMINI_DEBUG=1 to have every Gemini call announce itself: which
+# stage, which file, which model, whether a response came back, and what
+# the response was understood to mean.
+#
+# This exists because the log could not distinguish "Gemini looked at
+# this crop and said it is architecture" from "Gemini was never called,
+# or answered something unreadable, and the parser filled in defaults
+# that happen to read as a confident rejection". Those need different
+# fixes, and no amount of reading the old output told them apart.
+#
+# Never prints the API key, and never prints image bytes.
+# ============================================================
+
+GEMINI_DEBUG = os.getenv("GEMINI_DEBUG", "").strip().lower() in (
+    "1", "true", "yes", "on",
+)
+
+
+def _debug(message):
+    if GEMINI_DEBUG:
+        print(f"[gemini-debug] {message}")
+
+
 # How long any single Gemini request may take before it is abandoned.
 #
 # WHY THIS EXISTS: the client was built with no http_options, so the
@@ -991,6 +1017,11 @@ Return ONLY JSON.
     # GEMINI
     # --------------------------------------------------------
 
+    _debug("CALL")
+    _debug("  stage            : product-classify (analyze_product_image)")
+    _debug(f"  image/candidate  : {image_path.name} ({len(image_bytes)} bytes)")
+    _debug(f"  model            : {GEMINI_MODEL}")
+
     response = _generate_content_safe(
 
         model=GEMINI_MODEL,
@@ -1820,6 +1851,12 @@ def detect_tile_regions(image_path, width, height):
     except OSError:
         return []
 
+    _debug("CALL")
+    _debug("  stage            : region-detect (detect_tile_regions)")
+    _debug(f"  image/candidate  : {Path(image_path).name} "
+           f"({width}x{height}, {len(image_bytes)} bytes)")
+    _debug(f"  model            : {GEMINI_MODEL}")
+
     try:
         response = _generate_content_safe(
             model=GEMINI_MODEL,
@@ -1890,6 +1927,14 @@ def detect_tile_regions(image_path, width, height):
 
     regions.sort(key=lambda region: region["confidence"], reverse=True)
 
+    _debug("  response received : YES")
+    _debug(f"  surfaces returned : {len(regions)} kept, "
+           f"{len(below_threshold)} below the confidence floor, "
+           f"{unusable_geometry} with unreadable geometry")
+    for region in regions[:TILE_REGION_MAX]:
+        _debug(f"    - {region['surface']} @ {region['confidence']:.2f}, "
+               f"{len(region['occluders'])} occluder(s)")
+
     # Surfaces the detector DID see and this function then discarded.
     # Silently dropping them makes a thresholding decision look exactly
     # like "the model saw nothing", which is the difference between
@@ -1938,6 +1983,11 @@ def verify_tile_only(image_path):
     else:
         mime_type = "image/webp"
 
+    _debug("CALL")
+    _debug("  stage            : tile-purity (verify_tile_only)")
+    _debug(f"  image/candidate  : {Path(image_path).name} ({len(image_bytes)} bytes)")
+    _debug(f"  model            : {GEMINI_MODEL}")
+
     try:
         response = _generate_content_safe(
             model=GEMINI_MODEL,
@@ -1950,34 +2000,73 @@ def verify_tile_only(image_path):
                 "response_schema": TILE_PURITY_SCHEMA,
             },
         )
-    except Exception:  # noqa: BLE001 -- treated as "no verdict", never as clean
+    except Exception as exc:  # noqa: BLE001 -- "no verdict", never "clean"
+        _debug(f"  response received : NO -- call raised ({exc})")
+        _debug("  final interpretation: NO VERDICT -> defer, not 'not a tile'")
         return None
 
     if response is None:
+        # None means quota exhausted or the call gave up; either way
+        # nothing looked at this crop.
+        _debug("  response received : NO -- quota exhausted or call abandoned")
+        _debug("  final interpretation: NO VERDICT -> defer, not 'not a tile'")
         return None
+
+    _debug("  response received : YES")
 
     try:
         payload = json.loads(response.text)
-    except (AttributeError, ValueError, TypeError):
+    except (AttributeError, ValueError, TypeError) as exc:
+        _debug(f"  raw response      : {str(getattr(response, 'text', ''))[:400]!r}")
+        _debug(f"  response received : YES, but unparseable ({exc})")
+        _debug("  final interpretation: NO VERDICT -> defer, not 'not a tile'")
         return None
 
     if not isinstance(payload, dict):
         return None
 
+    # A PAYLOAD THAT ANSWERS NOTHING IS NOT AN ANSWER.
+    #
+    # The defaults below used to fabricate a verdict out of a response
+    # that carried no verdict: a missing material became "OTHER" and a
+    # missing tile_fraction became 0.0, so a truncated reply, a schema
+    # slip or a refusal arrived at the validator as a confident
+    # "0% tile, unidentifiable material" and the candidate was rejected
+    # as NOT a tile. That is a Gemini failure wearing the costume of a
+    # Gemini judgement, and it is indistinguishable downstream from the
+    # model actually having looked and said no.
+    #
+    # Both fields are declared required in TILE_PURITY_SCHEMA. If either
+    # is absent, nothing judged this crop, so None is returned and the
+    # callers defer the image for review instead of deleting it.
+    if payload.get("material") is None or payload.get("tile_fraction") is None:
+        _debug(
+            "purity response missing required fields "
+            f"(material={payload.get('material')!r}, "
+            f"tile_fraction={payload.get('tile_fraction')!r}) "
+            f"-- treating as NO VERDICT, not as 'not a tile'"
+        )
+        return None
+
     try:
         tile_fraction = float(payload.get("tile_fraction", 0.0))
     except (TypeError, ValueError):
-        tile_fraction = 0.0
+        # Present but unparseable is the same kind of non-answer.
+        _debug(
+            f"purity tile_fraction is unreadable "
+            f"({payload.get('tile_fraction')!r}) -- treating as NO VERDICT"
+        )
+        return None
 
     if not math.isfinite(tile_fraction):
-        tile_fraction = 0.0
+        return None
 
     try:
         distinct_designs = int(payload.get("distinct_tile_designs", 1))
     except (TypeError, ValueError):
         distinct_designs = 1
 
-    return {
+    observation = {
         "distinct_tile_designs": max(1, distinct_designs),
         "tile_fraction": max(0.0, min(1.0, tile_fraction)),
         "material": str(payload.get("material") or "OTHER").strip().upper(),
@@ -1990,3 +2079,24 @@ def verify_tile_only(image_path):
         "is_scene": bool(payload.get("is_scene")),
         "reason": str(payload.get("reason") or "").strip(),
     }
+
+    _debug(f"  material          : {observation['material']}")
+    _debug(f"  tile_fraction     : {observation['tile_fraction']:.0%}")
+    _debug(f"  scene             : {observation['is_scene']}")
+    _debug(f"  designs           : {observation['distinct_tile_designs']}")
+    _debug(
+        "  objects           : "
+        + (", ".join(
+            name for name, present in (
+                ("person", observation["contains_person"]),
+                ("text", observation["contains_text"]),
+                ("logo", observation["contains_logo"]),
+                ("furniture", observation["contains_furniture"]),
+                ("fixture", observation["contains_fixture"]),
+                ("object", observation["contains_object"]),
+            ) if present
+        ) or "none")
+    )
+    _debug("  final interpretation: a real verdict from the model")
+
+    return observation

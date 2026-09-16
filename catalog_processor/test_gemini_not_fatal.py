@@ -222,10 +222,81 @@ def main():
             all(f"page_{BAD_PAGE}_" not in n for n in uploaded),
         ))
 
+    results.extend(unreadable_response_matrix())
+
     passed = sum(1 for r in results if r)
     print("")
     print(f"{passed}/{len(results)} checks passed")
     return 0 if passed == len(results) else 1
+
+
+def unreadable_response_matrix():
+    """A response nobody can read is NOT the model saying "not a tile".
+
+    verify_tile_only parsed the payload with defaults, so a reply that
+    carried no verdict -- truncated, refused, schema-slipped, empty --
+    arrived at the validator as material="OTHER", tile_fraction=0.0.
+    That is a confident-looking rejection manufactured out of a failure,
+    and downstream nothing could tell it from the model having looked
+    and said no. Candidates died on it, and the run reported them as
+    not-tile.
+
+    The line that matters most below is the second one: a GENUINE
+    non-tile verdict must still reject. A fix that deferred everything
+    would pass the rest of this and quietly disable the gate.
+    """
+    import json
+
+    print("")
+    print("=" * 72)
+    print("UNREADABLE RESPONSES (must defer, not reject)")
+    print("=" * 72)
+
+    crop = OUT / "_probe.webp"
+    tile_photo().save(crop, "WEBP", quality=90, method=6)
+
+    class Response:
+        def __init__(self, text):
+            self.text = text
+
+    real_call = gemini_service._generate_content_safe
+
+    def answer(body):
+        gemini_service._generate_content_safe = lambda *a, **k: Response(body)
+        try:
+            return gemini_service.verify_tile_only(str(crop))
+        finally:
+            gemini_service._generate_content_safe = real_call
+
+    verdicts = [
+        ("a real tile verdict", json.dumps({
+            "material": "TILE", "tile_fraction": 0.97,
+            "is_scene": False, "reason": "tile"}), "VERDICT"),
+        ("a real NON-tile verdict", json.dumps({
+            "material": "ARCHITECTURE", "tile_fraction": 0.0,
+            "is_scene": True, "reason": "a building"}), "VERDICT"),
+        ("empty object", json.dumps({}), "NO VERDICT"),
+        ("material missing", json.dumps({"tile_fraction": 0.9}), "NO VERDICT"),
+        ("tile_fraction missing", json.dumps({"material": "TILE"}), "NO VERDICT"),
+        ("tile_fraction unreadable", json.dumps({
+            "material": "TILE", "tile_fraction": "lots"}), "NO VERDICT"),
+        ("a refusal", json.dumps({"error": "cannot process"}), "NO VERDICT"),
+        ("not JSON at all", "I'm sorry, I can't help with that.", "NO VERDICT"),
+    ]
+
+    outcomes = []
+    for label, body, expected in verdicts:
+        observation = answer(body)
+        actual = "NO VERDICT" if observation is None else "VERDICT"
+        detail = "" if actual == expected else f"got {actual}"
+        if observation is not None:
+            detail = (detail or f"material={observation['material']} "
+                                f"tile={observation['tile_fraction']:.0%}")
+        outcomes.append(check(
+            f"{label:26s} -> {expected}", actual == expected, detail,
+        ))
+
+    return outcomes
 
 
 if __name__ == "__main__":
