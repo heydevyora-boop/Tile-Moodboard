@@ -1011,20 +1011,35 @@ def extract_tile_region(image_bgr, quad, occluders=None,
     return crop, info
 
 
-# The same measurement, read the other way round, for a catalog whose
-# pages are known to carry NOTHING BUT products.
+# WHY THERE IS NO "STRICTER" VERSION OF THE NUMBER ABOVE.
 #
-# 0.03 above was chosen to be generous about calling two crops the same
-# tile, because the failure it was fixing was the same tile uploaded
-# twice. On a tile-only sheet the risk runs the other way: a range laid
-# out as a base tile plus its matching highlighter, border and decor --
-# one family, one palette, one texture -- can sit inside 0.03 of each
-# other and be merged into a single "duplicate", losing real products
-# that happen to look like their own siblings.
+# The obvious repair for siblings being merged is a tighter threshold.
+# Measured against a real prepared catalog, there is no threshold that
+# works. On one sheet:
 #
-# 0.012 keeps a comfortable multiple of the 0.001-0.002 the two
-# rasterization paths actually differ by (so cross-route duplicates are
-# still caught) while staying far below the 0.05 that separates two
-# genuinely different products. It is used only where the caller opts
-# in -- see CATALOG_TILE_ONLY in main_step6_complete.py.
-CONTENT_SIGNATURE_MAX_DIFFERENCE_STRICT = 0.012
+#   same tile, embedded raster vs page render :  0.0021 .. 0.0297
+#   different products, closest pair          :  0.0108
+#
+# The two ranges OVERLAP. Any cut-off tight enough to keep a base tile
+# apart from its plain sibling is loose enough to upload the same tile
+# twice, and vice versa. Appearance cannot answer "is this the same
+# tile" on a catalog whose products are meant to resemble each other.
+#
+# So appearance stopped being the answer. Two candidates found by two
+# different routes are the same tile when they cover the same area OF
+# THE PAGE -- identity, not resemblance -- which both routes can state
+# exactly. See page_box_for_region() and signature_already_seen() in
+# main_step6_complete.py; content_signature remains the fallback for a
+# caller that cannot supply page geometry.
+
+# Two page-space boxes this far overlapped are the same physical tile
+# seen twice. Generous, because the two routes bound a tile slightly
+# differently -- one from the embedded raster's pixels, one from the
+# rendered page's -- and a tile's own neighbours do not overlap it at
+# all, so there is nothing nearby for a loose value to collide with.
+PAGE_BOX_OVERLAP_LIMIT = 0.50
+
+
+def box_iou(first, second):
+    """Intersection-over-union of two (x0, y0, x1, y1) boxes."""
+    return _box_iou(first, second)

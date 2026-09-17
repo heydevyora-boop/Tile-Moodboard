@@ -1410,7 +1410,44 @@ def crop_signature(image_bgr):
     return content_signature(image_bgr)
 
 
-def signature_already_seen(seen_signatures, signature, source_key=None):
+def page_box_for_region(image_rect, source_width, source_height, region_box):
+    """Maps a region's box from source pixels into PAGE coordinates.
+
+    This is what lets the two search routes talk about the same tile.
+    They see different images of it -- one the PDF's embedded raster,
+    one a re-render of the whole page -- at different scales, different
+    origins and different crops, so a box in one means nothing in the
+    other. Both, however, know exactly where their image sits on the
+    page, so both can name the same tile by the area of the PAGE it
+    occupies, and that name is identical whichever route found it.
+
+    Returns (x0, y0, x1, y1) in page points, or None when the caller
+    could not supply the placement (then appearance is the fallback).
+    """
+    if image_rect is None or not source_width or not source_height:
+        return None
+
+    try:
+        left, top, right, bottom = (float(value) for value in image_rect)
+    except (TypeError, ValueError):
+        return None
+
+    span_x = right - left
+    span_y = bottom - top
+    if span_x <= 0 or span_y <= 0:
+        return None
+
+    x0, y0, x1, y1 = region_box
+    return (
+        left + (x0 / source_width) * span_x,
+        top + (y0 / source_height) * span_y,
+        left + (x1 / source_width) * span_x,
+        top + (y1 / source_height) * span_y,
+    )
+
+
+def signature_already_seen(seen_signatures, signature, source_key=None,
+                           page_box=None):
     """True when `signature` is a re-sighting of a tile already extracted.
 
     `seen_signatures` is a growing list (not a set: near-duplicate
@@ -1418,46 +1455,58 @@ def signature_already_seen(seen_signatures, signature, source_key=None):
     across every search of one page, so a tile found via its embedded
     image and again via the page render is recognised as one tile.
 
-    Entries are (source_key, signature) pairs, and that first half is
-    what keeps this from eating a page. Appearance is the right test
-    ACROSS sources -- the embedded raster and the page render never
-    produce identical pixels for the same tile, so only a perceptual
-    comparison can recognise the second sighting. It is the wrong test
-    WITHIN one source: three tiles laid out side by side on one sheet
-    are three distinct regions of it, and a range built around a single
-    palette and texture (a base tile with its matching highlighter and
-    border) can easily look alike enough to be merged. Inside one source
-    image, region coordinates already decide what is the same surface --
-    that is deduplicate_regions' job -- so this skips same-source
-    entries entirely rather than second-guessing it on appearance.
+    Entries are (source_key, signature, page_box) triples, and neither
+    of the first two halves of that is decoration.
 
-    Older entries stored as a bare signature are still honoured, so a
-    caller that has not been updated keeps working.
+    source_key stops this being asked the wrong question. Within ONE
+    source image, three tiles laid out side by side are three distinct
+    regions of it and coordinates already decide what is the same
+    surface (deduplicate_regions' job). Comparing a candidate with its
+    own neighbours on appearance is what collapsed a whole sheet: on a
+    real catalog the closest pair of DIFFERENT products measured 0.0108
+    apart, well inside the 0.03 that means "same tile".
+
+    page_box settles it across sources. The same catalog's same tile,
+    seen by the embedded route and by the page render, measured 0.0021
+    to 0.0297 apart -- a range that OVERLAPS the one above, so no
+    appearance threshold can separate "the same tile again" from "its
+    plain sibling". Page geometry can, exactly: two routes that found
+    the same tile are describing the same area of the page, and a
+    tile's neighbours do not overlap it at all.
+
+    So geometry decides whenever both sides have it, and appearance is
+    the fallback for a caller that cannot supply placement. Entries
+    stored as a bare signature, or as a (source, signature) pair, are
+    still honoured.
     """
     from app.tile_region_extractor import (
-        CONTENT_SIGNATURE_MAX_DIFFERENCE,
-        CONTENT_SIGNATURE_MAX_DIFFERENCE_STRICT,
+        PAGE_BOX_OVERLAP_LIMIT,
+        box_iou,
         signatures_match,
     )
 
-    limit = (
-        CONTENT_SIGNATURE_MAX_DIFFERENCE_STRICT if TILE_ONLY_CATALOG
-        else CONTENT_SIGNATURE_MAX_DIFFERENCE
-    )
-
     for entry in seen_signatures:
-        if isinstance(entry, tuple) and len(entry) == 2 and (
+        entry_source, existing, entry_box = None, entry, None
+        if isinstance(entry, tuple) and 2 <= len(entry) <= 3 and (
             entry[1] is None or isinstance(entry[1], tuple)
         ):
-            entry_source, existing = entry
-        else:
-            entry_source, existing = None, entry
+            entry_source = entry[0]
+            existing = entry[1]
+            entry_box = entry[2] if len(entry) == 3 else None
 
         # Same source image: coordinates decide, not appearance.
         if source_key is not None and entry_source == source_key:
             continue
 
-        if signatures_match(signature, existing, max_difference_fraction=limit):
+        if page_box is not None and entry_box is not None:
+            # Both sides can name the area of the page they cover, so
+            # the question is answerable exactly and appearance does not
+            # get a vote -- in either direction.
+            if box_iou(page_box, entry_box) >= PAGE_BOX_OVERLAP_LIMIT:
+                return True
+            continue
+
+        if signatures_match(signature, existing):
             return True
 
     return False
@@ -1772,7 +1821,12 @@ def mine_tile_regions(
         #     nothing. A signature is now recorded only where a tile is
         #     actually ACCEPTED, so only a real output can mask another.
         signature = crop_signature(crop)
-        if signature_already_seen(seen_signatures, signature, source_key):
+        page_box = page_box_for_region(
+            image_rect, source_width, source_height, region_box,
+        )
+        if signature_already_seen(
+            seen_signatures, signature, source_key, page_box,
+        ):
             print(f"      geometry           : extracted, but this tile was "
                   f"already extracted from another source on this page")
             print(f"      FINAL              : DUPLICATE")
@@ -2020,7 +2074,7 @@ def mine_tile_regions(
                          product_name=piece_metadata.get("product_name", ""),
                          **geometry_fields)
                     seen_signatures.append(
-                        (source_key, crop_signature(piece))
+                        (source_key, crop_signature(piece), page_box)
                     )
                     accepted.append((piece_path, piece_reason, piece_metadata))
                     pieces_accepted += 1
@@ -2078,7 +2132,7 @@ def mine_tile_regions(
              tile_fraction=(metadata.get("purity") or {}).get("tile_fraction"),
              **geometry_fields)
 
-        seen_signatures.append((source_key, signature))
+        seen_signatures.append((source_key, signature, page_box))
         record("ACCEPTED", f"candidate {index}", reason)
         accepted.append((region_path, reason, metadata))
 
@@ -3009,6 +3063,8 @@ def extract_images_from_pdf(
                             page_signatures.append((
                                 f"embedded-image:{output_filename}",
                                 crop_signature(_whole),
+                                tuple(float(v) for v in image_rect)
+                                if image_rect is not None else None,
                             ))
                     except Exception:  # noqa: BLE001 -- dedupe aid only
                         pass
@@ -4127,7 +4183,7 @@ if __name__ == "__main__":
     if "--pipeline" in sys.argv:
         drive = input(
             "Enter pen drive path "
-            "(example E:\): "
+            "(example E:\\): "
         ).strip().strip('"').strip("'")
 
         process_drive(drive)
