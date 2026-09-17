@@ -609,6 +609,7 @@ def main():
         total_saved >= 10, f"{total_saved} tiles recovered",
     ))
 
+    results.extend(full_source_matrix())
     results.extend(graphic_matrix())
     results.extend(occluder_matrix())
     results.extend(material_matrix())
@@ -622,6 +623,97 @@ def main():
 
     contact_sheet(sources, accepted_by_scene)
     return 0 if passed == len(results) else 1
+
+
+def full_source_matrix():
+    """A candidate spanning the whole composed source is a failure.
+
+    The pipeline was saving entire catalog pages as "tiles". A page is a
+    composition -- margins, headings, text, usually several elements --
+    so nothing on it is a single material surface spanning all of it.
+    Two generic paths produce such a candidate: the detector returns the
+    whole frame, or a coordinate-space misread clamps every corner onto
+    the frame edge (_to_pixels bounds each fraction into [0, 1]).
+
+    The second group is what stops this being a blunt "reject big
+    candidates" rule: an EMBEDDED image is already one element off the
+    page, and a full-frame candidate there is the correct answer for a
+    standalone product shot. Nothing here is specific to any catalog,
+    brand, filename or layout -- only to whether the source is a
+    composition or a single element.
+    """
+    import cv2
+    from app.tile_region_extractor import (
+        MAX_PAGE_SOURCE_COVERAGE, extract_tile_region,
+    )
+
+    print("")
+    print("=" * 72)
+    print("FULL-SOURCE CANDIDATES")
+    print("=" * 72)
+
+    size = 700
+    image = Image.new("RGB", (size, size), WALL)
+    tile_field(ImageDraw.Draw(image), (0, 0, size, size), cell=44)
+    path = OUT / "_fullsrc.webp"
+    image.save(path, "WEBP", quality=92, method=6)
+    source = cv2.imread(str(path), cv2.IMREAD_COLOR)
+
+    def quad(x1, y1, x2, y2):
+        return [(x1, y1), (x2, y1), (x2, y2), (x1, y2)]
+
+    whole = quad(0, 0, size, size)
+    # A misread coordinate space clamps every corner onto the frame.
+    clamped = quad(-40, -40, size + 40, size + 40)
+    part = quad(60, 60, 430, 430)
+
+    cases = [
+        ("page render, whole frame", whole, "page", False),
+        ("page render, clamped out-of-range quad", clamped, "page", False),
+        ("page render, a real sub-region", part, "page", True),
+        ("embedded image, whole frame (standalone product)",
+         whole, "embedded", True),
+        ("embedded image, a real sub-region", part, "embedded", True),
+    ]
+
+    outcomes = []
+    for label, region_quad, kind, should_extract in cases:
+        limit = MAX_PAGE_SOURCE_COVERAGE if kind == "page" else None
+        crop, info = extract_tile_region(
+            source, region_quad, [], max_source_coverage=limit,
+        )
+        extracted = crop is not None
+        detail = (
+            f"coverage={info.get('source_coverage', 0):.0%}"
+            + ("" if extracted else f", stage={info.get('stage')}")
+        )
+        outcomes.append(check(
+            f"{label:48s} -> {'extract' if should_extract else 'reject'}",
+            extracted == should_extract, detail,
+        ))
+
+    # Several samples on one page must stay separate candidates, each
+    # well under the limit -- never merged into one page-sized crop.
+    boxes = [quad(40, 40, 320, 320), quad(380, 40, 660, 320),
+             quad(40, 380, 320, 660), quad(380, 380, 660, 660)]
+    separate = [
+        extract_tile_region(source, b, [],
+                            max_source_coverage=MAX_PAGE_SOURCE_COVERAGE)
+        for b in boxes
+    ]
+    outcomes.append(check(
+        "four samples on one page stay four candidates",
+        all(crop is not None for crop, _i in separate),
+        f"{sum(1 for c, _i in separate if c is not None)}/4 extracted",
+    ))
+    outcomes.append(check(
+        "none of them is page-sized",
+        all(i["source_coverage"] < MAX_PAGE_SOURCE_COVERAGE
+            for _c, i in separate),
+        f"max coverage {max(i['source_coverage'] for _c, i in separate):.0%}",
+    ))
+
+    return outcomes
 
 
 def graphic_matrix():

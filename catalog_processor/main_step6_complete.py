@@ -1301,6 +1301,8 @@ def mine_tile_regions(
     import cv2  # local: only needed when mining actually runs
 
     from app.tile_region_extractor import (
+        MAX_PAGE_SOURCE_COVERAGE,
+        draw_region_overlay,
         MIN_CLEAN_PIXELS,
         MIN_OUTPUT_SIDE_PX,
         deduplicate_regions,
@@ -1410,6 +1412,7 @@ def mine_tile_regions(
     accepted = []
     deferred = []
     seen_signatures = set()
+    overlay_boxes = []
 
     for index, region in enumerate(regions, start=1):
         label = f"page {page_number} image {image_counter} region {index}"
@@ -1455,9 +1458,27 @@ def mine_tile_regions(
         print(f"      coordinate space   : {region.get('coordinate_space', '?')}")
         print(f"      occluder box(es)   : {len(region['occluders'])}")
 
+        # A rendered page is a COMPOSITION -- margins, headings, text,
+        # usually several elements -- so a candidate spanning all of it
+        # is a detection failure and must never become the output. An
+        # embedded image is already one element off the page, where a
+        # full-frame candidate is the right answer for a standalone
+        # product shot, so no limit is imposed there.
         crop, info = extract_tile_region(
             image_bgr, region["quad"], region["occluders"],
+            max_source_coverage=(
+                MAX_PAGE_SOURCE_COVERAGE
+                if source_type == "rendered-page" else None
+            ),
         )
+
+        print(f"      [TILE-REGION] source={source_type}:{output_path.name}")
+        print(f"      [TILE-REGION] bbox={info.get('bbox')}")
+        print(f"      [TILE-REGION] width={region_width} height={region_height}")
+        print(f"      [TILE-REGION] coverage="
+              f"{info.get('source_coverage', 0.0):.1%}")
+        print(f"      [TILE-REGION] candidate_type={region['surface']}")
+        overlay_boxes.append((index, region_box, crop is not None))
 
         # Both geometries are printed on every failure: a candidate that
         # dies here died between "the detector saw a surface" and "there
@@ -1467,6 +1488,8 @@ def mine_tile_regions(
             print(f"      geometry normalized: {info.get('quad_normalized', 'n/a')}")
             print(f"      geometry           : REJECTED -- {info['reason']} "
                   f"[stage={info['stage']}]")
+            print(f"      [TILE-REGION] decision=REJECT")
+            print(f"      [TILE-REGION] reason={info['reason']}")
             print(f"      FINAL              : REJECTED")
             note(
                 "REJECTED",
@@ -1703,6 +1726,15 @@ def mine_tile_regions(
              **geometry_fields)
 
         accepted.append((region_path, reason, metadata))
+
+    debug_directory = os.getenv("TILE_REGION_DEBUG_DIR", "").strip()
+    if debug_directory and overlay_boxes:
+        written = draw_region_overlay(
+            image_bgr, overlay_boxes,
+            Path(debug_directory) / f"{output_path.stem}_regions.png",
+        )
+        if written is not None:
+            print(f"  [TILE-REGION] overlay written: {written}")
 
     return accepted, deferred
 

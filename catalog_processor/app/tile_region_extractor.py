@@ -60,6 +60,23 @@ import numpy as np
 # not what proportion of the region it represents.
 MIN_CLEAN_PIXELS = 130 * 130
 
+# A candidate whose bounding box covers at least this much of a
+# COMPOSED source (a rendered catalog page) is a region-detection
+# failure, not a surface. A page carries margins, text, headings and
+# usually several elements; no single material surface spans all of it.
+#
+# Two things produce such a candidate, and both are generic -- neither
+# depends on any catalog's layout:
+#   - the detector genuinely returns the whole frame as the surface
+#   - a coordinate-space misread: _to_pixels clamps every fraction into
+#     [0, 1], so out-of-range values land exactly on the frame edges and
+#     the quad collapses to the full image
+#
+# Deliberately NOT applied to embedded images. There the source is
+# already one element off the page, and a full-frame candidate is the
+# right answer for a standalone product shot.
+MAX_PAGE_SOURCE_COVERAGE = 0.92
+
 # An occluder box covering at least this much of the region is treated as
 # a detector error rather than an object on the tile -- see the note at
 # the point of use in extract_tile_region. Set high on purpose: a genuine
@@ -622,13 +639,50 @@ def split_tile_designs(image_bgr, max_pieces=4):
     return [] if len(boxes) < 2 else boxes
 
 
-def extract_tile_region(image_bgr, quad, occluders=None):
+def draw_region_overlay(image_bgr, regions, destination):
+    """Writes the source with every detected candidate drawn on it.
+
+    Purely diagnostic, and opt-in: the caller only asks for this when
+    TILE_REGION_DEBUG_DIR is set. It answers the question the numbers
+    cannot -- whether a candidate actually sits on the material, or
+    spans the whole sheet.
+
+    `regions` is a list of (label, (x1, y1, x2, y2), accepted).
+    """
+    canvas = image_bgr.copy()
+
+    for label, (x1, y1, x2, y2), accepted in regions:
+        colour = (80, 200, 80) if accepted else (60, 60, 220)
+        cv2.rectangle(canvas, (int(x1), int(y1)), (int(x2), int(y2)), colour, 3)
+        cv2.putText(
+            canvas, str(label), (int(x1) + 6, max(20, int(y1) + 24)),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.6, colour, 2, cv2.LINE_AA,
+        )
+
+    try:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        cv2.imwrite(str(destination), canvas)
+        return destination
+    except Exception:  # noqa: BLE001 -- diagnostics must never break a run
+        return None
+
+
+def extract_tile_region(image_bgr, quad, occluders=None,
+                        max_source_coverage=None):
     """Rectifies one candidate region and returns a clean tile-only crop.
 
     Returns (crop_bgr, info) on success, or (None, info) when the region
     cannot yield a usable swatch. info always carries `stage` naming the
     step that ended it and `reason` explaining why, so the caller can log
     a per-candidate decision without re-deriving any of this.
+
+    `max_source_coverage` rejects a candidate whose bounding box covers
+    at least that fraction of the source. Callers pass it when the
+    source is a COMPOSITION rather than a single surface -- a rendered
+    catalog page -- where a candidate spanning the whole frame is a
+    detection failure by definition. It is left None when the source is
+    an embedded image, because there a full-frame candidate is the
+    normal, correct answer for a standalone product photograph.
     """
     source_height, source_width = image_bgr.shape[:2]
     source_area = float(source_height * source_width)
@@ -648,6 +702,21 @@ def extract_tile_region(image_bgr, quad, occluders=None):
     info["quad_normalized"] = [
         (round(x, 1), round(y, 1)) for x, y in normalized
     ]
+
+    bx1, by1, bx2, by2 = quad_bounds(normalized)
+    candidate_area = float(max(0, bx2 - bx1) * max(0, by2 - by1))
+    coverage = candidate_area / source_area if source_area else 0.0
+    info["bbox"] = (bx1, by1, bx2, by2)
+    info["source_coverage"] = round(coverage, 4)
+
+    if max_source_coverage is not None and coverage >= max_source_coverage:
+        info["stage"] = "full_source"
+        info["reason"] = (
+            f"candidate covers {coverage:.1%} of the source, at or above "
+            f"the {max_source_coverage:.0%} limit for a composed source -- "
+            f"this is the whole page, not a material surface"
+        )
+        return None, info
     if note:
         info["normalize_note"] = note
 
