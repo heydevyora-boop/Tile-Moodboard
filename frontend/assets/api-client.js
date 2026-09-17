@@ -2482,6 +2482,55 @@ const ai = {
         payload.combination;
     }
 
+    /*
+     * THE REST OF THE MOOD-BOARD COMBINATION.
+     *
+     * product_id above is the BASE tile only. A board also carries a
+     * highlight and an accent, and sending just the base is why the
+     * generated bathroom only ever showed one material.
+     *
+     * Only ids and roles travel; the backend resolves each id to that
+     * tile's current image, so the scene is always generated from the
+     * latest extracted image rather than whatever this page happened to
+     * render with.
+     */
+    if (
+      Array.isArray(
+        payload.materials
+      ) &&
+      payload.materials.length
+    ) {
+      normalizedPayload.materials =
+        payload.materials
+          .filter(
+            (material) =>
+              material &&
+              typeof material === 'object'
+          )
+          .map(
+            (material) => ({
+              role:
+                String(
+                  material.role || ''
+                )
+                  .trim()
+                  .toLowerCase(),
+
+              tile_id:
+                String(
+                  material.tile_id ||
+                  material.tileId ||
+                  material.product_id ||
+                  ''
+                ).trim()
+            })
+          )
+          .filter(
+            (material) =>
+              material.tile_id
+          );
+    }
+
     // ========================================================
     // CALL NODE BACKEND
     // ========================================================

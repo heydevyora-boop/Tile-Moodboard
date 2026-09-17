@@ -2,7 +2,7 @@ import re
 import uuid
 from pathlib import Path
 from app.output_paths import writable_output_root
-from typing import Any, Dict, Optional
+from typing import List, Any, Dict, Optional
 
 from app.tile_application_engine import (
     apply_tile_to_scene,
@@ -173,6 +173,12 @@ def generate_tile_visualization(
     tile_name: str = "Selected Tile",
     scene_id: Optional[str] = None,
     angle: Optional[str] = None,
+    # The rest of the mood-board combination -- [{role, image_path,
+    # product_id, name}]. Threaded through untouched, exactly as `angle`
+    # is: only the engine at the end of the chain knows what to do with
+    # it, and every layer in between would otherwise drop it, which is
+    # the bug being fixed.
+    materials: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
 
     scene_image = resolve_scene_image(
@@ -223,6 +229,7 @@ def generate_tile_visualization(
         tile_product_id=product_id,
         tile_name=tile_name,
         angle=angle,
+        materials=materials,
     )
 
     # --------------------------------------------------------

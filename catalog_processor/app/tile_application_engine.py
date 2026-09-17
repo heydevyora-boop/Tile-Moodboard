@@ -18,7 +18,7 @@ Applied Tile Bathroom Image
 
 from pathlib import Path
 from app.output_paths import writable_output_root
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 import mimetypes
 import os
 
@@ -141,6 +141,64 @@ SURFACE_DESCRIPTIONS = {
 
 def describe_surface(surface: str) -> str:
     return SURFACE_DESCRIPTIONS.get(surface, surface.lower())
+
+
+# ============================================================
+# MATERIAL ROLES
+#
+# A mood board is a COMBINATION -- a base tile plus the highlight and
+# accent chosen to sit with it -- and the whole point of visualizing it
+# is seeing those materials together in one room. Only the base was ever
+# reaching the generator, so every board rendered as a single-material
+# bathroom and the other two selections had no visible effect.
+#
+# Each role gets the surfaces a tile showroom would actually put it on.
+# This is deliberately description, not geometry: the model is choosing
+# where a highlight band or an accent frame belongs in THIS room, which
+# is exactly the judgement it is good at and which no fixed rectangle
+# could get right across different bathrooms.
+# ============================================================
+
+MATERIAL_ROLE_SURFACES = {
+    "base": (
+        "the PRIMARY surfaces -- the main field of the {surface_description}. "
+        "This is the dominant material and must cover most of the tiled area."
+    ),
+    "highlight": (
+        "the HIGHLIGHT surfaces -- one feature area within the "
+        "{surface_description}, such as a single feature wall, the wall "
+        "behind the vanity or inside the shower niche. Secondary to the "
+        "base, clearly visible, but covering much less area than it."
+    ),
+    "accent": (
+        "the ACCENT surfaces -- decorative detail within the "
+        "{surface_description}, such as a border course, a framed panel, "
+        "a strip between fields, or a niche/inset surround. The smallest "
+        "area of the three, used as trim rather than as a field."
+    ),
+    "border": (
+        "the BORDER surfaces -- a trim course or framing band within the "
+        "{surface_description}, running between or around the other "
+        "materials rather than filling an area."
+    ),
+}
+
+# Roles named in a combination that this file has no wording for still
+# have to appear in the room; they are described generically rather than
+# dropped, because dropping a selected material is the bug being fixed.
+MATERIAL_ROLE_FALLBACK = (
+    "a distinct secondary area of the {surface_description}, "
+    "clearly visible and clearly separate from the other materials."
+)
+
+
+def describe_material_role(role: str, surface_description: str) -> str:
+    """Says where one role's material belongs, in this room."""
+    template = MATERIAL_ROLE_SURFACES.get(
+        str(role or "").strip().lower(),
+        MATERIAL_ROLE_FALLBACK,
+    )
+    return template.format(surface_description=surface_description)
 
 
 # ============================================================
@@ -363,6 +421,7 @@ def build_tile_application_prompt(
     tile_product_id: Optional[str] = None,
     tile_name: Optional[str] = None,
     angle: Optional[str] = None,
+    materials: Optional[List[Dict[str, Any]]] = None,
 ) -> str:
 
     surface = validate_surface(
@@ -426,6 +485,117 @@ exactly the same as it would for any other angle of this same room.
 
         camera_section = ""
         camera_do_not_line = "- change camera\n"
+
+    # ONE MATERIAL OR SEVERAL.
+    #
+    # With no `materials` the wording is exactly what it always was, so
+    # every existing caller (Scene & Angles, the tests, the single-tile
+    # pipeline) is unaffected. With a combination, the task changes
+    # shape: it is no longer "apply this tile" but "install these
+    # materials, each in its own role", and the images have to be
+    # enumerated because there are now more than two of them.
+    if materials:
+        lines = []
+        for position, material in enumerate(materials, start=2):
+            role = str(material.get("role") or "").strip().lower()
+            label = role.upper() or f"MATERIAL {position - 1}"
+            where = describe_material_role(role, surface_description)
+
+            named = ""
+            if material.get("name"):
+                named += f" (\"{material['name']}\""
+                if material.get("product_id"):
+                    named += f", product {material['product_id']}"
+                named += ")"
+            elif material.get("product_id"):
+                named += f" (product {material['product_id']})"
+
+            lines.append(
+                f"  IMAGE {position} = the EXACT {label} material"
+                f"{named}.\n"
+                f"      Install it on {where}"
+            )
+
+        material_block = "\n".join(lines)
+
+        return f"""
+You are a professional architectural visualization engine.
+
+TASK:
+{len(materials) + 1} images are supplied, in this order:
+  IMAGE 1 = the bathroom/interior scene.
+{material_block}
+
+Install ALL {len(materials)} supplied materials into IMAGE 1 together, each
+one on the surfaces described for its own role above. This is a single
+coordinated tile scheme, exactly as a showroom would lay it up.
+
+EVERY supplied material MUST be visibly present in the finished image.
+Using only the first material, or blending them into one, is a FAILED
+result. Each must read as its own distinct, identifiable product, taken
+exactly from its own supplied photograph -- its pattern, colour,
+texture, finish, geometry and markings -- and must NOT be invented,
+substituted, or inferred from a product name, SKU or brand.
+
+Where two materials meet, finish the junction the way real tiling does:
+a clean cut, a trim piece or a grout line, never a blur or a fade.
+
+{identity}
+{camera_section}
+REFERENCE PRIORITY:
+
+1. IMAGE 1 (the bathroom) is the source of truth for: architecture,
+   layout, fixtures, camera and lighting. Its EXISTING tiles are NOT
+   any of the materials to use and must be replaced.
+
+2. Each material image is the ONLY source of truth for that material.
+
+DO NOT:
+- change room
+- change layout
+- change fixtures
+- change sanitaryware
+- change vanity
+- change faucets
+- change shower
+- change mirrors
+- change lighting
+{camera_do_not_line}- change room proportions
+- add furniture
+- add decoration
+- remove objects
+- omit any supplied material
+- apply one material where another was specified
+
+TILE APPLICATION RULES:
+
+1. Use the exact supplied materials.
+2. Preserve each one's original appearance.
+3. Preserve realistic tile scale for each.
+4. Preserve perspective.
+5. Follow the existing surface geometry.
+6. Follow vanishing points.
+7. Match lighting.
+8. Match shadows.
+9. Match reflections.
+10. Generate realistic grout where appropriate.
+11. Keep every material within the {surface_description} and the role
+    described for it.
+12. Do not apply them to unrelated surfaces.
+
+OUTPUT:
+
+Produce one photorealistic finished bathroom visualization showing all
+{len(materials)} materials installed together.
+
+The result must look like a professionally photographed bathroom with
+the selected tiles physically installed, not like a pasted image or
+flat texture.
+
+It must read as an actual photograph of a real, physically
+built room — not an illustration, rendering, drawing, diagram,
+or CGI-looking image.
+"""
 
     return f"""
 You are a professional architectural visualization engine.
@@ -663,9 +833,19 @@ def apply_tile_to_scene(
     tile_product_id: Optional[str] = None,
     tile_name: Optional[str] = None,
     angle: Optional[str] = None,
+    materials: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """
-    Apply selected tile to bathroom/interior image using Gemini.
+    Apply selected tile(s) to a bathroom/interior image using Gemini.
+
+    `materials` carries a whole mood-board combination -- a list of
+    {role, image_path, product_id, name} -- and every entry is sent to
+    the model as its own labelled image with its own role. Omitted, this
+    behaves exactly as it always did: one tile, one surface. `tile_image`
+    stays required either way and remains the base/primary material, so
+    no existing caller changes and a combination whose extra images all
+    fail to resolve still produces the single-tile result rather than
+    failing outright.
     """
 
     # --------------------------------------------------------
@@ -714,11 +894,47 @@ def apply_tile_to_scene(
     # PROMPT
     # --------------------------------------------------------
 
+    # Only materials whose image actually resolved can be described to
+    # the model -- promising it an IMAGE 4 that is not in the request is
+    # worse than not mentioning it, so the prompt is built from the same
+    # list the parts are built from, below.
+    resolved_materials = []
+
+    # The base is the material `tile_image` already carries. A caller
+    # that sends a combination without naming it still gets it, first, so
+    # rebuilding the image tail below can never drop the one image the
+    # single-tile path always sent.
+    if materials and not any(
+        str(m.get("role") or "").strip().lower() == "base" for m in materials
+    ):
+        materials = [{
+            "role": "base",
+            "image_path": tile_image,
+            "product_id": tile_product_id,
+            "name": tile_name,
+        }] + list(materials)
+
+    for material in (materials or []):
+        raw_path = material.get("image_path")
+        if not raw_path:
+            continue
+        try:
+            path = validate_image(Path(raw_path), "Material image")
+        except Exception as error:  # noqa: BLE001 -- one bad image, not a failed render
+            print(
+                f"  [visualization] material "
+                f"{material.get('role') or '?'} image unusable "
+                f"({raw_path}): {error}"
+            )
+            continue
+        resolved_materials.append({**material, "image_path": path})
+
     prompt = build_tile_application_prompt(
         surface=surface,
         tile_product_id=tile_product_id,
         tile_name=tile_name,
         angle=angle,
+        materials=resolved_materials or None,
     )
 
     # --------------------------------------------------------
@@ -796,6 +1012,47 @@ def apply_tile_to_scene(
             mime_type=tile_mime_type,
         ),
     ]
+
+    # THE WHOLE COMBINATION, EACH IMAGE LABELLED WITH ITS ROLE.
+    #
+    # The two labels above describe IMAGE 2 as "the one tile product
+    # being visualized", which stops being true the moment a board has a
+    # highlight and an accent as well. So for a combination the tile tail
+    # is rebuilt from scratch: scene, then one labelled image per
+    # material, in the order the prompt enumerated them. Labelling each
+    # part immediately before its own bytes is what binds a material to
+    # its role -- with four images, an unlabelled part is an invitation
+    # to put the accent where the base belongs.
+    if resolved_materials:
+
+        contents = contents[:3]  # prompt, scene label, scene bytes
+
+        for position, material in enumerate(resolved_materials, start=2):
+            role = str(material.get("role") or "").strip().upper()
+            path = material["image_path"]
+
+            contents.append(
+                types.Part.from_text(
+                    text=(
+                        f"IMAGE {position} = EXACT "
+                        f"{role or 'SELECTED'} CATALOG MATERIAL. "
+                        "The next image is the real catalog photograph "
+                        "of this material and is the ONLY source of "
+                        "truth for it. Reproduce it exactly -- pattern, "
+                        "colour, texture, finish, geometry and "
+                        "markings -- on the surfaces named for its role. "
+                        "Do NOT invent a similar material and do NOT "
+                        "substitute one inferred from a name or SKU."
+                    )
+                )
+            )
+
+            contents.append(
+                types.Part.from_bytes(
+                    data=path.read_bytes(),
+                    mime_type=_get_mime_type(path),
+                )
+            )
 
     # --------------------------------------------------------
     # GET CLIENT

@@ -36,7 +36,7 @@ Important:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import List, Any, Dict, Optional
 
 import hashlib
 import re
@@ -251,6 +251,12 @@ def generate_and_persist_visualization(
     final_design: Optional[Dict[str, Any]] = None,
     fallback_image_path: Optional[Path] = None,
     angle: Optional[str] = None,
+    # The rest of the mood-board combination -- [{role, image_path,
+    # product_id, name}]. Threaded through untouched, exactly as `angle`
+    # is: only the engine at the end of the chain knows what to do with
+    # it, and every layer in between would otherwise drop it, which is
+    # the bug being fixed.
+    materials: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """
     Execute the complete backend visualization workflow.
@@ -298,6 +304,7 @@ def generate_and_persist_visualization(
             sheet_name=sheet_name,
             fallback_image_path=fallback_image_path,
             angle=angle,
+            materials=materials,
         )
     )
 

@@ -919,6 +919,21 @@
       return;
     }
 
+    // ...and EVERY other material the board selected with it. This line
+    // is where the highlight and the accent used to be lost: only
+    // baseTile was sent, so the generator could only ever draw one
+    // material and the board's other two choices had no effect on the
+    // image at all. The base stays first so it is IMAGE 2 / the primary
+    // surface downstream.
+    //
+    // Ids only -- the backend resolves each to that tile's current
+    // image, so a re-extracted tile is picked up without this page
+    // having to know anything about it.
+    const materials = [
+      baseTile,
+      ...combo.tiles.filter((t) => t !== baseTile),
+    ].map((t) => ({ role: t.role, tile_id: t.tileId }));
+
     state.visualization = { status: 'loading', imageUrl: null, error: null, forIndex: state.detailIndex };
     render();
 
@@ -928,6 +943,7 @@
         // No surface picker exists in this UI; WALL matches the default
         // the previous Scene & Angles tool used for the same backend call.
         surface: 'WALL',
+        materials,
       });
       state.visualization = { status: 'success', imageUrl, error: null, forIndex: state.detailIndex };
     } catch (err) {

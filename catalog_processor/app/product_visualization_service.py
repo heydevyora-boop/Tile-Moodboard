@@ -30,7 +30,7 @@ import tempfile
 import requests
 
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import List, Any, Dict, Optional
 
 from app.google_master_loader import (
     load_master_records,
@@ -674,6 +674,12 @@ def generate_product_visualization(
     sheet_name: str = "MASTER",
     fallback_image_path: Optional[Path] = None,
     angle: Optional[str] = None,
+    # The rest of the mood-board combination -- [{role, image_path,
+    # product_id, name}]. Threaded through untouched, exactly as `angle`
+    # is: only the engine at the end of the chain knows what to do with
+    # it, and every layer in between would otherwise drop it, which is
+    # the bug being fixed.
+    materials: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """
     Complete production bridge:
@@ -914,6 +920,7 @@ def generate_product_visualization(
         tile_image=tile_image,
         tile_name=product_name,
         angle=angle,
+        materials=materials,
     )
 
     # --------------------------------------------------------

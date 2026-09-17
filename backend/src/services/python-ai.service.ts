@@ -39,6 +39,18 @@ export interface VisualizationRequest {
   // Local path or absolute URL; relative /static/... paths are
   // resolved against BACKEND_PUBLIC_URL below before being sent.
   fallback_image_url?: string;
+  // The rest of the mood board's combination -- the highlight, the
+  // accent, and anything else selected alongside the base. Optional, so
+  // every existing single-tile caller is unchanged; when present, Python
+  // sends each one to the generator as its own labelled image under its
+  // own role. Without this the board's other selections never left the
+  // browser, which is why a three-material board rendered with one.
+  materials?: Array<{
+    role: string;
+    image_url: string;
+    product_id?: string;
+    name?: string;
+  }>;
 }
 
 // ============================================================

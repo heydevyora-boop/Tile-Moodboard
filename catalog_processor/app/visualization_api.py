@@ -616,6 +616,40 @@ def validate_visualization_request(
         or ""
     ).strip()
 
+    # THE REST OF THE MOOD-BOARD COMBINATION.
+    #
+    # Accepted at the top level or inside requirements, for the same
+    # reason `angle` is read from both: the Node layer forwards one and
+    # the older frontend path nests the other, and a selected material
+    # that arrives by the "wrong" one of those must not be discarded.
+    #
+    # Entries are normalized here rather than downstream so that a
+    # half-formed entry (no image) is dropped once, loudly, instead of
+    # silently failing to appear in a finished render.
+    raw_materials = request.get("materials")
+    if not isinstance(raw_materials, list):
+        raw_materials = requirements.get("materials")
+    if not isinstance(raw_materials, list):
+        raw_materials = []
+
+    materials = []
+    for entry in raw_materials:
+        if not isinstance(entry, dict):
+            continue
+        image = str(
+            entry.get("image_path")
+            or entry.get("image_url")
+            or ""
+        ).strip()
+        if not image:
+            continue
+        materials.append({
+            "role": str(entry.get("role") or "").strip().lower(),
+            "image_path": image,
+            "product_id": str(entry.get("product_id") or "").strip(),
+            "name": str(entry.get("name") or "").strip(),
+        })
+
     if not product_id:
         raise ValueError("product_id is required.")
 
@@ -664,6 +698,7 @@ def validate_visualization_request(
         ),
         "fallback_image_path": fallback_image_path,
         "angle": angle or None,
+        "materials": materials or None,
     }
 
 
@@ -862,6 +897,11 @@ def create_visualization(
                     normalized[
                         "angle"
                     ]
+                ),
+                materials=(
+                    normalized.get(
+                        "materials"
+                    )
                 ),
             )
         )

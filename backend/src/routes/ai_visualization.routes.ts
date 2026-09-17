@@ -45,6 +45,7 @@ router.post(
         scene_id,
         theme,
         requirements,
+        materials,
       } = req.body;
 
       // ========================================================
@@ -135,6 +136,91 @@ router.post(
       }
 
       // ========================================================
+      // RESOLVE THE REST OF THE COMBINATION
+      // ========================================================
+      // A mood board is a base tile PLUS the highlight and accent
+      // picked to sit with it, and visualizing it is the whole point of
+      // choosing three. Only product_id was ever sent, so the generated
+      // bathroom could only ever show one material and the other two
+      // selections had no effect on the image.
+      //
+      // Each entry is resolved the same way the base is, just above:
+      // Postgres id -> MASTER product code + that tile's own extracted
+      // catalog image. Resolving them HERE rather than trusting the
+      // browser is what makes requirement "use the actual latest
+      // selected image" true -- the image sent is whatever Tile.imageUrl
+      // holds right now, not whatever the page was rendered with.
+
+      const requestedMaterials =
+        Array.isArray(materials)
+          ? materials
+              .filter(
+                (entry: unknown): entry is Record<string, unknown> =>
+                  Boolean(entry) && typeof entry === 'object',
+              )
+              .map((entry) => ({
+                role: String(entry.role ?? '').trim().toLowerCase(),
+                tileId: String(
+                  entry.tile_id ?? entry.tileId ?? entry.product_id ?? '',
+                ).trim(),
+              }))
+              .filter((entry) => entry.tileId)
+          : [];
+
+      const resolvedMaterials: Array<{
+        role: string;
+        image_url: string;
+        product_id?: string;
+        name?: string;
+      }> = [];
+
+      if (requestedMaterials.length > 0) {
+        const materialTiles =
+          await prisma.tile.findMany({
+            where: {
+              id: {
+                in: requestedMaterials.map((entry) => entry.tileId),
+              },
+            },
+            select: {
+              id: true,
+              name: true,
+              imageUrl: true,
+              productCode: true,
+            },
+          });
+
+        const tilesById = new Map(
+          materialTiles.map((row) => [row.id, row]),
+        );
+
+        for (const entry of requestedMaterials) {
+          const row = tilesById.get(entry.tileId);
+
+          // A material with no resolvable image cannot be drawn, so it
+          // is skipped -- but only it. Failing the whole request would
+          // lose the materials that ARE renderable, and silently
+          // dropping it without a line in the log is how this class of
+          // bug stayed invisible in the first place.
+          if (!row?.imageUrl) {
+            console.warn(
+              `Visualization: ${entry.role || 'material'} tile ` +
+                `${entry.tileId} has no image, so it cannot be ` +
+                `included in the generated scene.`,
+            );
+            continue;
+          }
+
+          resolvedMaterials.push({
+            role: entry.role,
+            image_url: row.imageUrl,
+            product_id: row.productCode ?? undefined,
+            name: row.name ?? undefined,
+          });
+        }
+      }
+
+      // ========================================================
       // NODE → PYTHON
       // ========================================================
 
@@ -208,6 +294,13 @@ router.post(
           fallback_image_url:
             tile.imageUrl ??
             undefined,
+
+          // Empty for a single-tile request, which leaves Python on its
+          // existing one-image path.
+          materials:
+            resolvedMaterials.length > 0
+              ? resolvedMaterials
+              : undefined,
         });
 
       // ========================================================

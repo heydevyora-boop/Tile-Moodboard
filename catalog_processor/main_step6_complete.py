@@ -143,7 +143,7 @@ except ImportError:
 
 from fastapi import APIRouter, FastAPI
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Any, Dict, List, Optional
 import uvicorn
 
 from app.visualization_api import (
@@ -232,6 +232,15 @@ class InternalVisualizationRequest(BaseModel):
     scene_image_url: Optional[str] = None
 
     scene_image_mode: Optional[str] = None
+
+    # The rest of the mood-board combination: the highlight, accent and
+    # any other selected material, each as
+    # {role, image_url|image_path, product_id, name}. Optional, so every
+    # existing single-tile caller is unaffected; when present, every
+    # entry is resolved to a local image below and sent to the generator
+    # alongside the base, which is what stops a three-material board
+    # rendering as a one-material bathroom.
+    materials: Optional[List[Dict[str, Any]]] = None
 
     generate_random_scene: Optional[bool] = None
 
@@ -590,51 +599,91 @@ def internal_visualization(
         # Drive API first, so prefer it for remote URLs and keep
         # resolve_scene_image for the inputs it already handled (local
         # paths, data URLs, raw base64) and as a second chance.
-        fallback_image_path = None
-        raw_fallback_image = (request.fallback_image_url or "").strip()
+        def resolve_product_image(raw_image, label):
+            """A product image (not a scene) -> a local path, or None.
 
-        if raw_fallback_image:
+            Lifted out of the fallback block below unchanged so the
+            mood-board materials can use exactly the same resolution,
+            including the Drive authentication step -- a highlight tile
+            lives in the same private folder the base does, and a second,
+            simpler resolver here would fail on every one of them.
+            """
+            raw_image = str(raw_image or "").strip()
+            if not raw_image:
+                return None
 
-            fallback_resolvers = []
+            resolvers = []
 
-            if raw_fallback_image.lower().startswith(
-                ("http://", "https://")
-            ):
+            if raw_image.lower().startswith(("http://", "https://")):
                 from app.product_visualization_service import (
                     _download_remote_product_image,
                 )
+                resolvers.append(_download_remote_product_image)
 
-                fallback_resolvers.append(
-                    _download_remote_product_image
-                )
+            resolvers.append(resolve_scene_image)
 
-            fallback_resolvers.append(resolve_scene_image)
+            errors = []
 
-            fallback_errors = []
-
-            for resolve_fallback in fallback_resolvers:
+            for resolve in resolvers:
                 try:
-                    fallback_image_path = str(
-                        resolve_fallback(raw_fallback_image)
-                    )
-                    break
-                except Exception as fallback_error:
-                    fallback_image_path = None
-                    fallback_errors.append(
-                        f"{getattr(resolve_fallback, '__name__', 'resolver')}"
-                        f": {fallback_error}"
+                    return str(resolve(raw_image))
+                except Exception as error:
+                    errors.append(
+                        f"{getattr(resolve, '__name__', 'resolver')}: {error}"
                     )
 
             # Swallowing every failure silently is what made this so hard
             # to diagnose: the request went on to fail with the generic
             # "does not exist in MASTER" message, giving no hint that a
             # fallback had been attempted at all, let alone why it failed.
-            if fallback_image_path is None:
-                print(
-                    "  [visualization] fallback product image unusable for "
-                    f"{raw_fallback_image!r} -- "
-                    + " | ".join(fallback_errors)
+            print(
+                f"  [visualization] {label} image unusable for "
+                f"{raw_image!r} -- " + " | ".join(errors)
+            )
+            return None
+
+        fallback_image_path = resolve_product_image(
+            request.fallback_image_url, "fallback product",
+        )
+
+        # EVERY SELECTED MATERIAL, RESOLVED.
+        #
+        # An entry whose image cannot be fetched is dropped here with a
+        # named reason rather than passed on as a promise the generator
+        # cannot keep -- but it is the only thing dropped: the rest of
+        # the combination still renders.
+        resolved_materials = []
+
+        for material in (request.materials or []):
+            if not isinstance(material, dict):
+                continue
+
+            role = str(material.get("role") or "").strip().lower()
+
+            image_path = resolve_product_image(
+                material.get("image_url") or material.get("image_path"),
+                f"{role or 'material'} product",
+            )
+
+            if image_path is None:
+                continue
+
+            resolved_materials.append({
+                "role": role,
+                "image_path": image_path,
+                "product_id": str(material.get("product_id") or "").strip(),
+                "name": str(material.get("name") or "").strip(),
+            })
+
+        if request.materials:
+            print(
+                f"  [visualization] combination: "
+                f"{len(resolved_materials)}/{len(request.materials)} "
+                f"material(s) resolved -- "
+                + ", ".join(
+                    m["role"] or "?" for m in resolved_materials
                 )
+            )
 
         result = create_visualization(
             {
@@ -654,6 +703,7 @@ def internal_visualization(
                 "theme": request.theme,
                 "requirements": request.requirements or {},
                 "fallback_image_path": fallback_image_path,
+                "materials": resolved_materials or None,
             }
         )
 
