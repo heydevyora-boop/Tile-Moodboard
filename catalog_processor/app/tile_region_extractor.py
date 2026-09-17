@@ -1009,3 +1009,22 @@ def extract_tile_region(image_bgr, quad, occluders=None,
     info["output_size"] = (crop.shape[1], crop.shape[0])
 
     return crop, info
+
+
+# The same measurement, read the other way round, for a catalog whose
+# pages are known to carry NOTHING BUT products.
+#
+# 0.03 above was chosen to be generous about calling two crops the same
+# tile, because the failure it was fixing was the same tile uploaded
+# twice. On a tile-only sheet the risk runs the other way: a range laid
+# out as a base tile plus its matching highlighter, border and decor --
+# one family, one palette, one texture -- can sit inside 0.03 of each
+# other and be merged into a single "duplicate", losing real products
+# that happen to look like their own siblings.
+#
+# 0.012 keeps a comfortable multiple of the 0.001-0.002 the two
+# rasterization paths actually differ by (so cross-route duplicates are
+# still caught) while staying far below the 0.05 that separates two
+# genuinely different products. It is used only where the caller opts
+# in -- see CATALOG_TILE_ONLY in main_step6_complete.py.
+CONTENT_SIGNATURE_MAX_DIFFERENCE_STRICT = 0.012

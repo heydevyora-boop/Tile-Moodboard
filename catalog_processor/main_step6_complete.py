@@ -42,6 +42,34 @@ CATALOG_DEBUG = os.getenv("CATALOG_DEBUG", "").strip().lower() in (
     "1", "true", "yes", "on",
 )
 
+# TILE-ONLY CATALOG MODE.
+#
+# The catalogs fed to this pipeline are prepared upstream so that their
+# pages carry nothing but product surfaces -- no rooms, no lifestyle
+# photography, no people, no fittings, no marketing layouts, no logos,
+# no specification pages. That preparation is a CONTRACT, and it changes
+# which way the pipeline should fail.
+#
+# Against a raw manufacturer catalog the expensive mistake is a false
+# ACCEPT: one bathroom photo reaching Drive is worse than one tile
+# missed, so the semantic gates were built to reject on doubt. Against a
+# pre-filtered catalog that same posture is simply wrong. There is no
+# bathroom photo to keep out, so every rejection it produces is a
+# product lost, and "Gemini called this ARTWORK" stops being evidence of
+# anything -- the source has already answered the question the gate is
+# asking.
+#
+# So in this mode a detected distinct region IS a valid candidate. What
+# still rejects is what the contract does not cover: geometry that
+# yields no pixels, a crop below the size floor, a save that fails, and
+# a frame holding several products (which is split, not dropped).
+#
+# Off by CATALOG_TILE_ONLY=0 for a mixed or unprepared catalog, which
+# restores every semantic gate exactly as it was.
+TILE_ONLY_CATALOG = os.getenv("CATALOG_TILE_ONLY", "1").strip().lower() in (
+    "1", "true", "yes", "on",
+)
+
 # Substrings that mark a line as actionable rather than diagnostic.
 # Matched case-insensitively against each suppressed line.
 ERROR_MARKERS = (
@@ -1382,19 +1410,57 @@ def crop_signature(image_bgr):
     return content_signature(image_bgr)
 
 
-def signature_already_seen(seen_signatures, signature):
-    """True when `signature` matches something already collected.
+def signature_already_seen(seen_signatures, signature, source_key=None):
+    """True when `signature` is a re-sighting of a tile already extracted.
 
     `seen_signatures` is a growing list (not a set: near-duplicate
     signatures are compared, not hashed for exact equality) shared
     across every search of one page, so a tile found via its embedded
     image and again via the page render is recognised as one tile.
-    """
-    from app.tile_region_extractor import signatures_match
 
-    return any(
-        signatures_match(signature, existing) for existing in seen_signatures
+    Entries are (source_key, signature) pairs, and that first half is
+    what keeps this from eating a page. Appearance is the right test
+    ACROSS sources -- the embedded raster and the page render never
+    produce identical pixels for the same tile, so only a perceptual
+    comparison can recognise the second sighting. It is the wrong test
+    WITHIN one source: three tiles laid out side by side on one sheet
+    are three distinct regions of it, and a range built around a single
+    palette and texture (a base tile with its matching highlighter and
+    border) can easily look alike enough to be merged. Inside one source
+    image, region coordinates already decide what is the same surface --
+    that is deduplicate_regions' job -- so this skips same-source
+    entries entirely rather than second-guessing it on appearance.
+
+    Older entries stored as a bare signature are still honoured, so a
+    caller that has not been updated keeps working.
+    """
+    from app.tile_region_extractor import (
+        CONTENT_SIGNATURE_MAX_DIFFERENCE,
+        CONTENT_SIGNATURE_MAX_DIFFERENCE_STRICT,
+        signatures_match,
     )
+
+    limit = (
+        CONTENT_SIGNATURE_MAX_DIFFERENCE_STRICT if TILE_ONLY_CATALOG
+        else CONTENT_SIGNATURE_MAX_DIFFERENCE
+    )
+
+    for entry in seen_signatures:
+        if isinstance(entry, tuple) and len(entry) == 2 and (
+            entry[1] is None or isinstance(entry[1], tuple)
+        ):
+            entry_source, existing = entry
+        else:
+            entry_source, existing = None, entry
+
+        # Same source image: coordinates decide, not appearance.
+        if source_key is not None and entry_source == source_key:
+            continue
+
+        if signatures_match(signature, existing, max_difference_fraction=limit):
+            return True
+
+    return False
 
 
 def mine_tile_regions(
@@ -1516,8 +1582,8 @@ def mine_tile_regions(
 
     print(f"  [tile-region] page {page_number} image {image_counter}: "
           f"{detected_count} candidate tile surface(s)")
-    emit(f"      Page {page_number}: detected {detected_count} candidate "
-         f"region(s)")
+    print(f"  [tile-region] page {page_number}: detected {detected_count} "
+          f"candidate region(s)")
 
     # Loaded BEFORE deduplication so the dedup step can verify overlap
     # candidates against their actual pixels, not just their geometry --
@@ -1583,6 +1649,11 @@ def mine_tile_regions(
     # from the page render.
     if seen_signatures is None:
         seen_signatures = []
+    # Identifies the image these candidates were cut from, so that
+    # cross-source duplicate detection can tell "the same tile seen
+    # again by the other route" from "the tile next to it on the same
+    # sheet". See signature_already_seen.
+    source_key = f"{source_type}:{output_path.name}"
     overlay_boxes = []
 
     for index, region in enumerate(regions, start=1):
@@ -1679,19 +1750,37 @@ def mine_tile_regions(
         if info.get("normalize_note"):
             print(f"      geometry repair    : {info['normalize_note']}")
 
-        # Two detections of one surface produce near-identical crops; keep
-        # the first and drop the rest rather than syncing the same tile twice.
+        # The same tile seen twice by two different routes -- once in an
+        # embedded raster, once in the page render -- must not be synced
+        # twice. Matched against tiles ALREADY EXTRACTED from OTHER
+        # sources on this page; see signature_already_seen.
+        #
+        # Two things here are load-bearing, and both were wrong before:
+        #
+        #  1. source_key. Without it this compared a candidate against
+        #     its own neighbours on the same sheet, so three tiles from
+        #     one range -- one palette, one texture -- collapsed into one
+        #     "duplicate" and two products were lost.
+        #
+        #  2. WHEN the signature is recorded. It used to be recorded
+        #     here, before the candidate had been judged, so a candidate
+        #     that was then REJECTED still occupied the page: every later
+        #     sighting of a similar tile matched a swatch that was never
+        #     saved. That is the "0 accepted + 1 rejected + 2 duplicate"
+        #     page -- one rejection took the whole page down with it, and
+        #     the page render afterwards found three duplicates of
+        #     nothing. A signature is now recorded only where a tile is
+        #     actually ACCEPTED, so only a real output can mask another.
         signature = crop_signature(crop)
-        if signature_already_seen(seen_signatures, signature):
-            print(f"      geometry           : extracted, but duplicates an "
-                  f"earlier region in this image")
+        if signature_already_seen(seen_signatures, signature, source_key):
+            print(f"      geometry           : extracted, but this tile was "
+                  f"already extracted from another source on this page")
             print(f"      FINAL              : DUPLICATE")
             note("DUPLICATE", geometry_stage="duplicate",
-                 geometry_reason="duplicates an earlier region in this image")
+                 geometry_reason="already extracted from another source")
             record("DUPLICATE", f"candidate {index}",
-                   "pixels match a swatch already extracted from this page")
+                   "already extracted from another source on this page")
             continue
-        seen_signatures.append(signature)
 
         crop_width, crop_height = info["crop_size"]
         print(f"      geometry           : OK -- {crop_width}x{crop_height}px, "
@@ -1771,6 +1860,42 @@ def mine_tile_regions(
             "region_type": region_type,
             "region_confidence": region_confidence,
         }
+
+        # ------------------------------------------------------
+        # THE TILE-ONLY CONTRACT.
+        #
+        # On a catalog prepared to contain nothing but products, a
+        # semantic verdict of "this is not a tile" is not information:
+        # the source has already answered that question, and the only
+        # thing the verdict can still do is delete a product. So it
+        # stops being a gate here and becomes a label -- kept in the
+        # metadata and the log, never allowed to discard a candidate.
+        #
+        # The ONE verdict still acted on is "several products in this
+        # frame", because that one is not about whether there is a tile;
+        # it is about how many, and the answer is to cut them apart
+        # below rather than to save a picture of three products as one.
+        # Geometry, size and save failures are untouched: they are
+        # technical facts, not opinions about the subject.
+        # ------------------------------------------------------
+        if TILE_ONLY_CATALOG and status != VALIDATION_APPROVED:
+            try:
+                reported_designs = int(
+                    (metadata.get('purity') or {}).get(
+                        'distinct_tile_designs', 1
+                    )
+                )
+            except (TypeError, ValueError):
+                reported_designs = 1
+
+            if not (status == VALIDATION_IMPURE and reported_designs > 1):
+                print(f"      tile-only contract : source is a tile-only "
+                      f"catalog -- accepting despite '{status}: {reason}'")
+                reason = (
+                    f"accepted on the tile-only catalog contract "
+                    f"(classifier said: {reason})"
+                )
+                status = VALIDATION_APPROVED
 
         if status == VALIDATION_DEFERRED:
             # Nothing classified this crop, so it is neither a tile nor
@@ -1861,6 +1986,16 @@ def mine_tile_regions(
                           f"material={piece_purity.get('material', '?')}  "
                           f"tile={piece_purity.get('tile_fraction', 0.0):.0%}")
 
+                    if TILE_ONLY_CATALOG and piece_status != VALIDATION_APPROVED:
+                        # Already cut apart, so the one verdict worth
+                        # acting on no longer applies -- see the
+                        # tile-only contract above.
+                        piece_reason = (
+                            f"accepted on the tile-only catalog contract "
+                            f"(classifier said: {piece_reason})"
+                        )
+                        piece_status = VALIDATION_APPROVED
+
                     if piece_status == VALIDATION_DEFERRED:
                         print(f"        -> DEFERRED -- {piece_reason}")
                         note("DEFERRED", piece=piece_label,
@@ -1884,6 +2019,9 @@ def mine_tile_regions(
                          image_path=str(piece_path),
                          product_name=piece_metadata.get("product_name", ""),
                          **geometry_fields)
+                    seen_signatures.append(
+                        (source_key, crop_signature(piece))
+                    )
                     accepted.append((piece_path, piece_reason, piece_metadata))
                     pieces_accepted += 1
 
@@ -1930,7 +2068,7 @@ def mine_tile_regions(
 
         print(f"      region validation  : PASS -- {reason}")
         print(f"      FINAL              : ACCEPTED -> {region_path.name}")
-        emit(f"      Page {page_number}: candidate {index} -> accepted")
+        print(f"      [tile-region] candidate {index} -> accepted")
 
         note("ACCEPTED", validation="PASS", validation_reason=reason,
              image_path=str(region_path),
@@ -1940,6 +2078,7 @@ def mine_tile_regions(
              tile_fraction=(metadata.get("purity") or {}).get("tile_fraction"),
              **geometry_fields)
 
+        seen_signatures.append((source_key, signature))
         record("ACCEPTED", f"candidate {index}", reason)
         accepted.append((region_path, reason, metadata))
 
@@ -1962,13 +2101,12 @@ def mine_tile_regions(
     # accounting nobody sees is not accounting. The per-candidate reasons
     # underneath it are diagnostics and stay behind CATALOG_DEBUG, so the
     # normal terminal gets one line per page instead of a wall.
-    emit(f"      Page {page_number}: {detected_count} detected = "
+    emit(f"      [{source_type}] {detected_count} detected = "
          f"{len(outcomes['ACCEPTED'])} accepted + "
          f"{len(outcomes['REJECTED'])} rejected + "
          f"{len(outcomes['DUPLICATE'])} duplicate + "
          f"{len(outcomes['FAILED'])} failed + "
-         f"{len(outcomes['DEFERRED'])} deferred"
-         f"  ({len(accepted)} swatch(es))")
+         f"{len(outcomes['DEFERRED'])} deferred")
 
     for status in ("ACCEPTED", "REJECTED", "DUPLICATE", "FAILED", "DEFERRED"):
         for entry in outcomes[status]:
@@ -1979,16 +2117,16 @@ def mine_tile_regions(
     # exactly like a catalog with fewer products in it, and only this
     # line tells them apart.
     for entry in outcomes["FAILED"]:
-        emit(f"      Page {page_number}: FAILED -- {entry}")
+        emit(f"      FAILED -- {entry}")
 
     if accounted != detected_count:
         # Loud on purpose, and always. This is the failure the accounting
         # exists to catch: a detected product that reached no final
         # status at all.
-        emit(f"      Page {page_number}: ACCOUNTING MISMATCH -- "
-             f"{detected_count} candidate(s) detected but {accounted} "
-             f"accounted for; {detected_count - accounted} left this page "
-             f"with no final status")
+        emit(f"      ACCOUNTING MISMATCH -- {detected_count} candidate(s) "
+             f"detected but {accounted} accounted for; "
+             f"{detected_count - accounted} left this page with no "
+             f"final status")
         print(f"  [tile-region] ACCOUNTING MISMATCH on page {page_number}: "
               f"{detected_count} detected, {accounted} accounted for")
 
@@ -2517,6 +2655,8 @@ def extract_images_from_pdf(
         # by two routes is kept once.
         page_signatures = []
 
+        emit(f"   Page {page_number}")
+
         for image_info in page.get_images(
             full=True
         ):
@@ -2684,7 +2824,7 @@ def extract_images_from_pdf(
                         output_path, image_rect, text_spans, semantic_validator,
                     )
 
-                    if validation_status == VALIDATION_DEFERRED:
+                    if validation_status == VALIDATION_DEFERRED and not TILE_ONLY_CATALOG:
                         # Gemini never classified this image, so there is
                         # no verdict to act on. Keep the file and record
                         # how to finish the job later -- deleting a tile
@@ -2692,6 +2832,15 @@ def extract_images_from_pdf(
                         # branch exists to prevent. It stays out of Drive,
                         # MASTER and the Tile table until something has
                         # actually looked at it.
+                        #
+                        # Not in tile-only mode. Deferral exists because an
+                        # unclassified image MIGHT be a bathroom photo and
+                        # publishing it unseen is the worse error. On a
+                        # catalog that contains no bathroom photos there is
+                        # nothing to protect against, and holding products
+                        # back for a classifier they do not need just means
+                        # a dead quota empties the catalog. It falls through
+                        # to the search below instead, and is kept.
                         print(
                             f"  DEFERRED -- validation could not run "
                             f"(page {page_number} image {image_counter}): "
@@ -2779,34 +2928,55 @@ def extract_images_from_pdf(
                         # which is precisely the case a deferral exists
                         # for. A quota-killed image hit both bugs at
                         # once and vanished without a record.
-                        for deferred_path, deferred_reason, deferred_meta in region_deferred:
-                            if defer_for_revalidation(
-                                deferred_path, page_number, image_counter,
-                                deferred_reason, deferred_meta,
-                                output_directory, deferred_records,
-                            ) is not None:
-                                validation_deferred += 1
+                        # NOTHING WAS CUT OUT OF IT, AND THE SOURCE SAYS
+                        # IT IS A PRODUCT.
+                        #
+                        # On a tile-only catalog this is the last place a
+                        # product can silently disappear: the classifier
+                        # declined it, the region search then found no
+                        # surface inside it either, and the old path
+                        # deleted it on the strength of those two. But an
+                        # embedded image on a prepared page IS a product
+                        # picture -- a search that finds no sub-region in
+                        # it has found that it is ONE tile, not that it is
+                        # no tile. So it is kept whole, and falls through
+                        # to the normal accept path below.
+                        keep_whole = TILE_ONLY_CATALOG and not recovered
 
-                        output_path.unlink(missing_ok=True)
+                        if not keep_whole:
+                            for deferred_path, deferred_reason, deferred_meta in region_deferred:
+                                if defer_for_revalidation(
+                                    deferred_path, page_number, image_counter,
+                                    deferred_reason, deferred_meta,
+                                    output_directory, deferred_records,
+                                ) is not None:
+                                    validation_deferred += 1
 
-                        if not recovered:
-                            # Only a rejection when something actually
-                            # judged it. A deferred image was never
-                            # looked at, so counting it as rejected
-                            # would report a verdict nobody reached.
-                            if not region_deferred:
-                                semantic_rejections += 1
-                                rejection_categories[category] = (
-                                    rejection_categories.get(category, 0) + 1
-                                )
+                            output_path.unlink(missing_ok=True)
+
+                            if not recovered:
+                                # Only a rejection when something actually
+                                # judged it. A deferred image was never
+                                # looked at, so counting it as rejected
+                                # would report a verdict nobody reached.
+                                if not region_deferred:
+                                    semantic_rejections += 1
+                                    rejection_categories[category] = (
+                                        rejection_categories.get(category, 0) + 1
+                                    )
+                                continue
+
+                            regions_recovered += len(recovered)
+                            image_counter = append_recovered_regions(
+                                recovered, extracted_images,
+                                page_number, image_counter, on_tile,
+                            )
                             continue
 
-                        regions_recovered += len(recovered)
-                        image_counter = append_recovered_regions(
-                            recovered, extracted_images,
-                            page_number, image_counter, on_tile,
-                        )
-                        continue
+                        print(f"  [tile-only] page {page_number} image "
+                              f"{image_counter}: no separate surface inside "
+                              f"it, so the image itself is the product -- "
+                              f"kept whole")
 
                     # validate_and_correct_tile_image may have cropped the
                     # saved file (bbox and/or aspect-ratio correction), so
@@ -2836,7 +3006,10 @@ def extract_images_from_pdf(
 
                         _whole = cv2.imread(str(output_path), cv2.IMREAD_COLOR)
                         if _whole is not None:
-                            page_signatures.append(crop_signature(_whole))
+                            page_signatures.append((
+                                f"embedded-image:{output_filename}",
+                                crop_signature(_whole),
+                            ))
                     except Exception:  # noqa: BLE001 -- dedupe aid only
                         pass
 
@@ -2940,6 +3113,11 @@ def extract_images_from_pdf(
                 # The full-page render is scaffolding, never a product
                 # image -- only the validated regions cut from it survive.
                 render_path.unlink(missing_ok=True)
+
+        # After BOTH routes, so the count is the page's real yield rather
+        # than whatever the first route happened to find.
+        emit(f"   Page {page_number} complete: "
+             f"{len(extracted_images) - accepted_before_page} unique tile(s)")
 
     document.close()
 
@@ -3089,7 +3267,10 @@ def process_pdf(
 
     emit("")
     emit(f"\U0001F4C1 Company: {brand}")
-    emit(f"   \U0001F4E6 Product: {catalog}")
+    emit(f"   \U0001F4E6 Catalog: {catalog}")
+    if TILE_ONLY_CATALOG:
+        emit("   Mode: TILE-ONLY (source is pre-filtered; semantic "
+             "classification is advisory)")
 
     create_directory(
         catalog_output_directory
@@ -3208,8 +3389,35 @@ def process_pdf(
     skipped_count = 0
     sheet_failed_count = 0
     sync_failed_count = 0
+    # Counted apart from the sheet and backend failures below: a tile
+    # that never reached Drive is a different problem from one that
+    # reached Drive and then failed to be recorded, and the summary
+    # should not make an operator guess which happened.
+    drive_failed_count = 0
 
     persisted = 0
+
+    # TARGET-IMAGE IDENTITY, held for the length of this catalog.
+    #
+    # already_processed() is keyed on a hash that includes the FILENAME,
+    # and filenames are unique by construction -- page_1_img_1_region_2
+    # is never page_1_render_region_1 even when both hold the same tile.
+    # So the same physical tile found by two routes produced two keys,
+    # neither of which had been seen, and two Drive files.
+    #
+    # This is the same saved bytes under a different name, which is a
+    # thing the content alone can answer. Held in memory for the run AND
+    # written to the processed-files table, so the guard survives a
+    # re-run as well as a second route within one run. Exact bytes only:
+    # two genuinely different tiles cannot collide, so no real product is
+    # ever suppressed by it.
+    uploaded_content_hashes = set()
+
+    # Tiles are numbered WITHIN their page, because that is the unit the
+    # operator is checking: "this sheet showed three tiles, did three
+    # come out?" is answerable from Tile 1/2/3 under Page 1 and is not
+    # answerable from a catalog-wide running index.
+    page_tile_counter = {}
 
     def persist_tile(image):
         """Uploads ONE finished tile and records it, immediately.
@@ -3222,10 +3430,14 @@ def process_pdf(
         """
         nonlocal uploaded_count, drive_uploaded_count, master_row_count
         nonlocal skipped_count, sheet_failed_count, sync_failed_count
+        nonlocal drive_failed_count
         nonlocal persisted
 
         persisted += 1
-        position = persisted
+
+        page_number = image.get("page", 0)
+        page_tile_counter[page_number] = page_tile_counter.get(page_number, 0) + 1
+        position = page_tile_counter[page_number]
 
         product_id = make_product_id(
             brand,
@@ -3261,6 +3473,25 @@ def process_pdf(
             f"{image_content_hash}"
         )
 
+        # The same key without the filename in it: "these exact pixels,
+        # from this catalog". See uploaded_content_hashes above.
+        content_key = (
+            f"{pdf_path.resolve()}::content::{image_content_hash}"
+        )
+
+        if image_content_hash != "unreadable" and (
+            image_content_hash in uploaded_content_hashes
+            or already_processed(content_key)
+        ):
+            print(
+                "SKIP duplicate target image: "
+                f"{image['filename']}"
+            )
+            emit(f"      Tile {position} \u2192 already processed "
+                 f"\u2192 skipped")
+            skipped_count += 1
+            return
+
         if already_processed(
             file_hash
         ):
@@ -3269,6 +3500,9 @@ def process_pdf(
                 "SKIP already processed: "
                 f"{image['filename']}"
             )
+
+            emit(f"      Tile {position} \u2192 already processed "
+                 f"\u2192 skipped")
 
             skipped_count += 1
             return
@@ -3281,11 +3515,21 @@ def process_pdf(
             f"{image['filename']}"
         )
 
-        uploaded = upload_file(
-            drive_service,
-            image["path"],
-            catalog_folder_id,
-        )
+        try:
+            uploaded = upload_file(
+                drive_service,
+                image["path"],
+                catalog_folder_id,
+            )
+        except Exception as exc:  # noqa: BLE001
+            # Not marked processed, so the next run retries THIS tile
+            # while the ones that did upload are skipped -- per-candidate
+            # recovery rather than per-page.
+            print(f"[DRIVE UPLOAD] FAILED  {image['filename']}: {exc}")
+            emit(f"      Tile {position} \u2192 extracted \u2192 UPLOAD "
+                 f"FAILED ({exc}) -- will retry next run")
+            drive_failed_count += 1
+            return
 
         drive_url = uploaded.get(
             "webViewLink",
@@ -3336,6 +3580,9 @@ def process_pdf(
                 f"(image stays in Drive, row NOT written, "
                 f"will retry next run): {exc}"
             )
+
+            emit(f"      Tile {position} \u2192 uploaded \u2192 SHEET WRITE "
+                 f"FAILED ({exc}) -- will retry next run")
 
             return
 
@@ -3405,6 +3652,17 @@ def process_pdf(
             filename=image["filename"],
         )
 
+        # Recorded only after the upload has actually succeeded, so a
+        # tile that failed to reach Drive is retried on the next run
+        # rather than being remembered as done -- which is what keeps a
+        # partial failure recoverable per candidate.
+        if image_content_hash != "unreadable":
+            uploaded_content_hashes.add(image_content_hash)
+            mark_processed(
+                file_hash=content_key,
+                filename=image["filename"],
+            )
+
         # Reported in the same shape as the failure case above, so a run
         # can be read stage by stage rather than by noticing which lines
         # are absent.
@@ -3415,8 +3673,7 @@ def process_pdf(
 
         uploaded_count += 1
         _catalog_tiles.append(image["filename"])
-        emit(f"      \u2514\u2500\u2500 image: {image['filename']}  "
-             f"\u2713 uploaded")
+        emit(f"      Tile {position} \u2192 extracted \u2192 uploaded")
 
     # --------------------------------------------------------
     # 6. Extract images -- each accepted tile is uploaded and
@@ -3489,6 +3746,10 @@ def process_pdf(
 
     print(
         f"Uploaded to Drive    : {drive_uploaded_count}"
+    )
+
+    print(
+        f"Drive upload failures: {drive_failed_count}"
     )
 
     print(

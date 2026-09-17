@@ -48,6 +48,15 @@ from pathlib import Path
 
 os.environ.setdefault("GEMINI_API_KEY", "test-key-not-used")
 
+# These checks are about the STRICT gates -- what rejects a room photo, a
+# countertop, a logo, a printed graphic. Those gates still exist and still
+# decide every catalog that has not been pre-filtered, but they are
+# deliberately advisory under CATALOG_TILE_ONLY (see main_step6_complete),
+# which now defaults on. Pinned off here so this suite keeps testing the
+# rules it was written for whatever the environment's default is;
+# test_tile_only_mode.py is where the other mode is covered.
+os.environ["CATALOG_TILE_ONLY"] = "0"
+
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import numpy as np  # noqa: E402
