@@ -141,6 +141,7 @@ def install(mode):
             "contains_fixture": False,
             "contains_object": False,
             "is_scene": False,
+            "physical_surface": True,
             "reason": "synthetic tile grid",
         }
 

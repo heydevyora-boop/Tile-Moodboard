@@ -1505,13 +1505,29 @@ Return a SEPARATE entry per distinct tiled surface. A room whose wall and
 floor use different tiles is two entries. Do not return the same surface
 twice.
 
-Only report a surface where you can actually see repeating tile units or
-tile joints. A plain painted wall, a bare concrete floor, a wooden floor,
-a carpet, a curtain, a worktop or a single flat colour is NOT a tiled
-surface -- omit it entirely.
+Joints between units are STRONG EVIDENCE of a tiled surface, but they
+are NOT required. Large-format tiles -- 600x1200mm and bigger -- show
+one joint, or none at all, in a close view or a tight crop. A surface
+carrying the continuous fired face of a tile product is a tiled surface
+whether or not a joint happens to fall inside the frame. Do NOT omit a
+real material surface merely because you cannot count individual units
+in it.
 
-If the image contains no tiled surface at all, return an empty list.
-Never invent a region to have something to return.
+What to omit instead:
+
+A plain painted wall, bare concrete, a wooden floor, a carpet, a
+curtain, a worktop and a single flat colour are not tiled surfaces.
+
+A PRINTED OR DRAWN picture of a tile pattern is not a tiled surface
+either. Catalog pages are full of these: geometric decoration, pattern
+illustrations, diagrams, borders, icons, colour charts, background
+motifs. They repeat, and they can look convincingly like tile, but they
+are ink on the page rather than a material you could touch. Report only
+surfaces that are PHOTOGRAPHS OF REAL PHYSICAL MATERIAL -- an actual
+tile, sample, or installed surface.
+
+If the image contains no such surface, return an empty list. Never
+invent a region to have something to return.
 
 Return ONLY valid JSON.
 """
@@ -1603,8 +1619,26 @@ Report:
   even though the room is full of tile, because floor, ceiling,
   furniture and fittings are not tile surface.
 
+- physical_surface: true when this is a PHOTOGRAPH of real physical
+  material -- something with a manufactured surface, lit by real light,
+  that a person could run a hand across. False when it is ink or pixels
+  DEPICTING a pattern: a printed decoration, a geometric motif, an
+  illustration, a diagram, a colour chart, a border, an icon, a
+  background graphic, a rendering or any other catalog artwork.
+  A printed pattern repeats just as regularly as a tiled wall does, so
+  regularity tells you nothing here. Look instead for evidence of a real
+  object: lighting falling across it, shadow, gloss or sheen, surface
+  relief, grain or mottling within each unit, slight variation between
+  units, imperfections, the edge or thickness of a real piece. Flat even
+  fill, mathematically exact repetition, crisp vector edges and pure
+  flat colours mean a graphic. If it is a graphic, say so here even when
+  the pattern is unmistakably a tile design.
+
 - material: what the main surface really is, one of
-  TILE          repeating tile/paved/clad units, with joints
+  TILE          the fired ceramic, porcelain, vitrified or stone face of
+                an actual tile product. Joints between units are strong
+                evidence but are NOT required: a 600x1200mm tile shows
+                one joint or none in a close view, and is still tile.
   COUNTERTOP    a kitchen worktop / vanity top / island top
   STONE_SLAB    a continuous stone or marble slab, no tile joints
   WOOD          wooden floor, panel or furniture surface
@@ -1620,8 +1654,9 @@ Report:
                 BUILDING is not a tile sample.
   OTHER         anything else
   A COUNTERTOP or STONE_SLAB is NOT a tile even when it is stone and
-  even when it is beautiful. Only call it TILE if you can see the
-  repeating units or the joints between them.
+  even when it is beautiful. And a repeating pattern is NOT by itself
+  evidence of tile: if physical_surface is false, the material is
+  ARTWORK however tile-like the pattern looks.
   Report TILE only when the frame is filled by the surface itself, close
   enough to read its pattern. If you are looking AT a structure rather
   than at its material, that is ARCHITECTURE.
@@ -1671,6 +1706,7 @@ TILE_PURITY_SCHEMA = {
         "contains_fixture": {"type": "BOOLEAN"},
         "contains_object": {"type": "BOOLEAN"},
         "is_scene": {"type": "BOOLEAN"},
+        "physical_surface": {"type": "BOOLEAN"},
         "distinct_tile_designs": {"type": "INTEGER"},
         "reason": {"type": "STRING"},
     },
@@ -2077,12 +2113,18 @@ def verify_tile_only(image_path):
         "contains_fixture": bool(payload.get("contains_fixture")),
         "contains_object": bool(payload.get("contains_object")),
         "is_scene": bool(payload.get("is_scene")),
+        # Absent means the model did not answer it. Defaulting to True
+        # would silently restore the old behaviour of accepting printed
+        # graphics, so an unanswered question defaults to "not proven".
+        "physical_surface": bool(payload.get("physical_surface", False)),
         "reason": str(payload.get("reason") or "").strip(),
     }
 
     _debug(f"  material          : {observation['material']}")
     _debug(f"  tile_fraction     : {observation['tile_fraction']:.0%}")
     _debug(f"  scene             : {observation['is_scene']}")
+    _debug(f"  physical_surface  : {observation['physical_surface']}")
+    _debug(f"  graphic_contamination: {not observation['physical_surface']}")
     _debug(f"  designs           : {observation['distinct_tile_designs']}")
     _debug(
         "  objects           : "

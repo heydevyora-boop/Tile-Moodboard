@@ -394,6 +394,9 @@ def oracle_verify_tile_only(image_path):
         "material": material,
         "is_scene": present >= 2 or tile_fraction < 0.45,
         "distinct_tile_designs": max(1, designs),
+        # The synthetic scenes stand in for photographs of real surfaces.
+        # A dedicated matrix below covers the printed-graphic case.
+        "physical_surface": True,
         "reason": f"{tile_fraction:.0%} tile surface",
         **flags,
     }
@@ -606,6 +609,7 @@ def main():
         total_saved >= 10, f"{total_saved} tiles recovered",
     ))
 
+    results.extend(graphic_matrix())
     results.extend(occluder_matrix())
     results.extend(material_matrix())
     results.extend(size_gate_matrix())
@@ -618,6 +622,66 @@ def main():
 
     contact_sheet(sources, accepted_by_scene)
     return 0 if passed == len(results) else 1
+
+
+def graphic_matrix():
+    """A printed tile pattern is not a tile product.
+
+    A real ONERY run uploaded a decorative geometric catalog graphic as
+    a tile. Every other rule was satisfied -- it repeated regularly, it
+    filled the frame, it held no person, text or furniture -- because
+    the prompt made "repeating units with joints" the definition of
+    tile. A printed pattern repeats more perfectly than a real wall does.
+
+    The second half is the guard: a real photographed surface must still
+    be accepted, otherwise this rule would simply switch extraction off.
+    """
+    print("")
+    print("=" * 72)
+    print("PHYSICAL SURFACE vs PRINTED GRAPHIC")
+    print("=" * 72)
+
+    graphics = [
+        ("geometric catalog decoration", observe(material="TILE")),
+        ("a pattern illustration", observe(material="TILE", fraction=1.0)),
+        ("a colour chart", observe(material="TILE", fraction=0.95)),
+        ("a border motif", observe(material="MOSAIC")),
+        ("a rendered tile visual", observe(material="PORCELAIN")),
+    ]
+
+    outcomes = []
+    for label, observation in graphics:
+        observation["physical_surface"] = False
+        state = assess_tile_purity(observation)["state"]
+        outcomes.append(check(
+            f"{label:32s} -> NOT_TILE", state == "NOT_TILE",
+            "" if state == "NOT_TILE" else f"got {state}",
+        ))
+
+    # The other direction: real photographed material must still pass,
+    # including large-format tile where no joint falls in the frame.
+    for label, observation in [
+        ("photographed tile face", observe(material="TILE")),
+        ("large-format, no joint visible", observe(material="PORCELAIN")),
+        ("installed wall tile", observe(material="CERAMIC")),
+    ]:
+        state = assess_tile_purity(observation)["state"]
+        outcomes.append(check(
+            f"{label:32s} -> CLEAN", state == "CLEAN",
+            "" if state == "CLEAN" else f"got {state}",
+        ))
+
+    # An unanswered physical_surface must not silently restore the old
+    # behaviour of accepting graphics.
+    unanswered = observe(material="TILE")
+    unanswered.pop("physical_surface")
+    state = assess_tile_purity(unanswered)["state"]
+    outcomes.append(check(
+        "physical_surface unanswered        -> not accepted",
+        state != "CLEAN", f"got {state}",
+    ))
+
+    return outcomes
 
 
 def occluder_matrix():
@@ -902,6 +966,9 @@ def size_gate_matrix():
 def observe(material="TILE", fraction=1.0, scene=False, **flags):
     base = {
         "tile_fraction": fraction, "material": material, "is_scene": scene,
+        # Fixtures represent photographed surfaces unless a case says
+        # otherwise; the graphic cases pass physical_surface=False.
+        "physical_surface": True,
         "contains_person": False, "contains_text": False,
         "contains_logo": False, "contains_furniture": False,
         "contains_fixture": False, "contains_object": False,

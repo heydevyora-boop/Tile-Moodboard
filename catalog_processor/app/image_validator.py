@@ -372,6 +372,29 @@ def assess_tile_purity(observation):
     # A countertop and a stone slab get their own message because they
     # are the convincing near-miss: stone, patterned, photogenic, and
     # routinely shot in the same catalogs. They are still not the tile.
+    # RULE 0 -- is this a real material at all, or a picture of one?
+    #
+    # A real ONERY run uploaded a decorative geometric catalog graphic as
+    # a tile, because every other rule here was satisfied: it repeated
+    # regularly, it filled the frame, it held no person, text or
+    # furniture. Regularity was being read as tile-ness, and a printed
+    # pattern repeats more perfectly than a real wall ever does.
+    #
+    # Nothing downstream can recover from this. Location (WALL, FLOOR,
+    # EXTERIOR), material name and tile fraction all describe what the
+    # pattern LOOKS like; only this asks whether there is a physical
+    # object in front of the camera. It therefore runs first.
+    if not observation.get("physical_surface", False):
+        return {
+            "state": PURITY_NOT_TILE,
+            "reason": (
+                "this is a printed or drawn graphic, not a photograph of "
+                "a physical surface -- a tile pattern on paper is not a "
+                "tile product"
+            ),
+            "contaminants": contaminants,
+        }
+
     if material in ARCHITECTURE_MATERIALS:
         return {
             "state": PURITY_NOT_TILE,

@@ -96,7 +96,7 @@ CLEAN_PURITY = {
     "contains_person": False, "contains_text": False,
     "contains_logo": False, "contains_furniture": False,
     "contains_fixture": False, "contains_object": False,
-    "is_scene": False, "distinct_tile_designs": 1, "reason": "tile grid",
+    "is_scene": False, "physical_surface": True, "distinct_tile_designs": 1, "reason": "tile grid",
 }
 
 

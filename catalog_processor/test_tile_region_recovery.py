@@ -255,6 +255,7 @@ def install_fakes():
             "contains_fixture": False,
             "contains_object": False,
             "is_scene": False,
+            "physical_surface": True,
             # Page 4 lays four different products out together, so a crop
             # spanning them shows four designs. That is what stops it
             # being saved as one tile -- the source being "a collage" no
