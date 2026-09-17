@@ -248,7 +248,7 @@ def run_miner():
 
 ACCOUNTING = re.compile(
     r"(\d+) detected = (\d+) accepted \+ (\d+) rejected \+ "
-    r"(\d+) duplicate \+ (\d+) failed \+ (\d+) deferred"
+    r"(\d+) already extracted \+ (\d+) failed \+ (\d+) deferred"
 )
 
 

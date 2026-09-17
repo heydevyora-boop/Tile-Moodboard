@@ -2158,7 +2158,7 @@ def mine_tile_regions(
     emit(f"      [{source_type}] {detected_count} detected = "
          f"{len(outcomes['ACCEPTED'])} accepted + "
          f"{len(outcomes['REJECTED'])} rejected + "
-         f"{len(outcomes['DUPLICATE'])} duplicate + "
+         f"{len(outcomes['DUPLICATE'])} already extracted + "
          f"{len(outcomes['FAILED'])} failed + "
          f"{len(outcomes['DEFERRED'])} deferred")
 
