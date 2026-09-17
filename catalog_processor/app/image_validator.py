@@ -301,10 +301,52 @@ TILE_MATERIALS = {
     "VITRIFIED", "VITRIFIED_TILE", "MOSAIC", "MOSAIC_TILE",
     "STONE_TILE", "MARBLE_TILE", "CLADDING", "PAVER", "PAVING",
     "TERRACOTTA", "QUARRY_TILE", "SUBWAY_TILE",
+    # Large-format is a size, not a different product. A 1200x2400
+    # porcelain slab is sold off the same page as the 600x600 in the
+    # same range, and reading its name as "slab, therefore not a tile"
+    # turned the biggest products in a catalog into rejections.
+    "PORCELAIN_SLAB", "SLAB_TILE", "SLAB_PANEL",
+    "LARGE_FORMAT", "LARGE_FORMAT_TILE", "LARGE_SLAB",
+    "GVT", "PGVT", "FULL_BODY", "DOUBLE_CHARGE", "SOLUBLE_SALT",
+}
+
+# Physical DECORATIVE products.
+#
+# These are the second half of a tile catalog and they were being lost
+# wholesale. A range is sold as a base tile PLUS its highlighter, its
+# border, its listello, its decor panel -- separate codes, separate
+# rows, separate images. The verifier names them for what they look
+# like ("DECOR_PANEL", "HIGHLIGHTER", "BORDER"), none of those words
+# was TILE, and every one of them was thrown out as a positively
+# identified non-tile. A catalog with nine products yielded five.
+#
+# They are treated exactly as TILE is -- not waved through. Everything
+# below still applies: the frame must be a real photographed surface
+# (RULE 0 runs first), free of people, text, logos, furniture and
+# fixtures, not a view of a room, a single product, and overwhelmingly
+# filled by the surface. "Decorative" stops being a verdict and goes
+# back to being a description.
+DECORATIVE_PRODUCT_MATERIALS = {
+    "DECOR", "DECOR_PANEL", "DECORATIVE", "DECORATIVE_PANEL",
+    "DECORATIVE_TILE", "DECOR_TILE", "DECO", "DECO_PANEL",
+    "HIGHLIGHT", "HIGHLIGHTER", "HIGHLIGHTER_TILE", "HL",
+    "BORDER", "BORDER_TILE", "LISTELLO", "LISTELLO_TILE",
+    "ACCENT", "ACCENT_TILE", "INSERT", "INSERT_TILE", "MEDALLION",
+    "PANEL", "WALL_PANEL", "MOSAIC_PANEL", "MOSAIC_SHEET",
+    "RELIEF", "RELIEF_PANEL", "EMBOSSED", "EMBOSSED_PANEL",
+    "3D_PANEL", "TEXTURED", "TEXTURED_PANEL", "PATTERNED",
+    "STRIP", "STRIP_TILE", "SPECIAL_SHAPE",
 }
 
 # Materials that are a POSITIVE identification of something that is not
 # the catalog's tile. These reject; nothing else does.
+#
+# ARTWORK and its synonyms stay here, and that is the distinction the
+# decorative set above turns on: a PICTURE is not a product, but a
+# decorative PIECE is. RULE 0 already refuses anything that is not a
+# photograph of physical material, so a tile motif inked on the page
+# never reaches this line -- which is exactly why "decorative" no
+# longer has to double as a proxy for "printed".
 NON_TILE_MATERIALS = {
     "COUNTERTOP", "WORKTOP", "STONE_SLAB", "SLAB", "MARBLE_SLAB",
     "ARCHITECTURE", "BUILDING", "FACADE",
@@ -314,6 +356,7 @@ NON_TILE_MATERIALS = {
     "FABRIC", "CARPET", "RUG", "TEXTILE",
     "GLASS", "MIRROR", "METAL", "STEEL",
     "ARTWORK", "POSTER", "PRINT", "GRAPHIC",
+    "PAINTING", "MURAL", "ILLUSTRATION", "DIAGRAM", "COLOUR_CHART",
 }
 
 # Everything else -- OTHER, UNKNOWN, a blank field, a word nobody
@@ -323,15 +366,29 @@ NON_TILE_MATERIALS = {
 UNDECIDED_MATERIALS = {"OTHER", "UNKNOWN", ""}
 
 MATERIAL_TILE = "TILE"
+# A physical decorative product. Kept distinct from MATERIAL_TILE so a
+# log line can say which kind of product was saved, but it takes the
+# same path: neither is a verdict on its own, both still have to clear
+# every rule in assess_tile_purity.
+MATERIAL_DECOR = "DECOR"
 MATERIAL_UNDECIDED = "UNDECIDED"
+
+# The two names that mean "this is a catalog product surface".
+PRODUCT_MATERIALS = {MATERIAL_TILE, MATERIAL_DECOR}
 
 
 def normalize_material(raw):
-    """Folds a reported material into TILE, a named non-tile, or UNDECIDED."""
+    """Folds a reported material into TILE, DECOR, a named non-tile, or UNDECIDED."""
     material = str(raw or "").strip().upper().replace(" ", "_").replace("-", "_")
 
     if material in TILE_MATERIALS:
         return MATERIAL_TILE
+
+    # Checked before the non-tile set on purpose: a decorative product is
+    # a product. Nothing here overlaps NON_TILE_MATERIALS -- a PICTURE
+    # (artwork, poster, mural) is deliberately left in that set.
+    if material in DECORATIVE_PRODUCT_MATERIALS:
+        return MATERIAL_DECOR
 
     if material in NON_TILE_MATERIALS:
         return material

@@ -1484,22 +1484,49 @@ IMAGE INDEXES PRESENT:
 # ============================================================
 
 TILE_REGION_PROMPT = """
-You locate flat TILED SURFACES inside a photograph. You do not judge
-whether the photograph is a product image -- something else does that.
+You locate distinct PHYSICAL PRODUCT SURFACES inside a catalog image. You
+do not judge whether the photograph is a product image -- something else
+does that.
 
-Find every region showing a real tiled/paved/clad surface made of
-repeating units: wall tiles, floor tiles, ceiling tiles, terrace, parking,
-exterior cladding, or a tile sample board. Interior scenes are normal
-input. Report the surface wherever it appears.
+Find every region showing a real manufactured surface of the kind a tile
+or material catalog sells. That is not only plain square field tiles. It
+is equally:
 
-For EACH distinct tiled surface return:
+  base and field tiles, highlighters, borders, listellos, accents,
+  inserts, decorative and patterned faces, floral designs, textured,
+  embossed and 3D relief panels, mosaics and mosaic sheets, large-format
+  tiles and porcelain slabs, narrow strips, decorative panels, special
+  shapes, and a sample board laying several of these out side by side.
 
-- surface: one of WALL, FLOOR, CEILING, EXTERIOR, SAMPLE, OTHER
+All of those are products. A surface is NOT to be skipped for being
+decorative, patterned, ornate, floral, framed, glossy, oddly shaped or
+unlike the other products on the page -- those are ranges in the
+catalog, not reasons to pass it over. Walls, floors, ceilings, terraces,
+parking, exterior cladding and interior scenes are all normal input:
+where the surface happens to be is only where to look for it.
+
+A catalog page that lays out nine separate products must return nine
+separate regions. Returning only the ones that look like an ordinary
+plain tile is the specific failure to avoid.
+
+For EACH distinct product surface return:
+
+- surface: where it is or how it is shown -- one of WALL, FLOOR,
+  CEILING, EXTERIOR, SAMPLE, PANEL, OTHER. This is context for the
+  search, not the thing being judged; never omit a product because its
+  location does not fit one of these words.
 - quad: the four corners of the flat surface plane, in order
   top-left, top-right, bottom-right, bottom-left, each {x, y} normalized
   0.0-1.0. Follow the real perspective of the plane: for a floor receding
   from the camera the far edge is shorter than the near edge. Cover only
-  the tiled plane itself, not the whole photo.
+  the product surface itself, not the whole photo.
+  Where the product's OWN design carries a frame, border or inset -- a
+  decorative panel with a moulded surround, a tile with a printed border
+  -- that frame is part of the product: include it.
+  Where the PAGE puts a frame around the product -- a printed keyline or
+  rule, a drop shadow, a coloured mount or card, a caption band, a size
+  or code strip beneath it -- that belongs to the page layout, not the
+  product: keep it outside the quad.
 - occluders: bounding boxes {x1, y1, x2, y2} normalized 0.0-1.0 for
   anything sitting ON TOP of that surface and hiding the tile --
   furniture, sofa, table, bed, toilet, basin, shower, taps, mirror,
@@ -1511,30 +1538,41 @@ For EACH distinct tiled surface return:
 
 Rules:
 
-Return a SEPARATE entry per distinct tiled surface. A room whose wall and
-floor use different tiles is two entries. Do not return the same surface
-twice.
+Return a SEPARATE entry per distinct product surface. A room whose wall
+and floor use different tiles is two entries. A sheet showing a base
+tile with its matching highlighter and border is three entries, not one
+-- they are three products sold under three codes. Do not merge
+neighbouring products into a single region, and do not return the same
+surface twice.
 
 Joints between units are STRONG EVIDENCE of a tiled surface, but they
 are NOT required. Large-format tiles -- 600x1200mm and bigger -- show
 one joint, or none at all, in a close view or a tight crop. A surface
-carrying the continuous fired face of a tile product is a tiled surface
-whether or not a joint happens to fall inside the frame. Do NOT omit a
-real material surface merely because you cannot count individual units
-in it.
+carrying the continuous fired face of a tile product is a product
+surface whether or not a joint happens to fall inside the frame. A
+decorative panel, a relief panel or a single slab may show no repeating
+unit at all and is still a product. Do NOT omit a real material surface
+merely because you cannot count individual units in it.
 
 What to omit instead:
 
 A plain painted wall, bare concrete, a wooden floor, a carpet, a
-curtain, a worktop and a single flat colour are not tiled surfaces.
+curtain, a fitted worktop and a single flat colour are not product
+surfaces.
 
-A PRINTED OR DRAWN picture of a tile pattern is not a tiled surface
-either. Catalog pages are full of these: geometric decoration, pattern
-illustrations, diagrams, borders, icons, colour charts, background
-motifs. They repeat, and they can look convincingly like tile, but they
-are ink on the page rather than a material you could touch. Report only
-surfaces that are PHOTOGRAPHS OF REAL PHYSICAL MATERIAL -- an actual
-tile, sample, or installed surface.
+A PRINTED OR DRAWN picture is not one either. Catalog pages are full of
+these: pattern illustrations, diagrams, icons, colour charts, background
+motifs, header bands, corner flourishes, rules and page decoration. They
+repeat, and they can look convincingly like tile, but they are ink on
+the page rather than a material you could touch.
+
+Be careful with the one that looks the same and is not: a PHOTOGRAPH OF
+A PHYSICAL DECORATIVE PANEL -- a moulded, embossed, glazed or mosaic
+piece, lit by real light, with sheen, relief, shadow and edges -- IS a
+product and must be returned. A decorative MOTIF PRINTED ON THE PAGE, in
+flat even colour with mathematically exact repetition and crisp vector
+edges, is not. The test is whether there is a real object in front of
+the camera, never how ornate the design is.
 
 If the image contains no such surface, return an empty list. Never
 invent a region to have something to return.
@@ -1622,16 +1660,19 @@ TILE_REGION_MAX = 12
 
 TILE_PURITY_PROMPT = """
 You are inspecting ONE image that is about to be saved as a tile swatch
-in a product catalog. It must show the TILE SURFACE ITSELF and nothing
-else, like a material sample.
+in a product catalog. It must show the PRODUCT SURFACE ITSELF and
+nothing else, like a material sample. The product may be a plain field
+tile or a decorative one -- a highlighter, border, mosaic, patterned,
+embossed or 3D panel -- and both are equally valid here.
 
 Do NOT ask what product this picture advertises. Ask only what is
 physically visible inside this frame.
 
 Report:
 
-- tile_fraction: 0.0-1.0, how much of the frame is actual tile/clad
-  surface. A photo of a room with a tiled wall in it has a LOW value
+- tile_fraction: 0.0-1.0, how much of the frame is actual product
+  surface -- the tile, panel or clad face itself, decorative or plain.
+  A photo of a room with a tiled wall in it has a LOW value
   even though the room is full of tile, because floor, ceiling,
   furniture and fittings are not tile surface.
 
@@ -1655,15 +1696,31 @@ Report:
                 an actual tile product. Joints between units are strong
                 evidence but are NOT required: a 600x1200mm tile shows
                 one joint or none in a close view, and is still tile.
-  COUNTERTOP    a kitchen worktop / vanity top / island top
-  STONE_SLAB    a continuous stone or marble slab, no tile joints
+                A porcelain slab sold as a large-format tile is TILE.
+  DECOR_PANEL   the face of a PHYSICAL decorative product -- a
+                highlighter, border, listello, accent, insert, mosaic
+                sheet, patterned or floral face, an embossed, moulded or
+                3D relief panel, a decorative panel or a special shape.
+                Use this when there is a real manufactured piece in
+                front of the camera whose design happens to be
+                decorative rather than plain. It is a catalog product,
+                the same as TILE; it is not artwork.
+  COUNTERTOP    a kitchen worktop / vanity top / island top, shown as
+                fitted joinery rather than as a material face
+  STONE_SLAB    natural stone or marble shown as a slab of stock or a
+                fitted stone surface, not as a catalog tile product
   WOOD          wooden floor, panel or furniture surface
   PAINTED_WALL  plain painted or plastered wall
   CONCRETE      bare concrete or screed
   FABRIC        carpet, rug, curtain, upholstery
   GLASS         glass or mirror
   METAL         metal panel or appliance
-  ARTWORK       a printed picture, poster, mural or decorative panel
+  ARTWORK       a picture rather than a material: a printed graphic, a
+                motif inked on the page, an illustration, a diagram, a
+                colour chart, a poster, a painting, a mural. A physical
+                decorative tile or panel is NOT artwork -- it is
+                DECOR_PANEL. Decide by whether a manufactured piece
+                exists, never by how decorative the design is.
   ARCHITECTURE  a building, facade, monument, landmark or structure seen
                 as an object -- the Dubai Frame, a tower, an archway, a
                 window frame. Clad in tile or not, a photograph OF A
@@ -1673,9 +1730,9 @@ Report:
   even when it is beautiful. And a repeating pattern is NOT by itself
   evidence of tile: if physical_surface is false, the material is
   ARTWORK however tile-like the pattern looks.
-  Report TILE only when the frame is filled by the surface itself, close
-  enough to read its pattern. If you are looking AT a structure rather
-  than at its material, that is ARCHITECTURE.
+  Report TILE or DECOR_PANEL only when the frame is filled by the
+  surface itself, close enough to read its pattern. If you are looking
+  AT a structure rather than at its material, that is ARCHITECTURE.
 
 - contains_person: a human, or any part of one -- face, hand, leg,
   hair, clothing.
@@ -1693,13 +1750,19 @@ Report:
   flat piece of surface. A whole wall or a whole floor photographed as
   part of a room is a scene.
 
-- distinct_tile_designs: how many DIFFERENT tile designs are visible.
+- distinct_tile_designs: how many DIFFERENT products are visible.
   One tile repeated across the whole frame is 1, however many individual
   units you can count. Two panels of different colour, pattern or
   format side by side is 2, and so on. A catalog sheet showing six
   samples is 6. This must be 1 for the frame to be a swatch of one
   product -- several designs in one picture is a layout of products,
   not a product.
+  Count PRODUCTS, not motifs. One manufactured piece whose own design
+  includes a frame, a surround, a border, an inset medallion or a
+  patterned band is still ONE product: the ornament is printed or
+  moulded into that single piece and does not separate from it. Report 2
+  only when you are looking at two pieces that would be bought
+  separately, side by side.
 
 - reason: one short sentence naming what is actually in the frame.
 
@@ -1728,6 +1791,99 @@ TILE_PURITY_SCHEMA = {
     },
     "required": ["tile_fraction", "material", "is_scene", "reason"],
 }
+
+
+# ============================================================
+# SECOND INTERPRETATION -- PRODUCT OR PICTURE
+#
+# Asked only when the purity verifier contradicts itself: it named the
+# surface ARTWORK while also reporting that a real physical object was
+# photographed. One question, two answers, no room to hedge.
+# ============================================================
+
+# The words the verifier uses for "this is a picture, not a material".
+# Reaching one of these while physical_surface is true is the
+# contradiction that triggers the re-ask.
+ARTWORK_MATERIAL_NAMES = {
+    "ARTWORK", "POSTER", "PRINT", "GRAPHIC",
+    "PAINTING", "MURAL", "ILLUSTRATION",
+}
+
+PRODUCT_OR_ARTWORK_PROMPT = """
+Look at this one image and answer a single question.
+
+Is this a MANUFACTURED PRODUCT SURFACE, or a PICTURE of something?
+
+PRODUCT -- a real physical piece a factory made and a catalog sells by
+code: a tile, a highlighter, a border, a listello, an accent, an insert,
+a mosaic sheet, a decorative, patterned or floral face, an embossed,
+moulded or 3D relief panel, a slab, a strip, a special shape. Being
+ornate, floral, framed, colourful or unlike a plain square tile does not
+stop it being a product -- decorative ranges are products. Look for the
+evidence of a real object: light falling across it, shadow, gloss or
+sheen, surface relief, grain or mottling, slight variation, chipping or
+imperfection, the edge or thickness of a real piece.
+
+ARTWORK -- a picture rather than a material: a motif printed on a
+catalog page, an illustration, a diagram, a colour chart, a background
+graphic, a poster, a painting or a mural hanging on a wall. Flat even
+fill, mathematically exact repetition, crisp vector edges and pure flat
+colours mean a picture.
+
+If you cannot tell, answer UNSURE. Do not guess.
+
+Return ONLY valid JSON.
+"""
+
+PRODUCT_OR_ARTWORK_SCHEMA = {
+    "type": "OBJECT",
+    "properties": {
+        "verdict": {"type": "STRING"},
+        "reason": {"type": "STRING"},
+    },
+    "required": ["verdict"],
+}
+
+
+def _reinterpret_product_or_artwork(image_bytes, mime_type):
+    """Re-asks whether a decorative frame is a product or a picture.
+
+    Returns "PRODUCT", "ARTWORK" or None. None covers every failure --
+    quota, error, unparseable reply, UNSURE -- and the caller treats it
+    as "no second opinion", leaving the first verdict untouched. Nothing
+    here can turn a working run into a broken one: the worst outcome is
+    the behaviour that existed before it.
+    """
+    try:
+        response = _generate_content_safe(
+            model=GEMINI_MODEL,
+            contents=[
+                types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
+                PRODUCT_OR_ARTWORK_PROMPT,
+            ],
+            config={
+                "response_mime_type": "application/json",
+                "response_schema": PRODUCT_OR_ARTWORK_SCHEMA,
+            },
+        )
+    except Exception:  # noqa: BLE001 -- an optional opinion, never fatal
+        return None
+
+    if response is None:
+        return None
+
+    try:
+        payload = json.loads(response.text)
+    except (AttributeError, ValueError, TypeError):
+        return None
+
+    if not isinstance(payload, dict):
+        return None
+
+    verdict = str(payload.get("verdict") or "").strip().upper()
+    if verdict in ("PRODUCT", "ARTWORK"):
+        return verdict
+    return None
 
 
 # Gemini emits spatial coordinates in more than one convention, and which
@@ -2135,6 +2291,32 @@ def verify_tile_only(image_path):
         "physical_surface": bool(payload.get("physical_surface", False)),
         "reason": str(payload.get("reason") or "").strip(),
     }
+
+    # SECOND INTERPRETATION FOR A CONTRADICTORY DECORATIVE VERDICT.
+    #
+    # "material = ARTWORK" and "physical_surface = true" cannot both be
+    # right: the first says this is a picture, the second says there is
+    # a real manufactured thing in front of the camera. Deciding that
+    # contradiction in favour of ARTWORK is what deleted highlighters,
+    # borders, mosaics and 3D panels -- the whole decorative half of a
+    # tile range -- because the model reached for the nearest word for
+    # "ornate" and that word rejects.
+    #
+    # So the contradiction is put back to the model as the only question
+    # that matters, with nothing else to answer. It runs only in this
+    # one case, and it fails safe: anything other than a clear PRODUCT
+    # leaves the original ARTWORK verdict exactly as it was, so a
+    # printed page motif is still rejected and a failed or skipped
+    # re-ask changes nothing.
+    if (observation["material"] in ARTWORK_MATERIAL_NAMES
+            and observation["physical_surface"]):
+        _debug("  contradiction     : ARTWORK reported for a physical "
+               "surface -- re-asking product vs picture")
+        second = _reinterpret_product_or_artwork(image_bytes, mime_type)
+        _debug(f"  second opinion    : {second or 'none -- original stands'}")
+        if second == "PRODUCT":
+            observation["material"] = "DECOR_PANEL"
+            observation["reinterpreted_from"] = "ARTWORK"
 
     _debug(f"  material          : {observation['material']}")
     _debug(f"  tile_fraction     : {observation['tile_fraction']:.0%}")

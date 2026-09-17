@@ -1509,9 +1509,14 @@ def mine_tile_regions(
               f"reported no tiled surface in it")
         return [], []
 
+    # Fixed here, BEFORE deduplication reassigns `regions`. Every later
+    # tally is measured against this number, so that what the detector
+    # found and what the run accounted for can be compared at all.
+    detected_count = len(regions)
+
     print(f"  [tile-region] page {page_number} image {image_counter}: "
-          f"{len(regions)} candidate tile surface(s)")
-    emit(f"      Page {page_number}: detected {len(regions)} candidate "
+          f"{detected_count} candidate tile surface(s)")
+    emit(f"      Page {page_number}: detected {detected_count} candidate "
          f"region(s)")
 
     # Loaded BEFORE deduplication so the dedup step can verify overlap
@@ -1534,10 +1539,35 @@ def mine_tile_regions(
     # they are actually the same surface, not merely close together.
     regions, duplicate_regions = deduplicate_regions(regions, image_bgr=image_bgr)
 
+    # EVERY DETECTED CANDIDATE GETS A FINAL STATUS.
+    #
+    # A candidate used to be able to leave this function without one. The
+    # surfaces dropped by deduplicate_regions were removed from `regions`
+    # before the loop ever saw them, and the closing tally then computed
+    # "rejected" as a subtraction from the SHORTENED list -- so a page
+    # could detect nine products, report on however many survived dedup,
+    # and the difference simply evaporated. The one question worth asking
+    # of a run that missed a product ("which stage lost it?") had no
+    # answer for exactly the candidates most likely to have been lost.
+    #
+    # Now each outcome is recorded as it happens and the totals are
+    # reconciled against detected_count at the end, where a mismatch is
+    # printed rather than hidden.
+    outcomes = {
+        "ACCEPTED": [], "REJECTED": [], "DUPLICATE": [],
+        "FAILED": [], "DEFERRED": [],
+    }
+
+    def record(status, label, detail):
+        """Files one candidate's final status for the closing reconciliation."""
+        outcomes[status].append(f"{label}: {detail}")
+
     for duplicate, duplicates_index in duplicate_regions:
         print(f"    CANDIDATE -- {duplicate['surface']} "
               f"({duplicate['confidence']:.2f}) overlaps candidate "
               f"{duplicates_index}; same surface, dropped")
+        record("DUPLICATE", f"{duplicate['surface']} detection",
+               f"same surface as candidate {duplicates_index}")
 
     if duplicate_regions:
         print(f"  [tile-region] {len(regions)} distinct surface(s) after "
@@ -1639,6 +1669,8 @@ def mine_tile_regions(
                 geometry_stage=info["stage"],
                 geometry_reason=info["reason"],
             )
+            record("REJECTED", f"candidate {index}",
+                   f"{info['reason']} [stage={info['stage']}]")
             continue
 
         if info.get("surface_source") == "bbox-fallback":
@@ -1653,9 +1685,11 @@ def mine_tile_regions(
         if signature_already_seen(seen_signatures, signature):
             print(f"      geometry           : extracted, but duplicates an "
                   f"earlier region in this image")
-            print(f"      FINAL              : REJECTED (duplicate)")
-            note("REJECTED", geometry_stage="duplicate",
+            print(f"      FINAL              : DUPLICATE")
+            note("DUPLICATE", geometry_stage="duplicate",
                  geometry_reason="duplicates an earlier region in this image")
+            record("DUPLICATE", f"candidate {index}",
+                   "pixels match a swatch already extracted from this page")
             continue
         seen_signatures.append(signature)
 
@@ -1674,8 +1708,12 @@ def mine_tile_regions(
                 region_path, "WEBP", quality=IMAGE_QUALITY, method=6,
             )
         except Exception as exc:  # noqa: BLE001
-            print(f"      FINAL              : REJECTED -- could not save ({exc})")
-            note("REJECTED", geometry_stage="save", geometry_reason=str(exc))
+            # A technical failure, not a judgement. Kept in its own
+            # bucket so a run that lost products to a disk or encoder
+            # problem does not read as a run that rejected them.
+            print(f"      FINAL              : FAILED -- could not save ({exc})")
+            note("FAILED", geometry_stage="save", geometry_reason=str(exc))
+            record("FAILED", f"candidate {index}", f"could not be saved ({exc})")
             continue
 
         # The strict gate -- and the one that actually decides ACCEPT vs
@@ -1742,6 +1780,7 @@ def mine_tile_regions(
             print(f"      FINAL              : DEFERRED (awaiting validation)")
             note("DEFERRED", validation="DEFERRED", validation_reason=reason,
                  **geometry_fields)
+            record("DEFERRED", f"candidate {index}", reason)
             deferred.append((region_path, reason, metadata))
             continue
 
@@ -1764,6 +1803,16 @@ def mine_tile_regions(
                       f"each separately")
                 region_path.unlink(missing_ok=True)
 
+                # A split candidate is still ONE detected candidate, so
+                # it gets ONE status in the reconciliation below -- taken
+                # from what its pieces actually produced, with the piece
+                # counts spelled out so the tally cannot hide a product
+                # that was cut out and then lost.
+                pieces_accepted = 0
+                pieces_deferred = 0
+                pieces_rejected = 0
+                pieces_failed = 0
+
                 for piece_index, (px1, py1, px2, py2) in enumerate(pieces, start=1):
                     piece = crop[py1:py2, px1:px2]
                     piece_height, piece_width = piece.shape[:2]
@@ -1778,6 +1827,7 @@ def mine_tile_regions(
                              validation="FAIL",
                              validation_reason="split piece below size floor",
                              **geometry_fields)
+                        pieces_rejected += 1
                         continue
 
                     piece_path = (
@@ -1792,6 +1842,10 @@ def mine_tile_regions(
                     except Exception as exc:  # noqa: BLE001
                         print(f"      piece {piece_label}          : could not "
                               f"save ({exc})")
+                        note("FAILED", piece=piece_label,
+                             validation_reason=f"could not save ({exc})",
+                             **geometry_fields)
+                        pieces_failed += 1
                         continue
 
                     piece_status, piece_reason, piece_metadata = (
@@ -1813,6 +1867,7 @@ def mine_tile_regions(
                              validation="DEFERRED",
                              validation_reason=piece_reason, **geometry_fields)
                         deferred.append((piece_path, piece_reason, piece_metadata))
+                        pieces_deferred += 1
                         continue
 
                     if piece_status != VALIDATION_APPROVED:
@@ -1820,6 +1875,7 @@ def mine_tile_regions(
                         print(f"        -> REJECTED -- {piece_reason}")
                         note("REJECTED", piece=piece_label, validation="FAIL",
                              validation_reason=piece_reason, **geometry_fields)
+                        pieces_rejected += 1
                         continue
 
                     print(f"        -> ACCEPTED -> {piece_path.name}")
@@ -1829,6 +1885,24 @@ def mine_tile_regions(
                          product_name=piece_metadata.get("product_name", ""),
                          **geometry_fields)
                     accepted.append((piece_path, piece_reason, piece_metadata))
+                    pieces_accepted += 1
+
+                split_detail = (
+                    f"{designs} products in one frame -- split into "
+                    f"{len(pieces)} piece(s): {pieces_accepted} accepted, "
+                    f"{pieces_deferred} deferred, {pieces_rejected} rejected, "
+                    f"{pieces_failed} failed"
+                )
+                if pieces_accepted:
+                    record("ACCEPTED", f"candidate {index}", split_detail)
+                elif pieces_deferred:
+                    record("DEFERRED", f"candidate {index}", split_detail)
+                elif pieces_failed and not pieces_rejected:
+                    # Every piece died on a technical fault, so nothing
+                    # here judged this candidate.
+                    record("FAILED", f"candidate {index}", split_detail)
+                else:
+                    record("REJECTED", f"candidate {index}", split_detail)
 
                 continue
 
@@ -1851,6 +1925,7 @@ def mine_tile_regions(
             note("REJECTED", validation="FAIL", validation_reason=reason,
                  purity_state=metadata.get("purity_state"),
                  **geometry_fields)
+            record("REJECTED", f"candidate {index}", reason)
             continue
 
         print(f"      region validation  : PASS -- {reason}")
@@ -1865,12 +1940,57 @@ def mine_tile_regions(
              tile_fraction=(metadata.get("purity") or {}).get("tile_fraction"),
              **geometry_fields)
 
+        record("ACCEPTED", f"candidate {index}", reason)
         accepted.append((region_path, reason, metadata))
 
-    emit(f"      Page {page_number}: completed -> "
-         f"{len(accepted)} accepted, {len(deferred)} deferred, "
-         f"{len(regions) - len(accepted) - len(deferred)} rejected "
-         f"({len(regions)} candidate(s) processed)")
+    # ------------------------------------------------------------
+    # CANDIDATE RECONCILIATION
+    #
+    # Every surface the detector found is accounted for by name, and the
+    # totals are added back up against it. The old line derived
+    # "rejected" by subtracting from the post-dedup list, which is the
+    # one arithmetic that can never disagree with itself -- it reported a
+    # balanced page no matter how many candidates had gone missing on the
+    # way. This adds the statuses that were actually recorded, so when
+    # they do not come to the number detected, the run says so instead of
+    # quietly reporting a smaller catalog.
+    # ------------------------------------------------------------
+    accounted = sum(len(entries) for entries in outcomes.values())
+
+    # The equation goes through emit() rather than print(), which is what
+    # makes it survive quiet_stage() and appear in an ordinary run --
+    # accounting nobody sees is not accounting. The per-candidate reasons
+    # underneath it are diagnostics and stay behind CATALOG_DEBUG, so the
+    # normal terminal gets one line per page instead of a wall.
+    emit(f"      Page {page_number}: {detected_count} detected = "
+         f"{len(outcomes['ACCEPTED'])} accepted + "
+         f"{len(outcomes['REJECTED'])} rejected + "
+         f"{len(outcomes['DUPLICATE'])} duplicate + "
+         f"{len(outcomes['FAILED'])} failed + "
+         f"{len(outcomes['DEFERRED'])} deferred"
+         f"  ({len(accepted)} swatch(es))")
+
+    for status in ("ACCEPTED", "REJECTED", "DUPLICATE", "FAILED", "DEFERRED"):
+        for entry in outcomes[status]:
+            print(f"    [tile-region] {status:<9} {entry}")
+
+    # A technical fault is the one status that must reach the operator
+    # whatever the verbosity: a product lost to a broken encoder looks
+    # exactly like a catalog with fewer products in it, and only this
+    # line tells them apart.
+    for entry in outcomes["FAILED"]:
+        emit(f"      Page {page_number}: FAILED -- {entry}")
+
+    if accounted != detected_count:
+        # Loud on purpose, and always. This is the failure the accounting
+        # exists to catch: a detected product that reached no final
+        # status at all.
+        emit(f"      Page {page_number}: ACCOUNTING MISMATCH -- "
+             f"{detected_count} candidate(s) detected but {accounted} "
+             f"accounted for; {detected_count - accounted} left this page "
+             f"with no final status")
+        print(f"  [tile-region] ACCOUNTING MISMATCH on page {page_number}: "
+              f"{detected_count} detected, {accounted} accounted for")
 
     debug_directory = os.getenv("TILE_REGION_DEBUG_DIR", "").strip()
     if debug_directory and overlay_boxes:
