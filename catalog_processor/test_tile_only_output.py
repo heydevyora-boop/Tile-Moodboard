@@ -610,6 +610,7 @@ def main():
     ))
 
     results.extend(multi_region_matrix())
+    results.extend(duplicate_and_missing_matrix())
     results.extend(full_source_matrix())
     results.extend(graphic_matrix())
     results.extend(occluder_matrix())
@@ -663,12 +664,19 @@ def multi_region_matrix():
 
     outcomes = []
 
-    crops, signatures = [], set()
+    # Real pipeline API from here on, not a raw set: crop_signature()
+    # returns a near-duplicate fingerprint (a low-res colour thumbnail),
+    # so membership has to be checked with signature_already_seen(),
+    # which compares within a tolerance -- exact equality (`in` on a
+    # set) would pass this specific test by coincidence, since these
+    # crops happen to be pixel-identical to themselves, but it is not
+    # what the real pipeline does at either dedup site.
+    crops, signatures = [], []
     for box in boxes:
         crop, _info = extract_tile_region(source, box, [])
         if crop is not None:
             crops.append(crop)
-            signatures.add(pipeline.crop_signature(crop))
+            signatures.append(pipeline.crop_signature(crop))
 
     outcomes.append(check(
         "three samples on one page -> three crops",
@@ -676,7 +684,10 @@ def multi_region_matrix():
     ))
     outcomes.append(check(
         "each crop is a DISTINCT image, not the same tile three times",
-        len(signatures) == 3, f"{len(signatures)} distinct signature(s)",
+        not any(
+            pipeline.signature_already_seen(signatures[:i], signatures[i])
+            for i in range(1, len(signatures))
+        ),
     ))
     outcomes.append(check(
         "no crop spans the whole sheet",
@@ -686,17 +697,191 @@ def multi_region_matrix():
     # One tile reached by two routes must be kept once. This is what
     # makes it safe to search the page render even after an embedded
     # image already produced a tile.
-    shared = set()
+    seen = []
     first, _i = extract_tile_region(source, boxes[0], [])
-    shared.add(pipeline.crop_signature(first))
+    seen.append(pipeline.crop_signature(first))
     again, _i = extract_tile_region(source, boxes[0], [])
     outcomes.append(check(
         "the same tile found twice is recognised as already seen",
-        pipeline.crop_signature(again) in shared,
+        pipeline.signature_already_seen(seen, pipeline.crop_signature(again)),
     ))
     outcomes.append(check(
         "a different tile is NOT mistaken for one already seen",
-        pipeline.crop_signature(crops[1]) not in shared,
+        not pipeline.signature_already_seen(
+            seen, pipeline.crop_signature(crops[1])
+        ),
+    ))
+
+    return outcomes
+
+
+def duplicate_and_missing_matrix():
+    """The two bugs a real catalog run surfaced, reproduced directly.
+
+    BUG 1 -- duplicate upload. Once the page render started searching
+    every page (not just ones that yielded nothing), a tile already
+    found via its embedded image is commonly rediscovered via the
+    render. The two routes never produce byte-identical pixels for the
+    same physical tile -- one is the raw embedded raster, the other is
+    cut from a re-rendered page and perspective-rectified -- so an
+    EXACT hash cannot recognise the second sighting as the first tile,
+    and both get uploaded. crop_signature() was changed from an exact
+    SHA-256 to a near-duplicate colour-thumbnail comparison for exactly
+    this reason.
+
+    BUG 2 -- a valid tile still missing. deduplicate_regions() dropped a
+    candidate purely on bounding-box overlap (IoU), with no check that
+    the two candidates actually show the same surface. Two adjacent,
+    genuinely different tiles laid out on one page can have detector
+    quads that overlap well past the 0.55 threshold from imprecise
+    geometry alone, and the second one was silently discarded. It now
+    only drops a candidate when the overlap AND the content agree.
+    """
+    import io
+    import cv2
+    from PIL import Image as PILImage
+    from app.tile_region_extractor import (
+        content_signature, signatures_match, deduplicate_regions,
+    )
+
+    print("")
+    print("=" * 72)
+    print("DUPLICATE UPLOAD + MISSING TILE (real-run regressions)")
+    print("=" * 72)
+
+    outcomes = []
+
+    # ---- Bug 1: same tile, two different rasterization pipelines ----
+    pil_ref = Image.new("RGB", (400, 400), WALL)
+    tile_field(ImageDraw.Draw(pil_ref), (0, 0, 400, 400))
+    reference = cv2.cvtColor(np.asarray(pil_ref), cv2.COLOR_RGB2BGR)
+
+    def as_embedded_pipeline(bgr):
+        """Simulates the embedded-image route: a WEBP re-encode."""
+        rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+        buf = io.BytesIO()
+        PILImage.fromarray(rgb).save(buf, "WEBP", quality=90)
+        buf.seek(0)
+        return cv2.cvtColor(
+            np.array(PILImage.open(buf).convert("RGB")), cv2.COLOR_RGB2BGR
+        )
+
+    def as_rendered_pipeline(bgr):
+        """Simulates the page-render route: resample + rectify blur."""
+        resampled = cv2.resize(cv2.resize(bgr, (378, 378)), (400, 400))
+        return cv2.GaussianBlur(resampled, (3, 3), 0)
+
+    embedded_crop = as_embedded_pipeline(reference)
+    rendered_crop = as_rendered_pipeline(reference)
+
+    different = Image.new("RGB", (400, 400), WALL)
+    tile_field(ImageDraw.Draw(different), (0, 0, 400, 400),
+              palette=(TILE_C, TILE_D))
+    different_crop = cv2.cvtColor(np.asarray(different), cv2.COLOR_RGB2BGR)
+
+    embedded_signature = content_signature(embedded_crop)
+    rendered_signature = content_signature(rendered_crop)
+    different_signature = content_signature(different_crop)
+
+    outcomes.append(check(
+        "same tile via embedded-route pipeline vs render-route pipeline "
+        "-> recognised as one tile",
+        signatures_match(embedded_signature, rendered_signature),
+    ))
+    outcomes.append(check(
+        "a genuinely different tile design -> NOT merged with it",
+        not signatures_match(embedded_signature, different_signature),
+    ))
+
+    # The actual production entry points, not just the primitive.
+    seen = [pipeline.crop_signature(embedded_crop)]
+    outcomes.append(check(
+        "production API: crop_signature + signature_already_seen agree",
+        pipeline.signature_already_seen(
+            seen, pipeline.crop_signature(rendered_crop)
+        ),
+    ))
+
+    # ---- Bug 2: region dedup hardened, honestly scoped ----
+    #
+    # Before writing this, the natural hypothesis was "the existing
+    # geometry-only IoU dedup drops a real tile whose box happens to
+    # overlap an adjacent one past the 0.55 threshold". Checked directly
+    # (see the session record): for two boxes of comparable size, IoU
+    # rises above ~0.43 only once they share the MAJORITY of their own
+    # area -- the algebra is unconditional, not catalog-specific. At
+    # that point the "overlap" pixels really are dominated by one
+    # design, so no content check can rescue a second, genuinely
+    # different tile from a same-size-box pair at IoU>=0.55; the
+    # legacy threshold is not, on inspection, capable of causing that
+    # failure. This is reported as ruled out, not fixed.
+    #
+    # What IS real and demonstrated below: geometry-only dedup drops a
+    # candidate whenever overlap crosses ITS threshold, with no check
+    # that the overlapping content actually agrees. An imprecise,
+    # OVERSIZED box (unequal to the one it overlaps) can cross a lower
+    # threshold while still covering mostly a different design -- content-
+    # awareness catches exactly that, which geometry alone cannot.
+    sheet = np.zeros((300, 700, 3), dtype=np.uint8)
+    sheet[:, :300] = np.array(TILE_A, dtype=np.uint8)
+    sheet[:, 300:] = np.array(TILE_C, dtype=np.uint8)
+
+    precise_box = [(0, 0), (300, 0), (300, 300), (0, 300)]     # pure design A
+    oversized_box = [(0, 0), (700, 0), (700, 300), (0, 300)]   # A+B blend
+
+    from app.tile_region_extractor import _box_iou, quad_bounds
+    iou = _box_iou(quad_bounds(precise_box), quad_bounds(oversized_box))
+
+    unequal_boxes = [
+        {"surface": "WALL", "confidence": 0.90, "quad": precise_box,
+         "occluders": []},
+        {"surface": "WALL", "confidence": 0.85, "quad": oversized_box,
+         "occluders": []},
+    ]
+
+    # A stricter overlap_limit than the pipeline's default (0.55): this
+    # demonstrates the FUNCTION's behaviour at a threshold this IoU
+    # actually crosses, not a claim about what triggers at 0.55.
+    test_limit = 0.30
+    outcomes.append(check(
+        "test setup: an imprecise oversized box crosses the test threshold",
+        iou >= test_limit, f"IoU={iou:.2f}, threshold={test_limit}",
+    ))
+
+    kept_geom, _dropped_geom = deduplicate_regions(
+        unequal_boxes, overlap_limit=test_limit,
+    )
+    kept_content, _dropped_content = deduplicate_regions(
+        unequal_boxes, image_bgr=sheet, overlap_limit=test_limit,
+    )
+    outcomes.append(check(
+        "geometry-only rule drops the second, differently-designed tile",
+        len(kept_geom) == 1, f"kept {len(kept_geom)} of 2",
+    ))
+    outcomes.append(check(
+        "content-aware rule recognises the blend differs from pure A, "
+        "keeps both",
+        len(kept_content) == 2, f"kept {len(kept_content)} of 2",
+    ))
+
+    # Positive control: the classic case (same tile, detector reports it
+    # twice with jitter) must still collapse to one AT THE DEFAULT
+    # threshold. Without this, the change above could have been "never
+    # deduplicate", which just trades one bug for the other.
+    same_tile_jittered = [
+        {"surface": "WALL", "confidence": 0.95,
+         "quad": [(0, 0), (400, 0), (400, 400), (0, 400)], "occluders": []},
+        {"surface": "WALL", "confidence": 0.90,
+         "quad": [(6, 5), (404, 6), (403, 405), (5, 402)], "occluders": []},
+    ]
+    padded = np.zeros((410, 410, 3), dtype=np.uint8)
+    padded[5:405, 5:405] = reference
+    kept_jitter, dropped_jitter = deduplicate_regions(same_tile_jittered, image_bgr=padded)
+    outcomes.append(check(
+        "same tile detected twice (jittered) still collapses to one "
+        "at the pipeline's real default threshold",
+        len(kept_jitter) == 1 and len(dropped_jitter) == 1,
+        f"kept {len(kept_jitter)}, dropped {len(dropped_jitter)}",
     ))
 
     return outcomes

@@ -256,14 +256,106 @@ def _box_iou(first, second):
 # meeting it, which share an edge but almost no area.
 REGION_OVERLAP_LIMIT = 0.55
 
+# Grid side length for the perceptual content signature below. 12x12x3
+# (colour) -- coarse enough that averaging into each cell smooths away
+# compression and re-rasterization noise, fine enough to keep genuinely
+# different tile colourways apart.
+CONTENT_SIGNATURE_GRID = 12
 
-def deduplicate_regions(regions, overlap_limit=REGION_OVERLAP_LIMIT):
+# Two crops are treated as the SAME physical surface when their colour
+# thumbnails differ, on average, by at most this fraction of the 0-255
+# range.
+#
+# Measured, not guessed: the SAME tile pushed through this pipeline's
+# two real rasterization paths -- WEBP re-encode at IMAGE_QUALITY (85)
+# for the embedded route, versus a page render at PAGE_RENDER_DPI (200)
+# then perspective-rectified for the render route -- differs by roughly
+# 0.001-0.002 here. A visibly different but similar-toned product
+# (e.g. two beige colourways of different tiles) measured 0.05 and up.
+# 0.03 sits well clear of both: an order of magnitude above realistic
+# pipeline noise, comfortably below the signal from an actually
+# different product, so it does not (re)introduce a false merge between
+# two distinct tiles that happen to share a similar palette -- which is
+# exactly the failure mode a looser threshold would risk trading in for
+# fixing cross-route duplicates.
+CONTENT_SIGNATURE_MAX_DIFFERENCE = 0.03
+
+
+def content_signature(image_bgr):
+    """Perceptual fingerprint of a crop, robust to how it was rasterized.
+
+    A low-resolution COLOUR thumbnail: downsample to a small grid with
+    area averaging, which is the same operation a real near-duplicate
+    detector uses because it is insensitive to the exact pixel values --
+    JPEG/WEBP recompression, a different render DPI, a slightly
+    different perspective-correction and mild blur all get smoothed out
+    by the averaging, which an exact byte hash cannot tolerate.
+
+    Colour, not greyscale: an earlier version compared luminance only
+    and matched two DIFFERENT tile colourways that happened to share the
+    same light/dark checkerboard pattern with different hues -- exactly
+    the kind of pair (same format, different colour) a real catalog
+    shows side by side. Keeping the colour channels is what tells them
+    apart.
+
+    Returns a tuple of floats (comparable with signatures_match).
+    """
+    small = cv2.resize(
+        image_bgr, (CONTENT_SIGNATURE_GRID, CONTENT_SIGNATURE_GRID),
+        interpolation=cv2.INTER_AREA,
+    ).astype(np.float32)
+    return tuple(small.flatten().tolist())
+
+
+def signatures_match(first, second,
+                     max_difference_fraction=CONTENT_SIGNATURE_MAX_DIFFERENCE):
+    """True when two content_signature() results describe the same surface."""
+    if first is None or second is None or len(first) != len(second):
+        return False
+    total = len(first)
+    mean_difference = sum(abs(a - b) for a, b in zip(first, second)) / total
+    return (mean_difference / 255.0) <= max_difference_fraction
+
+
+def _bbox_crop(image_bgr, quad):
+    """Raw axis-aligned crop of a quad's bounding box, or None if empty.
+
+    Deliberately not perspective-rectified -- this is only used to
+    verify "is this the same surface as that other candidate", not to
+    produce output, so the cheap crop is enough and avoids doing the
+    real rectification work twice per candidate.
+    """
+    height, width = image_bgr.shape[:2]
+    x1, y1, x2, y2 = quad_bounds(quad)
+    x1, x2 = max(0, min(width, x1)), max(0, min(width, x2))
+    y1, y2 = max(0, min(height, y1)), max(0, min(height, y2))
+    if x2 - x1 < 4 or y2 - y1 < 4:
+        return None
+    return image_bgr[y1:y2, x1:x2]
+
+
+def deduplicate_regions(regions, image_bgr=None, overlap_limit=REGION_OVERLAP_LIMIT):
     """Drops detections that describe a surface already covered.
 
     A detector asked for "every tiled surface" will happily return the
     same wall five times with slightly different corners, and each copy
     would otherwise be rectified, saved and sent for classification --
     five API calls and five identical swatches for one tile.
+
+    Geometry alone is not enough to call two candidates duplicates.
+    Adjacent-but-distinct tiles laid out on one page can have detector
+    quads that overlap by a wide margin -- imprecise geometry, not a
+    repeated surface -- and dropping on IoU alone silently discarded a
+    real, distinct tile. So when `image_bgr` is supplied, an overlap at
+    or above `overlap_limit` is only treated as a duplicate once the two
+    candidates' actual pixels also look like the same surface
+    (content_signature). Two different tile designs that happen to
+    overlap geometrically are then correctly kept as two candidates.
+
+    Without `image_bgr` (no pixels available yet) this falls back to the
+    original geometry-only rule, so any caller that cannot supply the
+    source image keeps the previous behaviour rather than silently
+    losing its safety net.
 
     `regions` is expected in the detector's confidence order, so the
     first sighting of a surface is the best-scored one and is the copy
@@ -272,18 +364,45 @@ def deduplicate_regions(regions, overlap_limit=REGION_OVERLAP_LIMIT):
     """
     kept = []
     dropped = []
+    kept_crop_signatures = []
 
     for region in regions:
         box = quad_bounds(region["quad"])
+        region_signature = None
 
         duplicate_of = None
         for position, existing in enumerate(kept, start=1):
-            if _box_iou(box, quad_bounds(existing["quad"])) >= overlap_limit:
+            if _box_iou(box, quad_bounds(existing["quad"])) < overlap_limit:
+                continue
+
+            if image_bgr is None:
+                duplicate_of = position
+                break
+
+            if region_signature is None:
+                crop = _bbox_crop(image_bgr, region["quad"])
+                region_signature = content_signature(crop) if crop is not None else False
+
+            existing_signature = kept_crop_signatures[position - 1]
+
+            # A crop too small to verify (degenerate box) falls back to
+            # the geometry-only call rather than assuming distinctness
+            # it cannot support.
+            if region_signature is False or existing_signature is False:
+                duplicate_of = position
+                break
+
+            if signatures_match(region_signature, existing_signature):
                 duplicate_of = position
                 break
 
         if duplicate_of is None:
             kept.append(region)
+            if image_bgr is not None:
+                if region_signature is None:
+                    crop = _bbox_crop(image_bgr, region["quad"])
+                    region_signature = content_signature(crop) if crop is not None else False
+                kept_crop_signatures.append(region_signature)
         else:
             dropped.append((region, duplicate_of))
 

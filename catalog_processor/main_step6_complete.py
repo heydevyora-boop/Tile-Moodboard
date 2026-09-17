@@ -1359,18 +1359,42 @@ LEGACY_REGION_MINEABLE_CATEGORIES = frozenset({
 
 
 def crop_signature(image_bgr):
-    """Fingerprints a crop so the same tile is not extracted twice.
+    """Fingerprints a crop so the same physical tile is not extracted twice.
 
     A page is searched by two routes -- its embedded images, and a
-    render of the page itself -- and a tile can be visible to both.
-    Both routes hash a crop the same way here, so whichever finds it
-    first keeps it and the other skips it.
-    """
-    import cv2
+    render of the page itself -- and a tile can be visible to both. The
+    two routes never produce byte-identical pixels for the same tile
+    (one is the raw embedded raster, the other is cut from a
+    re-rendered page and perspective-rectified), so an EXACT hash here
+    would never recognise the second sighting as the first tile again --
+    which is exactly how the same tile ended up uploaded twice once the
+    page render started searching every page rather than only empty
+    ones.
 
-    return hashlib.sha256(
-        cv2.resize(image_bgr, (32, 32), interpolation=cv2.INTER_AREA).tobytes()
-    ).hexdigest()
+    Delegates to the perceptual signature used for region-level dedup
+    (see app.tile_region_extractor.content_signature), so "the same
+    tile" means the same thing everywhere in the pipeline. Compare
+    results with signature_already_seen(), not `==` or `in` on a set --
+    two signatures for the same tile are close, not identical.
+    """
+    from app.tile_region_extractor import content_signature
+
+    return content_signature(image_bgr)
+
+
+def signature_already_seen(seen_signatures, signature):
+    """True when `signature` matches something already collected.
+
+    `seen_signatures` is a growing list (not a set: near-duplicate
+    signatures are compared, not hashed for exact equality) shared
+    across every search of one page, so a tile found via its embedded
+    image and again via the page render is recognised as one tile.
+    """
+    from app.tile_region_extractor import signatures_match
+
+    return any(
+        signatures_match(signature, existing) for existing in seen_signatures
+    )
 
 
 def mine_tile_regions(
@@ -1490,20 +1514,10 @@ def mine_tile_regions(
     emit(f"      Page {page_number}: detected {len(regions)} candidate "
          f"region(s)")
 
-    # One surface reported five times costs five rectifications, five
-    # saves and five classifications, and yields five copies of the same
-    # tile. Collapse them before any of that is spent.
-    regions, duplicate_regions = deduplicate_regions(regions)
-
-    for duplicate, duplicates_index in duplicate_regions:
-        print(f"    CANDIDATE -- {duplicate['surface']} "
-              f"({duplicate['confidence']:.2f}) overlaps candidate "
-              f"{duplicates_index}; same surface, dropped")
-
-    if duplicate_regions:
-        print(f"  [tile-region] {len(regions)} distinct surface(s) after "
-              f"removing {len(duplicate_regions)} duplicate detection(s)")
-
+    # Loaded BEFORE deduplication so the dedup step can verify overlap
+    # candidates against their actual pixels, not just their geometry --
+    # see the note on deduplicate_regions for why geometry alone drops
+    # genuinely distinct, merely-adjacent tiles.
     image_bgr = cv2.imread(str(output_path), cv2.IMREAD_COLOR)
     if image_bgr is None:
         # Reached only after the detector found surfaces, so this is
@@ -1514,6 +1528,21 @@ def mine_tile_regions(
               f"crop them")
         return [], []
 
+    # One surface reported five times costs five rectifications, five
+    # saves and five classifications, and yields five copies of the same
+    # tile. Collapse them before any of that is spent -- but only when
+    # they are actually the same surface, not merely close together.
+    regions, duplicate_regions = deduplicate_regions(regions, image_bgr=image_bgr)
+
+    for duplicate, duplicates_index in duplicate_regions:
+        print(f"    CANDIDATE -- {duplicate['surface']} "
+              f"({duplicate['confidence']:.2f}) overlaps candidate "
+              f"{duplicates_index}; same surface, dropped")
+
+    if duplicate_regions:
+        print(f"  [tile-region] {len(regions)} distinct surface(s) after "
+              f"removing {len(duplicate_regions)} duplicate detection(s)")
+
     source_height, source_width = image_bgr.shape[:2]
     source_area = float(source_width * source_height)
 
@@ -1523,7 +1552,7 @@ def mine_tile_regions(
     # set, so a tile found in an embedded image is not extracted again
     # from the page render.
     if seen_signatures is None:
-        seen_signatures = set()
+        seen_signatures = []
     overlay_boxes = []
 
     for index, region in enumerate(regions, start=1):
@@ -1621,14 +1650,14 @@ def mine_tile_regions(
         # Two detections of one surface produce near-identical crops; keep
         # the first and drop the rest rather than syncing the same tile twice.
         signature = crop_signature(crop)
-        if signature in seen_signatures:
+        if signature_already_seen(seen_signatures, signature):
             print(f"      geometry           : extracted, but duplicates an "
                   f"earlier region in this image")
             print(f"      FINAL              : REJECTED (duplicate)")
             note("REJECTED", geometry_stage="duplicate",
                  geometry_reason="duplicates an earlier region in this image")
             continue
-        seen_signatures.add(signature)
+        seen_signatures.append(signature)
 
         crop_width, crop_height = info["crop_size"]
         print(f"      geometry           : OK -- {crop_width}x{crop_height}px, "
@@ -2366,7 +2395,7 @@ def extract_images_from_pdf(
         accepted_before_page = len(extracted_images)
         # One set per PAGE, shared by every search of it, so a tile seen
         # by two routes is kept once.
-        page_signatures = set()
+        page_signatures = []
 
         for image_info in page.get_images(
             full=True
@@ -2687,7 +2716,7 @@ def extract_images_from_pdf(
 
                         _whole = cv2.imread(str(output_path), cv2.IMREAD_COLOR)
                         if _whole is not None:
-                            page_signatures.add(crop_signature(_whole))
+                            page_signatures.append(crop_signature(_whole))
                     except Exception:  # noqa: BLE001 -- dedupe aid only
                         pass
 
