@@ -3,6 +3,8 @@
 
 import os
 import re
+import sys
+import contextlib
 import csv
 import json
 import hashlib
@@ -17,6 +19,94 @@ from urllib.request import Request, urlopen
 import fitz
 from PIL import Image
 from dotenv import load_dotenv
+
+# ============================================================
+# TERMINAL OUTPUT
+#
+# Two channels, because a catalog run has two audiences.
+#
+# NORMAL (default) shows what was extracted: company, product, image,
+# upload, and a final tally. Everything else -- per-candidate geometry,
+# classification internals, region trails, the model's own diagnostics --
+# is developer material and is suppressed.
+#
+# DEBUG (CATALOG_DEBUG=1) restores all of it, unchanged.
+#
+# The suppression is done at the boundary rather than at the ~200 print
+# sites, so no extraction logic is touched to achieve it. Lines that
+# look like errors are passed through even in NORMAL mode: a quiet run
+# must still be a truthful one.
+# ============================================================
+
+CATALOG_DEBUG = os.getenv("CATALOG_DEBUG", "").strip().lower() in (
+    "1", "true", "yes", "on",
+)
+
+# Substrings that mark a line as actionable rather than diagnostic.
+# Matched case-insensitively against each suppressed line.
+ERROR_MARKERS = (
+    "error", "failed", "failure", "cannot", "could not", "unable",
+    "traceback", "exception", "denied", "missing", "unavailable",
+    "quota", "rate limit", "not configured", "skipped:", "warning",
+    "\u274c",
+)
+
+
+class _QuietStream:
+    """Drops diagnostic stdout, lets anything error-shaped through.
+
+    Line-buffered: text is accumulated until a newline so a marker is
+    matched against the whole line rather than whichever fragment
+    happened to arrive in one write() call.
+    """
+
+    def __init__(self, destination):
+        self._destination = destination
+        self._pending = ""
+
+    def write(self, text):
+        self._pending += text
+        while "\n" in self._pending:
+            line, self._pending = self._pending.split("\n", 1)
+            if any(marker in line.lower() for marker in ERROR_MARKERS):
+                self._destination.write(line + "\n")
+        return len(text)
+
+    def flush(self):
+        self._destination.flush()
+
+    def __getattr__(self, name):
+        return getattr(self._destination, name)
+
+
+@contextlib.contextmanager
+def quiet_stage():
+    """Suppresses diagnostic output for the duration of a stage."""
+    if CATALOG_DEBUG:
+        yield
+        return
+
+    real = sys.stdout
+    sys.stdout = _QuietStream(real)
+    try:
+        yield
+    finally:
+        sys.stdout.flush()
+        sys.stdout = real
+
+
+def emit(message=""):
+    """Writes a user-facing line, bypassing any active suppression.
+
+    Uses the process's original stdout so the clean hierarchy survives
+    inside quiet_stage(), which is where extraction -- and therefore
+    every per-tile line -- actually runs.
+    """
+    stream = sys.__stdout__ or sys.stdout
+    stream.write(f"{message}\n")
+    stream.flush()
+
+
 
 try:
     from googleapiclient.http import MediaIoBaseDownload
@@ -2781,6 +2871,8 @@ def process_pdf(
     )
     print("=" * 70)
 
+    _catalog_tiles = []
+
     brand = get_brand_from_pdf(
         pdf_path
     )
@@ -2796,6 +2888,10 @@ def process_pdf(
     print(
         f"Catalog : {catalog}"
     )
+
+    emit("")
+    emit(f"\U0001F4C1 Company: {brand}")
+    emit(f"   \U0001F4E6 Product: {catalog}")
 
     create_directory(
         catalog_output_directory
@@ -3120,17 +3216,24 @@ def process_pdf(
         print(f"    Tile row     : SUCCESS")
 
         uploaded_count += 1
+        _catalog_tiles.append(image["filename"])
+        emit(f"      \u2514\u2500\u2500 image: {image['filename']}  "
+             f"\u2713 uploaded")
 
     # --------------------------------------------------------
     # 6. Extract images -- each accepted tile is uploaded and
     #    recorded immediately, through persist_tile above
     # --------------------------------------------------------
 
-    images = extract_images_from_pdf(
-        pdf_path,
-        images_directory,
-        on_tile=persist_tile,
-    )
+    with quiet_stage():
+        images = extract_images_from_pdf(
+            pdf_path,
+            images_directory,
+            on_tile=persist_tile,
+        )
+
+    if not _catalog_tiles:
+        emit("      (no tile images extracted)")
 
     # --------------------------------------------------------
     # 7. Save image information locally
@@ -3380,6 +3483,11 @@ def process_drive(
 
     results = []
 
+    emit("")
+    emit("=" * 50)
+    emit("CATALOG EXTRACTION")
+    emit("=" * 50)
+
     # --------------------------------------------------------
     # Process every PDF
     # --------------------------------------------------------
@@ -3419,6 +3527,23 @@ def process_drive(
             )
 
     # --------------------------------------------------------
+    _companies = {r.get("brand") for r in results if isinstance(r, dict)}
+    _images = sum(
+        r.get("uploaded", 0) for r in results if isinstance(r, dict)
+    )
+
+    emit("")
+    emit("=" * 50)
+    emit("EXTRACTION COMPLETE")
+    emit("=" * 50)
+    emit(f"Companies processed: {len([c for c in _companies if c])}")
+    emit(f"Products processed : {len(results)}")
+    emit(f"Images extracted   : {_images}")
+    emit("=" * 50)
+    if not CATALOG_DEBUG:
+        emit("(set CATALOG_DEBUG=1 for full per-candidate diagnostics)")
+    emit("")
+
     # Local master CSV for backup/debugging
     # --------------------------------------------------------
 

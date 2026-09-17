@@ -46,7 +46,17 @@ if not GEMINI_API_KEY:
 # Never prints the API key, and never prints image bytes.
 # ============================================================
 
-GEMINI_DEBUG = os.getenv("GEMINI_DEBUG", "").strip().lower() in (
+# Gated on CATALOG_DEBUG, the pipeline's single verbosity switch.
+#
+# GEMINI_DEBUG used to turn this on by itself, which made it easy to
+# leave set in a shell and have every later run flood the terminal with
+# internals -- a PowerShell `$env:GEMINI_DEBUG=1` persists for the whole
+# session. One switch for the whole pipeline means a normal run is
+# quiet whatever else is lingering in the environment.
+#
+# The diagnostics themselves are unchanged: CATALOG_DEBUG=1 restores
+# every line of them.
+GEMINI_DEBUG = os.getenv("CATALOG_DEBUG", "").strip().lower() in (
     "1", "true", "yes", "on",
 )
 
