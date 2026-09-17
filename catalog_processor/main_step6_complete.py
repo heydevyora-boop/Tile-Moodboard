@@ -1358,6 +1358,21 @@ LEGACY_REGION_MINEABLE_CATEGORIES = frozenset({
 })
 
 
+def crop_signature(image_bgr):
+    """Fingerprints a crop so the same tile is not extracted twice.
+
+    A page is searched by two routes -- its embedded images, and a
+    render of the page itself -- and a tile can be visible to both.
+    Both routes hash a crop the same way here, so whichever finds it
+    first keeps it and the other skips it.
+    """
+    import cv2
+
+    return hashlib.sha256(
+        cv2.resize(image_bgr, (32, 32), interpolation=cv2.INTER_AREA).tobytes()
+    ).hexdigest()
+
+
 def mine_tile_regions(
     output_path,
     page_number,
@@ -1369,6 +1384,7 @@ def mine_tile_regions(
     output_directory,
     source_type="embedded-image",
     trace=None,
+    seen_signatures=None,
 ):
     """Recovers tile-only swatches from an image rejected as a whole.
 
@@ -1471,6 +1487,8 @@ def mine_tile_regions(
 
     print(f"  [tile-region] page {page_number} image {image_counter}: "
           f"{len(regions)} candidate tile surface(s)")
+    emit(f"      Page {page_number}: detected {len(regions)} candidate "
+         f"region(s)")
 
     # One surface reported five times costs five rectifications, five
     # saves and five classifications, and yields five copies of the same
@@ -1501,7 +1519,11 @@ def mine_tile_regions(
 
     accepted = []
     deferred = []
-    seen_signatures = set()
+    # Shared across every search of ONE page when the caller supplies a
+    # set, so a tile found in an embedded image is not extracted again
+    # from the page render.
+    if seen_signatures is None:
+        seen_signatures = set()
     overlay_boxes = []
 
     for index, region in enumerate(regions, start=1):
@@ -1598,9 +1620,7 @@ def mine_tile_regions(
 
         # Two detections of one surface produce near-identical crops; keep
         # the first and drop the rest rather than syncing the same tile twice.
-        signature = hashlib.sha256(
-            cv2.resize(crop, (32, 32), interpolation=cv2.INTER_AREA).tobytes()
-        ).hexdigest()
+        signature = crop_signature(crop)
         if signature in seen_signatures:
             print(f"      geometry           : extracted, but duplicates an "
                   f"earlier region in this image")
@@ -1806,6 +1826,7 @@ def mine_tile_regions(
 
         print(f"      region validation  : PASS -- {reason}")
         print(f"      FINAL              : ACCEPTED -> {region_path.name}")
+        emit(f"      Page {page_number}: candidate {index} -> accepted")
 
         note("ACCEPTED", validation="PASS", validation_reason=reason,
              image_path=str(region_path),
@@ -1816,6 +1837,11 @@ def mine_tile_regions(
              **geometry_fields)
 
         accepted.append((region_path, reason, metadata))
+
+    emit(f"      Page {page_number}: completed -> "
+         f"{len(accepted)} accepted, {len(deferred)} deferred, "
+         f"{len(regions) - len(accepted) - len(deferred)} rejected "
+         f"({len(regions)} candidate(s) processed)")
 
     debug_directory = os.getenv("TILE_REGION_DEBUG_DIR", "").strip()
     if debug_directory and overlay_boxes:
@@ -2338,6 +2364,9 @@ def extract_images_from_pdf(
         # appended for this page by the embedded-image path, the page's
         # tiles (if any) are not embedded rasters at all.
         accepted_before_page = len(extracted_images)
+        # One set per PAGE, shared by every search of it, so a tile seen
+        # by two routes is kept once.
+        page_signatures = set()
 
         for image_info in page.get_images(
             full=True
@@ -2471,6 +2500,7 @@ def extract_images_from_pdf(
                                 region_miner,
                                 output_directory,
                                 trace=region_trace,
+                                seen_signatures=page_signatures,
                             )
 
                         # Deferrals are preserved BEFORE the source is
@@ -2590,6 +2620,7 @@ def extract_images_from_pdf(
                                 region_miner,
                                 output_directory,
                                 trace=region_trace,
+                                seen_signatures=page_signatures,
                             )
 
                         # Before the unlink, and before the early exit
@@ -2651,6 +2682,15 @@ def extract_images_from_pdf(
                         "size": tile_metadata.get("size", ""),
                     }
 
+                    try:
+                        import cv2
+
+                        _whole = cv2.imread(str(output_path), cv2.IMREAD_COLOR)
+                        if _whole is not None:
+                            page_signatures.add(crop_signature(_whole))
+                    except Exception:  # noqa: BLE001 -- dedupe aid only
+                        pass
+
                     extracted_images.append(record)
                     notify_tile(on_tile, record)
 
@@ -2678,9 +2718,17 @@ def extract_images_from_pdf(
         # swatch cut out of it must still independently pass the
         # validator before it can become a Tile row.
         # ----------------------------------------------------------
+        # NOTE: this deliberately no longer requires the page to have
+        # yielded nothing. It used to read
+        #     len(extracted_images) == accepted_before_page
+        # which meant one tile found in an embedded image stopped the
+        # page render from ever running -- so on a sheet showing several
+        # tiles, the ones only visible in the render were never looked
+        # for. Every page with visual content is now searched by both
+        # routes, and page_signatures keeps a tile found twice from
+        # being extracted twice.
         if (
             region_miner is not None
-            and len(extracted_images) == accepted_before_page
             and page_has_visual_content(page)
         ):
             render_path = (
@@ -2716,6 +2764,7 @@ def extract_images_from_pdf(
                     output_directory,
                     source_type="rendered-page",
                     trace=region_trace,
+                    seen_signatures=page_signatures,
                 )
 
                 for deferred_path, deferred_reason, deferred_meta in region_deferred:

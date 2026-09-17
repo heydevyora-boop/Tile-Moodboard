@@ -1591,9 +1591,15 @@ TILE_REGION_SCHEMA = {
 # of extracting and re-classifying obvious noise.
 TILE_REGION_MIN_CONFIDENCE = 0.55
 
-# More than this many surfaces in one image means the detector is
-# fragmenting a scene rather than finding distinct products.
-TILE_REGION_MAX = 6
+# Upper bound on surfaces returned for one image.
+#
+# 12 rather than 6: a catalog sheet laying out a colourway range shows
+# eight, ten or twelve separate samples, and capping at six silently
+# discarded the rest -- the cap, not the detector, decided how many
+# products a page could have. Still bounded, because past this the
+# detector is fragmenting one scene rather than finding distinct
+# products, and every surface kept still costs a crop and a validation.
+TILE_REGION_MAX = 12
 
 
 # ============================================================

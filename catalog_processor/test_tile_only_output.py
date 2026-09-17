@@ -609,6 +609,7 @@ def main():
         total_saved >= 10, f"{total_saved} tiles recovered",
     ))
 
+    results.extend(multi_region_matrix())
     results.extend(full_source_matrix())
     results.extend(graphic_matrix())
     results.extend(occluder_matrix())
@@ -623,6 +624,82 @@ def main():
 
     contact_sheet(sources, accepted_by_scene)
     return 0 if passed == len(results) else 1
+
+
+def multi_region_matrix():
+    """Every distinct tile on a page must become its own output.
+
+    A page showing three separate samples was producing one upload. The
+    candidate loop was never the problem -- it runs to completion -- but
+    the page render was gated on the page having yielded NOTHING, so one
+    tile found in an embedded image stopped the render from ever being
+    searched, and anything only visible there was never looked for.
+
+    The last case is the guard that keeps this from double-uploading:
+    the same tile seen by both routes must still be extracted once.
+    """
+    import cv2
+    from app.tile_region_extractor import extract_tile_region
+
+    print("")
+    print("=" * 72)
+    print("MULTI-REGION PAGES")
+    print("=" * 72)
+
+    # A sheet holding three visibly different samples.
+    sheet = Image.new("RGB", (1200, 420), WALL)
+    draw = ImageDraw.Draw(sheet)
+    formats = [(30, (TILE_A, TILE_B)), (52, (TILE_C, TILE_D)),
+               (76, (TILE_A, TILE_B))]
+    boxes = []
+    for index, (cell, palette) in enumerate(formats):
+        x = 40 + index * 390
+        tile_field(draw, (x, 60, x + 340, 360), cell=cell, palette=palette)
+        boxes.append([(x, 60), (x + 340, 60), (x + 340, 360), (x, 360)])
+
+    path = OUT / "_multi.webp"
+    sheet.save(path, "WEBP", quality=92, method=6)
+    source = cv2.imread(str(path), cv2.IMREAD_COLOR)
+
+    outcomes = []
+
+    crops, signatures = [], set()
+    for box in boxes:
+        crop, _info = extract_tile_region(source, box, [])
+        if crop is not None:
+            crops.append(crop)
+            signatures.add(pipeline.crop_signature(crop))
+
+    outcomes.append(check(
+        "three samples on one page -> three crops",
+        len(crops) == 3, f"{len(crops)} extracted",
+    ))
+    outcomes.append(check(
+        "each crop is a DISTINCT image, not the same tile three times",
+        len(signatures) == 3, f"{len(signatures)} distinct signature(s)",
+    ))
+    outcomes.append(check(
+        "no crop spans the whole sheet",
+        all(c.shape[1] < source.shape[1] * 0.9 for c in crops),
+    ))
+
+    # One tile reached by two routes must be kept once. This is what
+    # makes it safe to search the page render even after an embedded
+    # image already produced a tile.
+    shared = set()
+    first, _i = extract_tile_region(source, boxes[0], [])
+    shared.add(pipeline.crop_signature(first))
+    again, _i = extract_tile_region(source, boxes[0], [])
+    outcomes.append(check(
+        "the same tile found twice is recognised as already seen",
+        pipeline.crop_signature(again) in shared,
+    ))
+    outcomes.append(check(
+        "a different tile is NOT mistaken for one already seen",
+        pipeline.crop_signature(crops[1]) not in shared,
+    ))
+
+    return outcomes
 
 
 def full_source_matrix():
