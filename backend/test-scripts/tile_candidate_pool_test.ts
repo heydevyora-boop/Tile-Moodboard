@@ -96,9 +96,20 @@ async function main() {
       result.length === 2 && result.some((t) => t.id === 'row-old') && result.some((t) => t.id === 'row-new'),
       result.map((t) => t.id),
     );
+    // This used to assert the two scored IDENTICALLY, because recency was
+    // deliberately not a ranking signal at all. That policy is reversed:
+    // a newly extracted catalog was losing every board to the rows
+    // already in the database, so the latest extraction now carries a
+    // bounded preference.
+    //
+    // The half of the old check that still matters is kept, and is the
+    // half that was actually protecting anything: neither row is DROPPED.
+    // A preference reorders the pool; it must never shrink it.
     check(
-      '2. Neither row was dropped on an age rule -- both scored identically',
-      result.length === 2 && result[0].score === result[1].score,
+      '2. Neither row was dropped on an age rule -- the newer leads, the older remains',
+      result.length === 2 &&
+        result[0].id === 'row-new' &&
+        result.some((t) => t.id === 'row-old'),
       result.map((t) => ({ id: t.id, score: t.score })),
     );
   }
@@ -151,17 +162,23 @@ async function main() {
   }
 
   {
-    // Equal score, and the OLDER tile sorts first alphabetically. If
-    // recency were preferred anywhere -- even only as a tie-break -- the
-    // newer tile would lead here. It must not.
+    // Equally suitable, and the OLDER tile sorts first alphabetically --
+    // so alphabetical order alone would put it on top. The newer one must
+    // lead anyway: this is the case the whole change exists for, a fresh
+    // extraction that is just as good as what is already there and was
+    // never getting picked.
+    //
+    // Note what is NOT asserted: that the older tile is gone. It is still
+    // in the result, one place down, exactly as available as before.
     const tiles = [
       tile({ id: 'old-alpha-first', productCode: 'OLD-3', name: 'Aaa Old Tile', createdAt: OLD_EXTRACTION }),
       tile({ id: 'new-alpha-last', productCode: 'NEW-3', name: 'Zzz New Tile', createdAt: NEW_EXTRACTION }),
     ];
     const result = await getRecommendedTiles(fakePrisma(tiles), { room: 'Bathroom' });
     check(
-      '6. On an exact tie the NEWER tile is NOT promoted -- recency is not a tie-break',
-      result[0]?.score === result[1]?.score && result[0]?.id === 'old-alpha-first',
+      '6. Equally suitable: the newer leads, and the older is still a candidate',
+      result[0]?.id === 'new-alpha-last' &&
+        result.some((t) => t.id === 'old-alpha-first'),
       result.map((t) => ({ id: t.id, name: t.name, score: t.score })),
     );
   }

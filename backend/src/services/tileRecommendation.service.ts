@@ -61,6 +61,13 @@ export interface TileForRanking {
   colorTone?: string | null;
   bestRoom?: string | null;
   productCode?: string | null;
+  // When this tile was extracted. Supplied by getRecommendedTiles from
+  // the Tile row's own timestamps -- never inferred from array order,
+  // product code or anything else that only looks like an ordering.
+  // Optional so rankTiles stays callable without them, in which case
+  // the recency signal below contributes nothing at all.
+  createdAt?: Date | string | null;
+  updatedAt?: Date | string | null;
 }
 
 export interface RankingCriteria {
@@ -75,6 +82,62 @@ export interface RankedTile extends TileForRanking {
   // Only populated by getRecommendedTiles() (rankTiles() alone has no
   // notion of catalogs) -- see sourceGroupKey() below.
   catalogGroup?: string;
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Extraction recency
+//
+// A newly extracted catalog was losing every board to the tiles already
+// in the database, and not because of a filter or a cache: measured
+// against the real scorer, a freshly synced tile scores 10 where an
+// established one scores 72. The gap is metadata. masterTileSync writes
+// what the extraction pipeline sends -- a product code, an image, a
+// collection -- and nothing else, so every new tile arrives with no
+// bestRoom, no colorTone, no finish and no size. scoreRoom gives it the
+// +8 "versatile" credit instead of the +40 exact-room match, scoreColor
+// and scoreStyle give it nothing, and it sorts below everything.
+//
+// So recency is now a signal, which it deliberately was not before. The
+// note further down explaining why it was excluded described a DIFFERENT
+// mechanism -- collapsing duplicate rows to one "current" copy BEFORE
+// scoring, which removed real candidates from the pool. That is still
+// gone and is not what this is: nothing is removed here, a bounded bonus
+// is added, and every older tile stays exactly as selectable as it was.
+//
+// Bounded on purpose. At +18 a tile from the newest extraction wins a
+// near-tie and loses a real mismatch: it cannot overturn an exact room
+// match (+40) or an exact colour match (+30), so "prefer the latest when
+// it is a suitable match" holds without becoming "always replace the old
+// with the new". It is also honestly not enough to close the 62-point
+// metadata gap above on its own -- an untagged tile still loses to a
+// well-tagged one, as it should, until the extraction supplies the tags.
+const RECENCY_BONUS = 18;
+
+// How wide "the latest extraction" is. One sync run writes its rows over
+// seconds to minutes, so a window keeps a batch together instead of
+// privileging whichever row of it happened to be written last.
+const RECENCY_WINDOW_MS = 6 * 60 * 60 * 1000;
+
+/** The moment this tile was last written, or null when unknown. */
+export function extractionTime(tile: TileForRanking): number | null {
+  const stamps = [tile.updatedAt, tile.createdAt]
+    .map((value) => (value ? new Date(value).getTime() : NaN))
+    .filter((value) => Number.isFinite(value));
+
+  return stamps.length > 0 ? Math.max(...stamps) : null;
+}
+
+function scoreRecency(tile: TileForRanking, newest: number | null): { points: number; reasons: string[] } {
+  if (newest === null) return { points: 0, reasons: [] };
+
+  const when = extractionTime(tile);
+  if (when === null) return { points: 0, reasons: [] };
+
+  if (newest - when <= RECENCY_WINDOW_MS) {
+    return { points: RECENCY_BONUS, reasons: ['From the latest extraction'] };
+  }
+
+  return { points: 0, reasons: [] };
 }
 
 function scoreRoom(tile: TileForRanking, room: string | undefined): { points: number; reasons: string[] } {
@@ -131,16 +194,23 @@ function scoreColor(tile: TileForRanking, requestedColor: string | undefined): {
  * that only wants the top N.
  */
 export function rankTiles(tiles: TileForRanking[], criteria: RankingCriteria): RankedTile[] {
+  // "Latest" is measured against this pool's own newest row, so it means
+  // the same thing whether the database holds two catalogs or two
+  // hundred, and needs no wall-clock threshold to keep current.
+  const stamps = tiles.map(extractionTime).filter((value): value is number => value !== null);
+  const newest = stamps.length > 0 ? Math.max(...stamps) : null;
+
   const ranked = tiles.map((tile) => {
     const room = scoreRoom(tile, criteria.room);
     const style = scoreStyle(tile, criteria.style);
     const color = scoreColor(tile, criteria.colorTone);
+    const recency = scoreRecency(tile, newest);
     const baseTieBreak = tile.type === 'BASE' ? 2 : 0;
 
     return {
       ...tile,
-      score: room.points + style.points + color.points + baseTieBreak,
-      matchReasons: [...room.reasons, ...style.reasons, ...color.reasons],
+      score: room.points + style.points + color.points + recency.points + baseTieBreak,
+      matchReasons: [...room.reasons, ...style.reasons, ...color.reasons, ...recency.reasons],
     };
   });
 
@@ -223,7 +293,16 @@ function sourceGroupKey(tile: TileSource): string {
  * A single source degenerates to exactly the slice this replaces, and the
  * pool size never changes — only which tiles fill it.
  */
-function interleaveBySource(ranked: RankedTile[], sourceOf: (tileId: string) => string, limit: number): RankedTile[] {
+function interleaveBySource(
+  ranked: RankedTile[],
+  sourceOf: (tileId: string) => string,
+  limit: number,
+  // Visit order for the groups. Supplied by getRecommendedTiles so the
+  // most recently extracted catalog is served first; omitted, groups
+  // keep their previous order (the one their best-ranked tile appeared
+  // in) and this behaves exactly as it did.
+  recencyOf?: (tileId: string) => number | null,
+): RankedTile[] {
   if (ranked.length <= limit) return ranked;
 
   const bySource = new Map<string, RankedTile[]>();
@@ -235,6 +314,31 @@ function interleaveBySource(ranked: RankedTile[], sourceOf: (tileId: string) => 
   }
 
   const groups = [...bySource.values()];
+
+  // WHY THE ORDER MATTERS, AND ONLY HERE.
+  //
+  // Every group contributes its best tile at depth 0, so with a handful
+  // of catalogs each is represented whatever the order. Once the
+  // catalogs outnumber the pool limit, depth 0 alone fills it and the
+  // groups visited last are cut entirely -- and a freshly extracted
+  // catalog is exactly the one that sorts last, because its tiles carry
+  // no metadata to score on. That is the newest products being dropped
+  // before the model ever sees them.
+  //
+  // Serving the most recent source first fixes that truncation without
+  // taking a slot from anyone: the same number of tiles comes back, and
+  // with few catalogs loaded the membership is identical -- only the
+  // order changes.
+  if (recencyOf) {
+    const groupRecency = new Map<RankedTile[], number>();
+    for (const group of groups) {
+      const stamps = group
+        .map((tile) => recencyOf(tile.id))
+        .filter((value): value is number => value !== null);
+      groupRecency.set(group, stamps.length > 0 ? Math.max(...stamps) : 0);
+    }
+    groups.sort((a, b) => (groupRecency.get(b) ?? 0) - (groupRecency.get(a) ?? 0));
+  }
   const selected: RankedTile[] = [];
 
   for (let depth = 0; selected.length < limit; depth += 1) {
@@ -297,15 +401,28 @@ export async function getRecommendedTiles(prisma: PrismaTileClient, filter: Reco
     colorTone: t.colorTone,
     bestRoom: t.bestRoom,
     productCode: t.productCode,
+    // The row's own timestamps, which is what "latest extraction" is
+    // decided from below -- not array order, not product code order.
+    createdAt: t.createdAt,
+    updatedAt: t.updatedAt,
   }));
 
-  // Ranking decides the order, and nothing after it reorders on age: how
-  // recently a tile was extracted is not a ranking signal, not even to
-  // settle a tie. rankTiles' own deterministic tie-break stands.
+  // Ranking decides the order. Extraction recency is one of the signals
+  // it weighs (see RECENCY_BONUS) -- bounded, so the newest catalog wins
+  // a near-tie and never overturns a genuinely better match, and every
+  // older tile stays exactly as selectable as it was.
   const ranked = rankTiles(forRanking, { room: filter.room, style: filter.style, colorTone: filter.colorTone });
 
   const sourceByTileId = new Map<string, string>(tiles.map((t) => [t.id, sourceGroupKey(t)]));
-  const selected = interleaveBySource(ranked, (id) => sourceByTileId.get(id) ?? `tile:${id}`, filter.limit ?? 20);
+  const recencyByTileId = new Map<string, number | null>(
+    forRanking.map((t) => [t.id, extractionTime(t)]),
+  );
+  const selected = interleaveBySource(
+    ranked,
+    (id) => sourceByTileId.get(id) ?? `tile:${id}`,
+    filter.limit ?? 20,
+    (id) => recencyByTileId.get(id) ?? null,
+  );
 
   return selected.map((t) => ({ ...t, catalogGroup: sourceByTileId.get(t.id) ?? `tile:${t.id}` }));
 }
