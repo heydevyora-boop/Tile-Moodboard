@@ -506,6 +506,32 @@ export async function generateVisualization(
             request.fallback_image_url,
           )
         : null,
+
+    // THE REST OF THE MOOD-BOARD COMBINATION.
+    //
+    // This payload is built field by field, so anything not named here
+    // never leaves Node -- which is exactly what happened to the
+    // highlight and the accent: the route resolved them, handed them to
+    // this function, and they were dropped one layer below, leaving
+    // product_id (the base) as the only material Python ever saw.
+    //
+    // Each image goes through toAbsoluteImageUrl for the same reason
+    // fallback_image_url does: Tile.imageUrl is a relative /static/...
+    // path in LOCAL storage mode, and Python runs as a separate process
+    // that cannot resolve a path relative to this Express server.
+    materials:
+      request.materials?.length
+        ? request.materials
+            .map((material) => ({
+              role: material.role,
+              image_url: toAbsoluteImageUrl(
+                material.image_url,
+              ),
+              product_id: material.product_id,
+              name: material.name,
+            }))
+            .filter((material) => material.image_url)
+        : undefined,
   };
 
   // ==========================================================

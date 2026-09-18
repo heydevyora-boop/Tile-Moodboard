@@ -19,6 +19,7 @@
     "pm2:stop": "pm2 stop ecosystem.config.js",
     "pm2:restart": "pm2 restart ecosystem.config.js",
     "pm2:logs": "pm2 logs casa-de-aurum-api",
+    "test:visualization-materials": "ts-node -r tsconfig-paths/register test-scripts/visualization_materials_test.ts",
     "test:gemini": "ts-node -r tsconfig-paths/register test-scripts/gemini_client_test.ts",
     "test:prompt-builder": "ts-node -r tsconfig-paths/register test-scripts/prompt_builder_test.ts",
     "test:print-board": "ts-node -r tsconfig-paths/register test-scripts/print_board_test.ts",
