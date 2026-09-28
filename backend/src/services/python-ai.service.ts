@@ -50,6 +50,8 @@ export interface VisualizationRequest {
     image_url: string;
     product_id?: string;
     name?: string;
+    size?: string;
+    finish?: string;
   }>;
 }
 
@@ -545,6 +547,8 @@ export async function generateVisualization(
               ),
               product_id: material.product_id,
               name: material.name,
+              size: material.size,
+              finish: material.finish,
             }))
             .filter((material) => material.image_url)
         : undefined,

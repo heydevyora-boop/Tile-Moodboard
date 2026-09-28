@@ -104,6 +104,24 @@ Use only elements that naturally belong to the selected space and subcategory (p
 The selected design style must genuinely shape the palette, furniture, materials, lighting, and detailing of the whole scene — its actual character, not just its name — but style must never override tile fidelity, dimensions, role, application, surface allocation, height, joint width, laying pattern, or any other explicit requirement.
 
 ═══════════════════════════════════════
+8A. BATHROOM FUNCTIONAL COMPLETENESS (applies only when the selected space is a Bathroom)
+═══════════════════════════════════════
+This section shapes only the surrounding, non-designated parts of the bathroom. It never overrides Sections 2–6: it must never change the supplied tile's finish, colour, pattern or coverage, never spread the tile to a new surface, and never add objects that hide or block the tiled surface. Include only elements that belong to the selected subcategory (no shower in a powder washroom, no bathtub unless the subcategory calls for one). Choose a sensible, uncluttered subset — the tile must remain the visual hero.
+
+- Vanity storage: the vanity must look genuinely usable, with visible drawers or cupboard doors; where space allows, add a tall storage cabinet or a small open shelf nearby for towels and toiletries.
+- Toilet privacy: if a toilet is visible, place it away from the direct vanity sightline, or partly screened by a short partition wall or frosted-glass screen; never leave it fully exposed beside the vanity.
+- Window privacy: any large window near a bathtub or shower must show a privacy treatment (frosted glass, sheer curtain, or blind) that still lets in natural light.
+- Shower seating: where a shower zone is shown, include a built-in bench or ledge, a rain head plus a handheld shower, and a linear or neatly integrated drain. The bench and ledge use a complementary material, not the supplied tile, unless the user's application explicitly includes them.
+- Floor safety: any non-designated floor and any shower floor must use a matte or textured, slip-resistant finish. If the floor IS the supplied tile, keep its exact finish unchanged (Section 2). A bath mat or runner, if used, stays modest in size, sits only at the tub or shower exit, and must not cover the designated tile.
+- Lighting: use a layered scheme — soft lighting at the vanity mirror, recessed downlights over shower and tub zones, gentle ambient light. No harsh glare, and no colour cast that shifts the tile's real colour.
+- Ventilation: if the ceiling is visible, include one discreet exhaust grille.
+- Towels: include towel bars, hooks or a heated towel rail near the shower and tub, with folded towels on a shelf or stool.
+- Mirrors: the vanity mirror must not cover the highlighted tile wall. A secondary or full-length mirror may appear only in a dry area, never in the wet zone.
+- Greenery and softness: one or two healthy plants in planters, placed in a dry corner or on a ledge, never in front of the tile. A small side table or stool beside the tub is allowed if a tub exists.
+- Palette: metals (brass, black, chrome) and woods follow the selected style; do not force a fixed palette.
+- No artwork, plants or accessories may be placed over a tiled wall. No text, logos or labels on any accessory.
+
+═══════════════════════════════════════
 9. PHOTOREALISM, COMPOSITION & OUTPUT CLEANLINESS
 ═══════════════════════════════════════
 The image must read as a professional architectural visualization or high-quality interior photograph — avoid an obviously-AI look, warped architecture, malformed furniture, floating objects, impossible proportions, fake-looking repetition, unnatural lighting, or a cartoon/illustration/surreal appearance (unless surrealism was explicitly requested).
@@ -163,6 +181,7 @@ Before producing the final image, verify:
 - SIZE & INSTALLATION: exact dimensions and orientation, correct scale, believable boundaries/cuts, proportional joint, correct laying pattern, no stretching or distortion?
 - DESIGN: does the space/subcategory/style genuinely show, is the surrounding design coherent and materially differentiated, is the tile still visually important, any random or conflicting objects?
 - REALISM: believable architecture, lighting, shadows, reflections, physically-installed tile, professional visualization quality rather than an obvious AI image?
+- BATHROOM COMPLETENESS (bathroom only): usable vanity storage, no exposed toilet, window privacy, shower bench if a shower is shown, slip-safe non-tile flooring, layered lighting, towel points, no accessory covering the tile, and the tile finish and coverage unchanged.
 - USER REQUIREMENTS: check every explicit requirement one by one — a beautiful image that violates application, height, size, joint, pattern, tile role, or surface allocation is not acceptable. Correct any violation before producing the final output.
 
 ═══════════════════════════════════════

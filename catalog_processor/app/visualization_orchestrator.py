@@ -257,6 +257,10 @@ def generate_and_persist_visualization(
     # it, and every layer in between would otherwise drop it, which is
     # the bug being fixed.
     materials: Optional[List[Dict[str, Any]]] = None,
+    # The client's selections (room, feature wall, grout, tile size and
+    # finish), threaded to the engine the same way and for the same
+    # reason as `materials`.
+    requirements: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     Execute the complete backend visualization workflow.
@@ -305,6 +309,7 @@ def generate_and_persist_visualization(
             fallback_image_path=fallback_image_path,
             angle=angle,
             materials=materials,
+            requirements=requirements,
         )
     )
 

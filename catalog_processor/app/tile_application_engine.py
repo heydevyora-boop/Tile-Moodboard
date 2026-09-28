@@ -34,6 +34,12 @@ from tenacity import (
     wait_exponential,
 )
 
+from app.client_selections import (
+    describe_feature,
+    describe_space,
+    text,
+    wants_no_feature_wall,
+)
 from app.devyora_system_prompt import DEVYORA_SYSTEM_PROMPT
 from app.scene_image_resolver import resolve_scene_image
 
@@ -429,6 +435,7 @@ def build_tile_application_prompt(
     tile_name: Optional[str] = None,
     angle: Optional[str] = None,
     materials: Optional[List[Dict[str, Any]]] = None,
+    requirements: Optional[Dict[str, Any]] = None,
 ) -> str:
 
     surface = validate_surface(
@@ -438,6 +445,8 @@ def build_tile_application_prompt(
     surface_description = describe_surface(
         surface
     )
+
+    requirements = requirements if isinstance(requirements, dict) else {}
 
     identity = ""
 
@@ -454,6 +463,52 @@ def build_tile_application_prompt(
             f"Tile Name: "
             f"{tile_name}\n"
         )
+
+    # A combination states each material's size and finish on its own
+    # IMAGE line below; a single tile has only this block to carry them.
+    if not materials:
+        if text(requirements.get("tile_size")):
+            identity += f"Tile Size: {text(requirements.get('tile_size'))}\n"
+        if text(requirements.get("tile_finish")):
+            identity += f"Tile Finish: {text(requirements.get('tile_finish'))}\n"
+
+    # THE CLIENT'S SELECTIONS -- only the ones actually made. A value the
+    # client never chose is left unsaid rather than guessed, because the
+    # system prompt treats whatever is stated here as authoritative.
+    room = requirements.get("room")
+    space = describe_space(room)
+    selection_lines = []
+
+    if space:
+        selection_lines.append(f"- Space: {space['description']}.")
+
+    # Where the statement material goes is a statement about roles, so it
+    # only exists for a combination.
+    if materials:
+        feature = describe_feature(requirements.get("feature"), room, log=True)
+        if feature:
+            selection_lines.append(
+                f"- Feature wall: {feature}. The statement material -- the "
+                "HIGHLIGHT, or the ACCENT when there is no highlight -- is "
+                "concentrated there."
+            )
+        elif wants_no_feature_wall(requirements.get("feature")):
+            selection_lines.append(
+                "- No feature wall: finish the walls uniformly in the BASE "
+                "material; keep any HIGHLIGHT or ACCENT to a small detail -- "
+                "a border, strip or niche -- never a whole wall."
+            )
+
+    if text(requirements.get("grout")):
+        selection_lines.append(
+            f"- Grout: {text(requirements.get('grout'))}."
+        )
+
+    selections_section = (
+        "USER-SELECTED REQUIREMENTS:\n" + "\n".join(selection_lines) + "\n"
+        if selection_lines
+        else ""
+    )
 
     # Angle handling is intentionally an either/or against the room's
     # camera: most callers (single-shot generation elsewhere in the app)
@@ -508,14 +563,16 @@ exactly the same as it would for any other angle of this same room.
             label = role.upper() or f"MATERIAL {position - 1}"
             where = describe_material_role(role, surface_description)
 
-            named = ""
+            details = []
             if material.get("name"):
-                named += f" (\"{material['name']}\""
-                if material.get("product_id"):
-                    named += f", product {material['product_id']}"
-                named += ")"
-            elif material.get("product_id"):
-                named += f" (product {material['product_id']})"
+                details.append(f"\"{material['name']}\"")
+            if material.get("product_id"):
+                details.append(f"product {material['product_id']}")
+            if text(material.get("size")):
+                details.append(f"size {text(material.get('size'))}")
+            if text(material.get("finish")):
+                details.append(f"{text(material.get('finish'))} finish")
+            named = f" ({', '.join(details)})" if details else ""
 
             lines.append(
                 f"  IMAGE {position} = the EXACT {label} material"
@@ -530,13 +587,18 @@ exactly the same as it would for any other angle of this same room.
 ═══════════════════════════════════════
 THIS REQUEST
 ═══════════════════════════════════════
-Everything above governs this generation. Read and apply all thirteen
-sections in full BEFORE producing the image -- including the Section 12
+Everything above governs this generation. Read and apply every section
+in full BEFORE producing the image -- including the Section 12
 final check -- and treat the request below as the user-selected
 requirements those sections refer to: which product(s) are being
 visualized, the role each one plays, the surface each one is assigned
 to, and the camera. A requirement stated below is authoritative and may
 not be substituted, widened to another surface, or dropped.
+
+The room is fixed by IMAGE 1. Sections 8 and 8A are satisfied by IMAGE 1
+exactly as it stands: do not add, remove, move or restyle any furniture,
+fixture, accessory, lighting or decor to meet them. This request changes
+only the supplied material(s), on the surfaces assigned to them.
 
 TASK:
 {len(materials) + 1} images are supplied, in this order:
@@ -558,6 +620,7 @@ Where two materials meet, finish the junction the way real tiling does:
 a clean cut, a trim piece or a grout line, never a blur or a fade.
 
 {identity}
+{selections_section}
 {camera_section}
 REFERENCE PRIORITY:
 
@@ -619,13 +682,18 @@ or CGI-looking image.
 ═══════════════════════════════════════
 THIS REQUEST
 ═══════════════════════════════════════
-Everything above governs this generation. Read and apply all thirteen
-sections in full BEFORE producing the image -- including the Section 12
+Everything above governs this generation. Read and apply every section
+in full BEFORE producing the image -- including the Section 12
 final check -- and treat the request below as the user-selected
 requirements those sections refer to: which product(s) are being
 visualized, the role each one plays, the surface each one is assigned
 to, and the camera. A requirement stated below is authoritative and may
 not be substituted, widened to another surface, or dropped.
+
+The room is fixed by IMAGE 1. Sections 8 and 8A are satisfied by IMAGE 1
+exactly as it stands: do not add, remove, move or restyle any furniture,
+fixture, accessory, lighting or decor to meet them. This request changes
+only the supplied material(s), on the surfaces assigned to them.
 
 TASK:
 Two images are supplied, in this order:
@@ -636,6 +704,7 @@ Apply the EXACT tile shown in IMAGE 2 to the {surface_description}
 of IMAGE 1.
 
 {identity}
+{selections_section}
 {camera_section}
 REFERENCE PRIORITY:
 
@@ -861,6 +930,7 @@ def apply_tile_to_scene(
     tile_name: Optional[str] = None,
     angle: Optional[str] = None,
     materials: Optional[List[Dict[str, Any]]] = None,
+    requirements: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     Apply selected tile(s) to a bathroom/interior image using Gemini.
@@ -939,6 +1009,8 @@ def apply_tile_to_scene(
             "image_path": tile_image,
             "product_id": tile_product_id,
             "name": tile_name,
+            "size": (requirements or {}).get("tile_size"),
+            "finish": (requirements or {}).get("tile_finish"),
         }] + list(materials)
 
     for material in (materials or []):
@@ -962,6 +1034,7 @@ def apply_tile_to_scene(
         tile_name=tile_name,
         angle=angle,
         materials=resolved_materials or None,
+        requirements=requirements,
     )
 
     # --------------------------------------------------------

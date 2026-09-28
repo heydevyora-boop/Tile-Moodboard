@@ -934,6 +934,25 @@
       ...combo.tiles.filter((t) => t !== baseTile),
     ].map((t) => ({ role: t.role, tile_id: t.tileId }));
 
+    // The client's choices, so the scene is built from them rather than a
+    // generic "luxury bathroom". A reopened board only has its room and
+    // palette saved -- every other wizard field would be its default, not
+    // the client's pick -- so those are sent only for a board built here.
+    const requirements = {
+      room: state.room,
+      style: state.palette,
+      combination_name: combo.board_name,
+    };
+    if (!state.viewOnly) {
+      Object.assign(requirements, {
+        feature: state.feature,
+        size: state.size,
+        finish: state.finish,
+        grout: state.grout,
+        view: state.view,
+      });
+    }
+
     state.visualization = { status: 'loading', imageUrl: null, error: null, forIndex: state.detailIndex };
     render();
 
@@ -944,6 +963,7 @@
         // the previous Scene & Angles tool used for the same backend call.
         surface: 'WALL',
         materials,
+        requirements,
       });
       state.visualization = { status: 'success', imageUrl, error: null, forIndex: state.detailIndex };
     } catch (err) {

@@ -673,6 +673,8 @@ def internal_visualization(
                 "image_path": image_path,
                 "product_id": str(material.get("product_id") or "").strip(),
                 "name": str(material.get("name") or "").strip(),
+                "size": str(material.get("size") or "").strip(),
+                "finish": str(material.get("finish") or "").strip(),
             })
 
         if request.materials:

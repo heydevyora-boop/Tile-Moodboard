@@ -105,7 +105,7 @@ router.post(
       const tile =
         await prisma.tile.findUnique({
           where: { id: product_id.trim() },
-          select: { productCode: true, name: true, imageUrl: true },
+          select: { productCode: true, name: true, imageUrl: true, size: true, finish: true },
         });
 
       if (!tile) {
@@ -172,6 +172,8 @@ router.post(
         image_url: string;
         product_id?: string;
         name?: string;
+        size?: string;
+        finish?: string;
       }> = [];
 
       if (requestedMaterials.length > 0) {
@@ -187,6 +189,8 @@ router.post(
               name: true,
               imageUrl: true,
               productCode: true,
+              size: true,
+              finish: true,
             },
           });
 
@@ -216,6 +220,8 @@ router.post(
             image_url: row.imageUrl,
             product_id: row.productCode ?? undefined,
             name: row.name ?? undefined,
+            size: row.size ?? undefined,
+            finish: row.finish ?? undefined,
           });
         }
       }
@@ -280,12 +286,18 @@ router.post(
               ? theme.trim()
               : undefined,
 
-          requirements:
-            requirements &&
+          // The base tile's catalog size and finish ride along from the
+          // DB, not the browser, so a single-tile prompt can state the
+          // real product -- a combination carries them per material.
+          requirements: {
+            ...(requirements &&
             typeof requirements ===
               'object'
               ? requirements
-              : {},
+              : {}),
+            ...(tile.size ? { tile_size: tile.size } : {}),
+            ...(tile.finish ? { tile_finish: tile.finish } : {}),
+          },
 
           // The tile's own extracted catalog image, sent as a safety
           // net so Python can fall back to it when the MASTER sheet

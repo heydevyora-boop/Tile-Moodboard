@@ -644,6 +644,8 @@ def validate_visualization_request(
             "image_path": image,
             "product_id": str(entry.get("product_id") or "").strip(),
             "name": str(entry.get("name") or "").strip(),
+            "size": str(entry.get("size") or "").strip(),
+            "finish": str(entry.get("finish") or "").strip(),
         })
 
     if not product_id:
@@ -652,9 +654,12 @@ def validate_visualization_request(
     if not surface:
         raise ValueError("surface is required.")
 
+    # The room generator also needs to know which surface the tile will go
+    # on: that is the surface it must leave for the tile, and whether the
+    # client's floor module applies to the floor at all.
     scene_image = resolve_scene_image(
         "" if generate_random_scene else scene_image,
-        requirements=requirements,
+        requirements={**requirements, "surface": surface},
         scene_id=scene_id or None,
         scene_image_mode=(
             "random" if generate_random_scene else "reference"
@@ -695,6 +700,7 @@ def validate_visualization_request(
         "fallback_image_path": fallback_image_path,
         "angle": angle or None,
         "materials": materials or None,
+        "requirements": requirements or None,
     }
 
 
@@ -897,6 +903,11 @@ def create_visualization(
                 materials=(
                     normalized.get(
                         "materials"
+                    )
+                ),
+                requirements=(
+                    normalized.get(
+                        "requirements"
                     )
                 ),
             )

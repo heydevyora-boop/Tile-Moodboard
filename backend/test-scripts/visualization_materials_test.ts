@@ -70,12 +70,16 @@ async function main() {
       image_url: '/static/tiles/base.webp',
       product_id: 'BASE-CODE',
       name: 'Tile A',
+      size: '600X1200 MM',
+      finish: 'Polished',
     },
     {
       role: 'highlight',
       image_url: '/static/tiles/highlight.webp',
       product_id: 'HL-CODE',
       name: 'Tile B',
+      size: '300X600 MM',
+      finish: 'Matt',
     },
     {
       role: 'accent',
@@ -116,6 +120,24 @@ async function main() {
     JSON.stringify(materials.map((m) => m.product_id)) ===
       JSON.stringify(['BASE-CODE', 'HL-CODE', 'AC-CODE']),
     JSON.stringify(materials.map((m) => m.product_id)),
+  );
+
+  // The system prompt tells the model to use each tile's exact size and
+  // keep its finish; a size rebuilt out of the body here is a size the
+  // model is told to honour and never shown.
+  check(
+    "each material's catalog size and finish survive into the body",
+    materials[0]?.size === '600X1200 MM' &&
+      materials[0]?.finish === 'Polished' &&
+      materials[1]?.size === '300X600 MM' &&
+      materials[1]?.finish === 'Matt',
+    JSON.stringify(materials.map((m) => [m.size, m.finish])),
+  );
+
+  check(
+    'a material with no size or finish gets none invented',
+    materials[2]?.size === undefined && materials[2]?.finish === undefined,
+    JSON.stringify([materials[2]?.size, materials[2]?.finish]),
   );
 
   // A relative /static path is only meaningful to Express. Python runs

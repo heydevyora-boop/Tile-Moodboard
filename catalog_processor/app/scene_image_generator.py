@@ -3,6 +3,15 @@ import json
 import mimetypes
 from pathlib import Path
 from app.devyora_system_prompt import DEVYORA_SYSTEM_PROMPT
+from app.client_selections import (
+    describe_feature,
+    describe_space,
+    describe_surface_for_room,
+    describe_view,
+    text,
+    tile_goes_on_floor,
+    wants_no_feature_wall,
+)
 from app.output_paths import writable_output_root
 from typing import Any, Dict, Optional
 
@@ -150,6 +159,134 @@ OUTPUT_IMAGE_SIZE = os.getenv(
 # GENERATE A FRESH PHOTOREALISTIC SCENE (NO REFERENCE PHOTO)
 # ============================================================
 
+SECTION_SEPARATOR = "═" * 39
+
+
+def _doctrine_section(number: str) -> str:
+    """One section of the system prompt, verbatim, header lines included.
+
+    Read out of DEVYORA_SYSTEM_PROMPT rather than copied, so an edit to
+    the section there is exactly what the room generator sees too. An
+    absent section yields "" -- the owner removed it, so there is
+    nothing to apply.
+    """
+    lines = DEVYORA_SYSTEM_PROMPT.split("\n")
+
+    def opens_section(index: int) -> bool:
+        return (
+            index + 2 < len(lines)
+            and lines[index].startswith("═")
+            and lines[index + 2].startswith("═")
+        )
+
+    for start in range(len(lines)):
+        if opens_section(start) and lines[start + 1].startswith(f"{number}. "):
+            end = start + 3
+            while end < len(lines) and not opens_section(end):
+                end += 1
+            return "\n".join(lines[start:end]).strip()
+
+    return ""
+
+
+def build_room_scene_prompt(
+    style_text: str,
+    theme_text: str,
+    requirements: Optional[Dict[str, Any]] = None,
+) -> str:
+    """
+    The prompt for the room itself -- the step where the vanity, WC,
+    window, shower, lighting and decor are decided.
+
+    The tile step that follows is told to change nothing but the tile,
+    so a room rule or a client selection that is not in THIS prompt can
+    never reach the image. That is why Section 8A and the client's room
+    selections are here, and only selections that were actually made
+    are stated.
+    """
+    requirements = requirements if isinstance(requirements, dict) else {}
+    room = requirements.get("room")
+    surface = requirements.get("surface")
+    space = describe_space(room)
+    tiled = describe_surface_for_room(surface)
+
+    selections = []
+
+    if space:
+        selections.append(f"- Space: {space['description']}.")
+
+    feature = describe_feature(requirements.get("feature"), room)
+    if feature:
+        selections.append(
+            f"- Feature wall: {feature}. The statement tile is installed "
+            "there in the next step."
+        )
+    elif wants_no_feature_wall(requirements.get("feature")):
+        selections.append(
+            "- No feature wall: the walls are finished uniformly in the "
+            "next step."
+        )
+
+    # The wizard's size and finish are the client's FLOOR module. When
+    # the tile itself goes on the floor, the tile decides the floor.
+    size = text(requirements.get("size"))
+    finish = text(requirements.get("finish"))
+    if (size or finish) and not tile_goes_on_floor(surface):
+        if size and finish:
+            module = f"{size} tiles in a {finish} finish"
+        elif size:
+            module = f"{size} tiles"
+        else:
+            module = f"a {finish} finish"
+        selections.append(
+            f"- Floor: {module} (the client's selected floor module)."
+        )
+
+    framing = describe_view(requirements.get("view"))
+    if framing:
+        selections.append(f"- Camera: {framing}.")
+
+    room_rules = _doctrine_section("8A")
+
+    request = (
+        "No tile is supplied in this step. The room you generate is the "
+        "room the client's tile will be installed into in the next step, "
+        f"on the {tiled}."
+    )
+    if room_rules:
+        request += (
+            " Section 8A above governs how this room is designed; where it "
+            "mentions the supplied tile or the tiled surface, it means that "
+            f"next step's tile surface -- the {tiled}."
+        )
+
+    photograph = (
+        "Generate a single photorealistic photograph of a real, physically "
+        f"built {style_text.lower()} {space['noun'] if space else 'bathroom'} "
+        f"interior, styled as \"{theme_text}\". "
+        "Shoot it like a professional real-estate or architectural photograph: "
+        "natural and fixture lighting, true-to-life material textures, correct "
+        "perspective and shadows, a real vanity, mirror, sanitaryware and "
+        "fixtures. Include a clear, unobstructed wall area and floor area "
+        "suitable for a tile to be applied to later. "
+        "This must look like an actual photograph of a real room — not an "
+        "illustration, rendering, drawing, diagram, or CGI-looking image — "
+        "and with no text, watermark or logo anywhere in the frame."
+    )
+
+    parts = [room_rules] if room_rules else []
+    parts.append(
+        f"{SECTION_SEPARATOR}\nTHIS REQUEST\n{SECTION_SEPARATOR}\n{request}"
+    )
+    parts.append(photograph)
+    if selections:
+        parts.append(
+            "CLIENT SELECTIONS FOR THIS ROOM:\n" + "\n".join(selections)
+        )
+
+    return "\n\n".join(parts)
+
+
 def generate_bathroom_scene(
     output_path: Path,
     prompt: Optional[str] = None,
@@ -186,17 +323,10 @@ def generate_bathroom_scene(
     style_text = str(style or requirements.get("style") or "LUXURY").strip()
     theme_text = str(theme or requirements.get("combination_name") or "Warm Luxury Sanctuary").strip()
 
-    scene_prompt = (
-        "Generate a single photorealistic photograph of a real, physically "
-        f"built {style_text.lower()} bathroom interior, styled as \"{theme_text}\". "
-        "Shoot it like a professional real-estate or architectural photograph: "
-        "natural and fixture lighting, true-to-life material textures, correct "
-        "perspective and shadows, a real vanity, mirror, sanitaryware and "
-        "fixtures. Include a clear, unobstructed wall area and floor area "
-        "suitable for a tile to be applied to later. "
-        "This must look like an actual photograph of a real room — not an "
-        "illustration, rendering, drawing, diagram, or CGI-looking image — "
-        "and with no text, watermark or logo anywhere in the frame."
+    scene_prompt = build_room_scene_prompt(
+        style_text,
+        theme_text,
+        requirements,
     )
 
     response = client.models.generate_content(
@@ -618,12 +748,15 @@ def build_locked_scene_prompt(
 ═══════════════════════════════════════
 THIS REQUEST
 ═══════════════════════════════════════
-Everything above governs this generation. Read and apply all thirteen
-sections in full BEFORE producing the image. This request is a
+Everything above governs this generation. Read and apply every section
+in full BEFORE producing the image. This request is a
 REGENERATION of an already-approved scene under Section 10: the
 correction targets COMPOSITION only. Change the camera, and nothing
 else -- every other approved parameter, including the products, their
 surface allocation and their roles, stays exactly as it already is.
+Sections 8 and 8A were applied when this scene was designed and are
+satisfied by the locked scene exactly as it stands: do not add, remove,
+move or restyle anything to meet them.
 
 Generate a new camera view of the EXISTING LOCKED
 bathroom scene.

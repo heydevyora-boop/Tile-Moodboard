@@ -189,6 +189,9 @@ def generate_tile_visualization(
     # it, and every layer in between would otherwise drop it, which is
     # the bug being fixed.
     materials: Optional[List[Dict[str, Any]]] = None,
+    # The client's selections, threaded through untouched like
+    # `materials`.
+    requirements: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
 
     scene_image = resolve_scene_image(
@@ -240,6 +243,7 @@ def generate_tile_visualization(
         tile_name=tile_name,
         angle=angle,
         materials=materials,
+        requirements=requirements,
     )
 
     # --------------------------------------------------------

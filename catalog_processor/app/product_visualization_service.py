@@ -669,6 +669,9 @@ def generate_product_visualization(
     # it, and every layer in between would otherwise drop it, which is
     # the bug being fixed.
     materials: Optional[List[Dict[str, Any]]] = None,
+    # The client's selections, threaded through untouched like
+    # `materials`.
+    requirements: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     Complete production bridge:
@@ -910,6 +913,7 @@ def generate_product_visualization(
         tile_name=product_name,
         angle=angle,
         materials=materials,
+        requirements=requirements,
     )
 
     # --------------------------------------------------------
