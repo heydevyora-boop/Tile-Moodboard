@@ -36,24 +36,36 @@ export function createApp(): Application {
   // ============================================================
 
   app.use(
-    cors({
-      origin: (origin, callback) => {
-        if (
-          !origin ||
-          config.cors.origins.includes(origin)
-        ) {
-          callback(null, true);
-        } else {
-          callback(
-            new AppError(
-              `Origin ${origin} is not allowed by CORS`,
-              403,
-            ),
-          );
-        }
-      },
+    cors((req, callback) => {
+      const origin = req.headers.origin;
 
-      credentials: true,
+      // vercel.json routes the static frontend and /api/v1/* to this same
+      // deployment, so a frontend page calling this API is same-origin --
+      // its Origin header's host equals this request's own Host. That is
+      // never what CORS_ORIGINS exists to police (CORS only matters for
+      // cross-origin callers), and Vercel preview deployments get a fresh
+      // random subdomain on every deploy, so requiring each one to be
+      // added to CORS_ORIGINS by hand breaks every preview login until
+      // someone notices and updates the env var.
+      let sameOrigin = false;
+      if (origin) {
+        try {
+          sameOrigin = new URL(origin).host === req.headers.host;
+        } catch {
+          sameOrigin = false;
+        }
+      }
+
+      if (!origin || sameOrigin || config.cors.origins.includes(origin)) {
+        callback(null, { origin: true, credentials: true });
+      } else {
+        callback(
+          new AppError(
+            `Origin ${origin} is not allowed by CORS`,
+            403,
+          ),
+        );
+      }
     }),
   );
 
