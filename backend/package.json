@@ -23,6 +23,7 @@
     "test:visualization-materials": "ts-node -r tsconfig-paths/register test-scripts/visualization_materials_test.ts",
     "test:gemini": "ts-node -r tsconfig-paths/register test-scripts/gemini_client_test.ts",
     "test:prompt-builder": "ts-node -r tsconfig-paths/register test-scripts/prompt_builder_test.ts",
+    "test:role-case": "ts-node -r tsconfig-paths/register test-scripts/role_case_insensitivity_test.ts",
     "test:print-board": "ts-node -r tsconfig-paths/register test-scripts/print_board_test.ts",
     "test:tile-recommendation": "ts-node -r tsconfig-paths/register test-scripts/tile_recommendation_test.ts",
     "test:tile-candidate-pool": "ts-node -r tsconfig-paths/register test-scripts/tile_candidate_pool_test.ts",

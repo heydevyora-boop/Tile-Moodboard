@@ -257,7 +257,7 @@ export function validateCombinations(raw: unknown, consideredTileIds: Set<string
     for (const tileRaw of obj.tiles) {
       if (typeof tileRaw !== 'object' || tileRaw === null) continue;
       const t = tileRaw as Record<string, unknown>;
-      const role = typeof t.role === 'string' ? t.role : '';
+      const role = typeof t.role === 'string' ? t.role.trim().toLowerCase() : '';
       const tileId = typeof t.tileId === 'string' ? t.tileId : '';
 
       if (!VALID_ROLES.has(role)) {

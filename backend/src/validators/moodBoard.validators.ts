@@ -17,7 +17,7 @@ export type GenerateBriefInput = z.infer<typeof generateBriefSchema>;
 // ─────────────────────────────────────────────────────────────────────────
 
 const combinationTileSchema = z.object({
-  role: z.enum(['base', 'highlight', 'border', 'accent']),
+  role: z.string().trim().toLowerCase().pipe(z.enum(['base', 'highlight', 'border', 'accent'])),
   tileId: z.string().min(1),
   name: z.string().default(''),
 });
