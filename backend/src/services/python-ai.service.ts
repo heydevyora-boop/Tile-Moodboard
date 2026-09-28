@@ -298,10 +298,22 @@ function normalizeVisualizationResponse(
     driveImage?.webContentLink ||
     driveImage?.webViewLink;
 
+  // Python already reads the file it just wrote -- in its own process,
+  // immediately after writing it -- and embeds it here as a data: URL
+  // (_build_success_response in visualization_api.py). That is the only
+  // image reference in this response both sides can actually use: Node
+  // and Python run as separate serverless functions on Vercel with no
+  // shared disk, so image_path (Python's own local path, turned into
+  // /generated-visualizations/<file> below) points at a file that exists
+  // only inside Python's container -- unreachable from this Express
+  // server -- which is what made every generated visualization fail to
+  // load once the underlying scene-image fetch itself was fixed.
+  const embeddedImageUrl =
+    result.image?.url;
+
   /*
-   * The inline copy Python always encodes. Used only when the file
-   * itself cannot be served from here, since it is far larger than a
-   * URL to a statically-served file.
+   * The inline copy Python always encodes, kept as a fallback for the
+   * case below where the file itself cannot be served from here.
    */
 
   const incomingImageUrl =
@@ -314,11 +326,15 @@ function normalizeVisualizationResponse(
       : '');
 
   /*
-   * Prefer local Express-served image, but only when that file is
-   * really present in the directory Express serves -- otherwise the
-   * URL would 404.
+   * A statically-served URL is far smaller than an inline data: URL, so
+   * it stays the first choice -- but only when the file is really
+   * present in the directory Express serves, or the URL would 404.
    *
-   * Fall back to the inline image, then to the Google Drive URL.
+   * That check is also what makes this correct on Vercel, where Node and
+   * Python are separate functions with no shared disk: image_path names
+   * a file that only exists inside Python's container, the check fails,
+   * and the embedded image Python sent is used instead. Drive is the
+   * last resort.
    */
 
   const imageUrl =
@@ -329,7 +345,7 @@ function normalizeVisualizationResponse(
       ? buildVisualizationImageUrl(
           imagePath,
         )
-      : dataUrl || driveUrl || '';
+      : embeddedImageUrl || dataUrl || driveUrl || '';
 
   result.image = {
     url:

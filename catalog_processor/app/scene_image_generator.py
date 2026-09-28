@@ -49,11 +49,22 @@ IMAGE_MODEL = os.getenv(
 # OUTPUT DIRECTORY
 # ============================================================
 
+# Two fixes, composed. CATALOG_OUTPUT_ROOT redirects the whole output
+# tree to a writable location; writable_output_root then falls back to
+# the OS temp directory when whatever path we landed on still is not
+# writable, which is what serverless hosts give us (Vercel mounts the
+# deployment read-only, so an in-bundle default failed with
+# "[Errno 30] Read-only file system"). With nothing set and a writable
+# checkout, the path is exactly as it always was.
+_CATALOG_OUTPUT_ROOT = os.getenv("CATALOG_OUTPUT_ROOT")
+
 OUTPUT_ROOT = writable_output_root(
     Path(
-        os.getenv(
-            "SCENE_OUTPUT_ROOT",
-            "output/scenes"
+        os.getenv("SCENE_OUTPUT_ROOT")
+        or (
+            str(Path(_CATALOG_OUTPUT_ROOT) / "scenes")
+            if _CATALOG_OUTPUT_ROOT
+            else "output/scenes"
         )
     )
 )

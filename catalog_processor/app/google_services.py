@@ -1,7 +1,10 @@
+import base64
+import json
 import os
 from pathlib import Path
 
 from google.oauth2.credentials import Credentials
+from google.oauth2 import service_account
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 
@@ -57,6 +60,19 @@ CREDENTIALS_FILE = os.getenv(
 TOKEN_FILE = os.getenv(
     "GOOGLE_OAUTH_TOKEN_PATH",
     str(_CATALOG_PROCESSOR_DIR / "token.json"),
+)
+
+# Vercel/Lambda has no interactive browser for the OAuth flow below (it
+# calls flow.run_local_server(), which opens one), and its read-only
+# bundle never had credentials.json/token.json deployed to it in the
+# first place -- every Sheets/Drive call here failed with
+# "[Errno 2] No such file or directory: '.../credentials.json'" before a
+# single request could be served. Same env var name and JSON shape as the
+# Node backend's GOOGLE_SERVICE_ACCOUNT_JSON, so the identical value can
+# be set for both. Local/interactive use is unaffected: unset, this is
+# skipped and get_credentials() behaves exactly as before.
+GOOGLE_SERVICE_ACCOUNT_JSON = os.getenv(
+    "GOOGLE_SERVICE_ACCOUNT_JSON"
 )
 
 # Canonical product/master tab used by the catalog pipeline.
@@ -246,14 +262,91 @@ MASTER_SHEETS = {
 # GOOGLE AUTHENTICATION
 # ============================================================
 
+def _load_service_account_credentials():
+    """
+    Build service-account credentials from GOOGLE_SERVICE_ACCOUNT_JSON.
+
+    Accepts either the raw JSON or a base64 blob of it, since pasting raw
+    JSON into a dashboard env var commonly mangles the private key's
+    newlines -- the same acceptance rule the Node backend's
+    GOOGLE_SERVICE_ACCOUNT_JSON parsing uses, for the same reason.
+    """
+
+    # Strip a UTF-8 BOM some editors/dashboards prepend when the value is
+    # pasted from a file -- without this, raw.startswith("{") is False even
+    # for valid raw JSON, sending it down the base64 branch where decoding
+    # plain JSON text as base64 produces garbage bytes and an opaque
+    # "'utf-8' codec can't decode byte ..." error instead of a usable one.
+    raw = GOOGLE_SERVICE_ACCOUNT_JSON.strip().lstrip("﻿")
+
+    if raw.startswith("{"):
+        decoded = raw
+    else:
+        try:
+            decoded = base64.b64decode(raw).decode("utf-8")
+        except Exception as error:
+            raise RuntimeError(
+                "GOOGLE_SERVICE_ACCOUNT_JSON is not valid JSON or base64 "
+                "(paste the whole service-account key file, or its base64)."
+            ) from error
+
+    try:
+        info = json.loads(decoded)
+    except Exception as error:
+        raise RuntimeError(
+            "GOOGLE_SERVICE_ACCOUNT_JSON is not valid JSON "
+            "(paste the whole service-account key file, or its base64)."
+        ) from error
+
+    # A service account key JSON always has "client_email" and
+    # "private_key" at the top level. An "installed" or "web" key instead
+    # means an OAuth client-secrets file (credentials.json, downloaded from
+    # Google Cloud Console -> APIs & Services -> Credentials -> OAuth 2.0
+    # Client IDs) was pasted by mistake -- that file authenticates a
+    # different, interactive flow and has no client_email/private_key at
+    # all, which otherwise surfaces only as google-auth's generic
+    # "Service account info was not in the expected format" error.
+    if "installed" in info or "web" in info:
+        raise RuntimeError(
+            "GOOGLE_SERVICE_ACCOUNT_JSON contains an OAuth client-secrets "
+            "file (has an \"installed\"/\"web\" key), not a service "
+            "account key. Go to Google Cloud Console -> APIs & Services -> "
+            "Credentials -> Service Accounts -> your service account -> "
+            "Keys -> Add Key -> Create new key -> JSON, and paste that "
+            "file's contents instead."
+        )
+
+    if "client_email" not in info or "private_key" not in info:
+        raise RuntimeError(
+            "GOOGLE_SERVICE_ACCOUNT_JSON is missing client_email or "
+            "private_key -- paste the complete service-account key JSON "
+            "file downloaded from Google Cloud Console."
+        )
+
+    return (
+        service_account.Credentials
+        .from_service_account_info(
+            info,
+            scopes=SCOPES,
+        )
+    )
+
+
 def get_credentials():
     """
-    Get Google OAuth credentials.
+    Get Google credentials.
+
+    A service account (GOOGLE_SERVICE_ACCOUNT_JSON) is used when set --
+    required on a serverless host, since the OAuth flow below needs a
+    browser. Unset, behaviour is exactly as before:
 
     Reuses token.json if available.
     Refreshes expired credentials when possible.
     Opens browser authentication on first run.
     """
+
+    if GOOGLE_SERVICE_ACCOUNT_JSON:
+        return _load_service_account_credentials()
 
     credentials = None
 

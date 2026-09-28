@@ -25,10 +25,10 @@ IMPORTANT:
 import hashlib
 import os
 import re
-import tempfile
 
 import requests
 
+import os
 from pathlib import Path
 from typing import List, Any, Dict, Optional
 
@@ -41,6 +41,7 @@ from app.tile_visualization_pipeline import (
     generate_tile_visualization,
 )
 
+from app.output_paths import writable_output_root
 from app.scene_image_resolver import resolve_scene_image
 
 
@@ -55,31 +56,19 @@ PROJECT_ROOT = (
     .parent
 )
 
-def _default_output_root() -> Path:
-    """
-    Default root for generated/cached visualization files.
-
-    <catalog_processor>/output is correct for local and Docker runs and
-    stays the default there. On serverless hosts the deployment is
-    mounted read-only (Vercel serves it from /var/task), so writing that
-    directory fails with OSError [Errno 30]; fall back to the OS temp
-    directory, which is the only writable location there.
-
-    This runs at import time, so it only probes writability and never
-    creates anything -- the existing call sites still do their own
-    mkdir(parents=True, exist_ok=True) when they actually write.
-    """
-    packaged_root = PROJECT_ROOT / "output"
-
-    probe = packaged_root if packaged_root.exists() else PROJECT_ROOT
-
-    if os.access(probe, os.W_OK):
-        return packaged_root
-
-    return Path(tempfile.gettempdir()) / "casa-visualization-output"
-
-
-OUTPUT_ROOT = _default_output_root()
+# Two fixes, composed. CATALOG_OUTPUT_ROOT redirects the whole output
+# tree to a writable location; writable_output_root then falls back to
+# the OS temp directory when whatever path we landed on still is not
+# writable, which is what serverless hosts give us (Vercel mounts the
+# deployment read-only, so an in-bundle default failed with
+# "[Errno 30] Read-only file system"). With nothing set and a writable
+# checkout, the path is exactly as it always was.
+OUTPUT_ROOT = writable_output_root(
+    Path(
+        os.getenv("CATALOG_OUTPUT_ROOT")
+        or (PROJECT_ROOT / "output")
+    )
+)
 
 
 # ============================================================

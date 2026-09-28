@@ -1,10 +1,11 @@
 // Vercel serverless entry point for the Express backend.
-//
+
 // server.ts is the process entry point for Docker/PM2 (it opens a
 // listening HTTP socket). On Vercel there is no long-lived process --
 // each request invokes this function, so we reuse the same createApp()
 // wiring but hand the request/response straight to Express instead of
 // calling server.listen().
+
 import { register } from 'tsconfig-paths';
 import * as path from 'path';
 
@@ -33,8 +34,8 @@ register({
 });
 
 // When this function throws while loading its modules, Vercel replaces the
-// response with its own opaque page ("A server error has occurred" /
-// FUNCTION_INVOCATION_FAILED) and the real cause is only visible in the
+// response with its own opaque page ("A server error has occurred"
+// / FUNCTION_INVOCATION_FAILED) and the real cause is only visible in the
 // runtime logs. Two failures land there in practice: config/env.ts calls
 // process.exit(1) on a validation failure, and an unresolved import throws
 // before Express exists. So the app is loaded lazily inside the handler and
@@ -43,6 +44,7 @@ register({
 // config/env.ts requires these; everything else in its schema has a default
 // or is optional. They are checked here first because process.exit(1) cannot
 // be trapped by the try/catch below once that module loads.
+
 const REQUIRED_ENV = [
   'DATABASE_URL',
   'JWT_SECRET',
