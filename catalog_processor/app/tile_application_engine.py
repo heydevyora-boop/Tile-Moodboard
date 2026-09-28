@@ -34,6 +34,7 @@ from tenacity import (
     wait_exponential,
 )
 
+from app.devyora_system_prompt import DEVYORA_SYSTEM_PROMPT
 from app.scene_image_resolver import resolve_scene_image
 
 
@@ -518,8 +519,18 @@ exactly the same as it would for any other angle of this same room.
 
         material_block = "\n".join(lines)
 
-        return f"""
-You are a professional architectural visualization engine.
+        return f"""{DEVYORA_SYSTEM_PROMPT}
+
+═══════════════════════════════════════
+THIS REQUEST
+═══════════════════════════════════════
+Everything above governs this generation. Read and apply all thirteen
+sections in full BEFORE producing the image -- including the Section 12
+final check -- and treat the request below as the user-selected
+requirements those sections refer to: which product(s) are being
+visualized, the role each one plays, the surface each one is assigned
+to, and the camera. A requirement stated below is authoritative and may
+not be substituted, widened to another surface, or dropped.
 
 TASK:
 {len(materials) + 1} images are supplied, in this order:
@@ -597,8 +608,18 @@ built room — not an illustration, rendering, drawing, diagram,
 or CGI-looking image.
 """
 
-    return f"""
-You are a professional architectural visualization engine.
+    return f"""{DEVYORA_SYSTEM_PROMPT}
+
+═══════════════════════════════════════
+THIS REQUEST
+═══════════════════════════════════════
+Everything above governs this generation. Read and apply all thirteen
+sections in full BEFORE producing the image -- including the Section 12
+final check -- and treat the request below as the user-selected
+requirements those sections refer to: which product(s) are being
+visualized, the role each one plays, the surface each one is assigned
+to, and the camera. A requirement stated below is authoritative and may
+not be substituted, widened to another surface, or dropped.
 
 TASK:
 Two images are supplied, in this order:

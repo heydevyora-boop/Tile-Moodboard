@@ -2,6 +2,7 @@ import os
 import json
 import mimetypes
 from pathlib import Path
+from app.devyora_system_prompt import DEVYORA_SYSTEM_PROMPT
 from app.output_paths import writable_output_root
 from typing import Any, Dict, Optional
 
@@ -601,7 +602,18 @@ def build_locked_scene_prompt(
         ""
     )
 
-    return f"""
+    return f"""{DEVYORA_SYSTEM_PROMPT}
+
+═══════════════════════════════════════
+THIS REQUEST
+═══════════════════════════════════════
+Everything above governs this generation. Read and apply all thirteen
+sections in full BEFORE producing the image. This request is a
+REGENERATION of an already-approved scene under Section 10: the
+correction targets COMPOSITION only. Change the camera, and nothing
+else -- every other approved parameter, including the products, their
+surface allocation and their roles, stays exactly as it already is.
+
 Generate a new camera view of the EXISTING LOCKED
 bathroom scene.
 
