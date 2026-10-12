@@ -567,6 +567,14 @@ multi-panel image combining several separate photos into one. A
 composite is still a COLLAGE even when every individual panel, viewed
 alone, would have been approved -- reject the whole image.
 
+A catalog PAGE laid out as a grid of several tile swatches -- each one
+captioned underneath with its own product name, code, or size, and
+often with a page number or footer strip along the bottom -- is this
+same case: it is a page of multiple products, not a photograph of one.
+Per-swatch captions and a page footer are strong evidence that what is
+being looked at is a prepared page layout rather than a single product
+photo, even when the swatches themselves are genuine tiles.
+
 ============================================================
 IMAGE TYPE
 ============================================================
@@ -1815,7 +1823,10 @@ Report:
   format side by side is 2, and so on. A catalog sheet showing six
   samples is 6. This must be 1 for the frame to be a swatch of one
   product -- several designs in one picture is a layout of products,
-  not a product.
+  not a product. A caption or product name/code printed under each
+  swatch, or a page number/footer strip along the bottom of the frame,
+  is further evidence that this is a page layout: count every swatch it
+  labels.
   Count PRODUCTS, not motifs. One manufactured piece whose own design
   includes a frame, a surround, a border, an inset medallion or a
   patterned band is still ONE product: the ornament is printed or

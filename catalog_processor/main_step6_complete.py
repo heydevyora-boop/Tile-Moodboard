@@ -1364,6 +1364,40 @@ def classify_hard_reject(image_bytes):
     return is_mostly_text_image(image_bytes)
 
 
+# A real catalog sells elongated products at their true shape -- a strip,
+# listello or border tile, or a wood-look plank, can legitimately be a
+# narrow rectangle (app/image_validator.py's DECORATIVE_PRODUCT_MATERIALS
+# names STRIP/STRIP_TILE and LISTELLO/LISTELLO_TILE as real products, and
+# even a 1200x200mm plank photographed at its own proportions is 6:1).
+# This threshold sits well above that: it only catches the kind of
+# fragment the reported failure actually described -- a sliver of
+# furniture leg, a decorative page rule, or a mis-clipped edge of a larger
+# graphic -- which run far thinner than any genuine catalog product shot.
+# MIN_IMAGE_WIDTH/MIN_IMAGE_HEIGHT above already floor each side on its
+# own, but neither one looks at the other, so a 200x2000px sliver passes
+# both floors individually while still being nothing a camera was ever
+# pointed at a product to produce.
+THIN_STRIP_MAX_ASPECT_RATIO = 8.0
+
+
+def is_thin_strip_image(width, height):
+    """True when the raw pixel dimensions are an extreme sliver -- a
+    furniture leg, a decorative rule, or a clipping fragment -- rather
+    than a photographed product. Dimension-only, so it is cheap enough
+    to run before any pixel decode. Returns (reject, reason).
+    """
+    if width <= 0 or height <= 0:
+        return False, ""
+
+    ratio = max(width, height) / min(width, height)
+    if ratio > THIN_STRIP_MAX_ASPECT_RATIO:
+        return True, (
+            f"{width}x{height}px is an extreme {ratio:.1f}:1 sliver, not "
+            f"a photographed product"
+        )
+    return False, ""
+
+
 # ---------------------------------------------------------------------------
 # Tile-only semantic validation + product aspect-ratio correction
 #
@@ -1656,6 +1690,26 @@ LEGACY_REGION_MINEABLE_CATEGORIES = frozenset({
     "bathroom/room/lifestyle image",
     "multiple products in one image",
     "not a standalone tile",
+})
+
+# Categories that must never be rescued by the "keep it whole" fallback
+# below, even when region-mining finds nothing to cut out of them.
+#
+# That fallback exists for a genuine blind spot: an embedded image the
+# whole-image classifier rejected for a reason that does not mean "no
+# product here" (OTHER, unclassifiable, a dim or odd-angle shot), where a
+# region search finding nothing just confirms the frame IS the product.
+#
+# These two categories are not that case -- they are a confident,
+# specific verdict that the whole frame is NOT one tile product, and a
+# region search finding nothing recoverable inside a logo or a multi-tile
+# layout page does not mean "so the logo itself is the product"; it means
+# there was no tile-shaped surface in it to find. Rescuing it anyway is
+# exactly how a brand logo and a captioned multi-product grid reached
+# Drive/MASTER as if each were a single standalone tile.
+KEEP_WHOLE_BLOCKED_CATEGORIES = frozenset({
+    "logo/text/marketing graphic",
+    "multiple products in one image",
 })
 
 
@@ -2250,16 +2304,35 @@ def mine_tile_regions(
         # technical facts, not opinions about the subject.
         # ------------------------------------------------------
         if TILE_ONLY_CATALOG and status != VALIDATION_APPROVED:
+            observed_purity = metadata.get('purity') or {}
             try:
                 reported_designs = int(
-                    (metadata.get('purity') or {}).get(
-                        'distinct_tile_designs', 1
-                    )
+                    observed_purity.get('distinct_tile_designs', 1)
                 )
             except (TypeError, ValueError):
                 reported_designs = 1
 
-            if not (status == VALIDATION_IMPURE and reported_designs > 1):
+            # A verdict of "this is a printed/drawn graphic, not a
+            # photograph of a physical surface" (RULE 0 of
+            # assess_tile_purity) is not a disputable material label --
+            # it is the purity verifier's answer to "is there a physical
+            # product in front of the camera at all", and a logo, banner
+            # or text graphic is exactly the case it exists to catch.
+            # The contract below exists to stop an unreliable MATERIAL
+            # NAME (ARCHITECTURE, WOOD, OTHER, ...) from deleting a real,
+            # photographed tile it merely misnamed -- it was never meant
+            # to rescue something that was never a physical surface in
+            # the first place. `not observed_purity` (purity unavailable)
+            # deliberately keeps the old behaviour: with no observation
+            # to read, there is nothing to gate on.
+            is_printed_graphic = (
+                bool(observed_purity)
+                and not observed_purity.get('physical_surface', True)
+            )
+
+            if not is_printed_graphic and not (
+                status == VALIDATION_IMPURE and reported_designs > 1
+            ):
                 print(f"      tile-only contract : source is a tile-only "
                       f"catalog -- accepting despite '{status}: {reason}'")
                 reason = (
@@ -2357,10 +2430,24 @@ def mine_tile_regions(
                           f"material={piece_purity.get('material', '?')}  "
                           f"tile={piece_purity.get('tile_fraction', 0.0):.0%}")
 
-                    if TILE_ONLY_CATALOG and piece_status != VALIDATION_APPROVED:
+                    piece_is_printed_graphic = (
+                        bool(piece_purity)
+                        and not piece_purity.get('physical_surface', True)
+                    )
+
+                    if (
+                        TILE_ONLY_CATALOG
+                        and piece_status != VALIDATION_APPROVED
+                        and not piece_is_printed_graphic
+                    ):
                         # Already cut apart, so the one verdict worth
                         # acting on no longer applies -- see the
-                        # tile-only contract above.
+                        # tile-only contract above. A piece the purity
+                        # verifier says is not a photographed physical
+                        # surface at all (a caption, a footer strip, a
+                        # logo corner caught inside the split) is not
+                        # rescued by that contract either, for the same
+                        # reason the whole-candidate version above is not.
                         piece_reason = (
                             f"accepted on the tile-only catalog contract "
                             f"(classifier said: {piece_reason})"
@@ -3072,6 +3159,19 @@ def extract_images_from_pdf(
 
                     candidates_examined += 1
 
+                    # Thin-strip filter -- pure arithmetic on the
+                    # dimensions already in hand, so it runs before even
+                    # a pixel decode. See is_thin_strip_image's own
+                    # docstring for why the threshold is safe.
+                    strip_reject, strip_reason = is_thin_strip_image(width, height)
+                    if strip_reject:
+                        hard_filtered_count += 1
+                        print(
+                            f"  HARD FILTER -- page {page_number}, "
+                            f"candidate #{candidates_examined}: {strip_reason}"
+                        )
+                        continue
+
                     # Early hard filters -- conservative, pre-Gemini reject.
                     # Unlike the room/lifestyle check below, a pure solid
                     # colour bar or a block of printed text has no tile
@@ -3334,7 +3434,20 @@ def extract_images_from_pdf(
                         # it has found that it is ONE tile, not that it is
                         # no tile. So it is kept whole, and falls through
                         # to the normal accept path below.
-                        keep_whole = TILE_ONLY_CATALOG and not recovered
+                        #
+                        # UNLESS the source's own classification already
+                        # named it as something that cannot be rescued
+                        # this way -- see KEEP_WHOLE_BLOCKED_CATEGORIES.
+                        # A logo and a captioned multi-tile layout page
+                        # are exactly the inputs this guard exists for:
+                        # both confidently are NOT one tile product, so a
+                        # region search finding nothing inside them is not
+                        # evidence that the whole frame is the product.
+                        keep_whole = (
+                            TILE_ONLY_CATALOG
+                            and not recovered
+                            and category not in KEEP_WHOLE_BLOCKED_CATEGORIES
+                        )
 
                         if not keep_whole:
                             for deferred_path, deferred_reason, deferred_meta in region_deferred:
