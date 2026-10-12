@@ -1533,11 +1533,43 @@ def signature_already_seen(seen_signatures, signature, source_key=None,
     the fallback for a caller that cannot supply placement. Entries
     stored as a bare signature, or as a (source, signature) pair, are
     still honoured.
+
+    One pairing does NOT get that appearance fallback: two different
+    EMBEDDED images on the same page, neither with a usable placement
+    rect. A base tile and its highlighter are routinely embedded as two
+    separate PDF image resources -- not two regions of one image, which
+    source_key already protects above -- and PyMuPDF does not always
+    expose a placement rect for an embedded image (inline images,
+    certain content-stream constructs). When that happens for either
+    side, there is no page geometry to confirm OR rule out a match, and
+    the docstring's own measurements say appearance cannot be trusted
+    here: same-range siblings measured closer together (0.0108) than
+    the same tile re-rasterized by the two routes (0.0021-0.0297). So
+    without geometry this pairing is left undecided rather than settled
+    by a signal already shown to be unsafe for it, and the candidate is
+    kept. The one thing this gives up -- a tile embedded twice on one
+    page as two separate resources, with neither exposing a placement
+    rect -- is a narrow, cosmetic case (an extra listing, not a lost
+    one), and is still caught whenever either copy's rect IS available,
+    by the exact-byte hash upstream, or by its own true repeat elsewhere
+    on a route that does carry geometry.
+
+    This does not apply to an embedded image compared against a page
+    RENDER: the render is always keyed with the page's own full-page
+    rect (see the page-render call site), so that side of a true
+    cross-route repeat normally has page geometry even when the
+    embedded side does not, and still resolves either through that
+    geometry or, failing that, through the appearance fallback the
+    cross-route case was built for.
     """
     from app.tile_region_extractor import (
         PAGE_BOX_OVERLAP_LIMIT,
         box_iou,
         signatures_match,
+    )
+
+    candidate_source_type = (
+        source_key.split(":", 1)[0] if source_key else None
     )
 
     for entry in seen_signatures:
@@ -1559,6 +1591,18 @@ def signature_already_seen(seen_signatures, signature, source_key=None,
             # get a vote -- in either direction.
             if box_iou(page_box, entry_box) >= PAGE_BOX_OVERLAP_LIMIT:
                 return True
+            continue
+
+        # Two separate embedded-image sources, neither with a placement
+        # rect to settle it: do not let appearance call this a
+        # duplicate. See the docstring above.
+        entry_source_type = (
+            entry_source.split(":", 1)[0] if entry_source else None
+        )
+        if (
+            candidate_source_type == "embedded-image"
+            and entry_source_type == "embedded-image"
+        ):
             continue
 
         if signatures_match(signature, existing):
