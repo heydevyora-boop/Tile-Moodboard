@@ -91,10 +91,21 @@ def check(label, ok, detail=""):
     return (label, bool(ok), detail)
 
 
+def tile_patch(width, height, colours, cell=28):
+    """A checkerboard tile face with grout, like a real sheet."""
+    light, dark = colours
+    yy, xx = np.mgrid[0:height, 0:width]
+    checker = ((xx // cell) + (yy // cell)) % 2 == 0
+    canvas = np.where(checker[..., None], light, dark).astype(np.uint8)
+    canvas[(xx % cell < 4) | (yy % cell < 4)] = (118, 110, 98)
+    return canvas
+
+
 def observation(material="TILE", **overrides):
     base = {
         "material": material, "physical_surface": True, "tile_fraction": 0.97,
         "distinct_tile_designs": 1, "is_scene": False, "contains_person": False,
+        "complete_rectangle": True,
         "contains_text": False, "contains_logo": False, "contains_furniture": False,
         "contains_fixture": False, "contains_object": False, "reason": "test",
     }
@@ -177,6 +188,36 @@ def moulded_profile_checks():
             f"{obj} is still a hard non-tile REJECT",
             final == "REJECT" and purity["state"] == PURITY_NOT_TILE,
         ))
+
+    # A TILE IS A RECTANGLE -- arches and part-shapes are refused.
+    for label in ("an arched niche", "a domed/curved top",
+                  "a semicircular fragment", "a part-shape with no edges"):
+        final, purity = verdict_for(observation("TILE", complete_rectangle=False))
+        results.append(check(
+            f"{label} is REJECTED even though its surface is real tile",
+            final == "REJECT" and purity["state"] == PURITY_NOT_TILE,
+            f"{final} / {purity['state']}",
+        ))
+    # ...including when the material name is a moulded profile.
+    final, _ = verdict_for(observation("FRAME", complete_rectangle=False))
+    results.append(check(
+        "an arch described as a FRAME is still REJECTED",
+        final == "REJECT",
+    ))
+    # A tile whose ARTWORK is curved is still a rectangle.
+    final, _ = verdict_for(observation("DECOR_PANEL", complete_rectangle=True))
+    results.append(check(
+        "a decorative tile with curved artwork is still ACCEPTED",
+        final == "ACCEPT",
+    ))
+    # An older verifier that never answers the question must not reject.
+    legacy = observation("TILE")
+    legacy.pop("complete_rectangle", None)
+    final, _ = verdict_for(legacy)
+    results.append(check(
+        "a verifier that does not report the shape does not reject",
+        final == "ACCEPT",
+    ))
 
     # A caption/text band and a multi-product region.
     final, _ = verdict_for(observation("TILE", contains_text=True, tile_fraction=0.4))
@@ -446,6 +487,53 @@ def geometry_and_upload_checks():
     return results
 
 
+def catalog_duplicate_checks():
+    """The same product found again on a LATER page must not be saved
+    twice, while two different products never merge."""
+    from app.tile_region_extractor import content_signature, signatures_match
+
+    results = []
+    # Absent before the dedup fix; read defensively so this file runs
+    # against the unfixed baseline to demonstrate the failure.
+    threshold = getattr(pipeline, 'CATALOG_DUPLICATE_MAX_DIFFERENCE', 0.03)
+
+    base = tile_patch(300, 600, ((201, 190, 173), (183, 173, 157)))
+    # The SAME tile re-rasterized the way the two routes do it.
+    ok, buf = cv2.imencode(".webp", base, [int(cv2.IMWRITE_WEBP_QUALITY), 85])
+    requantized = cv2.imdecode(buf, cv2.IMREAD_COLOR)
+    # A SIBLING of the same range: same pattern, slightly different tone.
+    sibling = tile_patch(300, 600, ((205, 193, 170), (186, 175, 154)))
+    # A different product entirely.
+    other = tile_patch(300, 600, ((120, 140, 190), (90, 110, 160)))
+
+    sig_base = content_signature(base)
+    pairs = [
+        ("the same tile seen again later IS a duplicate",
+         content_signature(requantized), True),
+        ("a sibling of the same range is NOT a duplicate",
+         content_signature(sibling), False),
+        ("a different product is NOT a duplicate",
+         content_signature(other), False),
+    ]
+    for label, sig, expected in pairs:
+        got = signatures_match(sig_base, sig, max_difference_fraction=threshold)
+        diff = sum(abs(a - b) for a, b in zip(sig_base, sig)) / len(sig_base) / 255.0
+        results.append(check(f"{label} (measured {diff:.4f}, "
+                             f"threshold {threshold})", got == expected,
+                             f"got match={got}"))
+
+    results.append(check(
+        "the catalog-duplicate threshold is tighter than the within-page one",
+        threshold < 0.03,
+    ))
+    results.append(check(
+        "mine_tile_regions accepts a catalog_signatures list",
+        "catalog_signatures" in
+        pipeline.mine_tile_regions.__code__.co_varnames,
+    ))
+    return results
+
+
 def main():
     shutil.rmtree(OUT, ignore_errors=True)
     OUT.mkdir(parents=True, exist_ok=True)
@@ -458,6 +546,8 @@ def main():
          canvas_checks()),
         ("real catalog pixels, end to end", real_catalog_checks()),
         ("invalid geometry and upload gating", geometry_and_upload_checks()),
+        ("the same product is not extracted twice in one catalog",
+         catalog_duplicate_checks()),
     ]
 
     total = passed = 0

@@ -1404,6 +1404,19 @@ def is_mostly_text_image(image_bytes):
     )
 
 
+# The same product, found again on a LATER page.
+#
+# Tighter than the within-page CONTENT_SIGNATURE_MAX_DIFFERENCE (0.03) on
+# purpose. Measured in app/tile_region_extractor.py: one tile pushed
+# through both rasterization paths differs by 0.001-0.002, while two
+# siblings of a single range (a base tile and its highlighter, the pair a
+# catalog prints side by side) measure about 0.011 apart. 0.005 sits
+# between the two, so a genuine repeat merges and two real products never
+# do -- a false merge here deletes a product from the catalog, which is
+# the worse error of the two.
+CATALOG_DUPLICATE_MAX_DIFFERENCE = 0.005
+
+
 def classify_hard_reject(image_bytes):
     """Either early filter firing. Returns (reject, reason)."""
     reject, reason = is_flat_graphic_image(image_bytes)
@@ -1982,6 +1995,7 @@ def mine_tile_regions(
     source_type="embedded-image",
     trace=None,
     seen_signatures=None,
+    catalog_signatures=None,
 ):
     """Recovers tile-only swatches from an image rejected as a whole.
 
@@ -2010,6 +2024,7 @@ def mine_tile_regions(
         MIN_OUTPUT_SIDE_PX,
         deduplicate_regions,
         quad_bounds,
+        signatures_match,
         split_tile_designs,
     )
 
@@ -2620,6 +2635,39 @@ def mine_tile_regions(
             continue
 
         print(f"      region validation  : PASS -- {reason}")
+        # THE SAME PRODUCT, ONE PAGE LATER.
+        #
+        # seen_signatures is rebuilt per PAGE, so it cannot see a product
+        # already extracted from an earlier one, and a range photographed
+        # on two pages reached Drive twice. Geometry cannot help across
+        # pages -- catalogs lay products out on a fixed grid, so the same
+        # box on page 7 and page 8 is two DIFFERENT products -- so this
+        # compares appearance only, and at a much tighter tolerance than
+        # the within-page test: the same tile re-rasterized measures
+        # 0.001-0.002 apart, while two siblings of one range measure
+        # ~0.011, so CATALOG_DUPLICATE_MAX_DIFFERENCE sits between them
+        # and merges only a near-identical repeat.
+        if catalog_signatures is not None and signature is not None:
+            twin = next(
+                (name for name, other in catalog_signatures
+                 if signatures_match(
+                     signature, other,
+                     max_difference_fraction=CATALOG_DUPLICATE_MAX_DIFFERENCE,
+                 )),
+                None,
+            )
+            if twin is not None:
+                print(f"      duplicate          : already extracted earlier "
+                      f"in this catalog as {twin}")
+                print(f"      FINAL              : DUPLICATE")
+                region_path.unlink(missing_ok=True)
+                note("DUPLICATE", geometry_stage="catalog-duplicate",
+                     geometry_reason=f"same product as {twin}")
+                record("DUPLICATE", f"candidate {index}",
+                       f"already extracted as {twin}")
+                continue
+            catalog_signatures.append((region_path.name, signature))
+
         print(f"      FINAL              : ACCEPTED -> {region_path.name}")
         print(f"      [tile-region] candidate {index} -> accepted")
 
@@ -3186,6 +3234,11 @@ def extract_images_from_pdf(
     extracted_images = []
     image_counter = 0
     seen_hashes = set()
+    # Appearance of every product accepted ANYWHERE in this catalog, so a
+    # range photographed again on a later page is recognised. seen_hashes
+    # above is exact-byte and catches only a literally identical source
+    # image; this is perceptual and survives re-rasterization.
+    catalog_signatures = []
     candidates_examined = 0
     duplicates_skipped = 0
     room_photos_skipped = 0
@@ -3241,7 +3294,11 @@ def extract_images_from_pdf(
         # tiles (if any) are not embedded rasters at all.
         accepted_before_page = len(extracted_images)
         # One set per PAGE, shared by every search of it, so a tile seen
-        # by two routes is kept once.
+        # by two routes is kept once. Deliberately per-page: it carries
+        # page geometry, which only means anything within one page --
+        # catalogs lay products on a fixed grid, so the same box on two
+        # pages is two different products. Cross-page repeats are caught
+        # by catalog_signatures instead, on appearance alone.
         page_signatures = []
 
         emit(f"   Page {page_number}")
@@ -3425,6 +3482,7 @@ def extract_images_from_pdf(
                                 output_directory,
                                 trace=region_trace,
                                 seen_signatures=page_signatures,
+                                catalog_signatures=catalog_signatures,
                             )
 
                         # Deferrals are preserved BEFORE the source is
@@ -3554,6 +3612,7 @@ def extract_images_from_pdf(
                                 output_directory,
                                 trace=region_trace,
                                 seen_signatures=page_signatures,
+                                catalog_signatures=catalog_signatures,
                             )
 
                         # Before the unlink, and before the early exit
@@ -3746,6 +3805,7 @@ def extract_images_from_pdf(
                     source_type="rendered-page",
                     trace=region_trace,
                     seen_signatures=page_signatures,
+                    catalog_signatures=catalog_signatures,
                 )
 
                 for deferred_path, deferred_reason, deferred_meta in region_deferred:
