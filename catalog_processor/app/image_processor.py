@@ -1,13 +1,66 @@
 from pathlib import Path
+import os
 
 import cv2
+import numpy as np
+
+
+# Standard presentation canvas for approved product crops.
+# The canvas is square; the tile itself keeps its native aspect ratio.
+OUTPUT_CANVAS_SIZE = int(os.getenv("TILE_OUTPUT_CANVAS_SIZE", "1024"))
+NEUTRAL_BACKGROUND_BGR = (245, 245, 245)
+
+
+def fit_to_output_canvas(
+    image_bgr,
+    canvas_size=OUTPUT_CANVAS_SIZE,
+    background_bgr=NEUTRAL_BACKGROUND_BGR,
+):
+    """Place a crop on a square neutral canvas without distorting it.
+
+    Preserves the complete tile and its original aspect ratio. Never
+    stretches or squashes. Never upscales past the source resolution
+    (avoids inventing detail from blurry/small sources). Downscales only
+    when the crop is larger than the canvas, then centers with padding.
+    """
+    if image_bgr is None or image_bgr.size == 0:
+        raise ValueError("Cannot fit an empty image onto the output canvas")
+
+    height, width = image_bgr.shape[:2]
+    if width < 1 or height < 1:
+        raise ValueError("Cannot fit a zero-sized image onto the output canvas")
+
+    canvas_size = max(1, int(canvas_size))
+    scale = min(canvas_size / width, canvas_size / height, 1.0)
+    new_width = max(1, int(round(width * scale)))
+    new_height = max(1, int(round(height * scale)))
+
+    if scale < 0.999:
+        resized = cv2.resize(
+            image_bgr,
+            (new_width, new_height),
+            interpolation=cv2.INTER_AREA,
+        )
+    else:
+        resized = image_bgr
+
+    canvas = np.full(
+        (canvas_size, canvas_size, 3),
+        background_bgr,
+        dtype=np.uint8,
+    )
+    x0 = (canvas_size - new_width) // 2
+    y0 = (canvas_size - new_height) // 2
+    canvas[y0:y0 + new_height, x0:x0 + new_width] = resized
+    return canvas
 
 
 def crop_from_bbox(
     image_path,
     bbox,
     output_path,
-    margin_ratio=0.05
+    margin_ratio=0.05,
+    canvas_size=OUTPUT_CANVAS_SIZE,
 ):
 
     image_path = Path(
@@ -80,40 +133,12 @@ def crop_from_bbox(
             "Crop produced an empty image"
         )
 
-    # --------------------------------------------------------
-    # Moderate HD processing
-    # --------------------------------------------------------
-
-    crop_height, crop_width = cropped.shape[:2]
-
-    minimum_dimension = min(
-        crop_width,
-        crop_height
+    # Standard square presentation canvas. Tile aspect ratio preserved;
+    # no upscale past source pixels (see fit_to_output_canvas).
+    cropped = fit_to_output_canvas(
+        cropped,
+        canvas_size=canvas_size,
     )
-
-    if minimum_dimension < 1200:
-
-        scale = (
-            1200 /
-            minimum_dimension
-        )
-
-        new_width = int(
-            crop_width * scale
-        )
-
-        new_height = int(
-            crop_height * scale
-        )
-
-        cropped = cv2.resize(
-            cropped,
-            (
-                new_width,
-                new_height
-            ),
-            interpolation=cv2.INTER_LANCZOS4
-        )
 
     output_path.parent.mkdir(
         parents=True,

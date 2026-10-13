@@ -23,6 +23,14 @@ ALLOWED_TILE_TYPES = {
     "MARBLE_TILE",
     "PORCELAIN_TILE",
     "CERAMIC_TILE",
+    # Genuine decorative / highlight tile samples (not printed artwork)
+    "HIGHLIGHTER",
+    "HIGHLIGHTER_TILE",
+    "DECOR_PANEL",
+    "DECORATIVE_TILE",
+    "BORDER_TILE",
+    "LISTELLO",
+    "ACCENT_TILE",
 }
 
 
@@ -261,11 +269,21 @@ MIN_TILE_FRACTION = 0.80
 # the log can say why a handsome marble surface was turned down.
 SLAB_MATERIALS = {"COUNTERTOP", "STONE_SLAB"}
 
-# A photograph of a BUILDING. Named separately for the same reason: a
-# landmark clad in tile draws a confident EXTERIOR detection and a high
-# detector score, and neither is evidence that the frame is a tile
-# sample. The Dubai Frame is the case this exists for.
-ARCHITECTURE_MATERIALS = {"ARCHITECTURE", "BUILDING", "FACADE"}
+# A photograph of a BUILDING or architectural/furniture installation.
+# Named separately for the same reason: a landmark clad in tile draws a
+# confident EXTERIOR detection and a high detector score, and neither is
+# evidence that the frame is a tile sample. The Dubai Frame is the case
+# this exists for. Ornamental openings, door/window frames, cornices and
+# cabinet faces fall here too -- rectangular + decorative texture is not
+# a tile sample.
+ARCHITECTURE_MATERIALS = {
+    "ARCHITECTURE", "BUILDING", "FACADE",
+    "FRAME", "ARCHITECTURAL_FRAME", "ORNAMENTAL_FRAME",
+    "DOOR", "DOOR_PANEL", "WINDOW", "WINDOW_FRAME",
+    "CORNICE", "MOULDING", "MOLDING", "WAINSCOT", "WAINSCOTING",
+    "CABINET", "CUPBOARD", "FURNITURE", "FURNITURE_PANEL",
+    "ROOM_PANEL", "INSTALLATION_PANEL",
+}
 
 # What each contamination flag is called in a log line.
 CONTAMINANT_LABELS = (
@@ -332,7 +350,10 @@ DECORATIVE_PRODUCT_MATERIALS = {
     "HIGHLIGHT", "HIGHLIGHTER", "HIGHLIGHTER_TILE", "HL",
     "BORDER", "BORDER_TILE", "LISTELLO", "LISTELLO_TILE",
     "ACCENT", "ACCENT_TILE", "INSERT", "INSERT_TILE", "MEDALLION",
-    "PANEL", "WALL_PANEL", "MOSAIC_PANEL", "MOSAIC_SHEET",
+    # Bare "PANEL" / "WALL_PANEL" are too broad (door and room
+    # installations use them) -- those belong in NON_TILE. Keep only
+    # decorative-product forms that name a tile/mosaic piece.
+    "MOSAIC_PANEL", "MOSAIC_SHEET",
     "RELIEF", "RELIEF_PANEL", "EMBOSSED", "EMBOSSED_PANEL",
     "3D_PANEL", "TEXTURED", "TEXTURED_PANEL", "PATTERNED",
     "STRIP", "STRIP_TILE", "SPECIAL_SHAPE",
@@ -350,6 +371,11 @@ DECORATIVE_PRODUCT_MATERIALS = {
 NON_TILE_MATERIALS = {
     "COUNTERTOP", "WORKTOP", "STONE_SLAB", "SLAB", "MARBLE_SLAB",
     "ARCHITECTURE", "BUILDING", "FACADE",
+    "FRAME", "ARCHITECTURAL_FRAME", "ORNAMENTAL_FRAME",
+    "DOOR", "DOOR_PANEL", "WINDOW", "WINDOW_FRAME",
+    "CORNICE", "MOULDING", "MOLDING", "WAINSCOT", "WAINSCOTING",
+    "CABINET", "CUPBOARD", "FURNITURE", "FURNITURE_PANEL",
+    "ROOM_PANEL", "INSTALLATION_PANEL", "WALL_PANEL",
     "WOOD", "WOODEN", "TIMBER", "LAMINATE",
     "PAINTED_WALL", "PAINT", "PLASTER", "WALLPAPER",
     "CONCRETE", "SCREED",
@@ -558,6 +584,106 @@ def assess_tile_purity(observation):
         ),
         "contaminants": [],
     }
+
+
+# Contaminants that mean the crop is a room/furniture fragment, not a
+# recoverable tile swatch. Used by the tile-only contract so lifestyle
+# evidence cannot be force-approved after isolation has already run.
+LIFESTYLE_CONTAMINANT_KEYS = (
+    "contains_person",
+    "contains_furniture",
+    "contains_fixture",
+    "contains_object",
+)
+
+
+def tile_only_may_force_accept(status, metadata, impure_status="GEMINI_IMPURE"):
+    """Whether tile-only mode may override a non-approval into an accept.
+
+    Soft mislabels on an otherwise clean swatch may still be overridden
+    (the original reason tile-only mode exists). Hard evidence that the
+    crop is architecture, a room scene, furniture/hardware, a window, or
+    another non-tile material must still reject -- otherwise catalogs of
+    frames and interiors (e.g. mozart_frame_collection) upload junk.
+    """
+    metadata = metadata or {}
+    observation = metadata.get("purity") or {}
+    purity_state = str(metadata.get("purity_state") or "").upper()
+
+    # Nothing inspected this frame (quota, rate limit, API error, verifier
+    # unavailable). The override corrects a verifier that LOOKED and
+    # misnamed a clean swatch; with no observation every check below would
+    # pass on its defaults alone, turning an unjudged room-scene crop into
+    # an approved tile and bypassing the caller's DEFERRED handling.
+    if not observation:
+        return False
+
+    if purity_state == PURITY_NOT_TILE:
+        return False
+
+    if observation.get("is_scene"):
+        return False
+
+    if any(observation.get(key) for key in LIFESTYLE_CONTAMINANT_KEYS):
+        return False
+
+    try:
+        tile_fraction = float(observation.get("tile_fraction", 1.0))
+    except (TypeError, ValueError):
+        tile_fraction = 1.0
+
+    if tile_fraction < MIN_TILE_FRACTION:
+        return False
+
+    material = normalize_material(observation.get("material"))
+    if material in ARCHITECTURE_MATERIALS or material in NON_TILE_MATERIALS:
+        return False
+    if material in SLAB_MATERIALS:
+        return False
+
+    # Multi-product frames are handled by the splitter, never waved through.
+    try:
+        designs = int(observation.get("distinct_tile_designs", 1))
+    except (TypeError, ValueError):
+        designs = 1
+    if designs > 1:
+        return False
+
+    # Contaminated final crops (wrong framing with no clean isolation left)
+    # must not be force-accepted either.
+    if purity_state == PURITY_CONTAMINATED or status == impure_status:
+        return False
+
+    return True
+
+
+# Whole-image classifier types that are a failure to NAME the frame rather
+# than a positive identification of something other than a tile.
+SOFT_WHOLE_IMAGE_TYPES = {"", "?", "OTHER", "UNKNOWN", "TEXTURE"}
+
+
+def tile_only_may_keep_whole(status, metadata, impure_status):
+    """Whether tile-only mode may save a non-approved embedded image whole
+    after region mining recovered nothing from it.
+
+    That fallback exists for a frame the classifier merely failed to name.
+    It must not save a frame that was positively judged: contaminated
+    (`impure_status` -- a room scene, fixtures, several products, too much
+    background), NOT_TILE (architecture, door, window, painted wall), or
+    confidently typed as a scene, layout, logo/graphic or a non-tile
+    product such as sanitaryware. Saving those whole is exactly the output
+    the isolation step was asked to avoid.
+    """
+    metadata = metadata or {}
+
+    if status == impure_status:
+        return False
+
+    if metadata.get("purity"):
+        return tile_only_may_force_accept(status, metadata, impure_status)
+
+    image_type = str(metadata.get("image_type") or "").strip().upper()
+    return image_type in SOFT_WHOLE_IMAGE_TYPES or image_type in ALLOWED_TILE_TYPES
 
 
 # ============================================================

@@ -59,10 +59,12 @@ CATALOG_DEBUG = os.getenv("CATALOG_DEBUG", "").strip().lower() in (
 # anything -- the source has already answered the question the gate is
 # asking.
 #
-# So in this mode a detected distinct region IS a valid candidate. What
-# still rejects is what the contract does not cover: geometry that
-# yields no pixels, a crop below the size floor, a save that fails, and
-# a frame holding several products (which is split, not dropped).
+# Soft classifier mislabels on an otherwise clean swatch may be overridden
+# so a false "ARTWORK"/"OTHER" name does not delete a real tile. Hard
+# evidence still rejects: architecture/frames, room scenes, furniture,
+# hardware, windows, non-tile materials, low tile fraction, and multi-
+# product frames (which are split, not saved whole). Geometry/size/save
+# failures also still reject.
 #
 # Off by CATALOG_TILE_ONLY=0 for a mixed or unprepared catalog, which
 # restores every semantic gate exactly as it was.
@@ -1049,8 +1051,13 @@ def page_has_visual_content(page):
 # without re-measuring against real extracted images first.
 # ---------------------------------------------------------------------------
 
-BANNER_ASPECT_RATIO = 4.5
+BANNER_ASPECT_RATIO = 4.0
 PAGE_DOMINANT_FRACTION = 0.85
+# Match app.image_filter: reject width/height outside [0.25, 4.0].
+MAX_CANDIDATE_ASPECT_RATIO = 4.0
+MIN_CANDIDATE_ASPECT_RATIO = 0.25
+# Tiny fragment relative to the page (paired with other signals, not alone).
+MIN_PAGE_REGION_FRACTION = 0.008
 
 ROOM_COLOUR_VARIATION = 0.10
 ROOM_COLOUR_VARIATION_STRONG = 0.20
@@ -1145,6 +1152,47 @@ def classify_image_content(image_bytes, image_rect, page_rect):
 
     return False, measured
 
+
+def early_reject_candidate(width, height, image_bytes=None, image_rect=None,
+                           page_rect=None):
+    """Conservative pre-Gemini reject; delegates to app.image_filter."""
+    decoded = None
+    if image_bytes:
+        try:
+            import cv2
+            import numpy as _np
+
+            arr = _np.frombuffer(image_bytes, dtype=_np.uint8)
+            decoded = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+        except Exception:  # noqa: BLE001 -- filter is optional
+            decoded = None
+
+    region_area = None
+    page_area = None
+    if image_rect is not None and page_rect is not None:
+        ix0, iy0, ix1, iy1 = image_rect
+        region_area = max(0.0, (ix1 - ix0) * (iy1 - iy0))
+        page_area = float(page_rect.width * page_rect.height)
+
+    try:
+        from app.image_filter import early_reject_region
+    except Exception:  # noqa: BLE001
+        # Fallback: aspect only, matching MAX/MIN_CANDIDATE_ASPECT_RATIO.
+        if width <= 0 or height <= 0:
+            return True, "invalid dimensions"
+        aspect = width / float(height)
+        if aspect > MAX_CANDIDATE_ASPECT_RATIO:
+            return True, f"too_wide (aspect {aspect:.2f})"
+        if aspect < MIN_CANDIDATE_ASPECT_RATIO:
+            return True, f"too_tall (aspect {aspect:.2f})"
+        return False, ""
+
+    return early_reject_region(
+        width, height,
+        image_bgr=decoded,
+        region_area=region_area,
+        page_area=page_area,
+    )
 
 # ---------------------------------------------------------------------------
 # Early hard filters -- conservative, pre-Gemini rejection.
@@ -1567,11 +1615,11 @@ MIN_BBOX_FRACTION = 0.10
 def crop_image_to_validated_bbox(image, bbox):
     """Pure crop to a validate_bbox()-style pixel-space {x1,y1,x2,y2} dict.
 
-    Deliberately does NOT call app.image_processor.crop_from_bbox: that
-    helper upscales any crop whose short side is below 1200px
-    (cv2.resize), which synthesises pixels not present in the source --
-    exactly what this task must not do. This selects existing pixels only,
-    same posture as crop_image_to_aspect_ratio above.
+    Deliberately does NOT call app.image_processor.crop_from_bbox during
+    validation: that helper also letterboxes onto the output canvas, which
+    must happen AFTER purity judging (padding would lower tile_fraction).
+    This selects existing pixels only, same posture as
+    crop_image_to_aspect_ratio above.
     """
     width, height = image.size
     x1 = max(0, min(width, round(bbox['x1'])))
@@ -1586,6 +1634,38 @@ def crop_image_to_validated_bbox(image, bbox):
         return image  # already full-frame, nothing to trim
 
     return image.crop((x1, y1, x2, y2))
+
+
+def present_tile_on_canvas(image_path):
+    """Rewrite an approved tile onto the standard square output canvas.
+
+    Preserves aspect ratio; never upscales past source pixels. Applied
+    only after approval so purity/Gemini still judge the raw crop.
+    Returns True when the file was rewritten, False on skip/failure.
+    """
+    try:
+        import cv2
+        from app.image_processor import fit_to_output_canvas
+    except Exception:  # noqa: BLE001
+        return False
+
+    path = Path(image_path)
+    try:
+        with Image.open(path) as opened:
+            opened.load()
+            rgb = opened.convert("RGB")
+            bgr = cv2.cvtColor(
+                __import__("numpy").asarray(rgb),
+                cv2.COLOR_RGB2BGR,
+            )
+        presented = fit_to_output_canvas(bgr)
+        Image.fromarray(
+            cv2.cvtColor(presented, cv2.COLOR_BGR2RGB)
+        ).save(path, "WEBP", quality=IMAGE_QUALITY, method=6)
+        return True
+    except Exception as exc:  # noqa: BLE001 -- presentation must not kill accept
+        print(f"  [canvas] could not standardize {path.name}: {exc}")
+        return False
 
 
 # Buckets a validator rejection reason into one of the operator-facing
@@ -2289,19 +2369,12 @@ def mine_tile_regions(
         # ------------------------------------------------------
         # THE TILE-ONLY CONTRACT.
         #
-        # On a catalog prepared to contain nothing but products, a
-        # semantic verdict of "this is not a tile" is not information:
-        # the source has already answered that question, and the only
-        # thing the verdict can still do is delete a product. So it
-        # stops being a gate here and becomes a label -- kept in the
-        # metadata and the log, never allowed to discard a candidate.
-        #
-        # The ONE verdict still acted on is "several products in this
-        # frame", because that one is not about whether there is a tile;
-        # it is about how many, and the answer is to cut them apart
-        # below rather than to save a picture of three products as one.
-        # Geometry, size and save failures are untouched: they are
-        # technical facts, not opinions about the subject.
+        # Soft mislabels on a clean swatch may be overridden so a false
+        # material name does not delete a real tile. Hard evidence of
+        # architecture, rooms, furniture/hardware, windows, or other
+        # non-tile materials is still honored -- otherwise frame and
+        # interior catalogs upload junk as Tile rows.
+        # Multi-product frames are split below, never saved whole.
         # ------------------------------------------------------
         if TILE_ONLY_CATALOG and status != VALIDATION_APPROVED:
             observed_purity = metadata.get('purity') or {}
@@ -2322,24 +2395,33 @@ def mine_tile_regions(
             # NAME (ARCHITECTURE, WOOD, OTHER, ...) from deleting a real,
             # photographed tile it merely misnamed -- it was never meant
             # to rescue something that was never a physical surface in
-            # the first place. `not observed_purity` (purity unavailable)
-            # deliberately keeps the old behaviour: with no observation
-            # to read, there is nothing to gate on.
+            # the first place. Missing purity is not itself proof of a
+            # graphic; the shared helper separately requires an actual
+            # purity observation before overriding a rejection.
             is_printed_graphic = (
                 bool(observed_purity)
                 and not observed_purity.get('physical_surface', True)
             )
 
-            if not is_printed_graphic and not (
-                status == VALIDATION_IMPURE and reported_designs > 1
+            from app.image_validator import tile_only_may_force_accept
+
+            if (
+                not is_printed_graphic
+                and not (status == VALIDATION_IMPURE and reported_designs > 1)
+                and tile_only_may_force_accept(
+                    status, metadata, impure_status=VALIDATION_IMPURE
+                )
             ):
-                print(f"      tile-only contract : source is a tile-only "
-                      f"catalog -- accepting despite '{status}: {reason}'")
+                print(f"      tile-only contract : soft reject overridden "
+                      f"-- accepting despite '{status}: {reason}'")
                 reason = (
                     f"accepted on the tile-only catalog contract "
                     f"(classifier said: {reason})"
                 )
                 status = VALIDATION_APPROVED
+            else:
+                print(f"      tile-only contract : hard non-tile evidence "
+                      f"kept -- not overriding '{status}: {reason}'")
 
         if status == VALIDATION_DEFERRED:
             # Nothing classified this crop, so it is neither a tile nor
@@ -2440,6 +2522,8 @@ def mine_tile_regions(
                         and piece_status != VALIDATION_APPROVED
                         and not piece_is_printed_graphic
                     ):
+                        from app.image_validator import tile_only_may_force_accept
+
                         # Already cut apart, so the one verdict worth
                         # acting on no longer applies -- see the
                         # tile-only contract above. A piece the purity
@@ -2448,11 +2532,15 @@ def mine_tile_regions(
                         # logo corner caught inside the split) is not
                         # rescued by that contract either, for the same
                         # reason the whole-candidate version above is not.
-                        piece_reason = (
-                            f"accepted on the tile-only catalog contract "
-                            f"(classifier said: {piece_reason})"
-                        )
-                        piece_status = VALIDATION_APPROVED
+                        if tile_only_may_force_accept(
+                            piece_status, piece_metadata,
+                            impure_status=VALIDATION_IMPURE,
+                        ):
+                            piece_reason = (
+                                f"accepted on the tile-only catalog contract "
+                                f"(classifier said: {piece_reason})"
+                            )
+                            piece_status = VALIDATION_APPROVED
 
                     if piece_status == VALIDATION_DEFERRED:
                         print(f"        -> DEFERRED -- {piece_reason}")
@@ -2695,6 +2783,8 @@ def append_recovered_regions(
     """
     for region_path, _reason, region_metadata in recovered:
         image_counter += 1
+
+        present_tile_on_canvas(region_path)
 
         with Image.open(region_path) as region_image:
             region_width, region_height = region_image.size
@@ -3157,6 +3247,18 @@ def extract_images_from_pdf(
                     ):
                         continue
 
+                    # Conservative early reject: extreme aspect ratios,
+                    # obvious logo/text banners, tiny page fragments.
+                    # Does not call Gemini.
+                    early_reject, early_reason = early_reject_candidate(
+                        width, height, image_bytes=image_bytes,
+                        image_rect=image_rect, page_rect=page.rect,
+                    )
+                    if early_reject:
+                        print(f"  [early-filter] page {page_number}: "
+                              f"rejected ({early_reason})")
+                        continue
+
                     candidates_examined += 1
 
                     # Thin-strip filter -- pure arithmetic on the
@@ -3443,10 +3545,16 @@ def extract_images_from_pdf(
                         # both confidently are NOT one tile product, so a
                         # region search finding nothing inside them is not
                         # evidence that the whole frame is the product.
+                        from app.image_validator import tile_only_may_keep_whole
+
                         keep_whole = (
                             TILE_ONLY_CATALOG
                             and not recovered
                             and category not in KEEP_WHOLE_BLOCKED_CATEGORIES
+                            and tile_only_may_keep_whole(
+                                validation_status, tile_metadata,
+                                impure_status=VALIDATION_IMPURE,
+                            )
                         )
 
                         if not keep_whole:
@@ -3487,7 +3595,10 @@ def extract_images_from_pdf(
                     # validate_and_correct_tile_image may have cropped the
                     # saved file (bbox and/or aspect-ratio correction), so
                     # the recorded width/height must reflect the FINAL
-                    # saved pixels, not the pre-crop ones above.
+                    # saved pixels, not the pre-crop ones above. Canvas
+                    # presentation runs only after approval.
+                    present_tile_on_canvas(output_path)
+
                     with Image.open(output_path) as corrected:
                         width, height = corrected.size
 

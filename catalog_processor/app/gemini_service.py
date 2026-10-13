@@ -329,6 +329,15 @@ ALLOWED_PRODUCT_TYPES = {
     "PORCELAIN_TILE",
     "CERAMIC_TILE",
 
+    # Decorative / highlight tile products (same catalog family)
+    "HIGHLIGHTER",
+    "HIGHLIGHTER_TILE",
+    "DECOR_PANEL",
+    "DECORATIVE_TILE",
+    "BORDER_TILE",
+    "LISTELLO",
+    "ACCENT_TILE",
+
     # Mirrors
     "LED_MIRROR",
     "MIRROR",
@@ -468,49 +477,58 @@ STANDALONE PHYSICAL PRODUCT that should be stored in the product database.
 
 The IMAGE is the primary evidence. Page text is supporting evidence only.
 
+Be STRICT. When you cannot confidently identify one complete standalone
+product, REJECT. Do not guess.
+
 ============================================================
 APPROVE
 ============================================================
 
-Approve when the image clearly presents ONE physical catalog product,
-including examples such as:
-- one standalone tile or tile sample
-- one standalone LED mirror or mirror
-- one standalone basin / sanitaryware product
-- one standalone toilet / WC
-- one standalone faucet / tap / mixer
-- one standalone shower or bathroom fitting
-- one standalone physical product photographed separately
+Approve ONLY when the image clearly presents ONE physical catalog product
+and you can identify it confidently. Preferred approve cases for this
+catalog:
+- one clearly identifiable, sufficiently complete standalone tile
+- one genuine highlight / decorative / accent / border / listello /
+  mosaic-sheet tile sample whose SURFACE is the main subject
+- one standalone LED mirror, basin, sanitaryware, faucet, or fitting
+  photographed separately as a product (not as room furniture)
 
 The product may be:
-- on a plain background
-- on a dark or colored background
-- photographed at an angle
-- photographed with shadows
+- on a plain, dark, or colored background
+- photographed at an angle or with shadows
 - occupying only part of the image
 - tall, wide, square, rectangular, or irregular
+- plain, smooth, simple-colored, low-detail, OR complex relief / pattern
 
-IMAGE SIZE AND ASPECT RATIO ARE NEVER CLASSIFICATION RULES.
+Do NOT reject a genuine highlight tile because its pattern or relief is
+complex. Do NOT reject a plain, smooth, square, or rectangular tile merely
+because it has a simple color or low edge density.
+
+IMAGE SIZE AND ASPECT RATIO ARE NEVER CLASSIFICATION RULES by themselves.
+Still REJECT incomplete fragments and thin irrelevant strips (see REJECT).
 
 ============================================================
 REJECT
 ============================================================
 
-Reject when the image is primarily:
-- a room interior
-- a bathroom or kitchen scene
-- a lifestyle photograph
-- an architectural photograph
-- an installed product shown as part of a room
-- a product being used as furniture
-- a countertop, table, wall, floor, or other installation
-- multiple different physical products in one image
-- a collage of multiple product images
-- a color chart or palette
-- a logo, brand mark, banner, advertisement, or text graphic
-- a decorative object unrelated to the catalog product
-- a rendering where the physical standalone product is not clearly presented
-- an unrelated photograph
+Reject when the image is primarily ANY of:
+- a brand logo, company mark, watermark, or logo-only graphic
+- text-heavy graphics: product-name banners, slogans, headers, footers,
+  captions, price lists, or marketing copy as the main content
+- a catalog page or collage with multiple separate tile products saved
+  as one image (unless exactly one product is clearly isolated)
+- furniture, chair legs, room scenes, lifestyle objects, or unrelated
+  products that are not the catalog item itself
+- thin strips, partial graphics, incomplete tile crops, or irrelevant
+  image fragments where a genuine standalone tile cannot be identified
+- a room interior, bathroom/kitchen scene, lifestyle photograph, or
+  architectural photograph
+- an installed product shown as part of a room / wall / floor
+- a countertop, table, wall, floor, or other installation view
+- a color chart, palette, advertisement, or decorative object unrelated
+  to a sellable catalog product
+- a rendering where the physical standalone product is not clearly shown
+- any image where you cannot confidently identify ONE complete product
 
 IMPORTANT: A product appearing inside a bathroom or room does NOT become
 a standalone product merely because it is visually recognizable.
@@ -575,6 +593,10 @@ Per-swatch captions and a page footer are strong evidence that what is
 being looked at is a prepared page layout rather than a single product
 photo, even when the swatches themselves are genuine tiles.
 
+If a region contains multiple products and you cannot reliably isolate
+exactly one, REJECT the whole collage (product_count >= 2, decision
+REJECTED). Do not approve the collage as one product.
+
 ============================================================
 IMAGE TYPE
 ============================================================
@@ -593,6 +615,13 @@ STONE_TILE
 MARBLE_TILE
 PORCELAIN_TILE
 CERAMIC_TILE
+HIGHLIGHTER
+HIGHLIGHTER_TILE
+DECOR_PANEL
+DECORATIVE_TILE
+BORDER_TILE
+LISTELLO
+ACCENT_TILE
 LED_MIRROR
 MIRROR
 SANITARYWARE
@@ -704,6 +733,8 @@ CONFIDENCE
 below 0.50 = weak
 
 Confidence describes classification certainty, not image size.
+If confidence is below 0.75 that the frame is one complete standalone
+product, prefer REJECT over APPROVE.
 
 ============================================================
 FINAL RULE
@@ -717,6 +748,7 @@ Approve ONLY when:
 5. it is a genuine photograph of that physical product, not a logo,
    banner, cover/instruction page, color bar/annotation mark, or a
    lifestyle/collage scene
+6. the product surface is the main subject and sufficiently complete
 
 When uncertain between APPROVE and REJECT for any of the categories
 above, REJECT. A missed real product can be found again on review; a
@@ -1627,6 +1659,11 @@ A plain painted wall, bare concrete, a wooden floor, a carpet, a
 curtain, a fitted worktop and a single flat colour are not product
 surfaces.
 
+Architectural frames, ornamental openings, cornices, door panels,
+cabinet faces with handles/knobs, windows, window frames, and partial
+room/lifestyle crops are NOT tile product surfaces -- even when they
+carry decorative texture or a rectangular outline. Do not return them.
+
 A PRINTED OR DRAWN picture is not one either. Catalog pages are full of
 these: pattern illustrations, diagrams, icons, colour charts, background
 motifs, header bands, corner flourishes, rules and page decoration. They
@@ -1788,10 +1825,13 @@ Report:
                 decorative tile or panel is NOT artwork -- it is
                 DECOR_PANEL. Decide by whether a manufactured piece
                 exists, never by how decorative the design is.
-  ARCHITECTURE  a building, facade, monument, landmark or structure seen
-                as an object -- the Dubai Frame, a tower, an archway, a
-                window frame. Clad in tile or not, a photograph OF A
-                BUILDING is not a tile sample.
+  ARCHITECTURE  a building, facade, monument, landmark, ornamental
+                architectural frame/opening, cornice, door panel,
+                window, window frame, cabinet face, or room installation
+                seen as an object -- the Dubai Frame, a tower, an
+                archway, a moulded wall panel in situ. Clad in tile or
+                not, a photograph OF A STRUCTURE or furniture piece is
+                not a tile sample.
   OTHER         anything else
   A COUNTERTOP or STONE_SLAB is NOT a tile even when it is stone and
   even when it is beautiful. And a repeating pattern is NOT by itself
@@ -1800,22 +1840,26 @@ Report:
   Report TILE or DECOR_PANEL only when the frame is filled by the
   surface itself, close enough to read its pattern. If you are looking
   AT a structure rather than at its material, that is ARCHITECTURE.
+  A genuine decorative TILE sample with complex relief is still
+  DECOR_PANEL -- do not call it ARCHITECTURE merely for being ornate.
 
 - contains_person: a human, or any part of one -- face, hand, leg,
   hair, clothing.
 - contains_text: readable text, product names, sizes, SKU codes,
   headings, captions, marketing copy, watermarks.
 - contains_logo: a brand mark, emblem or logotype.
-- contains_furniture: sofa, table, chair, bed, cabinet, shelving.
+- contains_furniture: sofa, table, chair, bed, cabinet, shelving,
+  cupboard, drawer front, door leaf with handles.
 - contains_fixture: toilet, basin, bath, shower, tap, mirror, sink,
   radiator, door, window frame.
 - contains_object: plant, vase, bottle, lamp, appliance, equipment,
-  ornament or any other loose object.
+  ornament, knobs, handles, hardware, towels or any other loose object.
 
 - is_scene: true when this reads as a photograph OF A SPACE (a room, a
   kitchen, a bathroom, an elevation, an interior view) rather than a
   flat piece of surface. A whole wall or a whole floor photographed as
-  part of a room is a scene.
+  part of a room is a scene. A partial interior crop showing molding,
+  arches, windows or lifestyle props is also a scene.
 
 - distinct_tile_designs: how many DIFFERENT products are visible.
   One tile repeated across the whole frame is 1, however many individual
