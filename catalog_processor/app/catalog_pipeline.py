@@ -51,6 +51,10 @@ from app.image_processor import (
     crop_from_bbox
 )
 
+from app.image_filter import (
+    hard_filter
+)
+
 # Kept as a fallback for older projects. The new pipeline uploads
 # directly into the Python-controlled Brand/Catalog/status folders.
 try:
@@ -163,9 +167,10 @@ def _get_cached_sheets_service():
 # ============================================================
 
 # IMPORTANT:
-# There is NO image-size limit.
-# There is NO aspect-ratio limit.
-# OpenCV is INFORMATION ONLY and NEVER rejects an image.
+# OpenCV CV score remains informational and does not reject images.
+# Conservative early hard_filter (aspect / tiny fragment / obvious
+# logo-banner heuristics) may reject BEFORE Gemini to avoid paying for
+# non-products. Gemini remains authoritative for borderline tiles.
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -269,6 +274,15 @@ ALLOWED_TILE_TYPES = {
     "PORCELAIN_TILE",
     "CERAMIC_TILE",
     "SLAB",
+    "MOSAIC_TILE",
+    "TILE_SLAB",
+    "HIGHLIGHTER",
+    "HIGHLIGHTER_TILE",
+    "DECOR_PANEL",
+    "DECORATIVE_TILE",
+    "BORDER_TILE",
+    "LISTELLO",
+    "ACCENT_TILE",
 }
 
 
@@ -5449,6 +5463,62 @@ def process_catalog(
 
             # Do not add an unreadable source to the successful
             # source registry.
+            catalog_images.append({
+                **image_record,
+                "skip":
+                    True,
+                "source_hash":
+                    None,
+            })
+
+            continue
+
+        # ----------------------------------------------------
+        # Conservative early filter (before Gemini).
+        # Extreme aspect, tiny fragments, obvious logo banners.
+        # ----------------------------------------------------
+        early = hard_filter(image_path)
+        if not early.get("passed"):
+            early_reason = early.get("reason") or "failed early filter"
+            _print_candidate_status(
+                image_record,
+                "HARD REJECTED",
+                early_reason,
+                STATUS_HARD_REJECTED
+            )
+
+            result = {
+                **_build_result_base(
+                    image_record,
+                    hierarchy,
+                    directories,
+                    folder_ids
+                ),
+                "gemini_status":
+                    "NOT_RUN",
+                "status":
+                    STATUS_HARD_REJECTED,
+                "reason":
+                    f"Early filter: {early_reason}",
+                "width":
+                    early.get("width"),
+                "height":
+                    early.get("height"),
+                "aspect_ratio":
+                    early.get("aspect_ratio"),
+            }
+
+            try:
+                _append_sheet_record(
+                    result
+                )
+            except Exception:
+                pass
+
+            results.append(
+                result
+            )
+
             catalog_images.append({
                 **image_record,
                 "skip":
