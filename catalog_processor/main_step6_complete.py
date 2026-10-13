@@ -59,10 +59,12 @@ CATALOG_DEBUG = os.getenv("CATALOG_DEBUG", "").strip().lower() in (
 # anything -- the source has already answered the question the gate is
 # asking.
 #
-# So in this mode a detected distinct region IS a valid candidate. What
-# still rejects is what the contract does not cover: geometry that
-# yields no pixels, a crop below the size floor, a save that fails, and
-# a frame holding several products (which is split, not dropped).
+# Soft classifier mislabels on an otherwise clean swatch may be overridden
+# so a false "ARTWORK"/"OTHER" name does not delete a real tile. Hard
+# evidence still rejects: architecture/frames, room scenes, furniture,
+# hardware, windows, non-tile materials, low tile fraction, and multi-
+# product frames (which are split, not saved whole). Geometry/size/save
+# failures also still reject.
 #
 # Off by CATALOG_TILE_ONLY=0 for a mixed or unprepared catalog, which
 # restores every semantic gate exactly as it was.
@@ -2051,38 +2053,29 @@ def mine_tile_regions(
         # ------------------------------------------------------
         # THE TILE-ONLY CONTRACT.
         #
-        # On a catalog prepared to contain nothing but products, a
-        # semantic verdict of "this is not a tile" is not information:
-        # the source has already answered that question, and the only
-        # thing the verdict can still do is delete a product. So it
-        # stops being a gate here and becomes a label -- kept in the
-        # metadata and the log, never allowed to discard a candidate.
-        #
-        # The ONE verdict still acted on is "several products in this
-        # frame", because that one is not about whether there is a tile;
-        # it is about how many, and the answer is to cut them apart
-        # below rather than to save a picture of three products as one.
-        # Geometry, size and save failures are untouched: they are
-        # technical facts, not opinions about the subject.
+        # Soft mislabels on a clean swatch may be overridden so a false
+        # material name does not delete a real tile. Hard evidence of
+        # architecture, rooms, furniture/hardware, windows, or other
+        # non-tile materials is still honored -- otherwise frame and
+        # interior catalogs upload junk as Tile rows.
+        # Multi-product frames are split below, never saved whole.
         # ------------------------------------------------------
         if TILE_ONLY_CATALOG and status != VALIDATION_APPROVED:
-            try:
-                reported_designs = int(
-                    (metadata.get('purity') or {}).get(
-                        'distinct_tile_designs', 1
-                    )
-                )
-            except (TypeError, ValueError):
-                reported_designs = 1
+            from app.image_validator import tile_only_may_force_accept
 
-            if not (status == VALIDATION_IMPURE and reported_designs > 1):
-                print(f"      tile-only contract : source is a tile-only "
-                      f"catalog -- accepting despite '{status}: {reason}'")
+            if tile_only_may_force_accept(
+                status, metadata, impure_status=VALIDATION_IMPURE
+            ):
+                print(f"      tile-only contract : soft reject overridden "
+                      f"-- accepting despite '{status}: {reason}'")
                 reason = (
                     f"accepted on the tile-only catalog contract "
                     f"(classifier said: {reason})"
                 )
                 status = VALIDATION_APPROVED
+            else:
+                print(f"      tile-only contract : hard non-tile evidence "
+                      f"kept -- not overriding '{status}: {reason}'")
 
         if status == VALIDATION_DEFERRED:
             # Nothing classified this crop, so it is neither a tile nor
@@ -2174,14 +2167,17 @@ def mine_tile_regions(
                           f"tile={piece_purity.get('tile_fraction', 0.0):.0%}")
 
                     if TILE_ONLY_CATALOG and piece_status != VALIDATION_APPROVED:
-                        # Already cut apart, so the one verdict worth
-                        # acting on no longer applies -- see the
-                        # tile-only contract above.
-                        piece_reason = (
-                            f"accepted on the tile-only catalog contract "
-                            f"(classifier said: {piece_reason})"
-                        )
-                        piece_status = VALIDATION_APPROVED
+                        from app.image_validator import tile_only_may_force_accept
+
+                        if tile_only_may_force_accept(
+                            piece_status, piece_metadata,
+                            impure_status=VALIDATION_IMPURE,
+                        ):
+                            piece_reason = (
+                                f"accepted on the tile-only catalog contract "
+                                f"(classifier said: {piece_reason})"
+                            )
+                            piece_status = VALIDATION_APPROVED
 
                     if piece_status == VALIDATION_DEFERRED:
                         print(f"        -> DEFERRED -- {piece_reason}")

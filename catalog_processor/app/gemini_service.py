@@ -1592,6 +1592,11 @@ A plain painted wall, bare concrete, a wooden floor, a carpet, a
 curtain, a fitted worktop and a single flat colour are not product
 surfaces.
 
+Architectural frames, ornamental openings, cornices, door panels,
+cabinet faces with handles/knobs, windows, window frames, and partial
+room/lifestyle crops are NOT tile product surfaces -- even when they
+carry decorative texture or a rectangular outline. Do not return them.
+
 A PRINTED OR DRAWN picture is not one either. Catalog pages are full of
 these: pattern illustrations, diagrams, icons, colour charts, background
 motifs, header bands, corner flourishes, rules and page decoration. They
@@ -1753,10 +1758,13 @@ Report:
                 decorative tile or panel is NOT artwork -- it is
                 DECOR_PANEL. Decide by whether a manufactured piece
                 exists, never by how decorative the design is.
-  ARCHITECTURE  a building, facade, monument, landmark or structure seen
-                as an object -- the Dubai Frame, a tower, an archway, a
-                window frame. Clad in tile or not, a photograph OF A
-                BUILDING is not a tile sample.
+  ARCHITECTURE  a building, facade, monument, landmark, ornamental
+                architectural frame/opening, cornice, door panel,
+                window, window frame, cabinet face, or room installation
+                seen as an object -- the Dubai Frame, a tower, an
+                archway, a moulded wall panel in situ. Clad in tile or
+                not, a photograph OF A STRUCTURE or furniture piece is
+                not a tile sample.
   OTHER         anything else
   A COUNTERTOP or STONE_SLAB is NOT a tile even when it is stone and
   even when it is beautiful. And a repeating pattern is NOT by itself
@@ -1765,22 +1773,26 @@ Report:
   Report TILE or DECOR_PANEL only when the frame is filled by the
   surface itself, close enough to read its pattern. If you are looking
   AT a structure rather than at its material, that is ARCHITECTURE.
+  A genuine decorative TILE sample with complex relief is still
+  DECOR_PANEL -- do not call it ARCHITECTURE merely for being ornate.
 
 - contains_person: a human, or any part of one -- face, hand, leg,
   hair, clothing.
 - contains_text: readable text, product names, sizes, SKU codes,
   headings, captions, marketing copy, watermarks.
 - contains_logo: a brand mark, emblem or logotype.
-- contains_furniture: sofa, table, chair, bed, cabinet, shelving.
+- contains_furniture: sofa, table, chair, bed, cabinet, shelving,
+  cupboard, drawer front, door leaf with handles.
 - contains_fixture: toilet, basin, bath, shower, tap, mirror, sink,
   radiator, door, window frame.
 - contains_object: plant, vase, bottle, lamp, appliance, equipment,
-  ornament or any other loose object.
+  ornament, knobs, handles, hardware, towels or any other loose object.
 
 - is_scene: true when this reads as a photograph OF A SPACE (a room, a
   kitchen, a bathroom, an elevation, an interior view) rather than a
   flat piece of surface. A whole wall or a whole floor photographed as
-  part of a room is a scene.
+  part of a room is a scene. A partial interior crop showing molding,
+  arches, windows or lifestyle props is also a scene.
 
 - distinct_tile_designs: how many DIFFERENT products are visible.
   One tile repeated across the whole frame is 1, however many individual

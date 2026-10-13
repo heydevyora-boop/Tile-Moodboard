@@ -254,7 +254,7 @@ def check(label, ok, detail=""):
 
 
 def three_tiles_become_three():
-    """The reported page, rerun. A rejection must not cost the page."""
+    """A hard reject on one candidate must not cost its neighbours."""
     accounting, accepted, _log = run_page(tile_only=True, reject_first=True)
 
     route1 = accounting[0] if accounting else (0,) * 6
@@ -265,19 +265,24 @@ def three_tiles_become_three():
               f"{len(accounting)} accounting line(s)"),
         check(f"route 1 detects all three products ({route1[0]})",
               route1[0] == 3),
-        check(f"route 1 accepts all three ({route1[1]})", route1[1] == 3,
+        # ARCHITECTURE is hard non-tile evidence and is no longer force-
+        # accepted; the other two clean tiles must still survive.
+        check(f"route 1 keeps the two clean tiles ({route1[1]})",
+              route1[1] == 2,
               f"{route1[1]} accepted, {route1[2]} rejected, "
               f"{route1[3]} duplicate"),
+        check("the hard reject costs exactly one candidate",
+              route1[2] == 1, f"{route1[2]} rejected"),
         check("a classifier rejection no longer eats its neighbours",
               route1[3] == 0, f"{route1[3]} called duplicate"),
-        check(f"route 2 sees the same three tiles again as duplicates "
-              f"({route2[3]})", route2[3] == 3,
-              f"{route2[1]} accepted, {route2[3]} duplicate"),
-        check("route 2 adds nothing new", route2[1] == 0),
-        check(f"the page yields exactly three tiles ({len(accepted)})",
-              len(accepted) == 3),
-        check("all three output files exist and differ",
-              len({path.read_bytes() for path in accepted}) == 3),
+        check("route 2 adds nothing new",
+              route2[1] == 0 and route2[3] >= 2,
+              f"{route2[1]} accepted, {route2[2]} rejected, "
+              f"{route2[3]} duplicate"),
+        check(f"the page yields exactly two tiles ({len(accepted)})",
+              len(accepted) == 2),
+        check("the two output files exist and differ",
+              len({path.read_bytes() for path in accepted}) == 2),
     ]
 
 
@@ -302,22 +307,34 @@ def siblings_are_not_duplicates_of_each_other():
     ]
 
 
-def the_classifier_cannot_delete_a_product():
-    """Tile-only mode: every semantic verdict is advisory."""
-    verdicts = ["ARCHITECTURE", "ARTWORK", "COUNTERTOP", "WOOD", "OTHER"]
+def hard_non_tile_still_rejects_in_tile_only():
+    """Tile-only mode must not force-accept architecture/furniture junk."""
+    hard = ["ARCHITECTURE", "ARTWORK", "COUNTERTOP", "WOOD", "FRAME", "DOOR"]
     results = []
 
-    for verdict in verdicts:
+    for verdict in hard:
         accounting, accepted, _log = run_page(
             tile_only=True, reject_first=False, second_route=False,
             purity_for=lambda _path, v=verdict: purity(v),
         )
         route1 = accounting[0] if accounting else (0,) * 6
         results.append(check(
-            f"a verdict of {verdict} costs no products",
-            route1[1] == 3 and len(accepted) == 3,
+            f"a hard verdict of {verdict} rejects (not force-accepted)",
+            route1[2] == 3 and len(accepted) == 0,
             f"{route1[1]} accepted, {route1[2]} rejected",
         ))
+
+    # Soft/undecided material on an otherwise clean swatch may still pass.
+    accounting, accepted, _log = run_page(
+        tile_only=True, reject_first=False, second_route=False,
+        purity_for=lambda _path: purity("OTHER"),
+    )
+    route1 = accounting[0] if accounting else (0,) * 6
+    results.append(check(
+        "OTHER on a clean swatch still accepts",
+        route1[1] == 3 and len(accepted) == 3,
+        f"{route1[1]} accepted, {route1[2]} rejected",
+    ))
 
     return results
 
@@ -340,9 +357,19 @@ def a_multi_product_frame_is_still_split():
         "coordinate_space": "unit",
     }]
 
+    def purity_for_merged(path):
+        # Merged frame reports 2 designs; split pieces are judged as
+        # single-design swatches (otherwise every piece inherits the
+        # parent's count and is rejected forever).
+        stem = Path(path).stem
+        after = stem.split("region_")[-1] if "region_" in stem else ""
+        if after.count("_") >= 1:
+            return purity(designs=1)
+        return purity(designs=2)
+
     accounting, accepted, log = run_page(
         tile_only=True, reject_first=False, second_route=False,
-        purity_for=lambda _path: purity(designs=2),
+        purity_for=purity_for_merged,
         regions_override=merged,
     )
     route1 = accounting[0] if accounting else (0,) * 6
@@ -427,8 +454,8 @@ def main():
          three_tiles_become_three()),
         ("siblings in one range are not duplicates of each other",
          siblings_are_not_duplicates_of_each_other()),
-        ("in tile-only mode the classifier cannot delete a product",
-         the_classifier_cannot_delete_a_product()),
+        ("hard non-tile evidence still rejects in tile-only mode",
+         hard_non_tile_still_rejects_in_tile_only()),
         ("a multi-product frame is still split",
          a_multi_product_frame_is_still_split()),
         ("a true cross-route repeat is still one tile",
