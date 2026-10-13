@@ -552,6 +552,28 @@ def assess_tile_purity(observation):
             "contaminants": contaminants,
         }
 
+    # RULE 1b -- A TILE IS A RECTANGLE.
+    #
+    # Arched niches, domed tops, semicircles and part-shapes cut out of a
+    # lifestyle photo reached Drive as products: the surface inside them
+    # really is tile, so every other rule here passed them. What they are
+    # not is a PIECE -- there is no four-sided product in the frame, and
+    # nothing downstream can make one, so this rejects rather than
+    # routing to isolation.
+    #
+    # Absent (an older verifier, a response missing the field) means "not
+    # asked", which must not reject: the key defaults to True so the
+    # previous behaviour stands wherever the answer is unavailable.
+    if not observation.get("complete_rectangle", True):
+        return {
+            "state": PURITY_NOT_TILE,
+            "reason": (
+                "this is not a whole four-sided piece -- an arch, a "
+                "curve or a part-shape, not a tile"
+            ),
+            "contaminants": contaminants,
+        }
+
     # RULE 2 -- a photograph of a space is never a swatch, however much
     # tile it contains. This is the "complete room / complete wall /
     # complete floor" case: the tile is real, so it routes to isolation.
@@ -650,6 +672,12 @@ def tile_only_may_force_accept(status, metadata, impure_status="GEMINI_IMPURE"):
         return False
 
     if observation.get("is_scene"):
+        return False
+
+    # Not a four-sided piece at all -- see RULE 1b. The tile-only
+    # contract exists to overrule a questionable material NAME, never to
+    # turn an arch or a part-shape into a product.
+    if not observation.get("complete_rectangle", True):
         return False
 
     if any(observation.get(key) for key in LIFESTYLE_CONTAMINANT_KEYS):

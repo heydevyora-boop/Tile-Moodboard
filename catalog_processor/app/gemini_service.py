@@ -1861,6 +1861,22 @@ Report:
   part of a room is a scene. A partial interior crop showing molding,
   arches, windows or lifestyle props is also a scene.
 
+- complete_rectangle: true when the product in this frame is a WHOLE,
+  four-sided tile or panel whose outline is straight-edged, with all
+  four of its edges either visible or running to the edge of the frame.
+  A tile is manufactured as a rectangle, so this is what a correct
+  extraction looks like.
+  Report FALSE when the shape in the frame is not that: an arch, a
+  curved or domed top, a semicircle, a rounded niche or alcove, a
+  circular or oval outline, or any fragment cut off mid-curve. Report
+  FALSE as well when the frame shows only a PART of a product, with its
+  real edges nowhere to be seen, so there is no way to tell where the
+  product begins and ends.
+  A tile whose own printed or moulded DESIGN contains curves -- a floral
+  pattern, a scalloped border, a round medallion within a square face --
+  is still a complete rectangle: judge the outline of the piece, never
+  the artwork on it.
+
 - distinct_tile_designs: how many DIFFERENT products are visible.
   One tile repeated across the whole frame is 1, however many individual
   units you can count. Two panels of different colour, pattern or
@@ -1900,6 +1916,7 @@ TILE_PURITY_SCHEMA = {
         "contains_object": {"type": "BOOLEAN"},
         "is_scene": {"type": "BOOLEAN"},
         "physical_surface": {"type": "BOOLEAN"},
+        "complete_rectangle": {"type": "BOOLEAN"},
         "distinct_tile_designs": {"type": "INTEGER"},
         "reason": {"type": "STRING"},
     },
