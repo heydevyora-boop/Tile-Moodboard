@@ -137,15 +137,56 @@ def main():
         ) is True,
     ))
 
-    # Bare WALL_PANEL / PANEL are not decorative tile names anymore.
-    outcomes.append(check(
-        "WALL_PANEL normalizes to non-tile",
-        normalize_material("WALL_PANEL") == "WALL_PANEL",
-    ))
-    outcomes.append(check(
-        "WALL_PANEL observation is NOT_TILE",
-        assess_tile_purity(observation("WALL_PANEL"))["state"] == PURITY_NOT_TILE,
-    ))
+    # A MOULDED PROFILE IS A SHAPE, NOT A VERDICT.
+    #
+    # These two checks previously asserted the opposite: that WALL_PANEL
+    # names a non-tile and must be refused outright. That rule was written
+    # from the same Drive screenshots this file covers, on the reading
+    # that a frame-shaped thing cannot be a tile.
+    #
+    # The repo's own single_catalog/18_mozart_frame_collection.pdf
+    # disproves it. Every product on all three of its pages is a moulded,
+    # framed ceramic wall panel -- that IS the range being sold -- so a
+    # verifier reporting FRAME, MOULDING, WALL_PANEL or DOOR_PANEL for
+    # them is describing them correctly, and refusing the word refused the
+    # entire catalog. What actually separates that catalog's products from
+    # a photograph of real joinery is the scene evidence directly below,
+    # which is unchanged and still rejects.
+    for form in ("WALL_PANEL", "FRAME", "MOULDING", "DOOR_PANEL"):
+        outcomes.append(check(
+            f"a clean standalone {form} product is kept",
+            assess_tile_purity(observation(form))["state"] == PURITY_CLEAN,
+            assess_tile_purity(observation(form))["reason"],
+        ))
+        outcomes.append(check(
+            f"{form} normalizes to a product, not a non-tile",
+            normalize_material(form) in {MATERIAL_TILE, MATERIAL_DECOR},
+        ))
+        # The same word, in a room, is still refused.
+        scene = assess_tile_purity(
+            observation(form, is_scene=True, contains_fixture=True,
+                        tile_fraction=0.5)
+        )
+        outcomes.append(check(
+            f"{form} shown as part of a room is still refused",
+            scene["state"] != PURITY_CLEAN
+            and tile_only_may_force_accept(
+                "NEEDS_ISOLATION",
+                {"purity": observation(form, is_scene=True,
+                                       contains_fixture=True, tile_fraction=0.5),
+                 "purity_state": scene["state"]},
+            ) is False,
+            scene["reason"],
+        ))
+
+    # The words that name a whole OBJECT rather than a surface profile are
+    # untouched and still reject on the word alone.
+    for obj in ("ARCHITECTURE", "BUILDING", "WINDOW", "DOOR", "CABINET",
+                "FURNITURE"):
+        outcomes.append(check(
+            f"{obj} is still a hard non-tile",
+            assess_tile_purity(observation(obj))["state"] == PURITY_NOT_TILE,
+        ))
 
     failures = 0
     print("frame / room-scene rejection regression")

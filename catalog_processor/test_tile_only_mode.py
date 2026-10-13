@@ -309,7 +309,13 @@ def siblings_are_not_duplicates_of_each_other():
 
 def hard_non_tile_still_rejects_in_tile_only():
     """Tile-only mode must not force-accept architecture/furniture junk."""
-    hard = ["ARCHITECTURE", "ARTWORK", "COUNTERTOP", "WOOD", "FRAME", "DOOR"]
+    # FRAME was removed from this list deliberately. It names a moulded
+    # PROFILE, and the repo's own 18_mozart_frame_collection catalog sells
+    # nothing but framed moulded panel tiles, so rejecting the word
+    # rejected that catalog's whole product line. A frame shown in a ROOM
+    # is still refused -- by is_scene/fixture evidence, covered in
+    # test_frame_scene_rejection.py -- not by its material name.
+    hard = ["ARCHITECTURE", "ARTWORK", "COUNTERTOP", "WOOD", "DOOR"]
     results = []
 
     for verdict in hard:

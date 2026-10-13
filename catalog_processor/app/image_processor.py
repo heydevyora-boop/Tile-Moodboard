@@ -10,6 +10,16 @@ import numpy as np
 OUTPUT_CANVAS_SIZE = int(os.getenv("TILE_OUTPUT_CANVAS_SIZE", "1024"))
 NEUTRAL_BACKGROUND_BGR = (245, 245, 245)
 
+# How far a crop smaller than the canvas may be enlarged to fill it.
+#
+# Refusing to enlarge at all left a valid product stranded: a 300x300
+# swatch occupied 29% of a 1024 canvas and read as a tiny island in grey,
+# which is the "not a standard product image" complaint. Enlarging without
+# a limit is the opposite error -- a 120px thumbnail blown up 8x is a
+# blurry invention. 3x keeps real detail (a 341px crop reaches the full
+# canvas) and nothing below that is worth presenting as a product photo.
+MAX_CANVAS_UPSCALE = 3.0
+
 
 def fit_to_output_canvas(
     image_bgr,
@@ -19,9 +29,9 @@ def fit_to_output_canvas(
     """Place a crop on a square neutral canvas without distorting it.
 
     Preserves the complete tile and its original aspect ratio. Never
-    stretches or squashes. Never upscales past the source resolution
-    (avoids inventing detail from blurry/small sources). Downscales only
-    when the crop is larger than the canvas, then centers with padding.
+    stretches or squashes, and never crops: every source pixel survives.
+    Scales the crop to fit the canvas -- down without limit, up only as
+    far as MAX_CANVAS_UPSCALE -- then centres it with neutral padding.
     """
     if image_bgr is None or image_bgr.size == 0:
         raise ValueError("Cannot fit an empty image onto the output canvas")
@@ -31,7 +41,9 @@ def fit_to_output_canvas(
         raise ValueError("Cannot fit a zero-sized image onto the output canvas")
 
     canvas_size = max(1, int(canvas_size))
-    scale = min(canvas_size / width, canvas_size / height, 1.0)
+    scale = min(
+        canvas_size / width, canvas_size / height, MAX_CANVAS_UPSCALE,
+    )
     new_width = max(1, int(round(width * scale)))
     new_height = max(1, int(round(height * scale)))
 
@@ -40,6 +52,15 @@ def fit_to_output_canvas(
             image_bgr,
             (new_width, new_height),
             interpolation=cv2.INTER_AREA,
+        )
+    elif scale > 1.001:
+        # Enlarging: INTER_AREA is a decimation filter and smears here.
+        # Lanczos keeps the moulded edges and grout lines crisp, which is
+        # the whole point of presenting the product larger.
+        resized = cv2.resize(
+            image_bgr,
+            (new_width, new_height),
+            interpolation=cv2.INTER_LANCZOS4,
         )
     else:
         resized = image_bgr
