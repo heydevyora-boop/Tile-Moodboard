@@ -610,6 +610,14 @@ def tile_only_may_force_accept(status, metadata, impure_status="GEMINI_IMPURE"):
     observation = metadata.get("purity") or {}
     purity_state = str(metadata.get("purity_state") or "").upper()
 
+    # Nothing inspected this frame (quota, rate limit, API error, verifier
+    # unavailable). The override corrects a verifier that LOOKED and
+    # misnamed a clean swatch; with no observation every check below would
+    # pass on its defaults alone, turning an unjudged room-scene crop into
+    # an approved tile and bypassing the caller's DEFERRED handling.
+    if not observation:
+        return False
+
     if purity_state == PURITY_NOT_TILE:
         return False
 
@@ -647,6 +655,35 @@ def tile_only_may_force_accept(status, metadata, impure_status="GEMINI_IMPURE"):
         return False
 
     return True
+
+
+# Whole-image classifier types that are a failure to NAME the frame rather
+# than a positive identification of something other than a tile.
+SOFT_WHOLE_IMAGE_TYPES = {"", "?", "OTHER", "UNKNOWN", "TEXTURE"}
+
+
+def tile_only_may_keep_whole(status, metadata, impure_status):
+    """Whether tile-only mode may save a non-approved embedded image whole
+    after region mining recovered nothing from it.
+
+    That fallback exists for a frame the classifier merely failed to name.
+    It must not save a frame that was positively judged: contaminated
+    (`impure_status` -- a room scene, fixtures, several products, too much
+    background), NOT_TILE (architecture, door, window, painted wall), or
+    confidently typed as a scene, layout, logo/graphic or a non-tile
+    product such as sanitaryware. Saving those whole is exactly the output
+    the isolation step was asked to avoid.
+    """
+    metadata = metadata or {}
+
+    if status == impure_status:
+        return False
+
+    if metadata.get("purity"):
+        return tile_only_may_force_accept(status, metadata, impure_status)
+
+    image_type = str(metadata.get("image_type") or "").strip().upper()
+    return image_type in SOFT_WHOLE_IMAGE_TYPES or image_type in ALLOWED_TILE_TYPES
 
 
 # ============================================================

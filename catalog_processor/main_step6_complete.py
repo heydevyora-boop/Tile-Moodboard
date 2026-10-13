@@ -3137,8 +3137,20 @@ def extract_images_from_pdf(
                         # picture -- a search that finds no sub-region in
                         # it has found that it is ONE tile, not that it is
                         # no tile. So it is kept whole, and falls through
-                        # to the normal accept path below.
-                        keep_whole = TILE_ONLY_CATALOG and not recovered
+                        # to the normal accept path below -- but only when
+                        # the frame's own verdict was a failure to name
+                        # it, never when it was judged a scene, a multi-
+                        # product layout, architecture or another product.
+                        from app.image_validator import tile_only_may_keep_whole
+
+                        keep_whole = (
+                            TILE_ONLY_CATALOG
+                            and not recovered
+                            and tile_only_may_keep_whole(
+                                validation_status, tile_metadata,
+                                impure_status=VALIDATION_IMPURE,
+                            )
+                        )
 
                         if not keep_whole:
                             for deferred_path, deferred_reason, deferred_meta in region_deferred:
