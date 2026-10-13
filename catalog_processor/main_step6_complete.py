@@ -1195,6 +1195,258 @@ def early_reject_candidate(width, height, image_bytes=None, image_rect=None,
     )
 
 # ---------------------------------------------------------------------------
+# Early hard filters -- conservative, pre-Gemini rejection.
+#
+# classify_image_content() above never fully rejects a candidate; it only
+# chooses which search path to take (a room photo may still hide a tiled
+# wall, so it goes to region-mining instead of being judged whole). These
+# two filters are different: pure solid-colour graphics and blocks of
+# printed text have NO tile surface anywhere inside them, so there is
+# nothing a region search could recover, and the candidate is dropped
+# before either a whole-image or a region-mining Gemini call is spent on
+# it.
+#
+# Both are deliberately conservative, in the same spirit as
+# classify_image_content's own stated posture: a false reject here
+# silently loses a real product, so each threshold was set against
+# measured values for genuine (if plain) photographed tiles -- including
+# a two-tone geometric mosaic and a fine small-repeat pattern, the two
+# shapes closest to "looks like a solid colour" or "looks like text" --
+# and left with a wide, empirically-checked margin on the side that
+# protects a real product. Not calibrated against a real catalog; tune
+# against real extraction output if either proves too strict or too
+# loose, but only by moving further AWAY from a real tile's measured
+# range, never by splitting the difference.
+# ---------------------------------------------------------------------------
+
+# A genuine flat colour fill (a highlighter-style annotation bar, a solid
+# graphic rectangle) measured pixel_std 0.00002-0.00007 across several
+# colours. The plainest, most evenly lit SYNTHETIC "photograph" tested --
+# unrealistically clean, far cleaner than real sensor noise -- still
+# measured 0.0032 and up. 0.0005 sits roughly 7x above the flat-fill
+# ceiling and 6x below that photographic floor.
+FLAT_GRAPHIC_MAX_PIXEL_STD = 0.0005
+
+# Edge density was 0.0 for every flat fill AND for several genuinely
+# smooth real tiles (no grout, no pattern) alike, so on its own this
+# cannot tell them apart -- pixel_std above does the real work. Kept as a
+# second, independent requirement anyway (defence in depth: both signals
+# must agree), generous enough that it is never the limiting factor.
+FLAT_GRAPHIC_MAX_EDGE_DENSITY = 0.002
+
+
+def measure_image_flatness(image_bytes):
+    """Whole-frame colour variation and edge density. Returns None if the
+    image can't be read -- callers treat that as "no opinion" and keep
+    the image.
+
+    Deliberately NOT the region-grid average measure_image_content()
+    uses: a flat vector fill and a photographed tile can read the same
+    at THAT scale (both look visually uniform once averaged into 8x8
+    blocks). What actually separates them is per-pixel noise, which a
+    real photograph always carries and a flat fill does not -- so this
+    measures variation across every pixel instead.
+    """
+    try:
+        import cv2
+        import numpy as np
+
+        with Image.open(BytesIO(image_bytes)) as source:
+            source = source.convert("RGB")
+            source.thumbnail((256, 256))
+            rgb = np.asarray(source, dtype=np.uint8)
+    except Exception:  # noqa: BLE001
+        return None
+
+    if rgb.ndim != 3 or min(rgb.shape[:2]) < 16:
+        return None
+
+    pixels = rgb.astype(np.float32) / 255.0
+    pixel_std = float(pixels.reshape(-1, 3).std(axis=0).mean())
+
+    gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
+    edges = cv2.Canny(gray, 50, 150)
+    edge_density = float(np.mean(edges > 0))
+
+    return {"pixel_std": pixel_std, "edge_density": edge_density}
+
+
+def is_flat_graphic_image(image_bytes):
+    """True when `image_bytes` is an almost perfectly solid colour block
+    -- a highlighter-style annotation bar or a flat vector-drawn graphic
+    -- rather than a photograph of a product. Returns (reject, reason).
+
+    Conservative on purpose: BOTH signals must independently read as
+    "nothing here". Requiring agreement, rather than either alone, is
+    what keeps a genuinely plain, flatly-lit tile (which can still trip
+    one signal in isolation) from being rejected.
+    """
+    metrics = measure_image_flatness(image_bytes)
+    if metrics is None:
+        return False, ""
+
+    if (
+        metrics["pixel_std"] <= FLAT_GRAPHIC_MAX_PIXEL_STD
+        and metrics["edge_density"] <= FLAT_GRAPHIC_MAX_EDGE_DENSITY
+    ):
+        return True, (
+            f"reads as a solid colour bar/graphic, not a photographed "
+            f"product (pixel variation {metrics['pixel_std']:.5f}, "
+            f"edge density {metrics['edge_density']:.4f})"
+        )
+
+    return False, ""
+
+
+# Printed body text measured ink_fraction 0.02-0.06 across a dense
+# paragraph, a sparse price list and a ruled spec table. Every
+# photographed tile tested -- plain, grouted, marble, a two-tone
+# geometric mosaic, a fine small-repeat pattern -- measured 0.40 and up:
+# Otsu splits photographic sensor noise roughly in half, however little
+# noise there visibly is, which keeps this gap wide and reliable. 0.20
+# sits more than 3x above the text ceiling and more than 2x below the
+# lowest tile measured.
+#
+# Component SIZE/AREA was tried and dropped: the same sensor noise that
+# inflates ink_fraction on a plain tile also scatters it into hundreds of
+# tiny specks, so a photographed tile's "small marks" area overlapped a
+# sparse text block's. ink_fraction alone showed no such overlap across
+# every case tested, so it carries this filter; component count is kept
+# only as a sanity floor, not a discriminator.
+TEXT_MIN_INK_FRACTION = 0.01
+TEXT_MAX_INK_FRACTION = 0.20
+TEXT_MIN_SMALL_COMPONENTS = 50
+
+# A connected component taller than this fraction of the frame is a
+# design element (a pattern tile, a large logo), not a single glyph.
+TEXT_CHAR_MAX_HEIGHT_FRACTION = 0.05
+
+# Resize ceiling for the connected-components pass below: large enough
+# to keep character-scale structure legible, small enough to stay cheap
+# per candidate (this runs before every Gemini call, not just once).
+TEXT_ANALYSIS_MAX_SIDE = 900
+
+
+def measure_text_likeness(image_bytes):
+    """Ink coverage and small-mark count, used to recognise a block of
+    printed text. Returns None if the image can't be read -- callers
+    treat that as "no opinion" and keep the image.
+    """
+    try:
+        import cv2
+        import numpy as np
+
+        with Image.open(BytesIO(image_bytes)) as source:
+            source = source.convert("L")
+            longest_side = max(source.size)
+            if longest_side > TEXT_ANALYSIS_MAX_SIDE:
+                scale = TEXT_ANALYSIS_MAX_SIDE / longest_side
+                source = source.resize((
+                    max(1, round(source.width * scale)),
+                    max(1, round(source.height * scale)),
+                ))
+            gray = np.asarray(source, dtype=np.uint8)
+    except Exception:  # noqa: BLE001
+        return None
+
+    if gray.ndim != 2 or min(gray.shape) < 16:
+        return None
+
+    _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+    # Orient so "foreground" (255) is the MINORITY class -- printed text
+    # is sparse ink on a dominant background, whichever way Otsu happened
+    # to assign black/white.
+    ink_fraction = float(np.mean(binary == 255))
+    if ink_fraction > 0.5:
+        binary = 255 - binary
+        ink_fraction = 1.0 - ink_fraction
+
+    num_labels, _labels, stats, _centroids = cv2.connectedComponentsWithStats(
+        binary, connectivity=8,
+    )
+    # Component 0 is the background label.
+    heights = stats[1:, cv2.CC_STAT_HEIGHT]
+    char_max_height = max(3, round(gray.shape[0] * TEXT_CHAR_MAX_HEIGHT_FRACTION))
+    small_mask = (heights > 0) & (heights <= char_max_height)
+
+    return {
+        "ink_fraction": ink_fraction,
+        "small_component_count": int(np.count_nonzero(small_mask)),
+    }
+
+
+def is_mostly_text_image(image_bytes):
+    """True when `image_bytes` is almost entirely printed text -- a
+    scanned/rendered paragraph, price list or spec table saved as a
+    picture -- rather than a product photograph. Returns (reject, reason).
+
+    Conservative on purpose: ink_fraction has to land inside the band
+    real printed text measured, not merely be "present", and there has
+    to be real small-mark structure behind it (not one caption word).
+    """
+    metrics = measure_text_likeness(image_bytes)
+    if metrics is None:
+        return False, ""
+
+    looks_like_text = (
+        metrics["small_component_count"] >= TEXT_MIN_SMALL_COMPONENTS
+        and TEXT_MIN_INK_FRACTION <= metrics["ink_fraction"] <= TEXT_MAX_INK_FRACTION
+    )
+
+    if not looks_like_text:
+        return False, ""
+
+    return True, (
+        f"reads as a block of printed text, not a product photograph "
+        f"({metrics['small_component_count']} small marks, "
+        f"{metrics['ink_fraction']:.1%} ink coverage)"
+    )
+
+
+def classify_hard_reject(image_bytes):
+    """Either early filter firing. Returns (reject, reason)."""
+    reject, reason = is_flat_graphic_image(image_bytes)
+    if reject:
+        return True, reason
+    return is_mostly_text_image(image_bytes)
+
+
+# A real catalog sells elongated products at their true shape -- a strip,
+# listello or border tile, or a wood-look plank, can legitimately be a
+# narrow rectangle (app/image_validator.py's DECORATIVE_PRODUCT_MATERIALS
+# names STRIP/STRIP_TILE and LISTELLO/LISTELLO_TILE as real products, and
+# even a 1200x200mm plank photographed at its own proportions is 6:1).
+# This threshold sits well above that: it only catches the kind of
+# fragment the reported failure actually described -- a sliver of
+# furniture leg, a decorative page rule, or a mis-clipped edge of a larger
+# graphic -- which run far thinner than any genuine catalog product shot.
+# MIN_IMAGE_WIDTH/MIN_IMAGE_HEIGHT above already floor each side on its
+# own, but neither one looks at the other, so a 200x2000px sliver passes
+# both floors individually while still being nothing a camera was ever
+# pointed at a product to produce.
+THIN_STRIP_MAX_ASPECT_RATIO = 8.0
+
+
+def is_thin_strip_image(width, height):
+    """True when the raw pixel dimensions are an extreme sliver -- a
+    furniture leg, a decorative rule, or a clipping fragment -- rather
+    than a photographed product. Dimension-only, so it is cheap enough
+    to run before any pixel decode. Returns (reject, reason).
+    """
+    if width <= 0 or height <= 0:
+        return False, ""
+
+    ratio = max(width, height) / min(width, height)
+    if ratio > THIN_STRIP_MAX_ASPECT_RATIO:
+        return True, (
+            f"{width}x{height}px is an extreme {ratio:.1f}:1 sliver, not "
+            f"a photographed product"
+        )
+    return False, ""
+
+
+# ---------------------------------------------------------------------------
 # Tile-only semantic validation + product aspect-ratio correction
 #
 # classify_image_content() above is a cheap, purely statistical pre-filter
@@ -1520,6 +1772,26 @@ LEGACY_REGION_MINEABLE_CATEGORIES = frozenset({
     "not a standalone tile",
 })
 
+# Categories that must never be rescued by the "keep it whole" fallback
+# below, even when region-mining finds nothing to cut out of them.
+#
+# That fallback exists for a genuine blind spot: an embedded image the
+# whole-image classifier rejected for a reason that does not mean "no
+# product here" (OTHER, unclassifiable, a dim or odd-angle shot), where a
+# region search finding nothing just confirms the frame IS the product.
+#
+# These two categories are not that case -- they are a confident,
+# specific verdict that the whole frame is NOT one tile product, and a
+# region search finding nothing recoverable inside a logo or a multi-tile
+# layout page does not mean "so the logo itself is the product"; it means
+# there was no tile-shaped surface in it to find. Rescuing it anyway is
+# exactly how a brand logo and a captioned multi-product grid reached
+# Drive/MASTER as if each were a single standalone tile.
+KEEP_WHOLE_BLOCKED_CATEGORIES = frozenset({
+    "logo/text/marketing graphic",
+    "multiple products in one image",
+})
+
 
 def crop_signature(image_bgr):
     """Fingerprints a crop so the same physical tile is not extracted twice.
@@ -1613,11 +1885,43 @@ def signature_already_seen(seen_signatures, signature, source_key=None,
     the fallback for a caller that cannot supply placement. Entries
     stored as a bare signature, or as a (source, signature) pair, are
     still honoured.
+
+    One pairing does NOT get that appearance fallback: two different
+    EMBEDDED images on the same page, neither with a usable placement
+    rect. A base tile and its highlighter are routinely embedded as two
+    separate PDF image resources -- not two regions of one image, which
+    source_key already protects above -- and PyMuPDF does not always
+    expose a placement rect for an embedded image (inline images,
+    certain content-stream constructs). When that happens for either
+    side, there is no page geometry to confirm OR rule out a match, and
+    the docstring's own measurements say appearance cannot be trusted
+    here: same-range siblings measured closer together (0.0108) than
+    the same tile re-rasterized by the two routes (0.0021-0.0297). So
+    without geometry this pairing is left undecided rather than settled
+    by a signal already shown to be unsafe for it, and the candidate is
+    kept. The one thing this gives up -- a tile embedded twice on one
+    page as two separate resources, with neither exposing a placement
+    rect -- is a narrow, cosmetic case (an extra listing, not a lost
+    one), and is still caught whenever either copy's rect IS available,
+    by the exact-byte hash upstream, or by its own true repeat elsewhere
+    on a route that does carry geometry.
+
+    This does not apply to an embedded image compared against a page
+    RENDER: the render is always keyed with the page's own full-page
+    rect (see the page-render call site), so that side of a true
+    cross-route repeat normally has page geometry even when the
+    embedded side does not, and still resolves either through that
+    geometry or, failing that, through the appearance fallback the
+    cross-route case was built for.
     """
     from app.tile_region_extractor import (
         PAGE_BOX_OVERLAP_LIMIT,
         box_iou,
         signatures_match,
+    )
+
+    candidate_source_type = (
+        source_key.split(":", 1)[0] if source_key else None
     )
 
     for entry in seen_signatures:
@@ -1639,6 +1943,18 @@ def signature_already_seen(seen_signatures, signature, source_key=None,
             # get a vote -- in either direction.
             if box_iou(page_box, entry_box) >= PAGE_BOX_OVERLAP_LIMIT:
                 return True
+            continue
+
+        # Two separate embedded-image sources, neither with a placement
+        # rect to settle it: do not let appearance call this a
+        # duplicate. See the docstring above.
+        entry_source_type = (
+            entry_source.split(":", 1)[0] if entry_source else None
+        )
+        if (
+            candidate_source_type == "embedded-image"
+            and entry_source_type == "embedded-image"
+        ):
             continue
 
         if signatures_match(signature, existing):
@@ -2061,10 +2377,40 @@ def mine_tile_regions(
         # Multi-product frames are split below, never saved whole.
         # ------------------------------------------------------
         if TILE_ONLY_CATALOG and status != VALIDATION_APPROVED:
+            observed_purity = metadata.get('purity') or {}
+            try:
+                reported_designs = int(
+                    observed_purity.get('distinct_tile_designs', 1)
+                )
+            except (TypeError, ValueError):
+                reported_designs = 1
+
+            # A verdict of "this is a printed/drawn graphic, not a
+            # photograph of a physical surface" (RULE 0 of
+            # assess_tile_purity) is not a disputable material label --
+            # it is the purity verifier's answer to "is there a physical
+            # product in front of the camera at all", and a logo, banner
+            # or text graphic is exactly the case it exists to catch.
+            # The contract below exists to stop an unreliable MATERIAL
+            # NAME (ARCHITECTURE, WOOD, OTHER, ...) from deleting a real,
+            # photographed tile it merely misnamed -- it was never meant
+            # to rescue something that was never a physical surface in
+            # the first place. Missing purity is not itself proof of a
+            # graphic; the shared helper separately requires an actual
+            # purity observation before overriding a rejection.
+            is_printed_graphic = (
+                bool(observed_purity)
+                and not observed_purity.get('physical_surface', True)
+            )
+
             from app.image_validator import tile_only_may_force_accept
 
-            if tile_only_may_force_accept(
-                status, metadata, impure_status=VALIDATION_IMPURE
+            if (
+                not is_printed_graphic
+                and not (status == VALIDATION_IMPURE and reported_designs > 1)
+                and tile_only_may_force_accept(
+                    status, metadata, impure_status=VALIDATION_IMPURE
+                )
             ):
                 print(f"      tile-only contract : soft reject overridden "
                       f"-- accepting despite '{status}: {reason}'")
@@ -2166,9 +2512,26 @@ def mine_tile_regions(
                           f"material={piece_purity.get('material', '?')}  "
                           f"tile={piece_purity.get('tile_fraction', 0.0):.0%}")
 
-                    if TILE_ONLY_CATALOG and piece_status != VALIDATION_APPROVED:
+                    piece_is_printed_graphic = (
+                        bool(piece_purity)
+                        and not piece_purity.get('physical_surface', True)
+                    )
+
+                    if (
+                        TILE_ONLY_CATALOG
+                        and piece_status != VALIDATION_APPROVED
+                        and not piece_is_printed_graphic
+                    ):
                         from app.image_validator import tile_only_may_force_accept
 
+                        # Already cut apart, so the one verdict worth
+                        # acting on no longer applies -- see the
+                        # tile-only contract above. A piece the purity
+                        # verifier says is not a photographed physical
+                        # surface at all (a caption, a footer strip, a
+                        # logo corner caught inside the split) is not
+                        # rescued by that contract either, for the same
+                        # reason the whole-candidate version above is not.
                         if tile_only_may_force_accept(
                             piece_status, piece_metadata,
                             impure_status=VALIDATION_IMPURE,
@@ -2787,6 +3150,7 @@ def extract_images_from_pdf(
     duplicates_skipped = 0
     room_photos_skipped = 0
     semantic_rejections = 0
+    hard_filtered_count = 0
     rejection_categories = {}
 
     # Loaded once per PDF, not per image/page -- see the note on
@@ -2896,6 +3260,40 @@ def extract_images_from_pdf(
                         continue
 
                     candidates_examined += 1
+
+                    # Thin-strip filter -- pure arithmetic on the
+                    # dimensions already in hand, so it runs before even
+                    # a pixel decode. See is_thin_strip_image's own
+                    # docstring for why the threshold is safe.
+                    strip_reject, strip_reason = is_thin_strip_image(width, height)
+                    if strip_reject:
+                        hard_filtered_count += 1
+                        print(
+                            f"  HARD FILTER -- page {page_number}, "
+                            f"candidate #{candidates_examined}: {strip_reason}"
+                        )
+                        continue
+
+                    # Early hard filters -- conservative, pre-Gemini reject.
+                    # Unlike the room/lifestyle check below, a pure solid
+                    # colour bar or a block of printed text has no tile
+                    # surface anywhere inside it for a region search to
+                    # recover, so this skips straight past BOTH the
+                    # whole-image call and the region-mining search below
+                    # rather than choosing between them. See
+                    # classify_hard_reject's own docstring for why these
+                    # thresholds are safe.
+                    hard_reject, hard_reason = classify_hard_reject(image_bytes)
+                    if hard_reject:
+                        hard_filtered_count += 1
+                        # No image_counter/filename yet -- this candidate is
+                        # filtered before either is assigned, so it is named
+                        # by page and its running catalog-wide count instead.
+                        print(
+                            f"  HARD FILTER -- page {page_number}, "
+                            f"candidate #{candidates_examined}: {hard_reason}"
+                        )
+                        continue
 
                     # Statistical room/lifestyle detection. Deliberately NOT
                     # a place to stop any more: a room photo is precisely
@@ -3137,15 +3535,22 @@ def extract_images_from_pdf(
                         # picture -- a search that finds no sub-region in
                         # it has found that it is ONE tile, not that it is
                         # no tile. So it is kept whole, and falls through
-                        # to the normal accept path below -- but only when
-                        # the frame's own verdict was a failure to name
-                        # it, never when it was judged a scene, a multi-
-                        # product layout, architecture or another product.
+                        # to the normal accept path below.
+                        #
+                        # UNLESS the source's own classification already
+                        # named it as something that cannot be rescued
+                        # this way -- see KEEP_WHOLE_BLOCKED_CATEGORIES.
+                        # A logo and a captioned multi-tile layout page
+                        # are exactly the inputs this guard exists for:
+                        # both confidently are NOT one tile product, so a
+                        # region search finding nothing inside them is not
+                        # evidence that the whole frame is the product.
                         from app.image_validator import tile_only_may_keep_whole
 
                         keep_whole = (
                             TILE_ONLY_CATALOG
                             and not recovered
+                            and category not in KEEP_WHOLE_BLOCKED_CATEGORIES
                             and tile_only_may_keep_whole(
                                 validation_status, tile_metadata,
                                 impure_status=VALIDATION_IMPURE,
@@ -3338,6 +3743,7 @@ def extract_images_from_pdf(
     print("")
     print(f"Total PDF images discovered : {candidates_examined}")
     print(f"Duplicates skipped          : {duplicates_skipped}")
+    print(f"Hard-filtered (graphic/text): {hard_filtered_count}")
     print(f"Room/lifestyle -> mined     : {room_photos_skipped}")
     print(f"Rejected by tile validation : {semantic_rejections}")
     print(f"Deferred (not validated)    : {validation_deferred}")
@@ -3421,6 +3827,7 @@ def extract_images_from_pdf(
                         "regions_recovered": regions_recovered,
                         "from_rendered_pages": page_render_recoveries,
                         "duplicates_skipped": duplicates_skipped,
+                        "hard_filtered": hard_filtered_count,
                         "rejected_by_validation": semantic_rejections,
                         "deferred_for_validation": validation_deferred,
                         "trace": region_trace,

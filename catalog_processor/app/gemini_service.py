@@ -534,6 +534,65 @@ IMPORTANT: A product appearing inside a bathroom or room does NOT become
 a standalone product merely because it is visually recognizable.
 If it is installed or part of the environment, reject it.
 
+LOGOS, BRAND MARKS, BANNERS, TEXT GRAPHICS -- be strict here:
+
+REJECT any image whose content is primarily typography, branding, or
+page design rather than a photograph of a physical product, including a
+company/brand logo, wordmark, monogram or letterhead; a banner, header
+strip, section-title graphic, or advertisement; a certification seal,
+quality mark, award badge, or compliance icon; a QR code or barcode;
+and a page of running body text, a price list, or a specification table
+rendered as an image with no product photograph in it. None of these
+are a physical product, even when sharply in focus, centered, or
+filling the whole frame -- framing and image quality are never evidence
+that something is a product.
+
+COVER / INSTRUCTION-STYLE IMAGES -- be strict here too:
+
+REJECT a catalog cover, title page, section-divider page, or an
+instructional/how-to/installation-guide illustration: numbered steps,
+tool icons, arrows, or exploded diagrams showing how to lay or fit
+something. This holds even when such a page contains small inset
+product photos as part of a larger cover or instructional layout -- the
+image as a whole is still not a standalone product presentation.
+
+COLOR BARS / HIGHLIGHTER-STYLE ANNOTATION MARKS -- reject these, but do
+not confuse them with a real decorative tile:
+
+REJECT a flat, unphotographed color bar, stripe, swatch rectangle, or
+highlighter-pen style annotation mark used for page design, emphasis,
+or as part of a color chart/legend. It is graphic design, not a
+photograph of a physical product.
+
+Do NOT apply this rule to a real HIGHLIGHTER, ACCENT, BORDER or DECOR
+tile -- a genuine decorative tile product that is ITSELF photographed
+as a catalog item. A photographed physical tile is a product however
+small its area of colour or however decorative its role, and must be
+approved like any other standalone tile sample under TEXTURE vs
+TILE_SAMPLE below. The test is the same one used throughout this
+prompt: is this a PHOTOGRAPH of a physical object, or a flat
+graphic/annotation mark with no physical product behind it?
+
+LIFESTYLE, ROOM SCENES, COLLAGES -- be strict here as well:
+
+In addition to the room/installation rules above, REJECT a styled
+flat-lay or mood-board arrangement of multiple products or swatches
+composed together for visual appeal; any photograph containing a
+person, a person's hand, or a model, since the product is being
+used/demonstrated rather than presented standalone; an outdoor, garden,
+poolside or other lifestyle/leisure setting; and a composite or
+multi-panel image combining several separate photos into one. A
+composite is still a COLLAGE even when every individual panel, viewed
+alone, would have been approved -- reject the whole image.
+
+A catalog PAGE laid out as a grid of several tile swatches -- each one
+captioned underneath with its own product name, code, or size, and
+often with a page number or footer strip along the bottom -- is this
+same case: it is a page of multiple products, not a photograph of one.
+Per-swatch captions and a page footer are strong evidence that what is
+being looked at is a prepared page layout rather than a single product
+photo, even when the swatches themselves are genuine tiles.
+
 If a region contains multiple products and you cannot reliably isolate
 exactly one, REJECT the whole collage (product_count >= 2, decision
 REJECTED). Do not approve the collage as one product.
@@ -686,7 +745,15 @@ Approve ONLY when:
 2. exactly one physical product is represented
 3. image_type is in the allowed product types
 4. the product is standalone, not installed or merely shown in a room
-5. the product surface is the main subject and sufficiently complete
+5. it is a genuine photograph of that physical product, not a logo,
+   banner, cover/instruction page, color bar/annotation mark, or a
+   lifestyle/collage scene
+6. the product surface is the main subject and sufficiently complete
+
+When uncertain between APPROVE and REJECT for any of the categories
+above, REJECT. A missed real product can be found again on review; a
+false approval puts something into the catalog that was never a
+product at all.
 
 Return ONLY valid JSON.
 """
@@ -1800,7 +1867,10 @@ Report:
   format side by side is 2, and so on. A catalog sheet showing six
   samples is 6. This must be 1 for the frame to be a swatch of one
   product -- several designs in one picture is a layout of products,
-  not a product.
+  not a product. A caption or product name/code printed under each
+  swatch, or a page number/footer strip along the bottom of the frame,
+  is further evidence that this is a page layout: count every swatch it
+  labels.
   Count PRODUCTS, not motifs. One manufactured piece whose own design
   includes a frame, a surround, a border, an inset medallion or a
   patterned band is still ONE product: the ornament is printed or
