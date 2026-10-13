@@ -278,11 +278,34 @@ SLAB_MATERIALS = {"COUNTERTOP", "STONE_SLAB"}
 # a tile sample.
 ARCHITECTURE_MATERIALS = {
     "ARCHITECTURE", "BUILDING", "FACADE",
-    "FRAME", "ARCHITECTURAL_FRAME", "ORNAMENTAL_FRAME",
-    "DOOR", "DOOR_PANEL", "WINDOW", "WINDOW_FRAME",
-    "CORNICE", "MOULDING", "MOLDING", "WAINSCOT", "WAINSCOTING",
+    "ARCHITECTURAL_FRAME",
+    "DOOR", "WINDOW", "WINDOW_FRAME",
     "CABINET", "CUPBOARD", "FURNITURE", "FURNITURE_PANEL",
     "ROOM_PANEL", "INSTALLATION_PANEL",
+}
+
+# A MOULDED PROFILE is not a verdict -- it is a shape a real tile has.
+#
+# These words name the FORM of a surface, and a ceramic wall tile is
+# manufactured in every one of them: the "Mozart Frame Collection" in
+# this repo's own single_catalog/ is a range of framed, moulded panel
+# tiles, and its pages carry nothing else. Treating the word as proof of
+# architecture rejected that catalog's entire product line -- every page
+# of real products -- while the room photographs it was meant to stop
+# were already being caught by the evidence below (is_scene, fixtures,
+# furniture, people, tile_fraction).
+#
+# So these normalize to a decorative PRODUCT and are judged exactly as
+# every other product is. Nothing is waved through: a frame photographed
+# in a room still reports is_scene or a fixture and is still refused; a
+# frame that fills a clean catalog shot is a tile and is kept. The words
+# that name a whole OBJECT rather than a surface profile -- a door, a
+# window, a cabinet, a building -- stay above, where they still reject.
+MOULDED_FORM_MATERIALS = {
+    "FRAME", "FRAMED", "FRAMED_PANEL", "ORNAMENTAL_FRAME",
+    "MOULDING", "MOLDING", "MOULDED", "MOLDED", "MOULDED_PANEL",
+    "CORNICE", "WAINSCOT", "WAINSCOTING",
+    "PANEL", "WALL_PANEL", "DOOR_PANEL",
 }
 
 # What each contamination flag is called in a log line.
@@ -350,9 +373,9 @@ DECORATIVE_PRODUCT_MATERIALS = {
     "HIGHLIGHT", "HIGHLIGHTER", "HIGHLIGHTER_TILE", "HL",
     "BORDER", "BORDER_TILE", "LISTELLO", "LISTELLO_TILE",
     "ACCENT", "ACCENT_TILE", "INSERT", "INSERT_TILE", "MEDALLION",
-    # Bare "PANEL" / "WALL_PANEL" are too broad (door and room
-    # installations use them) -- those belong in NON_TILE. Keep only
-    # decorative-product forms that name a tile/mosaic piece.
+    # Bare "PANEL" / "WALL_PANEL" and the moulded-profile words live in
+    # MOULDED_FORM_MATERIALS above; they reach MATERIAL_DECOR the same
+    # way these do, and face the same rules.
     "MOSAIC_PANEL", "MOSAIC_SHEET",
     "RELIEF", "RELIEF_PANEL", "EMBOSSED", "EMBOSSED_PANEL",
     "3D_PANEL", "TEXTURED", "TEXTURED_PANEL", "PATTERNED",
@@ -371,11 +394,10 @@ DECORATIVE_PRODUCT_MATERIALS = {
 NON_TILE_MATERIALS = {
     "COUNTERTOP", "WORKTOP", "STONE_SLAB", "SLAB", "MARBLE_SLAB",
     "ARCHITECTURE", "BUILDING", "FACADE",
-    "FRAME", "ARCHITECTURAL_FRAME", "ORNAMENTAL_FRAME",
-    "DOOR", "DOOR_PANEL", "WINDOW", "WINDOW_FRAME",
-    "CORNICE", "MOULDING", "MOLDING", "WAINSCOT", "WAINSCOTING",
+    "ARCHITECTURAL_FRAME",
+    "DOOR", "WINDOW", "WINDOW_FRAME",
     "CABINET", "CUPBOARD", "FURNITURE", "FURNITURE_PANEL",
-    "ROOM_PANEL", "INSTALLATION_PANEL", "WALL_PANEL",
+    "ROOM_PANEL", "INSTALLATION_PANEL",
     "WOOD", "WOODEN", "TIMBER", "LAMINATE",
     "PAINTED_WALL", "PAINT", "PLASTER", "WALLPAPER",
     "CONCRETE", "SCREED",
@@ -414,6 +436,12 @@ def normalize_material(raw):
     # a product. Nothing here overlaps NON_TILE_MATERIALS -- a PICTURE
     # (artwork, poster, mural) is deliberately left in that set.
     if material in DECORATIVE_PRODUCT_MATERIALS:
+        return MATERIAL_DECOR
+
+    # A moulded profile is a shape a tile is made in, not a verdict about
+    # what the object is -- see MOULDED_FORM_MATERIALS. It reaches the
+    # same rules every other product faces.
+    if material in MOULDED_FORM_MATERIALS:
         return MATERIAL_DECOR
 
     if material in NON_TILE_MATERIALS:

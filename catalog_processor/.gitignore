@@ -6,3 +6,10 @@ venv/
 __pycache__/
 output/
 data/
+
+# Images produced by diagnostics/stage_harness.py and
+# diagnostics/make_proof_sheets.py. Regenerate by running those two
+# scripts; the scripts are tracked, their ~50MB of output is not.
+diagnostics/stageA/
+diagnostics/stages/
+diagnostics/proof/

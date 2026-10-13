@@ -1560,6 +1560,13 @@ def parse_product_aspect_ratio(size_text):
 # shave a stray pixel off one edge for no benefit.
 ASPECT_RATIO_TOLERANCE = 0.02
 
+# The least of a product the aspect correction may leave behind. Trimming
+# a slight mismatch is the job; removing a tenth of the product means the
+# label does not describe this picture, and the picture is the evidence
+# that was actually measured. See the call site in
+# validate_and_correct_tile_image.
+MAX_ASPECT_CORRECTION_LOSS = 0.90
+
 
 def crop_image_to_aspect_ratio(image, target_ratio):
     """Centre-crops a PIL Image to `target_ratio` (width/height), keeping
@@ -2992,8 +2999,41 @@ def validate_and_correct_tile_image(
 
         detected_size = detect_nearby_size_text(nearby_text)
         target_ratio = parse_product_aspect_ratio(detected_size)
-        if target_ratio:
-            image = crop_image_to_aspect_ratio(image, target_ratio)
+
+        # A SIZE LABEL MUST NEVER CUT THE PRODUCT DOWN.
+        #
+        # crop_image_to_aspect_ratio centre-crops to the ratio read off
+        # the page, and `nearby_text` is the text near the SOURCE image,
+        # within MAX_LABEL_DISTANCE_PT. Two things follow, and both were
+        # destroying products:
+        #
+        #  * On a region candidate the rect passed in belongs to the
+        #    PARENT image, not to this crop, so the label can belong to a
+        #    different product on the same page entirely. The region's
+        #    own boundary is the better evidence of its shape -- it was
+        #    measured from this product's pixels -- so the label does not
+        #    get to overrule it.
+        #  * Even on a whole image, forcing a 1:2 panel to a "600x600"
+        #    label throws away half the product. Measured on the real
+        #    single_catalog/18_mozart_frame_collection pages: a complete
+        #    931x1859 framed panel became 931x931, losing 50% of itself
+        #    and both moulded ends -- the extracted "tile" was a
+        #    featureless slab.
+        #
+        # So the correction now only ever trims a slight mismatch, and
+        # only where the label can actually be this product's own.
+        if target_ratio and not purity_is_authoritative:
+            before_area = image.width * image.height
+            corrected = crop_image_to_aspect_ratio(image, target_ratio)
+            kept = (corrected.width * corrected.height) / max(1, before_area)
+            if kept >= MAX_ASPECT_CORRECTION_LOSS:
+                image = corrected
+            else:
+                print(
+                    f"  [aspect] ignoring size label {detected_size}: "
+                    f"cropping to it would discard {100 * (1 - kept):.0f}% "
+                    f"of the product"
+                )
 
         image.save(output_path, 'WEBP', quality=IMAGE_QUALITY, method=6)
 
