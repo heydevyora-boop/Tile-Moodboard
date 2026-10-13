@@ -23,6 +23,14 @@ ALLOWED_TILE_TYPES = {
     "MARBLE_TILE",
     "PORCELAIN_TILE",
     "CERAMIC_TILE",
+    # Genuine decorative / highlight tile samples (not printed artwork)
+    "HIGHLIGHTER",
+    "HIGHLIGHTER_TILE",
+    "DECOR_PANEL",
+    "DECORATIVE_TILE",
+    "BORDER_TILE",
+    "LISTELLO",
+    "ACCENT_TILE",
 }
 
 

@@ -1049,8 +1049,13 @@ def page_has_visual_content(page):
 # without re-measuring against real extracted images first.
 # ---------------------------------------------------------------------------
 
-BANNER_ASPECT_RATIO = 4.5
+BANNER_ASPECT_RATIO = 4.0
 PAGE_DOMINANT_FRACTION = 0.85
+# Match app.image_filter: reject width/height outside [0.25, 4.0].
+MAX_CANDIDATE_ASPECT_RATIO = 4.0
+MIN_CANDIDATE_ASPECT_RATIO = 0.25
+# Tiny fragment relative to the page (paired with other signals, not alone).
+MIN_PAGE_REGION_FRACTION = 0.008
 
 ROOM_COLOUR_VARIATION = 0.10
 ROOM_COLOUR_VARIATION_STRONG = 0.20
@@ -1145,6 +1150,47 @@ def classify_image_content(image_bytes, image_rect, page_rect):
 
     return False, measured
 
+
+def early_reject_candidate(width, height, image_bytes=None, image_rect=None,
+                           page_rect=None):
+    """Conservative pre-Gemini reject; delegates to app.image_filter."""
+    decoded = None
+    if image_bytes:
+        try:
+            import cv2
+            import numpy as _np
+
+            arr = _np.frombuffer(image_bytes, dtype=_np.uint8)
+            decoded = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+        except Exception:  # noqa: BLE001 -- filter is optional
+            decoded = None
+
+    region_area = None
+    page_area = None
+    if image_rect is not None and page_rect is not None:
+        ix0, iy0, ix1, iy1 = image_rect
+        region_area = max(0.0, (ix1 - ix0) * (iy1 - iy0))
+        page_area = float(page_rect.width * page_rect.height)
+
+    try:
+        from app.image_filter import early_reject_region
+    except Exception:  # noqa: BLE001
+        # Fallback: aspect only, matching MAX/MIN_CANDIDATE_ASPECT_RATIO.
+        if width <= 0 or height <= 0:
+            return True, "invalid dimensions"
+        aspect = width / float(height)
+        if aspect > MAX_CANDIDATE_ASPECT_RATIO:
+            return True, f"too_wide (aspect {aspect:.2f})"
+        if aspect < MIN_CANDIDATE_ASPECT_RATIO:
+            return True, f"too_tall (aspect {aspect:.2f})"
+        return False, ""
+
+    return early_reject_region(
+        width, height,
+        image_bgr=decoded,
+        region_area=region_area,
+        page_area=page_area,
+    )
 
 # ---------------------------------------------------------------------------
 # Tile-only semantic validation + product aspect-ratio correction
@@ -1315,11 +1361,11 @@ MIN_BBOX_FRACTION = 0.10
 def crop_image_to_validated_bbox(image, bbox):
     """Pure crop to a validate_bbox()-style pixel-space {x1,y1,x2,y2} dict.
 
-    Deliberately does NOT call app.image_processor.crop_from_bbox: that
-    helper upscales any crop whose short side is below 1200px
-    (cv2.resize), which synthesises pixels not present in the source --
-    exactly what this task must not do. This selects existing pixels only,
-    same posture as crop_image_to_aspect_ratio above.
+    Deliberately does NOT call app.image_processor.crop_from_bbox during
+    validation: that helper also letterboxes onto the output canvas, which
+    must happen AFTER purity judging (padding would lower tile_fraction).
+    This selects existing pixels only, same posture as
+    crop_image_to_aspect_ratio above.
     """
     width, height = image.size
     x1 = max(0, min(width, round(bbox['x1'])))
@@ -1334,6 +1380,38 @@ def crop_image_to_validated_bbox(image, bbox):
         return image  # already full-frame, nothing to trim
 
     return image.crop((x1, y1, x2, y2))
+
+
+def present_tile_on_canvas(image_path):
+    """Rewrite an approved tile onto the standard square output canvas.
+
+    Preserves aspect ratio; never upscales past source pixels. Applied
+    only after approval so purity/Gemini still judge the raw crop.
+    Returns True when the file was rewritten, False on skip/failure.
+    """
+    try:
+        import cv2
+        from app.image_processor import fit_to_output_canvas
+    except Exception:  # noqa: BLE001
+        return False
+
+    path = Path(image_path)
+    try:
+        with Image.open(path) as opened:
+            opened.load()
+            rgb = opened.convert("RGB")
+            bgr = cv2.cvtColor(
+                __import__("numpy").asarray(rgb),
+                cv2.COLOR_RGB2BGR,
+            )
+        presented = fit_to_output_canvas(bgr)
+        Image.fromarray(
+            cv2.cvtColor(presented, cv2.COLOR_BGR2RGB)
+        ).save(path, "WEBP", quality=IMAGE_QUALITY, method=6)
+        return True
+    except Exception as exc:  # noqa: BLE001 -- presentation must not kill accept
+        print(f"  [canvas] could not standardize {path.name}: {exc}")
+        return False
 
 
 # Buckets a validator rejection reason into one of the operator-facing
@@ -2347,6 +2425,8 @@ def append_recovered_regions(
     for region_path, _reason, region_metadata in recovered:
         image_counter += 1
 
+        present_tile_on_canvas(region_path)
+
         with Image.open(region_path) as region_image:
             region_width, region_height = region_image.size
 
@@ -2807,6 +2887,18 @@ def extract_images_from_pdf(
                     ):
                         continue
 
+                    # Conservative early reject: extreme aspect ratios,
+                    # obvious logo/text banners, tiny page fragments.
+                    # Does not call Gemini.
+                    early_reject, early_reason = early_reject_candidate(
+                        width, height, image_bytes=image_bytes,
+                        image_rect=image_rect, page_rect=page.rect,
+                    )
+                    if early_reject:
+                        print(f"  [early-filter] page {page_number}: "
+                              f"rejected ({early_reason})")
+                        continue
+
                     candidates_examined += 1
 
                     # Statistical room/lifestyle detection. Deliberately NOT
@@ -3090,7 +3182,10 @@ def extract_images_from_pdf(
                     # validate_and_correct_tile_image may have cropped the
                     # saved file (bbox and/or aspect-ratio correction), so
                     # the recorded width/height must reflect the FINAL
-                    # saved pixels, not the pre-crop ones above.
+                    # saved pixels, not the pre-crop ones above. Canvas
+                    # presentation runs only after approval.
+                    present_tile_on_canvas(output_path)
+
                     with Image.open(output_path) as corrected:
                         width, height = corrected.size
 
