@@ -118,24 +118,33 @@ def main():
 
     before = old_canvas(damaged_bgr)
     after = fit_to_output_canvas(hero)
-    pair = np.hstack([
-        np.vstack([label_strip(1024, "BEFORE - 600x600 label centre-crop", 70,
-                               (235, 235, 255)), before]),
-        np.vstack([label_strip(1024, "AFTER - complete product kept", 70,
-                               (235, 255, 235)), after]),
-    ])
+    def titled(img, text, bg):
+        return np.vstack([label_strip(img.shape[1], text, 70, bg), img])
+
+    def side_by_side(left, right):
+        h = max(left.shape[0], right.shape[0])
+        out = []
+        for img in (left, right):
+            pad = np.full((h - img.shape[0], img.shape[1], 3), 255, np.uint8)
+            out.append(np.vstack([img, pad]) if pad.size else img)
+        return np.hstack(out)
+
+    pair = side_by_side(
+        titled(before, "BEFORE - 600x600 label centre-crop", (235, 235, 255)),
+        titled(after, "AFTER - complete product, no padding", (235, 255, 235)),
+    )
     cv2.imwrite(str(OUT / "before_after_highlighter.png"), pair)
     print(f"hero: source {hero.shape[1]}x{hero.shape[0]} -> "
           f"damaged {damaged_bgr.shape[1]}x{damaged_bgr.shape[0]}")
 
     # ---- 3. before / after for a small valid crop --------------------
     small = cv2.resize(hero, (300, 600), interpolation=cv2.INTER_AREA)
-    pair2 = np.hstack([
-        np.vstack([label_strip(1024, "BEFORE - 300x600 crop, never enlarged",
-                               70, (235, 235, 255)), old_canvas(small)]),
-        np.vstack([label_strip(1024, "AFTER - presented at a useful size", 70,
-                               (235, 255, 235)), fit_to_output_canvas(small)]),
-    ])
+    pair2 = side_by_side(
+        titled(old_canvas(small), "BEFORE - padded square, tile small",
+               (235, 235, 255)),
+        titled(fit_to_output_canvas(small), "AFTER - tile alone, full size",
+               (235, 255, 235)),
+    )
     cv2.imwrite(str(OUT / "before_after_small.png"), pair2)
 
     for f in sorted(OUT.iterdir()):

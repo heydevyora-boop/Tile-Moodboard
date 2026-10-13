@@ -2420,6 +2420,15 @@ def verify_tile_only(image_path):
         # would silently restore the old behaviour of accepting printed
         # graphics, so an unanswered question defaults to "not proven".
         "physical_surface": bool(payload.get("physical_surface", False)),
+        # Whether the piece is a whole four-sided tile rather than an
+        # arch, a curve or a part-shape. This dict is built from an
+        # explicit key list, so a field added to the prompt and the
+        # schema but NOT here is silently dropped before the validator
+        # ever sees it -- which is exactly what happened the first time
+        # complete_rectangle was added, and arched crops kept arriving.
+        # Absent defaults to True: an unanswered question must not
+        # reject every product in the catalog.
+        "complete_rectangle": bool(payload.get("complete_rectangle", True)),
         "reason": str(payload.get("reason") or "").strip(),
     }
 

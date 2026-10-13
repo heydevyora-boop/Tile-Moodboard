@@ -337,8 +337,19 @@ def canvas_checks():
             max(pw, ph) >= 0.80 * OUTPUT_CANVAS_SIZE,
         ))
         results.append(check(
-            f"{w}x{h} is square-canvassed at {OUTPUT_CANVAS_SIZE}",
-            out.shape[0] == out.shape[1] == OUTPUT_CANVAS_SIZE,
+            f"{w}x{h} comes out as the tile alone, no padding "
+            f"({out.shape[1]}x{out.shape[0]})",
+            (pw, ph) == (out.shape[1], out.shape[0]),
+            f"product {pw}x{ph} vs image {out.shape[1]}x{out.shape[0]}",
+        ))
+        # The long side reaches the target, unless the upscale cap stops
+        # it first -- a small crop is presented larger, never invented.
+        expected_long = min(OUTPUT_CANVAS_SIZE,
+                            round(max(w, h) * MAX_CANVAS_UPSCALE))
+        results.append(check(
+            f"{w}x{h} has its longest side at {expected_long}",
+            abs(max(out.shape[:2]) - expected_long) <= 1,
+            f"got {out.shape[1]}x{out.shape[0]}",
         ))
 
     # All four product edges must survive presentation.
@@ -422,9 +433,14 @@ def real_catalog_checks():
         ))
 
         canvas = fit_to_output_canvas(crop)
+        src_ratio = crop.shape[1] / crop.shape[0]
+        out_ratio = canvas.shape[1] / canvas.shape[0]
         results.append(check(
-            f"product {idx} presents at {OUTPUT_CANVAS_SIZE} square, ratio kept",
-            canvas.shape[0] == canvas.shape[1] == OUTPUT_CANVAS_SIZE,
+            f"product {idx} presents at {OUTPUT_CANVAS_SIZE} long side, "
+            f"ratio kept, no padding",
+            max(canvas.shape[:2]) == OUTPUT_CANVAS_SIZE
+            and abs(src_ratio - out_ratio) < 0.02,
+            f"{canvas.shape[1]}x{canvas.shape[0]}",
         ))
 
         # And the verifier's likely word for it is now accepted.
@@ -534,6 +550,60 @@ def catalog_duplicate_checks():
     return results
 
 
+def observation_plumbing_checks():
+    """Every field the purity PROMPT asks for must survive the PARSER.
+
+    The first complete_rectangle attempt added the question to the prompt
+    and the schema and wrote the validator rule -- but verify_tile_only
+    builds its result from an explicit key list, so the model's answer
+    was dropped before the validator ever saw it, and arched crops kept
+    arriving. This walks prompt -> schema -> parser so a field can never
+    again be half-wired.
+    """
+    import inspect
+
+    results = []
+    prompt = gemini_service.TILE_PURITY_PROMPT
+    schema = gemini_service.TILE_PURITY_SCHEMA["properties"]
+    parser_src = inspect.getsource(gemini_service.verify_tile_only)
+
+    for field in sorted(schema):
+        results.append(check(
+            f"'{field}' asked in the prompt is also read by the parser",
+            f'"{field}"' in parser_src,
+            "schema field never reaches the observation dict",
+        ))
+
+    for field in ("complete_rectangle", "physical_surface", "is_scene"):
+        results.append(check(
+            f"'{field}' is described in TILE_PURITY_PROMPT",
+            field in prompt,
+        ))
+        results.append(check(
+            f"'{field}' is declared in TILE_PURITY_SCHEMA",
+            field in schema,
+        ))
+
+    # And the parsed observation really carries it through.
+    sample = {
+        "material": "TILE", "tile_fraction": 0.95,
+        "complete_rectangle": False, "physical_surface": True,
+        "is_scene": False, "distinct_tile_designs": 1, "reason": "arch",
+    }
+    results.append(check(
+        "a payload saying complete_rectangle=false reaches the validator "
+        "as a rejection",
+        assess_tile_purity(observation("TILE", complete_rectangle=False))[
+            "state"] == PURITY_NOT_TILE,
+    ))
+    results.append(check(
+        "the parser defaults a missing complete_rectangle to True "
+        "(an unanswered question must not empty the catalog)",
+        'payload.get("complete_rectangle", True)' in parser_src,
+    ))
+    return results
+
+
 def main():
     shutil.rmtree(OUT, ignore_errors=True)
     OUT.mkdir(parents=True, exist_ok=True)
@@ -548,6 +618,7 @@ def main():
         ("invalid geometry and upload gating", geometry_and_upload_checks()),
         ("the same product is not extracted twice in one catalog",
          catalog_duplicate_checks()),
+        ("every prompt field survives the parser", observation_plumbing_checks()),
     ]
 
     total = passed = 0

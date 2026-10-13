@@ -5,10 +5,22 @@ import cv2
 import numpy as np
 
 
-# Standard presentation canvas for approved product crops.
-# The canvas is square; the tile itself keeps its native aspect ratio.
+# Longest side of an approved product image, in pixels.
 OUTPUT_CANVAS_SIZE = int(os.getenv("TILE_OUTPUT_CANVAS_SIZE", "1024"))
 NEUTRAL_BACKGROUND_BGR = (245, 245, 245)
+
+# Whether to letterbox the product onto a SQUARE canvas.
+#
+# Off. The output is the tile and nothing else: a 1:2 panel comes out
+# 512x1024, not 1024x1024 with 256px of filler down each side. Padding
+# was added to make every file the same shape, but a tile image with a
+# wide blank border around it is not what a product photo looks like,
+# and the blank is not part of the product.
+#
+# Set TILE_OUTPUT_PAD_TO_SQUARE=1 to restore the square letterbox.
+PAD_TO_SQUARE = os.getenv(
+    "TILE_OUTPUT_PAD_TO_SQUARE", "0",
+).strip().lower() in ("1", "true", "yes", "on")
 
 # How far a crop smaller than the canvas may be enlarged to fill it.
 #
@@ -25,14 +37,22 @@ def fit_to_output_canvas(
     image_bgr,
     canvas_size=OUTPUT_CANVAS_SIZE,
     background_bgr=NEUTRAL_BACKGROUND_BGR,
+    pad_to_square=None,
 ):
-    """Place a crop on a square neutral canvas without distorting it.
+    """Scale a crop to the standard output size without distorting it.
 
     Preserves the complete tile and its original aspect ratio. Never
     stretches or squashes, and never crops: every source pixel survives.
-    Scales the crop to fit the canvas -- down without limit, up only as
-    far as MAX_CANVAS_UPSCALE -- then centres it with neutral padding.
+    Scales so the LONGEST side reaches `canvas_size` -- down without
+    limit, up only as far as MAX_CANVAS_UPSCALE.
+
+    By default the result is the tile alone, so a 1:2 panel comes back
+    512x1024. With pad_to_square (or TILE_OUTPUT_PAD_TO_SQUARE=1) it is
+    centred on a square neutral canvas instead.
     """
+    if pad_to_square is None:
+        pad_to_square = PAD_TO_SQUARE
+
     if image_bgr is None or image_bgr.size == 0:
         raise ValueError("Cannot fit an empty image onto the output canvas")
 
@@ -64,6 +84,10 @@ def fit_to_output_canvas(
         )
     else:
         resized = image_bgr
+
+    if not pad_to_square:
+        # The product, and nothing around it.
+        return resized
 
     canvas = np.full(
         (canvas_size, canvas_size, 3),
