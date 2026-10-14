@@ -1780,20 +1780,40 @@ Report:
   even though the room is full of tile, because floor, ceiling,
   furniture and fittings are not tile surface.
 
-- physical_surface: true when this is a PHOTOGRAPH of real physical
-  material -- something with a manufactured surface, lit by real light,
-  that a person could run a hand across. False when it is ink or pixels
-  DEPICTING a pattern: a printed decoration, a geometric motif, an
-  illustration, a diagram, a colour chart, a border, an icon, a
-  background graphic, a rendering or any other catalog artwork.
-  A printed pattern repeats just as regularly as a tiled wall does, so
-  regularity tells you nothing here. Look instead for evidence of a real
-  object: lighting falling across it, shadow, gloss or sheen, surface
-  relief, grain or mottling within each unit, slight variation between
-  units, imperfections, the edge or thickness of a real piece. Flat even
-  fill, mathematically exact repetition, crisp vector edges and pure
-  flat colours mean a graphic. If it is a graphic, say so here even when
-  the pattern is unmistakably a tile design.
+- physical_surface: this asks what the image SHOWS. It does not ask how
+  the image reached you.
+
+  EVERY frame in this task was cut out of a printed tile catalog and
+  re-rendered as pixels. "It came off a page" is therefore true of all
+  of them and is evidence about none of them. A manufacturer's
+  photograph of a real tile is still a photograph of a real tile after
+  it has been printed in a brochure, made into a PDF, rendered and
+  cropped. That is the normal case here, and the answer for it is TRUE.
+
+  TRUE: a real manufactured piece was put in front of a camera, or
+  rendered to show exactly what one looks like -- a tile, a swatch, a
+  plank, a panel, a mosaic sheet, a border, a listello, a highlighter,
+  a moulded or relief piece -- whether laid out flat or shown on a
+  wall. Catalogs light flat products evenly and shoot them square on,
+  so a flat, evenly lit, shadowless swatch is exactly what a real
+  product looks like in a catalog, and it is TRUE. A product render is
+  TRUE as well: it stands for a piece the factory actually sells.
+
+  FALSE only for something that was never a piece of material at all:
+  a logo or brand mark, a line drawing, a technical or installation
+  diagram, a layout plan, an icon, a colour chart or grid of flat
+  colour blocks, a chart or table, page decoration, a sketch or
+  cartoon. What marks these is the look of something DRAWN rather than
+  photographed -- crisp vector edges, pure flat fill with no variation
+  anywhere in it, no material in evidence at all.
+
+  A printed pattern repeats as regularly as a tiled wall does, so
+  regularity tells you nothing either way.
+
+  If you are unsure, answer TRUE. A wrong FALSE deletes the product
+  outright and nothing downstream can reconsider it -- this is the one
+  answer in this list with no appeal -- while a wrong TRUE only passes
+  the frame on to every other rule here.
 
 - material: what the main surface really is, one of
   TILE          the fired ceramic, porcelain, vitrified or stone face of
@@ -1856,8 +1876,17 @@ Report:
   Report TILE or DECOR_PANEL only when the frame is filled by the
   surface itself, close enough to read its pattern. If you are looking
   AT a structure rather than at its material, that is ARCHITECTURE.
-  A genuine decorative TILE sample with complex relief is still
-  DECOR_PANEL -- do not call it ARCHITECTURE merely for being ornate.
+
+  ARCHITECTURE NEEDS THE EVIDENCE OF A PLACE, NOT JUST A SHAPE. Say it
+  only when the frame shows something standing in the world: sky,
+  ground, open air, distance, a perspective view, surroundings, other
+  buildings. A single flat piece shot square on against a plain
+  background is NEVER a landmark, however grand its moulding, however
+  deep its relief and however much its frame resembles a doorway or an
+  arch. A moulded framed panel is a product; a building that happens to
+  be framed is a building. If the only reason you are reaching for
+  ARCHITECTURE is that the piece is ornate or frame-shaped, the answer
+  is DECOR_PANEL.
 
 - contains_person: a human, or any part of one -- face, hand, leg,
   hair, clothing.
@@ -1876,6 +1905,15 @@ Report:
   flat piece of surface. A whole wall or a whole floor photographed as
   part of a room is a scene. A partial interior crop showing molding,
   arches, windows or lifestyle props is also a scene.
+
+  THE GIVEAWAY IS A JUNCTION OR A SECOND PLANE. If you can see where
+  the wall meets the ceiling, the floor, a skirting, a coving or
+  another wall, or if two surfaces lying at different angles are both
+  in the frame, you are looking at a SPACE -- say true. That holds even
+  when tile fills nearly the whole frame, even when every tile in it is
+  the same product, and even when no furniture, fitting or person
+  appears anywhere in it. A photograph of an installed wall is a
+  photograph of a wall, not a tile sample.
   OUTDOORS COUNTS TOO. A building, a monument, a landmark, a tower, an
   archway or any other built structure photographed where it stands --
   seen from a distance, at an angle, with sky, ground or open air
@@ -1952,7 +1990,14 @@ TILE_PURITY_SCHEMA = {
         "distinct_tile_designs": {"type": "INTEGER"},
         "reason": {"type": "STRING"},
     },
-    "required": ["tile_fraction", "material", "is_scene", "reason"],
+    # physical_surface is REQUIRED because RULE 0 acts on it with no
+    # appeal: a reply that simply omitted the field used to be read as
+    # "not a physical surface" and the product was deleted for a
+    # question nobody answered.
+    "required": [
+        "tile_fraction", "material", "is_scene", "physical_surface",
+        "reason",
+    ],
 }
 
 
@@ -1970,6 +2015,16 @@ TILE_PURITY_SCHEMA = {
 ARTWORK_MATERIAL_NAMES = {
     "ARTWORK", "POSTER", "PRINT", "GRAPHIC",
     "PAINTING", "MURAL", "ILLUSTRATION",
+}
+
+# The words that mean "a real catalog product". Reaching one of these
+# while physical_surface is FALSE is the contradiction the other way
+# round, and the costlier of the two: see verify_tile_only.
+PRODUCT_MATERIAL_NAMES = {
+    "TILE", "CERAMIC", "PORCELAIN", "VITRIFIED", "GLAZED", "SLAB_TILE",
+    "DECOR_PANEL", "DECORATIVE_PANEL", "MOSAIC", "HIGHLIGHTER",
+    "BORDER", "LISTELLO", "ACCENT", "INSERT",
+    "MOULDED_PANEL", "MOLDED_PANEL", "WALL_PANEL", "PANEL", "FRAMED_PANEL",
 }
 
 PRODUCT_OR_ARTWORK_PROMPT = """
@@ -2468,7 +2523,24 @@ def verify_tile_only(image_path):
         # Absent means the model did not answer it. Defaulting to True
         # would silently restore the old behaviour of accepting printed
         # graphics, so an unanswered question defaults to "not proven".
-        "physical_surface": bool(payload.get("physical_surface", False)),
+        # A MISSING ANSWER MUST NOT REJECT, AND MUST NOT SILENCE THE REST.
+        #
+        # physical_surface=false is the one answer with no appeal: RULE
+        # 0 deletes on it and the tile-only contract may not override
+        # it. Reading a reply that never mentioned the field as "false"
+        # therefore deleted products for a question nobody answered, so
+        # an absent field reads TRUE here and the frame goes on to be
+        # judged by every other rule -- material, scene, fraction,
+        # contaminants -- which still reject it on their own evidence.
+        # Discarding the whole reply instead would have been worse: a
+        # clear ARCHITECTURE verdict in a reply that happened to omit
+        # this field would stop rejecting at all.
+        #
+        # TILE_PURITY_SCHEMA marks the field required so this stays the
+        # rare case, and assess_tile_purity still defaults a
+        # hand-written observation the other way, where omission is not
+        # a model's doing.
+        "physical_surface": bool(payload.get("physical_surface", True)),
         # Whether the piece is a whole four-sided tile rather than an
         # arch, a curve or a part-shape. This dict is built from an
         # explicit key list, so a field added to the prompt and the
@@ -2480,6 +2552,31 @@ def verify_tile_only(image_path):
         "complete_rectangle": bool(payload.get("complete_rectangle", True)),
         "reason": str(payload.get("reason") or "").strip(),
     }
+
+    # THE SAME CONTRADICTION THE OTHER WAY ROUND, AND THE COSTLIER ONE.
+    #
+    # "material = TILE" and "physical_surface = false" cannot both be
+    # right either: the first names a fired ceramic product, the second
+    # says nothing physical was photographed at all. This is the
+    # pairing that emptied a real nine-page catalog -- around fifteen
+    # candidates refused by RULE 0, which deletes with no appeal and
+    # which the tile-only contract is expressly forbidden to override,
+    # so nothing else in the pipeline could look at them again.
+    #
+    # It is resolved exactly like its mirror image, by putting the one
+    # question that matters back to the model, and it fails the same
+    # safe way: only a clear PRODUCT answer changes anything, so a
+    # printed motif on a page stays refused, and a failed, skipped or
+    # unsure re-ask leaves the original verdict untouched.
+    if (not observation["physical_surface"]
+            and observation["material"] in PRODUCT_MATERIAL_NAMES):
+        _debug("  contradiction     : a product material reported with no "
+               "physical surface -- re-asking product vs picture")
+        second = _reinterpret_product_or_artwork(image_bytes, mime_type)
+        _debug(f"  second opinion    : {second or 'none -- original stands'}")
+        if second == "PRODUCT":
+            observation["physical_surface"] = True
+            observation["reinterpreted_from"] = "GRAPHIC"
 
     # SECOND INTERPRETATION FOR A CONTRADICTORY DECORATIVE VERDICT.
     #

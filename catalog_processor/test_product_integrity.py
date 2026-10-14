@@ -838,6 +838,173 @@ def flat(text):
     return " ".join(str(text).split())
 
 
+def printed_graphic_checks():
+    """RULE 0 was deleting the catalog, because of how it was asked.
+
+    A real run of 18_mozart_frame_collection refused about forty
+    candidates across nine pages and kept six. The single commonest
+    reason, by a wide margin, was "this is a printed or drawn graphic,
+    not a photograph of a physical surface".
+
+    The wording made that answer almost inevitable. It said FALSE for
+    "ink or pixels DEPICTING a pattern ... a border ... a rendering or
+    any other catalog artwork", and every frame in this pipeline is
+    pixels cut out of a catalog PDF. It also called a BORDER a graphic
+    while the material list two lines below calls a border a product.
+    So the question is now about what the image SHOWS, the medium is
+    named as evidence of nothing, and an unsure answer is TRUE.
+    """
+    prompt = flat(gemini_service.TILE_PURITY_PROMPT)
+    results = [
+        check("the question is about what the image shows, not its medium",
+              "It does not ask how the image reached you" in prompt),
+        check("coming off a catalog page is named as evidence of nothing",
+              "is evidence about none of them" in prompt),
+        check("a flat evenly lit catalog swatch is the normal TRUE case",
+              "shadowless swatch is exactly what a real product looks like"
+              in prompt),
+        check("a product render counts as a real piece",
+              "A product render is TRUE as well" in prompt),
+        check("FALSE is reserved for things that were never material",
+              "never a piece of material at all" in prompt),
+        check("an unsure answer is TRUE",
+              "If you are unsure, answer TRUE. A wrong FALSE deletes the "
+              "product outright" in prompt),
+        check("the no-appeal consequence is spelled out",
+              "nothing downstream can reconsider it" in prompt),
+        check("a border is no longer called a graphic",
+              "a colour chart, a border, an icon" not in prompt),
+        check("the material list still calls a border a product, as it did",
+              "DECOR_PANEL the face of a PHYSICAL decorative product -- a "
+              "highlighter, border, listello" in prompt),
+        check("so the two answers no longer contradict each other",
+              "a border, a listello, a highlighter" in prompt),
+    ]
+
+    # The rule itself, and what an unanswered question now does.
+    plain = observation("TILE")
+    no_answer = {k: v for k, v in plain.items() if k != "physical_surface"}
+    results.extend([
+        check("a frame the model calls a graphic is still refused",
+              assess_tile_purity(observation("TILE", physical_surface=False))
+              ["state"] == PURITY_NOT_TILE),
+        check("a photographed tile is still kept",
+              assess_tile_purity(plain)["state"] == PURITY_CLEAN),
+        check("a hand-built observation still cannot accept by omission",
+              assess_tile_purity(no_answer)["state"] == PURITY_NOT_TILE),
+        check("the model is required to answer it at all",
+              "physical_surface" in gemini_service.TILE_PURITY_SCHEMA["required"]),
+        # And where it actually bites -- a real reply that left the
+        # field out -- the omission must not reject by itself, and must
+        # not silence the other rules either.
+        check("a reply that omits it is not read as 'a graphic'",
+              (verify_with_model(
+                  purity={k: v for k, v in observation("TILE").items()
+                          if k != "physical_surface"},
+                  reask="PRODUCT") or {}).get("physical_surface") is True),
+        check("a genuine rejection in such a reply still rejects",
+              assess_tile_purity(verify_with_model(
+                  purity={k: v for k, v in observation("ARCHITECTURE").items()
+                          if k != "physical_surface"},
+                  reask="ARTWORK"))["state"] == PURITY_NOT_TILE),
+        check("and a scene in such a reply is still not clean",
+              assess_tile_purity(verify_with_model(
+                  purity={k: v for k, v in observation("TILE", is_scene=True).items()
+                          if k != "physical_surface"},
+                  reask="ARTWORK"))["state"] != PURITY_CLEAN),
+        check("a reply that answers it is still read normally",
+              (verify_with_model(purity=observation("TILE"), reask="PRODUCT")
+               or {}).get("physical_surface") is True),
+        # A PRODUCT MATERIAL WITH NO PHYSICAL SURFACE CONTRADICTS ITSELF.
+        #
+        # The file already re-asks the mirror case (ARTWORK reported for
+        # something physical). This pairing is the costlier one: RULE 0
+        # deletes on it and the tile-only contract may not override it,
+        # so nothing could look again. It is resolved the same way, and
+        # fails the same safe way.
+        check("a product material with no physical surface is re-asked",
+              (verify_with_model(
+                  purity=observation("TILE", physical_surface=False),
+                  reask="PRODUCT") or {}).get("physical_surface") is True),
+        check("and the rescue is recorded, not silent",
+              (verify_with_model(
+                  purity=observation("TILE", physical_surface=False),
+                  reask="PRODUCT") or {}).get("reinterpreted_from") == "GRAPHIC"),
+        check("an ARTWORK second opinion leaves the refusal standing",
+              (verify_with_model(
+                  purity=observation("TILE", physical_surface=False),
+                  reask="ARTWORK") or {}).get("physical_surface") is False),
+        check("an UNSURE second opinion leaves the refusal standing",
+              (verify_with_model(
+                  purity=observation("TILE", physical_surface=False),
+                  reask="UNSURE") or {}).get("physical_surface") is False),
+        check("a genuine graphic -- no product material -- is not re-asked",
+              (verify_with_model(
+                  purity=observation("GRAPHIC", physical_surface=False),
+                  reask="PRODUCT") or {}).get("physical_surface") is False),
+        check("a refused graphic still reaches RULE 0 as a rejection",
+              assess_tile_purity(verify_with_model(
+                  purity=observation("GRAPHIC", physical_surface=False),
+                  reask="PRODUCT"))["state"] == PURITY_NOT_TILE),
+    ])
+    return results
+
+
+def landmark_and_wall_checks():
+    """Two more verdicts from that same run, at opposite extremes.
+
+    Nine candidates were refused as "a photograph of a structure ... a
+    landmark clad in tile is still a landmark" -- in a catalog whose
+    entire range is moulded framed panels, where the only thing
+    frame-shaped about them is the moulding. Meanwhile the one crop
+    that WAS accepted off page 6 is a wall of three identical panels
+    with the ceiling line across the top: a room, reported as not a
+    scene, because tile filled the frame and every tile matched.
+
+    So ARCHITECTURE now needs the evidence of a place rather than a
+    shape, and a visible junction is named as what makes a frame a
+    space.
+    """
+    prompt = flat(gemini_service.TILE_PURITY_PROMPT)
+    return [
+        check("architecture requires evidence of a place, not a shape",
+              "ARCHITECTURE NEEDS THE EVIDENCE OF A PLACE, NOT JUST A SHAPE"
+              in prompt),
+        check("sky, ground, distance and surroundings are the evidence named",
+              "sky, ground, open air, distance, a perspective view" in prompt),
+        check("a flat piece shot square on is never a landmark",
+              "is NEVER a landmark, however grand its moulding" in prompt),
+        check("being frame-shaped is explicitly not enough",
+              "its frame resembles a doorway or an arch" in prompt),
+        check("ornate or frame-shaped resolves to DECOR_PANEL",
+              "the answer is DECOR_PANEL" in prompt),
+
+        check("a junction is named as the giveaway for a space",
+              "THE GIVEAWAY IS A JUNCTION OR A SECOND PLANE" in prompt),
+        check("wall-to-ceiling and wall-to-floor are spelled out",
+              "where the wall meets the ceiling, the floor, a skirting"
+              in prompt),
+        check("tile filling the frame does not make a wall a sample",
+              "even when tile fills nearly the whole frame" in prompt),
+        check("identical tiles throughout do not make a wall a sample",
+              "every tile in it is the same product" in prompt),
+        check("an empty room with no props is still a room",
+              "no furniture, fitting or person appears anywhere in it"
+              in prompt),
+
+        # The rules behind both, unchanged.
+        check("a scene is still refused whatever its material",
+              assess_tile_purity(observation("TILE", is_scene=True))["state"]
+              != PURITY_CLEAN),
+        check("an architecture verdict is still refused",
+              assess_tile_purity(observation("ARCHITECTURE"))["state"]
+              == PURITY_NOT_TILE),
+        check("a moulded framed panel is still a product",
+              assess_tile_purity(observation("MOULDED_PANEL"))["state"]
+              == PURITY_CLEAN),
+    ]
+
+
 def report_accounting_checks():
     """The report must say what happened to every candidate it counted.
 
@@ -1259,6 +1426,10 @@ def main():
         ("cutting something up cannot launder a non-tile verdict",
          split_laundering_checks()),
         ("a product is never a building", structure_word_checks()),
+        ("a catalog reproduction is not a printed graphic",
+         printed_graphic_checks()),
+        ("a panel is not a landmark, a wall is not a sample",
+         landmark_and_wall_checks()),
         ("two tiles in one crop are cut apart", gutter_split_checks()),
         ("a narrow product is not dropped for being narrow", size_floor_checks()),
     ]
