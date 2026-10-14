@@ -152,7 +152,13 @@ def main():
     # entire catalog. What actually separates that catalog's products from
     # a photograph of real joinery is the scene evidence directly below,
     # which is unchanged and still rejects.
-    for form in ("WALL_PANEL", "FRAME", "MOULDING", "DOOR_PANEL"):
+    # NOTE on FRAME: an earlier pass listed it here as a product, so the
+    # "Mozart Frame Collection" panels would stop being refused. A
+    # photograph of the Dubai Frame -- an actual building -- then reached
+    # Drive as a tile on the strength of that. The catalog's own pieces
+    # are PANELs, which still pass, and the bare word that names a
+    # structure now rejects again (checked below).
+    for form in ("WALL_PANEL", "MOULDED_PANEL", "MOULDING", "DOOR_PANEL"):
         outcomes.append(check(
             f"a clean standalone {form} product is kept",
             assess_tile_purity(observation(form))["state"] == PURITY_CLEAN,
@@ -182,7 +188,8 @@ def main():
     # The words that name a whole OBJECT rather than a surface profile are
     # untouched and still reject on the word alone.
     for obj in ("ARCHITECTURE", "BUILDING", "WINDOW", "DOOR", "CABINET",
-                "FURNITURE"):
+                "FURNITURE", "FRAME", "ORNAMENTAL_FRAME", "MONUMENT",
+                "LANDMARK", "STRUCTURE", "TOWER", "ARCHWAY"):
         outcomes.append(check(
             f"{obj} is still a hard non-tile",
             assess_tile_purity(observation(obj))["state"] == PURITY_NOT_TILE,

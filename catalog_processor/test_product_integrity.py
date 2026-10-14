@@ -147,8 +147,8 @@ class Analysis:
 def moulded_profile_checks():
     results = []
 
-    for form in ("FRAME", "MOULDING", "WALL_PANEL", "DOOR_PANEL", "PANEL",
-                 "WAINSCOT", "ORNAMENTAL_FRAME", "CORNICE"):
+    for form in ("MOULDING", "WALL_PANEL", "DOOR_PANEL", "PANEL",
+                 "WAINSCOT", "CORNICE", "FRAMED_PANEL", "MOULDED_PANEL"):
         final, purity = verdict_for(observation(form))
         results.append(check(
             f"a clean standalone {form} product is ACCEPTED",
@@ -167,23 +167,29 @@ def moulded_profile_checks():
 
     # The same words, with room evidence, must still be refused.
     scene_cases = [
-        ("FRAME in a room scene", observation("FRAME", is_scene=True)),
+        ("PANEL in a room scene", observation("PANEL", is_scene=True)),
         ("WALL_PANEL with a fixture", observation(
             "WALL_PANEL", contains_fixture=True, tile_fraction=0.55)),
         ("DOOR_PANEL with furniture", observation(
             "DOOR_PANEL", contains_furniture=True, tile_fraction=0.6)),
         ("MOULDING with props in frame", observation(
             "MOULDING", contains_object=True, tile_fraction=0.5)),
-        ("FRAME that is a printed graphic", observation(
-            "FRAME", physical_surface=False)),
+        ("PANEL that is a printed graphic", observation(
+            "PANEL", physical_surface=False)),
     ]
     for label, obs in scene_cases:
         final, _ = verdict_for(obs)
         results.append(check(f"{label} is REJECTED", final == "REJECT"))
 
     # Whole objects still reject on the word alone.
+    # A bare FRAME names a STRUCTURE as readily as a tile profile, and a
+    # photograph of the Dubai Frame reached Drive as a tile while it was
+    # treated as a product. The catalog's own pieces are PANELs, checked
+    # above, so the structure words all reject here.
     for obj in ("ARCHITECTURE", "BUILDING", "FACADE", "WINDOW", "WINDOW_FRAME",
-                "DOOR", "CABINET", "FURNITURE", "PAINTED_WALL", "ARTWORK"):
+                "DOOR", "CABINET", "FURNITURE", "PAINTED_WALL", "ARTWORK",
+                "FRAME", "ORNAMENTAL_FRAME", "MONUMENT", "LANDMARK",
+                "STRUCTURE", "TOWER", "BRIDGE", "ARCHWAY", "EXTERIOR"):
         final, purity = verdict_for(observation(obj))
         results.append(check(
             f"{obj} is still a hard non-tile REJECT",
@@ -200,11 +206,18 @@ def moulded_profile_checks():
             f"{final} / {purity['state']}",
         ))
     # ...including when the material name is a moulded profile.
-    final, _ = verdict_for(observation("FRAME", complete_rectangle=False))
+    final, _ = verdict_for(observation("PANEL", complete_rectangle=False))
     results.append(check(
-        "an arch described as a FRAME is still REJECTED",
+        "an arch described as a PANEL is still REJECTED",
         final == "REJECT",
     ))
+    # The reported failure: a frame-shaped BUILDING against open sky.
+    for extra in ({}, {"is_scene": True}, {"tile_fraction": 0.95}):
+        final, _ = verdict_for(observation("FRAME", **extra))
+        results.append(check(
+            f"a frame-shaped building is REJECTED (extra={extra or 'none'})",
+            final == "REJECT",
+        ))
     # A tile whose ARTWORK is curved is still a rectangle.
     final, _ = verdict_for(observation("DECOR_PANEL", complete_rectangle=True))
     results.append(check(
@@ -444,11 +457,19 @@ def real_catalog_checks():
             f"{canvas.shape[1]}x{canvas.shape[0]}",
         ))
 
-        # And the verifier's likely word for it is now accepted.
-        final, _ = verdict_for(observation("FRAME"))
+        # And the words a verifier reaches for on a flat moulded ceramic
+        # panel are accepted -- while the bare FRAME that names a
+        # building is not.
+        for word in ("PANEL", "MOULDED_PANEL", "DECOR_PANEL"):
+            final, _ = verdict_for(observation(word))
+            results.append(check(
+                f"product {idx} is not rejected when called {word}",
+                final == "ACCEPT",
+            ))
         results.append(check(
-            f"product {idx} is not rejected for being a moulded frame",
-            final == "ACCEPT",
+            f"product {idx}: a bare FRAME is still refused (it names a "
+            f"structure, not this flat piece)",
+            verdict_for(observation("FRAME"))[0] == "REJECT",
         ))
 
     doc.close()
