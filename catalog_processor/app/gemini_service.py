@@ -1860,6 +1860,14 @@ Report:
   flat piece of surface. A whole wall or a whole floor photographed as
   part of a room is a scene. A partial interior crop showing molding,
   arches, windows or lifestyle props is also a scene.
+  OUTDOORS COUNTS TOO. A building, a monument, a landmark, a tower, an
+  archway or any other built structure photographed where it stands --
+  seen from a distance, at an angle, with sky, ground or open air
+  around or through it -- is a scene, and its material is ARCHITECTURE.
+  The test is not whether the thing is rectangular or handsome: it is
+  whether you are looking at a flat piece of material lying in front of
+  the camera, or at a STRUCTURE standing in the world. A famous frame-
+  shaped building is a building.
 
 - complete_rectangle: true when the product in this frame is a WHOLE,
   four-sided tile or panel whose outline is straight-edged, with all

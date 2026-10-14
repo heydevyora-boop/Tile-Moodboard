@@ -39,6 +39,7 @@ Run:  GEMINI_API_KEY=test python3 test_product_integrity.py
 """
 
 import contextlib
+import inspect
 import io
 import os
 import shutil
@@ -146,8 +147,8 @@ class Analysis:
 def moulded_profile_checks():
     results = []
 
-    for form in ("FRAME", "MOULDING", "WALL_PANEL", "DOOR_PANEL", "PANEL",
-                 "WAINSCOT", "ORNAMENTAL_FRAME", "CORNICE"):
+    for form in ("MOULDING", "WALL_PANEL", "DOOR_PANEL", "PANEL",
+                 "WAINSCOT", "CORNICE", "FRAMED_PANEL", "MOULDED_PANEL"):
         final, purity = verdict_for(observation(form))
         results.append(check(
             f"a clean standalone {form} product is ACCEPTED",
@@ -166,23 +167,29 @@ def moulded_profile_checks():
 
     # The same words, with room evidence, must still be refused.
     scene_cases = [
-        ("FRAME in a room scene", observation("FRAME", is_scene=True)),
+        ("PANEL in a room scene", observation("PANEL", is_scene=True)),
         ("WALL_PANEL with a fixture", observation(
             "WALL_PANEL", contains_fixture=True, tile_fraction=0.55)),
         ("DOOR_PANEL with furniture", observation(
             "DOOR_PANEL", contains_furniture=True, tile_fraction=0.6)),
         ("MOULDING with props in frame", observation(
             "MOULDING", contains_object=True, tile_fraction=0.5)),
-        ("FRAME that is a printed graphic", observation(
-            "FRAME", physical_surface=False)),
+        ("PANEL that is a printed graphic", observation(
+            "PANEL", physical_surface=False)),
     ]
     for label, obs in scene_cases:
         final, _ = verdict_for(obs)
         results.append(check(f"{label} is REJECTED", final == "REJECT"))
 
     # Whole objects still reject on the word alone.
+    # A bare FRAME names a STRUCTURE as readily as a tile profile, and a
+    # photograph of the Dubai Frame reached Drive as a tile while it was
+    # treated as a product. The catalog's own pieces are PANELs, checked
+    # above, so the structure words all reject here.
     for obj in ("ARCHITECTURE", "BUILDING", "FACADE", "WINDOW", "WINDOW_FRAME",
-                "DOOR", "CABINET", "FURNITURE", "PAINTED_WALL", "ARTWORK"):
+                "DOOR", "CABINET", "FURNITURE", "PAINTED_WALL", "ARTWORK",
+                "FRAME", "ORNAMENTAL_FRAME", "MONUMENT", "LANDMARK",
+                "STRUCTURE", "TOWER", "BRIDGE", "ARCHWAY", "EXTERIOR"):
         final, purity = verdict_for(observation(obj))
         results.append(check(
             f"{obj} is still a hard non-tile REJECT",
@@ -199,11 +206,18 @@ def moulded_profile_checks():
             f"{final} / {purity['state']}",
         ))
     # ...including when the material name is a moulded profile.
-    final, _ = verdict_for(observation("FRAME", complete_rectangle=False))
+    final, _ = verdict_for(observation("PANEL", complete_rectangle=False))
     results.append(check(
-        "an arch described as a FRAME is still REJECTED",
+        "an arch described as a PANEL is still REJECTED",
         final == "REJECT",
     ))
+    # The reported failure: a frame-shaped BUILDING against open sky.
+    for extra in ({}, {"is_scene": True}, {"tile_fraction": 0.95}):
+        final, _ = verdict_for(observation("FRAME", **extra))
+        results.append(check(
+            f"a frame-shaped building is REJECTED (extra={extra or 'none'})",
+            final == "REJECT",
+        ))
     # A tile whose ARTWORK is curved is still a rectangle.
     final, _ = verdict_for(observation("DECOR_PANEL", complete_rectangle=True))
     results.append(check(
@@ -443,11 +457,19 @@ def real_catalog_checks():
             f"{canvas.shape[1]}x{canvas.shape[0]}",
         ))
 
-        # And the verifier's likely word for it is now accepted.
-        final, _ = verdict_for(observation("FRAME"))
+        # And the words a verifier reaches for on a flat moulded ceramic
+        # panel are accepted -- while the bare FRAME that names a
+        # building is not.
+        for word in ("PANEL", "MOULDED_PANEL", "DECOR_PANEL"):
+            final, _ = verdict_for(observation(word))
+            results.append(check(
+                f"product {idx} is not rejected when called {word}",
+                final == "ACCEPT",
+            ))
         results.append(check(
-            f"product {idx} is not rejected for being a moulded frame",
-            final == "ACCEPT",
+            f"product {idx}: a bare FRAME is still refused (it names a "
+            f"structure, not this flat piece)",
+            verdict_for(observation("FRAME"))[0] == "REJECT",
         ))
 
     doc.close()
@@ -604,6 +626,101 @@ def observation_plumbing_checks():
     return results
 
 
+def gutter_split_checks():
+    """Two tiles with bare page between them must come apart, and a
+    single product must never be cut."""
+    # Absent before the gutter fix; read defensively so this file can be
+    # run against the unfixed baseline to demonstrate the failure.
+    import app.tile_region_extractor as tre
+    split_at_background_gutters = getattr(
+        tre, "split_at_background_gutters", lambda _img: [],
+    )
+
+    results = []
+    gap = lambda h, w=60: np.full((h, w, 3), 252, np.uint8)
+
+    single = tile_patch(400, 800, ((201, 190, 173), (183, 173, 157)))
+    results.append(check(
+        "a single patterned tile is NOT cut",
+        split_at_background_gutters(single) == [],
+        str(split_at_background_gutters(single)),
+    ))
+
+    rng = np.random.default_rng(3)
+    plain = (np.full((800, 400, 3), 200, np.uint8)
+             + rng.normal(0, 4, (800, 400, 3))).clip(0, 255).astype(np.uint8)
+    results.append(check(
+        "a plain noisy tile is NOT cut (sensor noise is not a gutter)",
+        split_at_background_gutters(plain) == [],
+    ))
+
+    two = np.hstack([single, gap(800), single])
+    pieces = split_at_background_gutters(two)
+    results.append(check(
+        f"two tiles with page between them are cut apart ({len(pieces)} pieces)",
+        len(pieces) == 2, str(pieces),
+    ))
+    if len(pieces) == 2:
+        widths = [x2 - x1 for x1, _y1, x2, _y2 in pieces]
+        results.append(check(
+            f"each piece is one tile, the white band belongs to neither "
+            f"(widths {widths})",
+            all(abs(w - 400) <= 8 for w in widths),
+        ))
+
+    stacked = np.vstack([single, gap(60, 400), single])
+    results.append(check(
+        "a horizontal gutter is found too",
+        len(split_at_background_gutters(stacked)) == 2,
+    ))
+
+    three = np.hstack([single, gap(800), single, gap(800), single])
+    results.append(check(
+        "three tiles become three pieces",
+        len(split_at_background_gutters(three)) == 3,
+    ))
+
+    results.append(check(
+        "the splitter is wired into mine_tile_regions",
+        "split_at_background_gutters" in
+        inspect.getsource(pipeline.mine_tile_regions),
+    ))
+    return results
+
+
+def size_floor_checks():
+    """A narrow product must not be dropped for being narrow."""
+    results = []
+    too_small = getattr(
+        pipeline, "is_too_small_for_a_product",
+        lambda w, h: w < 200 or h < 200,   # the old flat floor
+    )
+
+    keep = [
+        (150, 900, "a 75x300mm subway tile, narrow but large"),
+        (200, 200, "a small square swatch at the floor"),
+        (240, 1200, "a long plank"),
+        (900, 900, "an ordinary tile"),
+    ]
+    for w, h, label in keep:
+        results.append(check(f"{label} ({w}x{h}) is KEPT", not too_small(w, h)))
+
+    drop = [
+        (64, 64, "an icon"),
+        (180, 180, "a small logo"),
+        (32, 400, "a hairline rule"),
+        (0, 0, "a degenerate size"),
+    ]
+    for w, h, label in drop:
+        results.append(check(f"{label} ({w}x{h}) is dropped", too_small(w, h)))
+
+    results.append(check(
+        "candidates dropped for size are counted, not silently discarded",
+        "too_small_skipped" in inspect.getsource(pipeline.extract_images_from_pdf),
+    ))
+    return results
+
+
 def main():
     shutil.rmtree(OUT, ignore_errors=True)
     OUT.mkdir(parents=True, exist_ok=True)
@@ -619,6 +736,8 @@ def main():
         ("the same product is not extracted twice in one catalog",
          catalog_duplicate_checks()),
         ("every prompt field survives the parser", observation_plumbing_checks()),
+        ("two tiles in one crop are cut apart", gutter_split_checks()),
+        ("a narrow product is not dropped for being narrow", size_floor_checks()),
     ]
 
     total = passed = 0

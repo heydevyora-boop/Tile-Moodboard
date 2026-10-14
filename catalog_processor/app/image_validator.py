@@ -279,6 +279,20 @@ SLAB_MATERIALS = {"COUNTERTOP", "STONE_SLAB"}
 ARCHITECTURE_MATERIALS = {
     "ARCHITECTURE", "BUILDING", "FACADE",
     "ARCHITECTURAL_FRAME",
+    # A BARE "FRAME" IS A STRUCTURE, NOT A PRODUCT.
+    #
+    # These two were moved to the moulded-product set so the "Mozart
+    # Frame Collection" panels would stop being refused -- and a
+    # photograph of the Dubai Frame, an actual building, came through as
+    # a tile on the strength of it. The catalog's own products are
+    # better described as PANELs, and every panel word below still
+    # reaches MATERIAL_DECOR, so they keep working while the word that
+    # names a structure goes back to rejecting.
+    "FRAME", "ORNAMENTAL_FRAME",
+    # Other words for "this is a built thing photographed in place".
+    # Without them these fell through to UNDECIDED and were accepted.
+    "MONUMENT", "LANDMARK", "STRUCTURE", "TOWER", "BRIDGE",
+    "EXTERIOR", "ARCHWAY", "COLUMN", "PILLAR", "STAIRCASE",
     "DOOR", "WINDOW", "WINDOW_FRAME",
     "CABINET", "CUPBOARD", "FURNITURE", "FURNITURE_PANEL",
     "ROOM_PANEL", "INSTALLATION_PANEL",
@@ -301,8 +315,12 @@ ARCHITECTURE_MATERIALS = {
 # frame that fills a clean catalog shot is a tile and is kept. The words
 # that name a whole OBJECT rather than a surface profile -- a door, a
 # window, a cabinet, a building -- stay above, where they still reject.
+# Note what is NOT here: a bare FRAME or ORNAMENTAL_FRAME. Those name a
+# structure as readily as a tile profile, and a real building came
+# through on them -- see ARCHITECTURE_MATERIALS. A framed PANEL is still
+# a product, and that is the word a flat ceramic piece earns.
 MOULDED_FORM_MATERIALS = {
-    "FRAME", "FRAMED", "FRAMED_PANEL", "ORNAMENTAL_FRAME",
+    "FRAMED", "FRAMED_PANEL", "FRAMED_TILE",
     "MOULDING", "MOLDING", "MOULDED", "MOLDED", "MOULDED_PANEL",
     "CORNICE", "WAINSCOT", "WAINSCOTING",
     "PANEL", "WALL_PANEL", "DOOR_PANEL",
@@ -394,7 +412,9 @@ DECORATIVE_PRODUCT_MATERIALS = {
 NON_TILE_MATERIALS = {
     "COUNTERTOP", "WORKTOP", "STONE_SLAB", "SLAB", "MARBLE_SLAB",
     "ARCHITECTURE", "BUILDING", "FACADE",
-    "ARCHITECTURAL_FRAME",
+    "ARCHITECTURAL_FRAME", "FRAME", "ORNAMENTAL_FRAME",
+    "MONUMENT", "LANDMARK", "STRUCTURE", "TOWER", "BRIDGE",
+    "EXTERIOR", "ARCHWAY", "COLUMN", "PILLAR", "STAIRCASE",
     "DOOR", "WINDOW", "WINDOW_FRAME",
     "CABINET", "CUPBOARD", "FURNITURE", "FURNITURE_PANEL",
     "ROOM_PANEL", "INSTALLATION_PANEL",
