@@ -3977,6 +3977,11 @@ def extract_images_from_pdf(
 
     if region_trace:
         report_path = output_directory / f"{pdf_path.stem}_extraction_report.json"
+
+        region_outcomes, region_reject_reasons = (
+            summarise_candidate_outcomes(region_trace)
+        )
+
         try:
             report_path.write_text(
                 json.dumps(
@@ -3992,6 +3997,8 @@ def extract_images_from_pdf(
                         "too_small_skipped": too_small_skipped,
                         "rejected_by_validation": semantic_rejections,
                         "deferred_for_validation": validation_deferred,
+                        "candidate_outcomes": region_outcomes,
+                        "candidate_reject_reasons": region_reject_reasons,
                         "trace": region_trace,
                     },
                     indent=2,
@@ -4011,6 +4018,40 @@ def extract_images_from_pdf(
         )
 
     return extracted_images
+
+
+def summarise_candidate_outcomes(region_trace):
+    """What happened to every mined candidate, and why, for the report.
+
+    The run's own counters only cover the whole-image route, so a
+    catalog whose regions were all refused still summarised as
+    "candidates: 12, rejected_by_validation: 0": the report said
+    nothing about the decision that actually emptied the catalog, and
+    the trace had to be read entry by entry to find it. Both tallies
+    are derived from that same trace -- no decision is made or changed
+    here, only reported -- and the outcomes sum to len(region_trace),
+    so a candidate that reaches the report without a recorded outcome
+    shows up as UNRECORDED rather than disappearing from the total.
+
+    Returns (outcomes, reject_reasons), reasons ordered commonest
+    first.
+    """
+    outcomes = {}
+    reasons = {}
+    for entry in region_trace:
+        outcome = str(entry.get("final") or "UNRECORDED")
+        outcomes[outcome] = outcomes.get(outcome, 0) + 1
+        if outcome == "ACCEPTED":
+            continue
+        reason = str(
+            entry.get("validation_reason")
+            or entry.get("purity_state")
+            or entry.get("reason")
+            or f"{outcome.lower()}, no reason recorded"
+        )
+        reasons[reason] = reasons.get(reason, 0) + 1
+    ordered = dict(sorted(reasons.items(), key=lambda item: -item[1]))
+    return outcomes, ordered
 
 
 # ============================================================
