@@ -1833,6 +1833,22 @@ Report:
                 not, a photograph OF A STRUCTURE or furniture piece is
                 not a tile sample.
   OTHER         anything else
+
+  A MOSAIC THAT DEPICTS SOMETHING IS ARTWORK, NOT A PRODUCT.
+  A mosaic sheet sold by the box -- a repeating field of chips in one
+  colourway, uniform across the sheet -- is a product, report MOSAIC.
+  But a mosaic laid up into a PICTURE -- a face, a figure, an animal,
+  flowers, a tree, a landscape, a scene, a mural made to be looked at
+  rather than laid by the square metre -- is ARTWORK, and must be
+  reported as ARTWORK however finely it is made and however real its
+  tesserae are. The test is whether the piece repeats as a surface or
+  composes into an image. If it composes into an image, it is ARTWORK.
+  Set contains_person as well when any face or figure appears in it,
+  even one made entirely of tile.
+  An ornament with no subject in it is NOT a picture: a medallion, a
+  rosette, a damask, a scroll, a geometric or floral motif centred on a
+  tile face is a pattern, and the tile is a product.
+
   A COUNTERTOP or STONE_SLAB is NOT a tile even when it is stone and
   even when it is beautiful. And a repeating pattern is NOT by itself
   evidence of tile: if physical_surface is false, the material is
@@ -1869,21 +1885,29 @@ Report:
   the camera, or at a STRUCTURE standing in the world. A famous frame-
   shaped building is a building.
 
-- complete_rectangle: true when the product in this frame is a WHOLE,
-  four-sided tile or panel whose outline is straight-edged, with all
-  four of its edges either visible or running to the edge of the frame.
-  A tile is manufactured as a rectangle, so this is what a correct
-  extraction looks like.
-  Report FALSE when the shape in the frame is not that: an arch, a
-  curved or domed top, a semicircle, a rounded niche or alcove, a
-  circular or oval outline, or any fragment cut off mid-curve. Report
-  FALSE as well when the frame shows only a PART of a product, with its
-  real edges nowhere to be seen, so there is no way to tell where the
-  product begins and ends.
+- complete_rectangle: this asks ONE narrow question -- is the OUTLINE of
+  the thing in this frame curved?
+
+  Answer TRUE for anything straight-edged, and that is the normal
+  answer. In particular, a crop cut tight to a tile, filling the frame
+  edge to edge with flat surface, is TRUE: the crop boundary IS the
+  tile's edge, and not being able to see a border around it means the
+  extraction was CORRECT, never that the product is incomplete. A tile
+  photographed straight on, a swatch, a plank, a panel, a mosaic sheet,
+  a strip -- all TRUE.
+
+  Answer FALSE only when you can actually SEE a curved outline: an arch,
+  a domed or rounded top, a semicircle, a round or oval piece, a curved
+  niche or alcove, or a fragment that is plainly cut off mid-curve.
+
   A tile whose own printed or moulded DESIGN contains curves -- a floral
   pattern, a scalloped border, a round medallion within a square face --
-  is still a complete rectangle: judge the outline of the piece, never
-  the artwork on it.
+  is still TRUE: judge the outline of the piece, never the artwork on
+  it.
+
+  If you are unsure, answer TRUE. A wrong FALSE deletes a real product
+  from the catalog; a wrong TRUE only lets one odd crop through, and
+  every other rule here still applies to it.
 
 - distinct_tile_designs: how many DIFFERENT products are visible.
   One tile repeated across the whole frame is 1, however many individual
@@ -1968,6 +1992,23 @@ catalog page, an illustration, a diagram, a colour chart, a background
 graphic, a poster, a painting or a mural hanging on a wall. Flat even
 fill, mathematically exact repetition, crisp vector edges and pure flat
 colours mean a picture.
+
+ONE MORE TEST, AND IT DECIDES THE ANSWER EVEN WHEN EVERY PRODUCT CUE
+ABOVE IS PRESENT: does this DEPICT a subject?
+
+An ALL-OVER DESIGN is a product, however ornate -- a pattern, a motif,
+a floral or geometric field, marble veining, wood grain, a repeating
+mosaic field in one colourway, a border running along a strip, an
+ornamental medallion or rosette with no subject in it. That is what
+decorative tile IS, and it is sold by the piece or the square metre.
+
+A SINGLE PICTURE, composed to be looked at, is ARTWORK: a face or
+portrait, a human figure, an animal or bird, a tree, a bouquet
+arranged as one bouquet, a landscape, a scene, a mural or wall picture
+made as one artwork. It stays ARTWORK when it is built from real
+tesserae, real relief or real tile, and when light, shadow, grain and
+the edge of a real object are all plainly there. A mosaic mural is
+still a mural. Judge what the surface SHOWS, not what it is made of.
 
 If you cannot tell, answer UNSURE. Do not guess.
 

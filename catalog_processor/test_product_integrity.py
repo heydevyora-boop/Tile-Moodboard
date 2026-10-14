@@ -572,6 +572,104 @@ def catalog_duplicate_checks():
     return results
 
 
+def flat(text):
+    """One-line view of a hand-wrapped prompt, for substring checks.
+
+    The prompts are wrapped to column 72, so a phrase being checked can
+    have a newline and indent dropped into the middle of it by an edit
+    that did not change a word of it. Collapsing whitespace first keeps
+    these checks about the wording.
+    """
+    return " ".join(str(text).split())
+
+
+def report_accounting_checks():
+    """The report must say what happened to every candidate it counted.
+
+    An Exotica run came back with two images out of a ten-page catalog,
+    and its report read "candidates: 12, accepted: 2" with
+    rejected_by_validation, duplicates_skipped, hard_filtered and
+    too_small_skipped ALL zero -- because those counters only track the
+    whole-image route, and every one of the twelve was a mined region.
+    Ten candidates were unaccounted for in the one file written to
+    explain the run, so the reason the catalog came out empty could not
+    be read off it at all.
+    """
+    trace = [
+        {"final": "ACCEPTED"},
+        {"final": "ACCEPTED"},
+        {"final": "REJECTED", "validation_reason": "the surface is artwork, not tile"},
+        {"final": "REJECTED", "validation_reason": "the surface is artwork, not tile"},
+        {"final": "REJECTED", "validation_reason": "the surface is artwork, not tile"},
+        {"final": "REJECTED", "purity_state": PURITY_NOT_TILE},
+        {"final": "DUPLICATE"},
+        {},  # a candidate that reached the report with no outcome at all
+    ]
+    outcomes, reasons = pipeline.summarise_candidate_outcomes(trace)
+
+    top_reason, top_count = next(iter(reasons.items()))
+    return [
+        check("every candidate in the trace is accounted for",
+              sum(outcomes.values()) == len(trace),
+              f"{sum(outcomes.values())} of {len(trace)}"),
+        check("an outcome-less candidate is UNRECORDED, not missing",
+              outcomes.get("UNRECORDED") == 1, str(outcomes)),
+        check("accepted, rejected and duplicate are counted separately",
+              outcomes.get("ACCEPTED") == 2
+              and outcomes.get("REJECTED") == 4
+              and outcomes.get("DUPLICATE") == 1,
+              str(outcomes)),
+        check("the commonest rejection reason is reported first",
+              top_reason == "the surface is artwork, not tile" and top_count == 3,
+              f"{top_reason!r} x{top_count}"),
+        check("a rejection with no reason text still carries its purity state",
+              PURITY_NOT_TILE in reasons, str(reasons)),
+        check("accepted candidates contribute no rejection reason",
+              sum(reasons.values()) == len(trace) - outcomes["ACCEPTED"],
+              str(reasons)),
+        check("the report carries both tallies",
+              all(key in inspect.getsource(pipeline.extract_images_from_pdf)
+                  for key in ("candidate_outcomes",
+                              "candidate_reject_reasons",
+                              "summarise_candidate_outcomes"))),
+    ]
+
+
+def verify_with_model(purity, reask):
+    """Runs the REAL verify_tile_only against scripted model answers.
+
+    Both of its questions go through _generate_content_safe, and the
+    response_schema it passes says which one is being asked, so one
+    stub can script the purity observation and the product-or-picture
+    re-ask separately. Nothing here is a reimplementation: the prompt,
+    the schema, the parser and the contradiction branch are the
+    shipping ones.
+    """
+    import json as _json
+
+    class Reply:
+        def __init__(self, payload):
+            self.text = _json.dumps(payload)
+
+    def model(**kwargs):
+        schema = (kwargs.get("config") or {}).get("response_schema")
+        if schema is gemini_service.PRODUCT_OR_ARTWORK_SCHEMA:
+            return Reply({"verdict": reask, "reason": "scripted"})
+        return Reply(purity)
+
+    OUT.mkdir(parents=True, exist_ok=True)
+    swatch = OUT / "_contradiction_probe.webp"
+    Image.fromarray(tile_patch(240, 240, ((198, 186, 170), (178, 166, 150)))
+                    ).save(swatch)
+
+    original = gemini_service._generate_content_safe
+    gemini_service._generate_content_safe = model
+    try:
+        return gemini_service.verify_tile_only(str(swatch))
+    finally:
+        gemini_service._generate_content_safe = original
+
+
 def observation_plumbing_checks():
     """Every field the purity PROMPT asks for must survive the PARSER.
 
@@ -750,6 +848,136 @@ def size_floor_checks():
     return results
 
 
+def shape_question_is_narrow_checks():
+    """complete_rectangle must reject curves -- and nothing else.
+
+    The first wording also told the verifier to answer FALSE when "the
+    frame shows only a PART of a product, with its real edges nowhere to
+    be seen". A region crop is cut TIGHT to the tile, so its edges are
+    exactly that, and the whole Exotica catalog came back with two
+    images. The question now asks only about a visibly curved outline,
+    and says to answer TRUE when unsure.
+    """
+    prompt = flat(gemini_service.TILE_PURITY_PROMPT)
+    results = []
+
+    results.append(check(
+        "a tight full-frame crop is explicitly called a complete rectangle",
+        "crop cut tight to a tile" in prompt and "edge to edge" in prompt,
+    ))
+    results.append(check(
+        "not seeing a border is stated to mean the crop was CORRECT",
+        "extraction was CORRECT" in prompt,
+    ))
+    results.append(check(
+        "the old 'edges nowhere to be seen' rejection is gone",
+        "real edges nowhere to be seen" not in prompt,
+    ))
+    results.append(check(
+        "the verifier is told to answer TRUE when unsure",
+        "If you are unsure, answer TRUE" in prompt,
+    ))
+    results.append(check(
+        "a wrong FALSE is named as the costly error",
+        "deletes a real product" in prompt,
+    ))
+    for shape in ("an arch", "domed", "semicircle", "oval"):
+        results.append(check(
+            f"a curved outline ({shape}) is still a FALSE",
+            shape in prompt,
+        ))
+
+    # The rule itself is unchanged: a curved outline still rejects, a
+    # straight one still passes.
+    results.append(check(
+        "a curved outline is still REJECTED by the rule",
+        verdict_for(observation("TILE", complete_rectangle=False))[0] == "REJECT",
+    ))
+    results.append(check(
+        "a straight-edged tile is still ACCEPTED",
+        verdict_for(observation("TILE", complete_rectangle=True))[0] == "ACCEPT",
+    ))
+    return results
+
+
+def mosaic_picture_checks():
+    """A mosaic sheet is a product; a mosaic PICTURE is artwork.
+
+    Two images that did survive the Exotica run were mosaic murals -- a
+    face and flowers. MOSAIC normalizes to a tile material, so a picture
+    laid up in tesserae walked through as a product.
+    """
+    prompt = flat(gemini_service.TILE_PURITY_PROMPT)
+    results = [
+        check("the prompt separates a mosaic SHEET from a mosaic PICTURE",
+              "composes into an image" in prompt),
+        check("a depicted face/figure/flowers is named as ARTWORK",
+              "is ARTWORK, and must be reported as ARTWORK" in prompt),
+        check("a tile face still counts for contains_person",
+              "even one made entirely of tile" in prompt),
+        check("an ornament with no subject in it stays a pattern",
+              "An ornament with no subject in it is NOT a picture" in prompt
+              and "a medallion, a" in prompt),
+        check("the re-ask also keeps a subjectless medallion a product",
+              "ornamental medallion or rosette with no subject in it"
+              in flat(gemini_service.PRODUCT_OR_ARTWORK_PROMPT)),
+        check("a plain mosaic SHEET is still a product",
+              verdict_for(observation("MOSAIC"))[0] == "ACCEPT"),
+        check("a mosaic reported as ARTWORK is REJECTED",
+              verdict_for(observation("ARTWORK"))[0] == "REJECT"),
+        check("a mosaic picture with a face is REJECTED",
+              verdict_for(observation("MOSAIC", contains_person=True))[0] == "REJECT"),
+    ]
+
+    # THE SECOND QUESTION HAD TO AGREE, OR THE FIRST ONE DOES NOTHING.
+    #
+    # "ARTWORK for a physical surface" is a contradiction, and
+    # verify_tile_only re-asks it as product-or-picture. That re-ask
+    # prompt argued the rescuing side only: "Being ornate, floral,
+    # framed, colourful or unlike a plain square tile does not stop it
+    # being a product". A mosaic mural of flowers has every PRODUCT cue
+    # it lists -- real light, real shadow, real tesserae -- so it came
+    # back PRODUCT and the purity verdict was overwritten. Teaching the
+    # first question about murals changed nothing on its own.
+    reask = flat(gemini_service.PRODUCT_OR_ARTWORK_PROMPT)
+    results.extend([
+        check("the re-ask asks whether the surface DEPICTS a subject",
+              "does this DEPICT a subject" in reask),
+        check("the depiction test is stated to outrank the material cues",
+              "EVEN WHEN EVERY PRODUCT CUE" in reask),
+        check("an all-over design is still a product in the re-ask",
+              "ALL-OVER DESIGN is a product" in reask),
+        check("a single composed picture is artwork in the re-ask",
+              "SINGLE PICTURE, composed to be looked at, is ARTWORK" in reask),
+        check("real tesserae do not make a mural a product",
+              "A mosaic mural is still a mural." in reask),
+    ])
+
+    # And the rule end to end, through the real verifier: the re-ask
+    # decides, and either answer is honoured.
+    for verdict, material, expect in (
+        ("PRODUCT", MATERIAL_DECOR, "ACCEPT"),
+        ("ARTWORK", None, "REJECT"),
+    ):
+        obs = verify_with_model(
+            purity={**observation("ARTWORK"), "physical_surface": True},
+            reask=verdict,
+        )
+        got = verdict_for(obs)[0] if obs else "NO VERDICT"
+        results.append(check(
+            f"a contradictory ARTWORK verdict re-asked as {verdict} -> {expect}",
+            got == expect,
+            f"got {got} with material={obs and obs.get('material')}",
+        ))
+        if material is not None:
+            results.append(check(
+                f"a {verdict} second opinion normalizes as a product",
+                normalize_material(obs["material"]) == material,
+            ))
+
+    return results
+
+
 def main():
     shutil.rmtree(OUT, ignore_errors=True)
     OUT.mkdir(parents=True, exist_ok=True)
@@ -765,6 +993,12 @@ def main():
         ("the same product is not extracted twice in one catalog",
          catalog_duplicate_checks()),
         ("every prompt field survives the parser", observation_plumbing_checks()),
+        ("the shape question rejects curves and nothing else",
+         shape_question_is_narrow_checks()),
+        ("a mosaic picture is artwork, a mosaic sheet is a product",
+         mosaic_picture_checks()),
+        ("the report accounts for every candidate",
+         report_accounting_checks()),
         ("two tiles in one crop are cut apart", gutter_split_checks()),
         ("a narrow product is not dropped for being narrow", size_floor_checks()),
     ]

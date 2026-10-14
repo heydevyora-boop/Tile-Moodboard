@@ -29,6 +29,7 @@ Run:  GEMINI_API_KEY=test python3 test_single_pdf_tile_only.py
 """
 
 import hashlib
+import json
 import os
 import shutil
 import sys
@@ -45,6 +46,7 @@ from PIL import Image  # noqa: E402
 import app.gemini_service as gemini_service  # noqa: E402
 import main_step6_complete as pipeline  # noqa: E402
 from app.image_validator import (  # noqa: E402
+    assess_tile_purity,
     validate_bbox,
     validate_product_decision,
 )
@@ -168,22 +170,52 @@ class Analysis:
         self.reason = "not a standalone product shot"
 
 
-def fake_purity(image_path):
-    # Also unhelpful: the verdict that was deleting real products.
-    return {
-        "tile_fraction": 1.0,
-        "material": "ARTWORK",
-        "contains_person": False,
-        "contains_text": False,
-        "contains_logo": False,
-        "contains_furniture": False,
-        "contains_fixture": False,
-        "contains_object": False,
-        "is_scene": False,
-        "physical_surface": True,
-        "distinct_tile_designs": 1,
-        "reason": "synthetic",
-    }
+# Also unhelpful: the verdict that was deleting real products. ARTWORK
+# for something the model itself says is a real physical surface is a
+# self-contradiction, and resolving it in ARTWORK's favour is what
+# deleted highlighters, borders, mosaics and 3D panels.
+PURITY_ANSWER_WITH_CONTRADICTION = {
+    "tile_fraction": 1.0,
+    "material": "ARTWORK",
+    "contains_person": False,
+    "contains_text": False,
+    "contains_logo": False,
+    "contains_furniture": False,
+    "contains_fixture": False,
+    "contains_object": False,
+    "is_scene": False,
+    "physical_surface": True,
+    "distinct_tile_designs": 1,
+    "reason": "synthetic",
+}
+
+
+class Reply:
+    """What _generate_content_safe hands back: an object with .text."""
+
+    def __init__(self, payload):
+        self.text = json.dumps(payload)
+
+
+def fake_model_call(**kwargs):
+    """The model, answering whichever of the two questions it was asked.
+
+    verify_tile_only asks twice through this one helper -- the purity
+    observation, then, ONLY when that answer contradicts itself,
+    product-or-picture -- and the response_schema it passes says which.
+
+    Stubbing here rather than replacing verify_tile_only is deliberate.
+    An earlier version of this harness replaced the whole function, and
+    that took production's contradiction resolution out of the test run
+    along with it: the test then asked for a rescue its own stub had
+    removed, and reported 2 of 6 tiles as a pipeline failure. Patching
+    the model call leaves every line of the real verifier -- prompt,
+    schema, parser, re-ask -- inside the test.
+    """
+    schema = (kwargs.get("config") or {}).get("response_schema")
+    if schema is gemini_service.PRODUCT_OR_ARTWORK_SCHEMA:
+        return Reply({"verdict": "PRODUCT", "reason": "a real moulded face"})
+    return Reply(PURITY_ANSWER_WITH_CONTRADICTION)
 
 
 class Harness:
@@ -228,10 +260,10 @@ def install(harness):
         validate_bbox,
     )
     pipeline.load_tile_region_miner = lambda: (fake_detect, extract_tile_region)
-    gemini_service.verify_tile_only = fake_purity
+    gemini_service._generate_content_safe = fake_model_call
     pipeline.load_tile_purity_verifier = lambda: (
-        fake_purity,
-        __import__("app.image_validator", fromlist=["x"]).assess_tile_purity,
+        gemini_service.verify_tile_only,
+        assess_tile_purity,
     )
 
     pipeline.upload_file = harness.upload_file
