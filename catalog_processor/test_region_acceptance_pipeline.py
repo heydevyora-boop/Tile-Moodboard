@@ -168,12 +168,16 @@ def render_route_checks():
         with contextlib.redirect_stdout(io.StringIO()):
             pipeline.append_recovered_regions(accepted, records, 1, 0)
         canvas_w, canvas_h, box_w, box_h = product_box(records[0]["path"])
+        # The output is the tile alone -- no square letterbox, no blank
+        # border around the product (TILE_OUTPUT_PAD_TO_SQUARE=1 restores
+        # the old padded square).
         results.append(check(
-            f"accepted tile sits on the {OUTPUT_CANVAS_SIZE}x{OUTPUT_CANVAS_SIZE} "
-            f"canvas without stretching (product {box_w}x{box_h}, "
-            f"ratio {box_w / box_h:.2f}, source ratio 2.00)",
-            canvas_w == canvas_h == OUTPUT_CANVAS_SIZE
-            and abs(box_w / box_h - 2.0) < 0.1,
+            f"accepted tile is saved as the product alone, undistorted "
+            f"({canvas_w}x{canvas_h}, ratio {canvas_w / canvas_h:.2f}, "
+            f"source ratio 2.00)",
+            max(canvas_w, canvas_h) == OUTPUT_CANVAS_SIZE
+            and abs(canvas_w / canvas_h - 2.0) < 0.1
+            and (box_w, box_h) == (canvas_w, canvas_h),
         ))
 
     accepted, _d, _log = run_render_region("highlighter", observation("HIGHLIGHTER"))

@@ -3722,12 +3722,23 @@ def extract_images_from_pdf(
 
                         _whole = cv2.imread(str(output_path), cv2.IMREAD_COLOR)
                         if _whole is not None:
+                            _whole_signature = crop_signature(_whole)
                             page_signatures.append((
                                 f"embedded-image:{output_filename}",
-                                crop_signature(_whole),
+                                _whole_signature,
                                 tuple(float(v) for v in image_rect)
                                 if image_rect is not None else None,
                             ))
+                            # Also into the catalog-wide list, so a
+                            # product saved WHOLE here is recognised when
+                            # the same product turns up as a region on a
+                            # later page. Without this the cross-page
+                            # check only ever saw region crops and a
+                            # whole-image product could still be
+                            # extracted twice.
+                            catalog_signatures.append(
+                                (output_filename, _whole_signature)
+                            )
                     except Exception:  # noqa: BLE001 -- dedupe aid only
                         pass
 
