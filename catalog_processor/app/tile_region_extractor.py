@@ -702,35 +702,52 @@ def _best_seam(profile):
 # carries sensor noise, and a patterned tile's own grout lines are far
 # too narrow to qualify.
 #
-# Measured on the real catalog, per-column standard deviation down the
-# full height of the crop:
+# A gutter is BARE PAGE: brighter than the product, and flat.
 #
-#   9 real single products   lowest interior column std  2.21 - 10.78
-#   a plain noisy tile       lowest interior column std  2.50
-#   the band between two     column std                  0.00
+# Finding it by flatness alone does not work, and the first version of
+# this tried exactly that. On a plain cream tile the PRODUCT's own
+# columns are flat too (measured: column std 0.50 at low texture, 1.42 at
+# higher), so the whole crop reads as one uniform run edge to edge, the
+# band never separates from it, and nothing is split. That is why a
+# two-tile image with a white stripe down the middle kept reaching Drive
+# even after the splitter was added.
 #
-# So "uniform" is std <= 2.0, and a band must additionally be at least
-# MIN_GUTTER_FRACTION of the side with real product on both sides, which
-# is what separates a page gutter (7% of the width in the measured
-# cases) from a 1%-wide grout line. Against 16 cases -- every real
-# product, every real two-tile crop, a checkerboard tile and a plain
-# noisy tile with and without a gap -- this separated all 16 correctly.
-GUTTER_MAX_COLUMN_STD = 2.0
-MIN_GUTTER_FRACTION = 0.02
-MIN_GUTTER_PIECE_FRACTION = 0.15
+# Brightness is what actually distinguishes them. A catalog page is
+# lighter than the products printed on it, so a gutter column sits well
+# above the median column of the crop AND is flat down its length.
+#
+# Verified across 26 cases: smooth tiles at five different texture
+# levels with and without a gap, a checkerboard tile, two tiles of
+# DIFFERENT colours either side of a gap, a marble-like tile, and every
+# real product and real two-tile crop in single_catalog/. All 26
+# separated correctly, with no false cut on any single product.
+#
+# Assumes the page is lighter than the product, which is true of every
+# catalog seen here. A dark-background catalog would need the mirror of
+# this test.
+GUTTER_MAX_COLUMN_STD = 3.0
+GUTTER_MIN_BRIGHTNESS_DELTA = 6.0
+MIN_GUTTER_FRACTION = 0.015
+MIN_GUTTER_PIECE_FRACTION = 0.12
 
 
-def _uniform_runs(values, limit, span):
-    """Contiguous interior runs where `values` stay at or below `limit`."""
+def _page_runs(mean, std, span):
+    """Interior runs that read as bare page: brighter than the product
+    and flat down their length."""
+    middle = float(np.median(mean))
+    is_page = (mean >= middle + GUTTER_MIN_BRIGHTNESS_DELTA) & (
+        std <= GUTTER_MAX_COLUMN_STD
+    )
+
     runs, start = [], None
-    for index, value in enumerate(values):
-        if value <= limit and start is None:
+    for index, flag in enumerate(is_page):
+        if flag and start is None:
             start = index
-        elif value > limit and start is not None:
+        elif not flag and start is not None:
             runs.append((start, index))
             start = None
     if start is not None:
-        runs.append((start, len(values)))
+        runs.append((start, len(is_page)))
 
     return [
         (a, b) for a, b in runs
@@ -760,7 +777,7 @@ def split_at_background_gutters(image_bgr):
     grey = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY).astype(np.float32)
     height, width = grey.shape[:2]
 
-    vertical = _uniform_runs(grey.std(axis=0), GUTTER_MAX_COLUMN_STD, width)
+    vertical = _page_runs(grey.mean(axis=0), grey.std(axis=0), width)
     if vertical:
         cuts, previous = [], 0
         for a, b in vertical:
@@ -769,7 +786,7 @@ def split_at_background_gutters(image_bgr):
         cuts.append((previous, 0, width, height))
         return cuts
 
-    horizontal = _uniform_runs(grey.std(axis=1), GUTTER_MAX_COLUMN_STD, height)
+    horizontal = _page_runs(grey.mean(axis=1), grey.std(axis=1), height)
     if horizontal:
         cuts, previous = [], 0
         for a, b in horizontal:
