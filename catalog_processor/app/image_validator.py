@@ -293,6 +293,17 @@ ARCHITECTURE_MATERIALS = {
     # Without them these fell through to UNDECIDED and were accepted.
     "MONUMENT", "LANDMARK", "STRUCTURE", "TOWER", "BRIDGE",
     "EXTERIOR", "ARCHWAY", "COLUMN", "PILLAR", "STAIRCASE",
+    # More words for the same thing. A catalog answering with any of
+    # these is describing a place that was photographed, and none of
+    # them can name a piece of tile: a product is never a skyline, a
+    # gateway or a dome. Kept to words that cannot double as a tile
+    # finish -- which is why marble, stone and terracotta are not here,
+    # and why "terrace" and "balcony" are not either: those name where
+    # a floor tile is laid, and a model reaching for one of them about
+    # a correct tile shot must not have the image deleted for it.
+    "SKYSCRAPER", "SKYLINE", "CITYSCAPE", "GATE", "GATEWAY", "PORTAL",
+    "ARCH", "ARCADE", "DOME", "MINARET", "MOSQUE", "TEMPLE",
+    "PALACE", "CASTLE",
     "DOOR", "WINDOW", "WINDOW_FRAME",
     "CABINET", "CUPBOARD", "FURNITURE", "FURNITURE_PANEL",
     "ROOM_PANEL", "INSTALLATION_PANEL",
@@ -415,6 +426,9 @@ NON_TILE_MATERIALS = {
     "ARCHITECTURAL_FRAME", "FRAME", "ORNAMENTAL_FRAME",
     "MONUMENT", "LANDMARK", "STRUCTURE", "TOWER", "BRIDGE",
     "EXTERIOR", "ARCHWAY", "COLUMN", "PILLAR", "STAIRCASE",
+    "SKYSCRAPER", "SKYLINE", "CITYSCAPE", "GATE", "GATEWAY", "PORTAL",
+    "ARCH", "ARCADE", "DOME", "MINARET", "MOSQUE", "TEMPLE",
+    "PALACE", "CASTLE",
     "DOOR", "WINDOW", "WINDOW_FRAME",
     "CABINET", "CUPBOARD", "FURNITURE", "FURNITURE_PANEL",
     "ROOM_PANEL", "INSTALLATION_PANEL",
@@ -665,6 +679,48 @@ LIFESTYLE_CONTAMINANT_KEYS = (
     "contains_fixture",
     "contains_object",
 )
+
+
+def purity_is_hard_non_tile(observation, purity_state=None):
+    """Does this verdict say "not a tile at all", or just "more than one"?
+
+    Both answers come back as a non-approval, and the pipeline treats
+    them very differently: a crop holding several products is CUT APART
+    and its pieces judged one by one, which is the right answer for a
+    catalog sheet and the wrong one for a photograph. Splitting a
+    photograph of a building gives pieces of a building, and a piece of
+    a flat facade reads as a clean surface -- so a verdict of "this is
+    not a tile" could be laundered into an accepted tile simply by
+    being cut up.
+
+    True for the verdicts that no amount of cutting can repair: there
+    is no physical surface here, this is a view of a space, the outline
+    is not a whole straight-edged piece, or the thing itself is a
+    building, a window, furniture or artwork. False for contamination
+    and for several designs in one frame, which are exactly what
+    isolating a piece is for.
+
+    No observation means no verdict, which is not evidence of anything.
+    """
+    if not observation:
+        return False
+
+    if purity_state == PURITY_NOT_TILE:
+        return True
+
+    if not observation.get("physical_surface", True):
+        return True
+
+    if observation.get("is_scene"):
+        return True
+
+    if not observation.get("complete_rectangle", True):
+        return True
+
+    # normalize_material hands back the word itself for the sets that
+    # name a non-product, and TILE/DECOR/UNDECIDED for everything else.
+    material = normalize_material(observation.get("material"))
+    return material not in (PRODUCT_MATERIALS | {MATERIAL_UNDECIDED})
 
 
 def tile_only_may_force_accept(status, metadata, impure_status="GEMINI_IMPURE"):

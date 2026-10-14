@@ -54,6 +54,7 @@ import numpy as np  # noqa: E402
 from PIL import Image  # noqa: E402
 
 import app.gemini_service as gemini_service  # noqa: E402
+import app.image_validator as image_validator_module  # noqa: E402
 import main_step6_complete as pipeline  # noqa: E402
 import app.image_processor as image_processor  # noqa: E402
 from app.image_processor import (  # noqa: E402
@@ -68,6 +69,7 @@ from app.image_validator import (  # noqa: E402
     MATERIAL_DECOR,
     MATERIAL_TILE,
     PURITY_CLEAN,
+    PURITY_CONTAMINATED,
     PURITY_NOT_TILE,
     assess_tile_purity,
     normalize_material,
@@ -572,6 +574,259 @@ def catalog_duplicate_checks():
     return results
 
 
+def real_product_crop():
+    """The pink moulded panel from page 3 of the real catalog, in BGR.
+
+    A product whose own moulded border runs right around its edge --
+    exactly the kind of border a crop must not quietly remove.
+    """
+    import fitz
+
+    doc = fitz.open(str(REAL_PDF))
+    page = doc[2]
+    page_bytes, _w, _h = pipeline.render_image_crop(
+        page, page.rect, dpi=pipeline.PAGE_RENDER_DPI,
+    )
+    page_bgr = cv2.imdecode(np.frombuffer(page_bytes, np.uint8), cv2.IMREAD_COLOR)
+    gray = cv2.cvtColor(page_bgr, cv2.COLOR_BGR2GRAY)
+    n, _l, stats, _c = cv2.connectedComponentsWithStats(
+        (gray < 248).astype(np.uint8), connectivity=8,
+    )
+    boxes = [tuple(stats[i][:4]) for i in range(1, n) if stats[i][4] > 20000]
+    boxes.sort(key=lambda b: -b[2] * b[3])
+    x, y, w, h = boxes[0]
+    return page_bgr[y:y + h, x:x + w].copy()
+
+
+def synthetic_highlighter(width=900, height=260):
+    """A highlighter strip: decorative bands top and bottom, motif between.
+
+    The bands are the product. A box drawn around the motif alone is
+    the failure this covers.
+    """
+    strip = np.full((height, width, 3), (196, 206, 214), np.uint8)
+    band = int(height * 0.22)
+    strip[:band] = (150, 162, 176)
+    strip[-band:] = (150, 162, 176)
+    for x in range(0, width, 46):
+        cv2.circle(strip, (x + 23, height // 2), 26, (120, 140, 190), -1)
+    for y in (band - 5, height - band + 5):
+        cv2.line(strip, (0, y), (width, y), (96, 110, 128), 4)
+    return strip
+
+
+def as_pil(image_bgr):
+    return Image.fromarray(cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB))
+
+
+def on_page(product_bgr, margin=0.18, background=250):
+    """The product laid on a catalog page, and the box tight around it."""
+    height, width = product_bgr.shape[:2]
+    mx, my = int(width * margin), int(height * margin)
+    page = np.full((height + 2 * my, width + 2 * mx, 3), background, np.uint8)
+    page[my:my + height, mx:mx + width] = product_bgr
+    return page, {"x1": mx, "y1": my, "x2": mx + width, "y2": my + height}
+
+
+def bbox_trim_checks():
+    """A product box may remove background. It may not cut the product.
+
+    crop_image_to_validated_bbox cut to whatever box the classifier
+    returned, guarded only by MIN_BBOX_FRACTION = 0.10, which asks no
+    more than that the box not be a sliver. A box keeping the middle
+    70% of a highlighter clears that -- and a highlighter's decorative
+    top and bottom bands ARE the product, so both ends were lost. This
+    is the "upper border and lower border are being removed" report.
+    """
+    results = []
+    if not REAL_PDF.exists():
+        return [check("real catalog present", False, f"missing {REAL_PDF}")]
+    if not hasattr(pipeline, "bbox_trim_only_removes_background"):
+        return [check(
+            "a product box is checked before it cuts the product", False,
+            "bbox_trim_only_removes_background does not exist -- nothing "
+            "stops the classifier's box removing a product's own border",
+        )]
+
+    panel = real_product_crop()
+    strip = synthetic_highlighter()
+    guard = pipeline.bbox_trim_only_removes_background
+
+    # Legitimate trims: the box is tight on the product, the page around
+    # it is what goes.
+    for label, product, background in (
+        ("a moulded panel on a pale page", panel, 250),
+        ("a highlighter on a pale page", strip, 250),
+        ("a product on a dark page", panel, 28),
+    ):
+        page, box = on_page(product, background=background)
+        allowed, why = guard(as_pil(page), box)
+        results.append(check(
+            f"trimming background around {label} is allowed",
+            allowed, why,
+        ))
+
+    # Cuts into the product itself.
+    for label, product in (("moulded panel", panel), ("highlighter", strip)):
+        height, width = product.shape[:2]
+        for name, inset in (("70%", 0.15), ("85%", 0.075), ("92%", 0.04)):
+            box = {"x1": 0, "y1": int(height * inset),
+                   "x2": width, "y2": int(height * (1 - inset))}
+            allowed, why = guard(as_pil(product), box)
+            results.append(check(
+                f"a box keeping only the centre {name} of a {label} is refused",
+                not allowed, "allowed it" if allowed else why[:60],
+            ))
+        box = {"x1": int(width * 0.1), "y1": int(height * 0.05),
+               "x2": int(width * 0.9), "y2": int(height * 0.95)}
+        allowed, _why = guard(as_pil(product), box)
+        results.append(check(
+            f"a box inset on all four sides of a {label} is refused",
+            not allowed,
+        ))
+
+    # A box that trims nothing cannot be a cut, and an unmeasurable one
+    # must not become a new way to lose an image.
+    height, width = panel.shape[:2]
+    results.append(check(
+        "a full-frame box is allowed without measuring anything",
+        guard(as_pil(panel), {"x1": 0, "y1": 0, "x2": width, "y2": height})[0],
+    ))
+    results.append(check(
+        "a degenerate box is allowed rather than failing the save",
+        guard(as_pil(panel), {"x1": 10, "y1": 10, "x2": 11, "y2": 11})[0],
+    ))
+
+    # The highlighter case, stated as the thing the user reported: the
+    # decorative bands survive.
+    height, width = strip.shape[:2]
+    motif_box = {"x1": 0, "y1": int(height * 0.22),
+                 "x2": width, "y2": int(height * 0.78)}
+    allowed, _ = guard(as_pil(strip), motif_box)
+    results.append(check(
+        "a box around a highlighter's motif alone does not strip its borders",
+        not allowed,
+    ))
+
+    source = inspect.getsource(pipeline.validate_and_prepare_tile_image) \
+        if hasattr(pipeline, "validate_and_prepare_tile_image") else ""
+    if not source:
+        source = inspect.getsource(pipeline)
+    results.append(check(
+        "the guard is actually consulted before the product box is applied",
+        "bbox_trim_only_removes_background" in source
+        and source.index("bbox_trim_only_removes_background")
+        < source.rindex("crop_image_to_validated_bbox"),
+    ))
+    return results
+
+
+def split_laundering_checks():
+    """Cutting something up must not launder a verdict of "not a tile".
+
+    Splitting exists for several products butted together in one frame,
+    but it ran on whatever reached it -- including a hard non-tile
+    verdict. A photographed building, a view of a room or a printed
+    graphic was cut apart and its pieces judged one by one, and a piece
+    of a flat facade reads as a clean surface. The refusal on the whole
+    image was undone by the act of dividing it.
+    """
+    if not hasattr(image_validator_module, "purity_is_hard_non_tile"):
+        return [check(
+            "a hard non-tile verdict survives being cut up", False,
+            "purity_is_hard_non_tile does not exist -- a building, a room "
+            "or a graphic is split and its pieces judged as tiles",
+        )]
+    hard = image_validator_module.purity_is_hard_non_tile
+
+    cases = [
+        # (label, observation, purity state, is this beyond repair?)
+        ("three products in one frame",
+         observation("TILE", distinct_tile_designs=3), PURITY_CONTAMINATED, False),
+        ("a tile with a towel lying on it",
+         observation("TILE", contains_object=True), PURITY_CONTAMINATED, False),
+        ("a tile photographed with a person in shot",
+         observation("TILE", contains_person=True), PURITY_CONTAMINATED, False),
+        ("a view of a room",
+         observation("TILE", is_scene=True), PURITY_CONTAMINATED, True),
+        ("a photographed building",
+         observation("ARCHITECTURE"), PURITY_NOT_TILE, True),
+        ("a frame-shaped structure",
+         observation("FRAME"), PURITY_NOT_TILE, True),
+        ("a printed graphic, no physical surface",
+         observation("TILE", physical_surface=False), PURITY_NOT_TILE, True),
+        ("an arch",
+         observation("TILE", complete_rectangle=False), PURITY_NOT_TILE, True),
+        ("a clean tile", observation("TILE"), PURITY_CLEAN, False),
+        ("a clean decorative panel", observation("DECOR_PANEL"), PURITY_CLEAN, False),
+    ]
+
+    results = []
+    for label, obs, state, beyond_repair in cases:
+        results.append(check(
+            f"{label}: {'cutting it up cannot help' if beyond_repair else 'splitting still allowed'}",
+            hard(obs, state) is beyond_repair,
+            f"got hard={hard(obs, state)}",
+        ))
+
+    results.append(check(
+        "no purity verdict at all is not evidence of anything",
+        hard(None, None) is False,
+    ))
+    results.append(check(
+        "an empty observation is not evidence of anything",
+        hard({}, None) is False,
+    ))
+
+    source = inspect.getsource(pipeline.mine_tile_regions)
+    split_at = source.index("split_at_background_gutters(crop)")
+    results.append(check(
+        "the splitter consults it before cutting anything up",
+        "purity_is_hard_non_tile" in source
+        and source.index("purity_is_hard_non_tile") > split_at,
+    ))
+    return results
+
+
+def structure_word_checks():
+    """A product is never a skyline, a gateway or a dome.
+
+    The frame-shaped building reached Drive once already on the word
+    FRAME, which was then moved back to the architecture set. These are
+    the neighbouring words that still fell through to UNDECIDED and
+    were judged on everything else -- which, for a flat graphic
+    photograph of a structure, is not much.
+    """
+    added = ("SKYSCRAPER", "SKYLINE", "CITYSCAPE", "GATE", "GATEWAY",
+             "PORTAL", "ARCH", "ARCADE", "DOME", "MINARET", "MOSQUE",
+             "TEMPLE", "PALACE", "CASTLE")
+    results = [
+        check(f"{word} is refused as a product",
+              assess_tile_purity(observation(word))["state"] == PURITY_NOT_TILE)
+        for word in added
+    ]
+
+    # And nothing a real catalog calls its own products is caught by it.
+    for word in ("TILE", "CERAMIC", "PORCELAIN", "MARBLE", "TERRACOTTA",
+                 "MOSAIC", "HIGHLIGHTER", "DECOR_PANEL", "WALL_PANEL",
+                 "MOULDED_PANEL", "GLAZED", "VITRIFIED", "BORDER",
+                 "LISTELLO", "OTHER"):
+        results.append(check(
+            f"{word} is still kept",
+            assess_tile_purity(observation(word))["state"] != PURITY_NOT_TILE,
+        ))
+
+    # Words that name where a tile is LAID are deliberately not here: a
+    # model reaching for one of them about a correct tile shot must not
+    # have the image deleted for it.
+    for word in ("TERRACE", "BALCONY", "ROOFTOP", "COURTYARD"):
+        results.append(check(
+            f"{word} names a place a tile is laid, so it does not reject",
+            assess_tile_purity(observation(word))["state"] != PURITY_NOT_TILE,
+        ))
+    return results
+
+
 def flat(text):
     """One-line view of a hand-wrapped prompt, for substring checks.
 
@@ -999,6 +1254,11 @@ def main():
          mosaic_picture_checks()),
         ("the report accounts for every candidate",
          report_accounting_checks()),
+        ("a product box may trim background, never the product",
+         bbox_trim_checks()),
+        ("cutting something up cannot launder a non-tile verdict",
+         split_laundering_checks()),
+        ("a product is never a building", structure_word_checks()),
         ("two tiles in one crop are cut apart", gutter_split_checks()),
         ("a narrow product is not dropped for being narrow", size_floor_checks()),
     ]
