@@ -639,6 +639,35 @@ def gutter_split_checks():
     results = []
     gap = lambda h, w=60: np.full((h, w, 3), 252, np.uint8)
 
+    # THE CASE THAT KEPT REACHING DRIVE: two PLAIN cream tiles with a
+    # white stripe between them. The first version of the splitter looked
+    # for flat columns, but a plain tile's own columns are flat too, so
+    # nothing separated and the pair was saved as one image.
+    def plain(base=238, noise=0.6, seed=1, w=400, h=800):
+        rng = np.random.default_rng(seed)
+        return (np.full((h, w, 3), base, np.float32)
+                + rng.normal(0, noise, (h, w, 3))).clip(0, 255).astype(np.uint8)
+
+    for noise in (0.3, 0.6, 1.0, 2.0, 4.0):
+        pair = np.hstack([plain(noise=noise), gap(800),
+                          plain(noise=noise, seed=2)])
+        results.append(check(
+            f"two PLAIN tiles (texture {noise}) with page between them are cut",
+            len(split_at_background_gutters(pair)) == 2,
+            str(split_at_background_gutters(pair)),
+        ))
+        results.append(check(
+            f"a single PLAIN tile (texture {noise}) is NOT cut",
+            split_at_background_gutters(plain(noise=noise)) == [],
+        ))
+
+    results.append(check(
+        "two tiles of DIFFERENT colours are still cut apart",
+        len(split_at_background_gutters(
+            np.hstack([plain(base=238), gap(800), plain(base=214, seed=9)])
+        )) == 2,
+    ))
+
     single = tile_patch(400, 800, ((201, 190, 173), (183, 173, 157)))
     results.append(check(
         "a single patterned tile is NOT cut",
