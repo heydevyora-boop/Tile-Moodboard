@@ -529,6 +529,14 @@ def assess_tile_purity(observation):
     # EXTERIOR), material name and tile fraction all describe what the
     # pattern LOOKS like; only this asks whether there is a physical
     # object in front of the camera. It therefore runs first.
+    # Absent still reads as "not a physical surface" HERE, so a
+    # hand-built observation cannot accept a graphic by omission. The
+    # real hazard -- a model reply that simply left the field out, and a
+    # product deleted for a question nobody answered -- is handled where
+    # it actually arises: the field is required by TILE_PURITY_SCHEMA,
+    # and verify_tile_only returns "no verdict" (defer) rather than a
+    # verdict when a reply omits it. Deferring keeps the file for a
+    # later run; it neither accepts a graphic nor deletes a tile.
     if not observation.get("physical_surface", False):
         return {
             "state": PURITY_NOT_TILE,
