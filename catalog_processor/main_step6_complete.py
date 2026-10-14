@@ -782,8 +782,35 @@ OUTPUT_DIR = Path(
 )
 
 IMAGE_QUALITY = 85
+# WHAT COUNTS AS TOO SMALL TO BE A PRODUCT.
+#
+# These used to be a flat "both sides >= 200px", which quietly deleted
+# narrow products: a 75x300mm subway tile is a long thin rectangle, and
+# its embedded image is routinely under 200px on the short side while
+# being far bigger than any icon overall. Those candidates vanished
+# before anything counted or logged them, which is why a catalog could
+# come back with far fewer tiles than it visibly contains.
+#
+# A real product is big in at least one direction AND has real area. An
+# icon or a bullet is small in BOTH directions, so it still goes.
+MIN_IMAGE_LONG_SIDE = 200
+MIN_IMAGE_SHORT_SIDE = 64
+MIN_IMAGE_AREA = 150 * 150
+
+# Kept so existing callers and tests that import these names still work.
 MIN_IMAGE_WIDTH = 200
 MIN_IMAGE_HEIGHT = 200
+
+
+def is_too_small_for_a_product(width, height):
+    """True when a candidate is too small to be a catalog product."""
+    if width <= 0 or height <= 0:
+        return True
+    return (
+        max(width, height) < MIN_IMAGE_LONG_SIDE
+        or min(width, height) < MIN_IMAGE_SHORT_SIDE
+        or (width * height) < MIN_IMAGE_AREA
+    )
 
 GOOGLE_SHEET_ID = os.getenv(
     "GOOGLE_SHEET_ID",
@@ -2025,6 +2052,7 @@ def mine_tile_regions(
         deduplicate_regions,
         quad_bounds,
         signatures_match,
+        split_at_background_gutters,
         split_tile_designs,
     )
 
@@ -2463,12 +2491,26 @@ def mine_tile_regions(
         except (TypeError, ValueError):
             designs = 1
 
-        if status == VALIDATION_IMPURE and designs > 1:
+        # The page showing straight through the crop is its own evidence
+        # that more than one product is in it, and it does not need the
+        # classifier to agree: a band of bare page between two tiles is
+        # geometry, not opinion. Checked first, because this is the case
+        # that was reaching Drive as one image of two tiles with a white
+        # stripe down the middle.
+        gutter_pieces = split_at_background_gutters(crop)
+
+        if gutter_pieces or (status == VALIDATION_IMPURE and designs > 1):
             # Several products butted together in one frame. Saving it
             # whole would give one Tile row a picture of its neighbours;
             # rejecting it would throw away every product in it. Cut it
             # along the seams and judge each piece on its own.
-            pieces = split_tile_designs(crop, max_pieces=max(2, min(designs, 4)))
+            pieces = gutter_pieces or split_tile_designs(
+                crop, max_pieces=max(2, min(designs, 4)),
+            )
+            if gutter_pieces:
+                print(f"      gutter             : bare page runs through "
+                      f"this crop -- {len(pieces)} products in it, cutting "
+                      f"them apart")
 
             if pieces:
                 print(f"      region validation  : {designs} designs here -- "
@@ -3240,6 +3282,7 @@ def extract_images_from_pdf(
     # image; this is perceptual and survives re-rasterization.
     catalog_signatures = []
     candidates_examined = 0
+    too_small_skipped = 0
     duplicates_skipped = 0
     room_photos_skipped = 0
     semantic_rejections = 0
@@ -3337,11 +3380,17 @@ def extract_images_from_pdf(
                         with Image.open(BytesIO(image_bytes)) as probe:
                             width, height = probe.size
 
-                    # Ignore tiny icons/logos.
-                    if (
-                        width < MIN_IMAGE_WIDTH
-                        or height < MIN_IMAGE_HEIGHT
-                    ):
+                    # Ignore tiny icons/logos -- but count them, so a
+                    # catalog that comes back short can be diagnosed from
+                    # its own summary instead of guessed at.
+                    if is_too_small_for_a_product(width, height):
+                        too_small_skipped += 1
+                        print(
+                            f"  TOO SMALL -- page {page_number}: "
+                            f"{width}x{height}px is below the product floor "
+                            f"(long side {MIN_IMAGE_LONG_SIDE}, short side "
+                            f"{MIN_IMAGE_SHORT_SIDE}, area {MIN_IMAGE_AREA})"
+                        )
                         continue
 
                     # Conservative early reject: extreme aspect ratios,
@@ -3853,6 +3902,7 @@ def extract_images_from_pdf(
 
     print("")
     print(f"Total PDF images discovered : {candidates_examined}")
+    print(f"Too small to be a product   : {too_small_skipped}")
     print(f"Duplicates skipped          : {duplicates_skipped}")
     print(f"Hard-filtered (graphic/text): {hard_filtered_count}")
     print(f"Room/lifestyle -> mined     : {room_photos_skipped}")
@@ -3939,6 +3989,7 @@ def extract_images_from_pdf(
                         "from_rendered_pages": page_render_recoveries,
                         "duplicates_skipped": duplicates_skipped,
                         "hard_filtered": hard_filtered_count,
+                        "too_small_skipped": too_small_skipped,
                         "rejected_by_validation": semantic_rejections,
                         "deferred_for_validation": validation_deferred,
                         "trace": region_trace,

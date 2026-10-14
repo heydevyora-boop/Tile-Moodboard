@@ -39,6 +39,7 @@ Run:  GEMINI_API_KEY=test python3 test_product_integrity.py
 """
 
 import contextlib
+import inspect
 import io
 import os
 import shutil
@@ -604,6 +605,101 @@ def observation_plumbing_checks():
     return results
 
 
+def gutter_split_checks():
+    """Two tiles with bare page between them must come apart, and a
+    single product must never be cut."""
+    # Absent before the gutter fix; read defensively so this file can be
+    # run against the unfixed baseline to demonstrate the failure.
+    import app.tile_region_extractor as tre
+    split_at_background_gutters = getattr(
+        tre, "split_at_background_gutters", lambda _img: [],
+    )
+
+    results = []
+    gap = lambda h, w=60: np.full((h, w, 3), 252, np.uint8)
+
+    single = tile_patch(400, 800, ((201, 190, 173), (183, 173, 157)))
+    results.append(check(
+        "a single patterned tile is NOT cut",
+        split_at_background_gutters(single) == [],
+        str(split_at_background_gutters(single)),
+    ))
+
+    rng = np.random.default_rng(3)
+    plain = (np.full((800, 400, 3), 200, np.uint8)
+             + rng.normal(0, 4, (800, 400, 3))).clip(0, 255).astype(np.uint8)
+    results.append(check(
+        "a plain noisy tile is NOT cut (sensor noise is not a gutter)",
+        split_at_background_gutters(plain) == [],
+    ))
+
+    two = np.hstack([single, gap(800), single])
+    pieces = split_at_background_gutters(two)
+    results.append(check(
+        f"two tiles with page between them are cut apart ({len(pieces)} pieces)",
+        len(pieces) == 2, str(pieces),
+    ))
+    if len(pieces) == 2:
+        widths = [x2 - x1 for x1, _y1, x2, _y2 in pieces]
+        results.append(check(
+            f"each piece is one tile, the white band belongs to neither "
+            f"(widths {widths})",
+            all(abs(w - 400) <= 8 for w in widths),
+        ))
+
+    stacked = np.vstack([single, gap(60, 400), single])
+    results.append(check(
+        "a horizontal gutter is found too",
+        len(split_at_background_gutters(stacked)) == 2,
+    ))
+
+    three = np.hstack([single, gap(800), single, gap(800), single])
+    results.append(check(
+        "three tiles become three pieces",
+        len(split_at_background_gutters(three)) == 3,
+    ))
+
+    results.append(check(
+        "the splitter is wired into mine_tile_regions",
+        "split_at_background_gutters" in
+        inspect.getsource(pipeline.mine_tile_regions),
+    ))
+    return results
+
+
+def size_floor_checks():
+    """A narrow product must not be dropped for being narrow."""
+    results = []
+    too_small = getattr(
+        pipeline, "is_too_small_for_a_product",
+        lambda w, h: w < 200 or h < 200,   # the old flat floor
+    )
+
+    keep = [
+        (150, 900, "a 75x300mm subway tile, narrow but large"),
+        (200, 200, "a small square swatch at the floor"),
+        (240, 1200, "a long plank"),
+        (900, 900, "an ordinary tile"),
+    ]
+    for w, h, label in keep:
+        results.append(check(f"{label} ({w}x{h}) is KEPT", not too_small(w, h)))
+
+    drop = [
+        (64, 64, "an icon"),
+        (180, 180, "a small logo"),
+        (32, 400, "a hairline rule"),
+        (0, 0, "a degenerate size"),
+    ]
+    for w, h, label in drop:
+        results.append(check(f"{label} ({w}x{h}) is dropped", too_small(w, h)))
+
+    results.append(check(
+        "candidates dropped for size are counted, not silently discarded",
+        "too_small_skipped" in inspect.getsource(pipeline.extract_images_from_pdf),
+    ))
+    return results
+
+
 def main():
     shutil.rmtree(OUT, ignore_errors=True)
     OUT.mkdir(parents=True, exist_ok=True)
@@ -619,6 +715,8 @@ def main():
         ("the same product is not extracted twice in one catalog",
          catalog_duplicate_checks()),
         ("every prompt field survives the parser", observation_plumbing_checks()),
+        ("two tiles in one crop are cut apart", gutter_split_checks()),
+        ("a narrow product is not dropped for being narrow", size_floor_checks()),
     ]
 
     total = passed = 0
