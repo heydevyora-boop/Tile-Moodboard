@@ -1659,6 +1659,123 @@ def crop_image_to_aspect_ratio(image, target_ratio):
 MIN_BBOX_FRACTION = 0.10
 
 
+# A PRODUCT BOX MAY REMOVE BACKGROUND. IT MAY NOT CUT THE PRODUCT.
+#
+# crop_image_to_validated_bbox cuts to whatever box the classifier
+# returned, and the only guard was MIN_BBOX_FRACTION, which asks merely
+# that the box not be a sliver. A box keeping the middle 70% of a
+# highlighter passes that easily -- and a highlighter's decorative top
+# and bottom bands ARE the product, so the saved tile lost both ends.
+# That is what "upper border and lower border are being removed" was.
+#
+# The classifier's box cannot be trusted to know where a product ends:
+# the comment above this call site already says the classifier
+# routinely cannot even recognise a bare swatch. So the pixels decide
+# instead. For every side the box trims, two things must hold of the
+# band being discarded:
+#
+#   * it is FLAT -- a page background, not surface detail; and
+#   * there is a real EDGE where the cut falls -- what is being thrown
+#     away does not look like what is being kept.
+#
+# Measured on this repo's own single_catalog pages (a moulded panel, a
+# floral panel, a plain cream tile) plus a synthetic highlighter, each
+# on pale and dark pages at image noise sigma 0..5:
+#
+#   legitimate trims (box tight on the product, page around it)
+#       edge contrast  13.0 .. 349.0      band std  0.00 .. 2.71
+#   trims that cut into the product (centre 70/85/92/96/98%, insets)
+#       edge contrast   0.1 ..  22.9      band std  1.36 .. 23.2
+#
+# Neither statistic separates them alone -- a near-white tile on a white
+# page has almost no edge, and a plain tile's interior is as flat as any
+# background. Together they do: 36/36 legitimate trims allowed and 0/28
+# product cuts allowed, over the whole plateau contrast 2..12 with band
+# std 4..6. The thresholds sit inside it, the nearest failure being
+# contrast 13 (legitimate trims start being refused) and band std 7 (a
+# product cut slips through).
+BBOX_TRIM_EDGE_CONTRAST_MIN = 8.0
+BBOX_TRIM_BAND_FLATNESS_MAX = 5.0
+
+# Thickness of the strips compared either side of a cut, as a fraction
+# of the image's shorter side. Two pixels minimum: one row is noise.
+BBOX_TRIM_BAND_FRACTION = 0.01
+
+
+def bbox_trim_only_removes_background(image, bbox):
+    """Is this product box trimming background, or cutting the product?
+
+    Returns (True, "") when every side the box trims discards flat
+    background across a real edge, and (False, reason) when any trimmed
+    side cuts through continuous material -- in which case the caller
+    keeps the whole validated frame, because losing some background
+    beats losing the product's own border.
+
+    A box that trims nothing is allowed trivially. Failing to measure
+    (an unreadable band, a degenerate box) is allowed too: this guard
+    exists to stop a specific, measured kind of damage, not to become a
+    new way to lose images.
+    """
+    import numpy as np
+
+    try:
+        frame = np.asarray(image.convert("RGB"), dtype=np.float32)
+    except Exception:  # noqa: BLE001 -- never fail a save over a check
+        return True, ""
+
+    if frame.ndim != 3 or frame.size == 0:
+        return True, ""
+
+    height, width = frame.shape[:2]
+    x1 = max(0, min(width, int(round(bbox["x1"]))))
+    y1 = max(0, min(height, int(round(bbox["y1"]))))
+    x2 = max(0, min(width, int(round(bbox["x2"]))))
+    y2 = max(0, min(height, int(round(bbox["y2"]))))
+
+    if x2 - x1 < 2 or y2 - y1 < 2:
+        return True, ""
+
+    thickness = max(2, int(round(min(height, width) * BBOX_TRIM_BAND_FRACTION)))
+
+    sides = (
+        ("top", frame[max(0, y1 - thickness):y1, x1:x2],
+         frame[y1:y1 + thickness, x1:x2], y1 > 0),
+        ("bottom", frame[y2:min(height, y2 + thickness), x1:x2],
+         frame[y2 - thickness:y2, x1:x2], y2 < height),
+        ("left", frame[y1:y2, max(0, x1 - thickness):x1],
+         frame[y1:y2, x1:x1 + thickness], x1 > 0),
+        ("right", frame[y1:y2, x2:min(width, x2 + thickness)],
+         frame[y1:y2, x2 - thickness:x2], x2 < width),
+    )
+
+    for name, discarded, kept, trimmed in sides:
+        if not trimmed or discarded.size == 0 or kept.size == 0:
+            continue
+
+        contrast = float(np.linalg.norm(
+            discarded.reshape(-1, 3).mean(axis=0)
+            - kept.reshape(-1, 3).mean(axis=0)
+        ))
+        flatness = float(discarded.reshape(-1, 3).mean(axis=1).std())
+
+        if flatness > BBOX_TRIM_BAND_FLATNESS_MAX:
+            return False, (
+                f"the {name} band it would discard has detail in it "
+                f"(variation {flatness:.1f}, above "
+                f"{BBOX_TRIM_BAND_FLATNESS_MAX:.0f}) -- that is product "
+                f"surface, not page background"
+            )
+        if contrast < BBOX_TRIM_EDGE_CONTRAST_MIN:
+            return False, (
+                f"there is no edge at the {name} cut (contrast "
+                f"{contrast:.1f}, below "
+                f"{BBOX_TRIM_EDGE_CONTRAST_MIN:.0f}) -- the box cuts "
+                f"through continuous surface"
+            )
+
+    return True, ""
+
+
 def crop_image_to_validated_bbox(image, bbox):
     """Pure crop to a validate_bbox()-style pixel-space {x1,y1,x2,y2} dict.
 
@@ -2499,7 +2616,34 @@ def mine_tile_regions(
         # stripe down the middle.
         gutter_pieces = split_at_background_gutters(crop)
 
-        if gutter_pieces or (status == VALIDATION_IMPURE and designs > 1):
+        # CUTTING SOMETHING UP MUST NOT LAUNDER A VERDICT OF "NOT A TILE".
+        #
+        # Splitting exists for one case: several products butted together
+        # in one frame. It runs on whatever reaches it, though, and a
+        # hard non-tile verdict reaches it too -- a view of a room, a
+        # photographed building, a printed graphic, an arch. Those get
+        # cut apart and their pieces judged individually, and a piece of
+        # a flat facade or a tiled wall in a room photograph reads as a
+        # clean surface, so the refusal on the whole image is undone by
+        # the very act of dividing it.
+        #
+        # Contamination and multiple designs still split: a towel lying
+        # on a tile, or three products in a row, are exactly what
+        # isolating a piece is for.
+        from app.image_validator import purity_is_hard_non_tile
+
+        beyond_repair = purity_is_hard_non_tile(
+            metadata.get('purity'), metadata.get('purity_state'),
+        )
+        if beyond_repair:
+            gutter_pieces = []
+            if status != VALIDATION_APPROVED:
+                print(f"      split              : not splitting -- "
+                      f"'{reason}' is a verdict on the thing itself, and "
+                      f"cutting it up cannot make it a tile")
+
+        if gutter_pieces or (status == VALIDATION_IMPURE and designs > 1
+                             and not beyond_repair):
             # Several products butted together in one frame. Saving it
             # whole would give one Tile row a picture of its neighbours;
             # rejecting it would throw away every product in it. Cut it
@@ -3085,7 +3229,14 @@ def validate_and_correct_tile_image(
         if gemini_result.product_bbox and verdict == 'APPROVED':
             bbox_check = validate_bbox(gemini_result.product_bbox, image.width, image.height)
             if bbox_check.get('valid'):
-                image = crop_image_to_validated_bbox(image, bbox_check['bbox'])
+                trim_ok, trim_reason = bbox_trim_only_removes_background(
+                    image, bbox_check['bbox'],
+                )
+                if trim_ok:
+                    image = crop_image_to_validated_bbox(image, bbox_check['bbox'])
+                else:
+                    print(f"  [bbox] ignoring the classifier's product box: "
+                          f"{trim_reason}")
 
         detected_size = detect_nearby_size_text(nearby_text)
         target_ratio = parse_product_aspect_ratio(detected_size)
