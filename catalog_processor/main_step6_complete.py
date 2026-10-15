@@ -3652,6 +3652,41 @@ def extract_images_from_pdf(
                         / output_filename
                     )
 
+                    # THE SAME PAGE-TRIM THE REGION PATH DOES.
+                    #
+                    # A catalog that prints its products at an angle does
+                    # it in its embedded images too: a tilted tile with
+                    # the page, and often a caption, around it. Trimming
+                    # here means the classifier and the purity model see
+                    # the product instead.
+                    #
+                    # Only a clean "trimmed" verdict is acted on. A frame
+                    # this cannot resolve is left exactly as it was,
+                    # because region mining below may still find real
+                    # products inside it -- refusing the whole image here
+                    # would throw those away with it.
+                    try:
+                        import cv2
+                        import numpy as np
+
+                        from app.tile_region_extractor import trim_to_product
+
+                        trimmed, trim_note = trim_to_product(
+                            cv2.cvtColor(
+                                np.array(image.convert("RGB")),
+                                cv2.COLOR_RGB2BGR,
+                            )
+                        )
+                        if trim_note.get("action") == "trimmed":
+                            image = Image.fromarray(
+                                cv2.cvtColor(trimmed, cv2.COLOR_BGR2RGB)
+                            )
+                            print(f"  [trim] page {page_number} image "
+                                  f"{image_counter}: {trim_note['reason']}")
+                    except Exception as exc:  # noqa: BLE001 -- never fatal
+                        print(f"  [trim] page {page_number} image "
+                              f"{image_counter}: not trimmed ({exc})")
+
                     image.save(
                         output_path,
                         "WEBP",

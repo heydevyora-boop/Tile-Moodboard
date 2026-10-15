@@ -77,11 +77,16 @@ from app.image_validator import (  # noqa: E402
     validate_bbox,
     validate_product_decision,
 )
+import app.tile_region_extractor as region_extractor  # noqa: E402
 from app.tile_region_extractor import (  # noqa: E402
     MAX_PAGE_SOURCE_COVERAGE,
     extract_tile_region,
     split_tile_designs,
 )
+
+# Absent until the page-trim exists; the check below reports that as a
+# failure rather than taking the whole file down with an ImportError.
+trim_to_product = getattr(region_extractor, "trim_to_product", None)
 
 OUT = Path(__file__).resolve().parent / "output" / "product_integrity_test"
 REAL_PDF = (
@@ -827,6 +832,160 @@ def structure_word_checks():
     return results
 
 
+def checkerboard_tile(width=400, height=340, cell=26):
+    """A strongly patterned tile: the case that broke the first trim."""
+    grout = (118, 110, 98)
+    face = np.zeros((height, width, 3), np.uint8)
+    for y in range(height):
+        for x in range(width):
+            if x % cell < 5 or y % cell < 5:
+                face[y, x] = grout
+            else:
+                face[y, x] = ((201, 190, 173)
+                              if ((x // cell) + (y // cell)) % 2 == 0
+                              else (183, 173, 157))
+    return face
+
+
+def on_catalog_page(product_bgr, angle=0.0, pad=0.45, background=(250, 250, 250),
+                    caption=False, clip=0.0, noise=2.0):
+    """The product printed on a page, optionally at an angle."""
+    rng = np.random.default_rng(5)
+    height, width = product_bgr.shape[:2]
+    side = int(max(height, width) * (1 + pad))
+    page = np.full((side, side, 3), background, np.uint8)
+    oy, ox = (side - height) // 2, (side - width) // 2
+    page[oy:oy + height, ox:ox + width] = product_bgr
+    if caption:
+        cv2.putText(page, "EXOTICA 600X1200",
+                    (ox, min(side - 12, oy + height + 46)),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1.1, (70, 70, 70), 3)
+    if angle:
+        rotation = cv2.getRotationMatrix2D((side / 2, side / 2), angle, 1.0)
+        page = cv2.warpAffine(page, rotation, (side, side),
+                              flags=cv2.INTER_LINEAR,
+                              borderMode=cv2.BORDER_CONSTANT,
+                              borderValue=background)
+    if clip:
+        page = page[:, :int(side * clip)]
+    return np.clip(page.astype(np.float32)
+                   + rng.normal(0, noise, page.shape), 0, 255).astype(np.uint8)
+
+
+def page_trim_checks():
+    """Only the tile. Not the page it was printed on.
+
+    Five images came back from a real Exotica run and three were mostly
+    paper: the catalog prints its products at an angle, and an
+    axis-aligned box around a tilted tile is two white triangles with a
+    band of product between them. One was a tile so far out of frame
+    that only a dark diagonal sliver was left.
+
+    trim_to_product cuts the page away and straightens what is left --
+    but only when the frame holds one whole rectangular product. Every
+    ambiguous frame is handed on untouched, because every statistic
+    that would have refused one also refused a real patterned tile.
+    """
+    results = []
+    if not REAL_PDF.exists():
+        return [check("real catalog present", False, f"missing {REAL_PDF}")]
+    if trim_to_product is None:
+        return [check(
+            "the page around a product is cut away", False,
+            "trim_to_product does not exist -- a tilted product arrives as "
+            "two triangles of paper with a band of tile between them",
+        )]
+
+    panel = real_product_crop()
+    strip = synthetic_highlighter()
+    checker = checkerboard_tile()
+
+    # The Exotica layout: a product printed at an angle, with page --
+    # and sometimes a caption -- around it.
+    for label, product, angle, background in (
+        ("a panel at 5 degrees", panel, 5, (250, 250, 250)),
+        ("a panel at 20 degrees", panel, 20, (250, 250, 250)),
+        ("a panel at 45 degrees", panel, 45, (250, 250, 250)),
+        ("a highlighter at 15 degrees", strip, 15, (250, 250, 250)),
+        ("a patterned tile at 15 degrees", checker, 15, (250, 250, 250)),
+        ("a panel on a DARK page", panel, 12, (30, 30, 30)),
+    ):
+        crop, info = trim_to_product(
+            on_catalog_page(product, angle=angle, background=background),
+        )
+        results.append(check(
+            f"{label} is cut out of the page and straightened",
+            info["action"] == "trimmed", info["reason"][:60],
+        ))
+        if info["action"] == "trimmed":
+            tall = max(product.shape[:2]), min(product.shape[:2])
+            got = max(crop.shape[:2]), min(crop.shape[:2])
+            results.append(check(
+                f"{label} comes back at the product's own size",
+                abs(got[0] - tall[0]) <= 3 and abs(got[1] - tall[1]) <= 3,
+                f"{got} vs {tall}",
+            ))
+
+    # A caption beside the product goes with the page.
+    crop, info = trim_to_product(on_catalog_page(panel, angle=20, caption=True))
+    results.append(check(
+        "a caption printed beside the product is left behind with the page",
+        info["action"] == "trimmed"
+        and abs(max(crop.shape[:2]) - max(panel.shape[:2])) <= 3,
+    ))
+
+    # THE CASES THAT MUST BE LEFT EXACTLY AS THEY WERE.
+    #
+    # The first version of this refused the ambiguous ones, and a
+    # checkerboard tile's own pattern read as the page: 6 tiles became
+    # 2 in test_single_pdf_tile_only.
+    sliver = np.full((900, 700, 3), 250, np.uint8)
+    cv2.fillPoly(sliver, [np.array([[0, 0], [105, 0], [700, 795], [595, 900]],
+                                   np.int32)], (38, 36, 34))
+    two_up = np.full((panel.shape[0] + 80, panel.shape[1] * 2 + 160, 3),
+                     250, np.uint8)
+    two_up[40:40 + panel.shape[0], 40:40 + panel.shape[1]] = panel
+    two_up[40:40 + panel.shape[0],
+           40 + panel.shape[1] + 80:40 + panel.shape[1] * 2 + 80] = panel
+
+    for label, image in (
+        ("a crop already tight to its panel", panel),
+        ("a patterned tile filling the frame", checker),
+        ("the same tile with bigger cells", checkerboard_tile(cell=52)),
+        ("the same tile with tiny cells", checkerboard_tile(cell=12)),
+        ("a highlighter filling the frame", strip),
+        ("a product running out of the frame",
+         on_catalog_page(panel, angle=20, clip=0.55)),
+        ("a thin diagonal sliver", sliver),
+        ("two products in one frame", two_up),
+    ):
+        before = image.shape
+        crop, info = trim_to_product(image)
+        results.append(check(
+            f"{label} is handed on untouched",
+            info["action"] == "unchanged" and crop.shape == before,
+            info["reason"][:60],
+        ))
+
+    results.append(check(
+        "the trim never refuses an image outright",
+        "rejected" not in inspect.getsource(trim_to_product),
+    ))
+    results.append(check(
+        "region extraction trims before it upscales or reports",
+        inspect.getsource(region_extractor.extract_tile_region).index(
+            "trim_to_product")
+        < inspect.getsource(region_extractor.extract_tile_region).index(
+            "UPSCALE_TARGET_SIDE_PX"),
+    ))
+    results.append(check(
+        "the whole-image route trims too, and only on a clean verdict",
+        'trim_note.get("action") == "trimmed"' in inspect.getsource(
+            pipeline.extract_images_from_pdf),
+    ))
+    return results
+
+
 def flat(text):
     """One-line view of a hand-wrapped prompt, for substring checks.
 
@@ -1430,6 +1589,8 @@ def main():
          printed_graphic_checks()),
         ("a panel is not a landmark, a wall is not a sample",
          landmark_and_wall_checks()),
+        ("only the tile, not the page it was printed on",
+         page_trim_checks()),
         ("two tiles in one crop are cut apart", gutter_split_checks()),
         ("a narrow product is not dropped for being narrow", size_floor_checks()),
     ]

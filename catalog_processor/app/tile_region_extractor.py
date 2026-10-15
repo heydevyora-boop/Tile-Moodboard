@@ -862,6 +862,241 @@ def split_tile_designs(image_bgr, max_pieces=4):
     return [] if len(boxes) < 2 else boxes
 
 
+# ONLY THE TILE. NOT THE PAGE IT WAS PRINTED ON.
+#
+# A catalog does not always print its products straight. The Exotica
+# pages lay them at an angle, and a detector reporting an axis-aligned
+# box around a tilted tile hands back a frame that is mostly paper: two
+# white triangles with a diagonal band of product between them. Three
+# of the five images from that run were exactly that, and one was a
+# tile so far out of frame that only a dark diagonal sliver remained.
+#
+# So the crop is measured before anything else looks at it. The page
+# around a product is flat and one colour, which is what makes this
+# cheap: take the colour of the crop's own outer ring, mark every pixel
+# far from it, and the product is the blob that is left.
+#
+# Four outcomes, and the numbers that separate them were measured on
+# this repo's own single_catalog products -- a moulded panel, a floral
+# panel, a plain cream tile and a synthetic highlighter strip -- laid on
+# pale and dark pages at 0, 5, 12, 20, 35 and 45 degrees, with and
+# without a drop shadow, a caption line and a clipping crop edge:
+#
+#   fill    how much of the blob's own rotated bounding rectangle the
+#           blob actually fills. A real tile is a rectangle, so it
+#           fills it: 0.987 .. 1.000 across every rotation, shadow and
+#           caption case. A diagonal sliver cut by the frame is a
+#           parallelogram and fills only 0.788 .. 0.815. A crop already
+#           tight to its product has no page in the ring at all, the
+#           mask comes out sparse, and fill drops to 0.007 .. 0.085 --
+#           which is how "there is nothing to trim" is recognised.
+#   touch   how many frame edges the blob reaches. A product with page
+#           around it reaches none. A product running out of the crop
+#           reaches at least one, and is partial no matter how neatly
+#           it fills its rectangle (0.992 .. 0.996 for the clipped
+#           cases -- fill cannot see this, which is why touch exists).
+#   second  the next blob's area as a fraction of the largest. Two
+#           products in one frame give 1.000; everything else gives
+#           0.000 .. 0.003. Those are left for the gutter splitter,
+#           which is the thing that knows how to cut them apart.
+#
+# The thresholds sit in the middle of each gap: 0.50 between 0.085 and
+# 0.788, 0.90 between 0.815 and 0.987, 0.50 between 0.003 and 1.000.
+# Deliberately NOT a rule: aspect ratio. A highlighter is 1:6 and a
+# listello longer still, so refusing a long blob would refuse the very
+# products this is meant to deliver.
+# ONLY THE TILE. NOT THE PAGE IT WAS PRINTED ON.
+#
+# A catalog does not always print its products straight. The Exotica
+# pages lay them at an angle, and a detector reporting an axis-aligned
+# box around a tilted tile hands back a frame that is mostly paper: two
+# white triangles with a diagonal band of product between them. Three
+# of the five images from that run were exactly that.
+#
+# The page around a product is flat and one colour, which is what makes
+# this cheap: take the colour of the crop's own outer ring, mark every
+# pixel far from it, and the product is the blob that is left. Three
+# numbers then describe that blob, measured on this repo's own
+# single_catalog products -- a moulded panel, a floral panel, a plain
+# cream tile, a checkerboard tile and a synthetic highlighter strip --
+# on pale and dark pages, at 0, 5, 12, 20, 35 and 45 degrees, with and
+# without a drop shadow, a caption line and a clipping crop edge:
+#
+#   fill    how much of its own rotated bounding rectangle the blob
+#           fills. A whole tile is a rectangle and fills it: 0.987 ..
+#           1.000 through every rotation, shadow and caption case. A
+#           crop already tight to its product has no page in the ring,
+#           the mask comes out sparse, and fill falls to 0.007 .. 0.085.
+#           A diagonal sliver cut by the frame is a parallelogram:
+#           0.788 .. 0.815.
+#   touch   how many frame edges the blob reaches. A product with page
+#           around it reaches none. A product running out of the crop
+#           reaches at least one. A patterned tile filling the frame
+#           reaches all four, because its own pattern is what the mask
+#           found.
+#   second  the next blob's area as a fraction of the largest. Two
+#           products in one frame give 1.000, everything else 0.000 ..
+#           0.003, and two products are the gutter splitter's job.
+#
+# WHAT THIS DELIBERATELY DOES NOT DO IS REJECT.
+#
+# A sliver and a partial tile should be refused, and the first versions
+# of this did refuse them. But every statistic that separated them from
+# a whole tile -- ring variation, the share of the ring that is page,
+# how far the background reaches around the frame -- also had a real
+# patterned tile sitting inside the refusing band:
+#
+#   ring variation   page 0.00 .. 5.42   vs   tight product 9.49 .. 35.60
+#                    but a clipped product's ring is page AND product,
+#                    and lands in both
+#   ring page-share  page 0.765 .. 1.000 vs   tight product 0.287 .. 0.884
+#   background edges page 2 .. 4         vs   tight product 0 .. 4
+#
+# Each overlap means a rule built on it deletes real tiles, and the
+# first attempt proved it: test_single_pdf_tile_only went from 6 tiles
+# to 2 because a checkerboard tile's own pattern read as the thing to
+# cut away. So this trims only what is unambiguous and leaves
+# everything else exactly as it was. Whether a part-shape is a product
+# is already asked, by name, in the purity verifier's
+# complete_rectangle.
+#
+# It degrades the same way. A page carrying image noise up to sigma 7
+# still trims (fill 0.997 down to 0.931); past that the page stops
+# reading as flat and the crop is handed on untouched, which costs
+# some background and damages nothing.
+TRIM_BACKGROUND_TOLERANCE = 18.0
+TRIM_MIN_RECTANGLE_FILL = 0.90
+TRIM_MAX_SECOND_BLOB = 0.50
+TRIM_BORDER_RING = 0.02
+TRIM_EDGE_BAND = 0.004
+
+
+def _product_blob(image_bgr):
+    """The product in this crop, as (rect, fill, touch, second).
+
+    Returns None when nothing can be measured.
+    """
+    height, width = image_bgr.shape[:2]
+    if height < 16 or width < 16:
+        return None
+
+    ring = max(2, int(round(min(height, width) * TRIM_BORDER_RING)))
+    border = np.concatenate([
+        image_bgr[:ring].reshape(-1, 3), image_bgr[-ring:].reshape(-1, 3),
+        image_bgr[:, :ring].reshape(-1, 3), image_bgr[:, -ring:].reshape(-1, 3),
+    ])
+    background = np.median(border, axis=0)
+
+    distance = np.linalg.norm(
+        image_bgr.astype(np.float32) - background, axis=2,
+    )
+    mask = (distance > TRIM_BACKGROUND_TOLERANCE).astype(np.uint8)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8))
+
+    contours, _ = cv2.findContours(
+        mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE,
+    )
+    if not contours:
+        return None
+
+    areas = sorted((cv2.contourArea(c) for c in contours), reverse=True)
+    if areas[0] <= 0:
+        return None
+
+    contour = max(contours, key=cv2.contourArea)
+    rect = cv2.minAreaRect(contour)
+    rect_width, rect_height = rect[1]
+    if rect_width < 4 or rect_height < 4:
+        return None
+
+    box = np.zeros_like(mask)
+    cv2.drawContours(box, [cv2.boxPoints(rect).astype(np.int32)], 0, 1, -1)
+    box_pixels = float(box.sum())
+    if box_pixels <= 0:
+        return None
+    fill = float((mask & box).sum()) / box_pixels
+
+    solo = np.zeros_like(mask)
+    cv2.drawContours(solo, [contour], 0, 1, -1)
+    band = max(1, int(round(min(height, width) * TRIM_EDGE_BAND)))
+    touch = (
+        int(solo[:band].any()) + int(solo[-band:].any())
+        + int(solo[:, :band].any()) + int(solo[:, -band:].any())
+    )
+
+    second = areas[1] / areas[0] if len(areas) > 1 else 0.0
+    return rect, fill, touch, second
+
+
+def trim_to_product(image_bgr):
+    """Cuts a crop down to the product in it, straightened.
+
+    Returns (crop, info). The crop is the deskewed, tightly cropped
+    product when the frame holds one whole rectangular product with
+    page around it, and the image UNCHANGED in every other case --
+    including the ambiguous ones. info["action"] is "trimmed" or
+    "unchanged", with info["reason"] saying which test decided it.
+
+    This never refuses an image; see the note above for why.
+    """
+    info = {"action": "unchanged", "reason": "nothing measurable to trim"}
+
+    measured = _product_blob(image_bgr)
+    if measured is None:
+        return image_bgr, info
+
+    rect, fill, touch, second = measured
+    info.update({
+        "fill": round(fill, 3), "edges_touched": touch,
+        "second_blob": round(second, 3),
+    })
+
+    if second >= TRIM_MAX_SECOND_BLOB:
+        info["reason"] = (
+            f"a second product fills {second:.0%} as much of the frame -- "
+            "leaving this for the splitter rather than keeping one of them"
+        )
+        return image_bgr, info
+
+    if fill < TRIM_MIN_RECTANGLE_FILL:
+        info["reason"] = (
+            f"what the page-colour test found fills only {fill:.0%} of its "
+            "own rectangle -- not one clean product shape, so nothing is cut"
+        )
+        return image_bgr, info
+
+    if touch:
+        info["reason"] = (
+            f"it reaches {touch} frame edge(s) -- either the crop is already "
+            "the product or the product runs out of it; either way there is "
+            "no page to cut"
+        )
+        return image_bgr, info
+
+    centre, (rect_width, rect_height), angle = rect
+    height, width = image_bgr.shape[:2]
+    rotation = cv2.getRotationMatrix2D(centre, angle, 1.0)
+    straightened = cv2.warpAffine(
+        image_bgr, rotation, (width, height),
+        flags=cv2.INTER_LANCZOS4, borderMode=cv2.BORDER_REPLICATE,
+    )
+    crop = cv2.getRectSubPix(
+        straightened,
+        (int(round(rect_width)), int(round(rect_height))),
+        centre,
+    )
+    if crop is None or crop.size == 0:
+        info["reason"] = "the straightened crop came out empty"
+        return image_bgr, info
+
+    info["action"] = "trimmed"
+    info["reason"] = (
+        f"cut the page away and straightened by {angle:.1f} degrees"
+    )
+    info["trimmed_size"] = (crop.shape[1], crop.shape[0])
+    return crop, info
+
+
 def draw_region_overlay(image_bgr, regions, destination):
     """Writes the source with every detected candidate drawn on it.
 
@@ -1091,6 +1326,20 @@ def extract_tile_region(image_bgr, quad, occluders=None,
         return None, info
 
     crop = rectified[y1:y2, x1:x2].copy()
+
+    # CUT THE PAGE AWAY BEFORE ANYTHING ELSE SEES THIS.
+    #
+    # The quad bounds the surface the detector reported, which on a
+    # catalog that prints its products at an angle is a frame of paper
+    # with the tile lying across it. Trimming here, before the upscale
+    # below and before any verdict, means every later stage -- the
+    # purity model included -- is looking at the product rather than at
+    # the page around it. A frame holding no whole product is refused
+    # outright: see trim_to_product for what separates the two.
+    crop, trim = trim_to_product(crop)
+    info["trim"] = trim
+    if trim["action"] == "trimmed":
+        clean_width, clean_height = crop.shape[1], crop.shape[0]
 
     # A small crop that passed both gates is real tile, just not many
     # pixels of it. Enlarging the pixels that are there beats handing
