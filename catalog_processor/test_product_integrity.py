@@ -87,6 +87,7 @@ from app.tile_region_extractor import (  # noqa: E402
 # Absent until the page-trim exists; the check below reports that as a
 # failure rather than taking the whole file down with an ImportError.
 trim_to_product = getattr(region_extractor, "trim_to_product", None)
+grow_to_whole_product = getattr(region_extractor, "grow_to_whole_product", None)
 
 OUT = Path(__file__).resolve().parent / "output" / "product_integrity_test"
 REAL_PDF = (
@@ -829,6 +830,170 @@ def structure_word_checks():
             f"{word} names a place a tile is laid, so it does not reject",
             assess_tile_purity(observation(word))["state"] != PURITY_NOT_TILE,
         ))
+    return results
+
+
+def real_page_and_products(page_index=2, dpi=110):
+    """A real catalog page, with the true extent of each product on it."""
+    import fitz
+
+    doc = fitz.open(str(REAL_PDF))
+    pix = doc[page_index].get_pixmap(dpi=dpi)
+    page = cv2.imdecode(
+        np.frombuffer(pix.tobytes("png"), np.uint8), cv2.IMREAD_COLOR,
+    )
+    gray = cv2.cvtColor(page, cv2.COLOR_BGR2GRAY)
+    count, _l, stats, _c = cv2.connectedComponentsWithStats(
+        (gray < 244).astype(np.uint8), 8,
+    )
+    products = sorted(
+        [tuple(int(v) for v in stats[i][:4]) for i in range(1, count)
+         if stats[i][4] > 40000],
+        key=lambda b: b[0],
+    )
+    return page, products
+
+
+def as_quad(x, y, width, height):
+    return [(x, y), (x + width, y), (x + width, y + height), (x, y + height)]
+
+
+def grow_checks():
+    """Half a product is not a product -- so finish it, do not refuse it.
+
+    Mozart came back with half panels: a quad bounding part of a
+    product, so the crop, and any piece the splitter cut from it, held
+    a fragment. What is needed to see that is not in the crop at all --
+    it is in the parent, where the product continues past the quad.
+
+    Six crop-only statistics were measured against this and every one
+    put a real, tightly cropped patterned tile inside the refusing
+    band, so nothing is refused: the quad is grown to the product it
+    sits in.
+    """
+    if not REAL_PDF.exists():
+        return [check("real catalog present", False, f"missing {REAL_PDF}")]
+    if grow_to_whole_product is None:
+        return [check(
+            "a quad that cuts a product is finished before use", False,
+            "grow_to_whole_product does not exist -- half a panel is "
+            "cropped, and the splitter then cuts a fragment of a fragment",
+        )]
+
+    results = []
+    page, products = real_page_and_products()
+    results.append(check(
+        f"the real page yields its products ({len(products)} found)",
+        len(products) >= 3, str(products),
+    ))
+
+    for index, (x, y, width, height) in enumerate(products):
+        whole = as_quad(x, y, width, height)
+        reference, _note = grow_to_whole_product(page, whole)
+        reference_bounds = region_extractor.quad_bounds(reference)
+
+        # TO WITHIN A FEW PIXELS, AND THAT IS THE RIGHT ASSERTION.
+        #
+        # The parent is labelled on a reduced copy -- one labelling per
+        # page instead of one per candidate, which at 200 DPI is 0.09s
+        # against 16.2s. The boundary then lands a pixel or two
+        # differently, measured at worst 2px, or 0.29% of a product's
+        # longest side, and identically for every cut fraction of the
+        # same product. What matters is that a half quad recovers the
+        # SAME product, not that it agrees to the pixel with a full
+        # one, so the tolerance is 4px: twice the worst seen.
+        for label, fraction, axis in (
+            ("55% of its width", 0.55, "x"),
+            ("30% of its width", 0.30, "x"),
+            ("40% of its height", 0.40, "y"),
+            ("60% of its height", 0.60, "y"),
+        ):
+            cut = (as_quad(x, y, int(width * fraction), height) if axis == "x"
+                   else as_quad(x, y, width, int(height * fraction)))
+            grown, note = grow_to_whole_product(page, cut)
+            bounds = region_extractor.quad_bounds(grown)
+            results.append(check(
+                f"product {index}: a quad holding {label} recovers all of it",
+                all(abs(a - b) <= 4 for a, b in zip(bounds, reference_bounds)),
+                f"{bounds} vs {reference_bounds}",
+            ))
+
+        # A quad already on the whole product is left where it is.
+        _same, note = grow_to_whole_product(page, whole)
+        results.append(check(
+            f"product {index}: a correct quad is not moved",
+            "already holds the whole product" in note, note[:60],
+        ))
+
+    # A SCENE HAS NO PAGE TO FIND, AND MUST NOT BE GROWN TO ITS WHOLE SELF.
+    scene = np.zeros((900, 1400, 3), np.uint8)
+    for row in range(900):
+        scene[row, :] = (150 + int(40 * row / 900),
+                         150 + int(35 * row / 900),
+                         145 + int(30 * row / 900))
+    cv2.rectangle(scene, (0, 648), (1400, 900), (96, 104, 112), -1)
+    cv2.rectangle(scene, (840, 360), (1260, 720), (220, 220, 225), -1)
+    for label, quad in (
+        ("a wall region in a room photo", as_quad(60, 60, 500, 500)),
+        ("a floor region in a room photo", as_quad(100, 675, 600, 180)),
+    ):
+        grown, note = grow_to_whole_product(scene, quad)
+        results.append(check(
+            f"{label} is left alone",
+            region_extractor.quad_bounds(grown)
+            == region_extractor.quad_bounds(quad),
+            note[:60],
+        ))
+        results.append(check(
+            f"{label}: the reason names the coverage guard",
+            "a scene" in note, note[:60],
+        ))
+
+    # A quad spanning two products belongs to the splitter, not here.
+    (x0, y0, w0, h0), (x1, y1, w1, h1) = products[0], products[1]
+    across = as_quad(x0, min(y0, y1), (x1 + w1) - x0,
+                     max(y0 + h0, y1 + h1) - min(y0, y1))
+    grown, note = grow_to_whole_product(page, across)
+    results.append(check(
+        "a quad spanning two products is left for the splitter",
+        region_extractor.quad_bounds(grown)
+        == region_extractor.quad_bounds(across)
+        and "more than one product" in note,
+        note[:60],
+    ))
+
+    # End to end: the crop that comes out is the whole product.
+    x, y, width, height = products[0]
+    full_crop, _info = extract_tile_region(page, as_quad(x, y, width, height))
+    for label, fraction in (("55%", 0.55), ("30%", 0.30)):
+        crop, info = extract_tile_region(
+            page, as_quad(x, y, int(width * fraction), height),
+        )
+        results.append(check(
+            f"a quad holding {label} of a product still crops the whole tile",
+            crop is not None and full_crop is not None
+            and abs(crop.shape[0] - full_crop.shape[0]) <= 4
+            and abs(crop.shape[1] - full_crop.shape[1]) <= 4,
+            f"{None if crop is None else crop.shape} vs "
+            f"{None if full_crop is None else full_crop.shape}",
+        ))
+
+    results.append(check(
+        "the quad is grown before it is normalised or cropped",
+        inspect.getsource(extract_tile_region).index("grow_to_whole_product")
+        < inspect.getsource(extract_tile_region).index("normalize_quad("),
+    ))
+
+    # The superseded header for the first, refusing version of the trim
+    # was left in the file when that version was replaced, so the module
+    # carried two headers and the first described behaviour that is not
+    # there. It describes "four outcomes" and a touch rule that refuses.
+    source = inspect.getsource(region_extractor)
+    results.append(check(
+        "the module does not describe a refusing trim it no longer has",
+        source.count("ONLY THE TILE. NOT THE PAGE IT WAS PRINTED ON.") == 1
+        and "Four outcomes" not in source,
+    ))
     return results
 
 
@@ -1591,6 +1756,7 @@ def main():
          landmark_and_wall_checks()),
         ("only the tile, not the page it was printed on",
          page_trim_checks()),
+        ("half a product is finished, not refused", grow_checks()),
         ("two tiles in one crop are cut apart", gutter_split_checks()),
         ("a narrow product is not dropped for being narrow", size_floor_checks()),
     ]
