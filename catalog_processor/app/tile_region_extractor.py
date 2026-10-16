@@ -862,6 +862,227 @@ def split_tile_designs(image_bgr, max_pieces=4):
     return [] if len(boxes) < 2 else boxes
 
 
+# IS THIS PARENT A CATALOG PAGE, OR A PHOTOGRAPH?
+#
+# Three rules below reason about page LAYOUT -- that a product has page
+# around it, that it does not bleed off the margin, that one product is
+# one region. None of that holds inside a photograph, where every
+# surface reaches the frame edge because the frame is a camera's, not a
+# page's. Applying page logic there refused a tiled wall band above a
+# sofa and stopped a two-tile layout being split.
+#
+# A page announces itself: one connected region of page colour,
+# touching all four edges, with the products sitting in it. Measured
+# over the real catalog pages and the synthetic photographs this repo
+# tests with:
+#
+#     real catalog pages          0.516 .. 0.761 of the parent
+#     photographs, full-frame     0.000  (no such region at all)
+#
+# The bar is 0.15: far below any page, and above a frame that has no
+# page in it at all.
+PAGE_MARGIN_MIN_SHARE = 0.15
+
+_PAGE_LIKE_CACHE = {"key": None, "value": None}
+
+
+def parent_is_a_catalog_page(image_bgr):
+    """Does this parent have a page margin around its contents?"""
+    key = (
+        id(image_bgr), image_bgr.shape, image_bgr.dtype.str,
+        int(image_bgr[::37, ::41].sum()),
+    )
+    if _PAGE_LIKE_CACHE["key"] == key:
+        return _PAGE_LIKE_CACHE["value"]
+
+    height, width = image_bgr.shape[:2]
+    ring = max(2, int(round(min(height, width) * 0.02)))
+    border = np.concatenate([
+        image_bgr[:ring].reshape(-1, 3), image_bgr[-ring:].reshape(-1, 3),
+        image_bgr[:, :ring].reshape(-1, 3), image_bgr[:, -ring:].reshape(-1, 3),
+    ])
+    page = np.median(border, axis=0)
+
+    margin = (
+        np.linalg.norm(image_bgr.astype(np.float32) - page, axis=2)
+        <= GROW_BACKGROUND_TOLERANCE
+    ).astype(np.uint8)
+    margin = cv2.morphologyEx(margin, cv2.MORPH_OPEN, np.ones((5, 5), np.uint8))
+
+    count, labels, stats, _ = cv2.connectedComponentsWithStats(margin, 4)
+    band = max(1, int(round(min(height, width) * TRIM_EDGE_BAND)))
+    best = 0.0
+    for index in range(1, count):
+        component = labels == index
+        if not (component[:band].any() and component[-band:].any()
+                and component[:, :band].any() and component[:, -band:].any()):
+            continue
+        best = max(best, float(stats[index, 4]) / float(height * width))
+
+    value = best >= PAGE_MARGIN_MIN_SHARE
+    _PAGE_LIKE_CACHE["key"], _PAGE_LIKE_CACHE["value"] = key, value
+    return value
+
+
+# A HERO THAT BLEEDS OFF THE PAGE IS NOT A PRODUCT SHOT.
+#
+# The real 41-page Mozart catalog finally explained two complaints that
+# had survived several rounds. Its COVER carries a photograph of the
+# Dubai Frame -- an actual building -- running off the bottom of the
+# page, and page 2 carries three moulded frames overlapping each other
+# and cropped by the page edge. Regions mined from those arrive as a
+# frame-shaped structure and as narrow strips of moulding, which is
+# exactly what kept reaching Drive.
+#
+# A catalog lays its PRODUCTS out with page around them and bleeds its
+# HERO artwork off the edge. Measured over every product region on all
+# 41 pages of that catalog -- 215 of them -- only three touch a page
+# edge at all:
+#
+#     0 edges   212 regions   the products
+#     1 edge      1 region    the Dubai Frame on the cover
+#     2 edges     1 region    page 2's cropped mouldings
+#     4 edges     1 region    a full-bleed page, a different thing
+#                             and left to the scene rules
+#
+# So one, two or three edges is refused. Four is not: an image that IS
+# the product edge to edge is the normal way an embedded product
+# photograph arrives.
+def region_runs_off_the_page(image_bgr, box):
+    """Is the product under this box a hero bleeding off the page?
+
+    Returns (True, reason) when the region it sits on runs off one,
+    two or three edges of the parent, and (False, note) otherwise --
+    including whenever it cannot be told.
+    """
+    if not parent_is_a_catalog_page(image_bgr):
+        return False, "this parent is a photograph, not a page with margins"
+
+    try:
+        count, labels, stats, scale = _page_regions(image_bgr)
+    except Exception as exc:  # noqa: BLE001 -- advice, never fatal
+        return False, f"could not read the parent ({exc})"
+
+    if count < 2:
+        return False, "no product regions in the parent"
+
+    x1, y1, x2, y2 = (int(v) for v in box)
+    sx1, sy1 = int(max(0, x1) * scale), int(max(0, y1) * scale)
+    sx2, sy2 = int(round(x2 * scale)), int(round(y2 * scale))
+    inside = labels[sy1:max(sy1 + 1, sy2), sx1:max(sx1 + 1, sx2)]
+    if inside.size == 0:
+        return False, "the box falls outside the parent"
+    found = inside[inside > 0]
+    if found.size == 0:
+        return False, "no product pixels inside the box"
+
+    ids, counts = np.unique(found, return_counts=True)
+    region = int(ids[int(np.argmax(counts))])
+
+    height, width = labels.shape
+
+    # ONLY A CATALOG PAGE HAS A MARGIN TO BLEED OFF.
+    #
+    # In a room photograph there is no page: the tiled wall reaches the
+    # frame edge because every surface does, and refusing it would
+    # throw away the lifestyle-shot recoveries this pipeline exists to
+    # make. That is the same line the growing rule draws -- a product
+    # on a page covers a small part of it (0.056 .. 0.126 measured on
+    # the real catalog, 0.192 and 0.428 for the two bled heroes), while
+    # a scene comes back as one region covering 0.823 of the frame.
+    coverage = float(stats[region, 4]) / float(height * width)
+    if coverage > GROW_MAX_PARENT_COVERAGE:
+        return False, (
+            f"the region covers {coverage:.0%} of the parent -- a photograph "
+            f"rather than a page, so reaching the edge means nothing"
+        )
+
+    rx, ry, rw, rh = (int(v) for v in stats[region][:4])
+    band = max(1, int(round(min(height, width) * TRIM_EDGE_BAND)))
+    edges = (
+        int(ry <= band) + int(ry + rh >= height - band)
+        + int(rx <= band) + int(rx + rw >= width - band)
+    )
+
+    if 1 <= edges <= 3:
+        return True, (
+            f"the product here runs off {edges} edge(s) of the page -- hero "
+            f"artwork bled to the margin, not a product shot"
+        )
+    return False, f"the product here sits inside the page ({edges} edges)"
+
+
+# HOW MANY PRODUCTS ARE IN THIS CROP? ASK THE PAGE, NOT THE PIXELS IN IT.
+#
+# split_tile_designs looks for seams. On a panel whose own design has
+# vertical structure -- a vine running up a framed blossom panel, a
+# moulding with a bright highlight -- it finds them, and carves one
+# product into four. Across all 41 pages of the real Mozart catalog,
+# examining every whole single product on them:
+#
+#     cut by split_tile_designs      32 of 109   (29.4%)
+#     cut by the gutter splitter      3 of 109   ( 2.8%)
+#
+# Nearly one product in three. Those quarters are the narrow strips of
+# moulding that came back as "tiles".
+#
+# The page itself knows better. A product is one connected region of
+# non-page colour on it, so a crop whose product pixels nearly all
+# belong to ONE such region holds one product, whatever seams its
+# pattern happens to show. Measured over 21 pages of that catalog: a
+# quad drawn on a single product reads 1.000, and of 31 quads
+# deliberately spanning two products only 4 read as one -- and those
+# four are products that physically touch, so the page has no gap to
+# find either.
+#
+# The bar is 0.95. Below it the crop may hold more than one product and
+# the splitters decide as before.
+SPLIT_ONE_PRODUCT_SHARE = 0.95
+
+
+def crop_is_one_product(image_bgr, box):
+    """Does this box hold a single product of its parent page?
+
+    Returns (True, note) when the box's product pixels nearly all
+    belong to one region of the parent, (False, note) otherwise --
+    including whenever it cannot be told, so the splitters keep their
+    existing behaviour by default.
+    """
+    if not parent_is_a_catalog_page(image_bgr):
+        return False, "this parent is a photograph, not a page with margins"
+
+    try:
+        count, labels, stats, scale = _page_regions(image_bgr)
+    except Exception as exc:  # noqa: BLE001 -- advice, never fatal
+        return False, f"could not read the parent ({exc})"
+
+    if count < 2:
+        return False, "no product regions found in the parent"
+
+    x1, y1, x2, y2 = (int(v) for v in box)
+    sx1, sy1 = int(max(0, x1) * scale), int(max(0, y1) * scale)
+    sx2, sy2 = int(round(x2 * scale)), int(round(y2 * scale))
+    inside = labels[sy1:max(sy1 + 1, sy2), sx1:max(sx1 + 1, sx2)]
+    if inside.size == 0:
+        return False, "the box falls outside the parent"
+
+    found = inside[inside > 0]
+    if found.size == 0:
+        return False, "no product pixels inside the box"
+
+    _ids, counts = np.unique(found, return_counts=True)
+    share = float(counts.max()) / float(counts.sum())
+    if share >= SPLIT_ONE_PRODUCT_SHARE:
+        return True, (
+            f"the page shows one product here ({share:.0%} of its product "
+            f"pixels are one region)"
+        )
+    return False, (
+        f"the page shows more than one product here (largest region is "
+        f"{share:.0%} of it)"
+    )
+
+
 # HALF A PRODUCT IS NOT A PRODUCT -- SO FINISH IT, DO NOT REFUSE IT.
 #
 # Mozart came back with half panels: a quad bounding part of a product,
@@ -971,6 +1192,9 @@ def grow_to_whole_product(image_bgr, quad):
     own bounding box when the parent shows the product continuing past
     it, and handed back unchanged in every other case.
     """
+    if not parent_is_a_catalog_page(image_bgr):
+        return quad, "this parent is a photograph, not a page with margins"
+
     bx1, by1, bx2, by2 = quad_bounds(quad)
     height, width = image_bgr.shape[:2]
     box_width, box_height = bx2 - bx1, by2 - by1
@@ -1286,6 +1510,18 @@ def extract_tile_region(image_bgr, quad, occluders=None,
     normalized, note = normalize_quad(quad, source_width, source_height)
     if normalized is None:
         info["reason"] = f"degenerate region geometry -- {note}"
+        return None, info
+
+    # A hero bled off the page edge is refused before it is cropped.
+    # Checked on the NORMALISED quad: the raw one may hold NaNs or
+    # corners outside the image, which quad_bounds cannot read.
+    bleeding, bleed_note = region_runs_off_the_page(
+        image_bgr, quad_bounds(normalized),
+    )
+    info["bleed"] = bleed_note
+    if bleeding:
+        info["stage"] = "page_bleed"
+        info["reason"] = bleed_note
         return None, info
 
     info["quad_normalized"] = [

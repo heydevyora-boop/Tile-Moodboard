@@ -88,6 +88,9 @@ from app.tile_region_extractor import (  # noqa: E402
 # failure rather than taking the whole file down with an ImportError.
 trim_to_product = getattr(region_extractor, "trim_to_product", None)
 grow_to_whole_product = getattr(region_extractor, "grow_to_whole_product", None)
+crop_is_one_product = getattr(region_extractor, "crop_is_one_product", None)
+region_runs_off_the_page = getattr(
+    region_extractor, "region_runs_off_the_page", None)
 
 OUT = Path(__file__).resolve().parent / "output" / "product_integrity_test"
 REAL_PDF = (
@@ -833,6 +836,186 @@ def structure_word_checks():
     return results
 
 
+FIXTURES = Path(__file__).resolve().parent / "single_catalog" / "fixtures"
+
+
+def catalog_fixture(name):
+    """A page of the real 41-page Mozart catalog, rendered at 72 DPI."""
+    path = FIXTURES / f"{name}.png"
+    if not path.exists():
+        return None
+    return cv2.imread(str(path))
+
+
+def page_regions_of(page):
+    """Every product region on a page, as boxes in the page's own pixels."""
+    count, _labels, stats, scale = region_extractor._page_regions(page)
+    inverse = 1.0 / scale
+    boxes = []
+    for index in range(1, count):
+        x, y, width, height, area = (int(v) for v in stats[index][:5])
+        if area < 800 or width < 15 or height < 15:
+            continue
+        boxes.append((
+            int(x * inverse), int(y * inverse),
+            int(width * inverse), int(height * inverse),
+        ))
+    return boxes
+
+
+def page_bleed_checks():
+    """A hero that bleeds off the page is not a product shot.
+
+    The real catalog finally explained two complaints that had survived
+    several rounds. Its COVER is a photograph of the Dubai Frame -- an
+    actual building -- running off the bottom of the page, and page 2
+    carries three moulded frames overlapping and cropped by the page
+    edge. Regions mined from those arrive as a frame-shaped structure
+    and as narrow strips of moulding: exactly what kept reaching Drive.
+
+    Over all 41 pages, 215 product regions, only three touch a page
+    edge: those two, and one full-bleed page. A catalog puts page
+    around its products and bleeds its artwork off the margin.
+    """
+    if region_runs_off_the_page is None:
+        return [check(
+            "hero artwork bled off the page is refused", False,
+            "region_runs_off_the_page does not exist -- the cover's Dubai "
+            "Frame and page 2's cropped mouldings are still mined as tiles",
+        )]
+
+    results = []
+    for name, should_bleed, what in (
+        ("mozart_cover_dubai_frame", True,
+         "the cover's Dubai Frame photograph"),
+        ("mozart_page2_bled_mouldings", True,
+         "page 2's three cropped mouldings"),
+        ("mozart_page7_products", False,
+         "page 7's catalogued panels"),
+    ):
+        page = catalog_fixture(name)
+        if page is None:
+            results.append(check(f"{what}: fixture present", False, name))
+            continue
+
+        bled = []
+        for x, y, width, height in page_regions_of(page):
+            runs_off, note = region_runs_off_the_page(
+                page, (x, y, x + width, y + height),
+            )
+            if runs_off:
+                bled.append((f"{width}x{height}", note))
+
+        if should_bleed:
+            results.append(check(
+                f"{what} is refused as page bleed",
+                len(bled) >= 1, f"{len(bled)} refused",
+            ))
+            if bled:
+                results.append(check(
+                    f"{what}: the reason says it runs off the page",
+                    "runs off" in bled[0][1] and "not a product shot"
+                    in bled[0][1],
+                    bled[0][1][:60],
+                ))
+        else:
+            results.append(check(
+                f"{what} are NOT refused -- they sit inside the page",
+                not bled, f"{len(bled)} wrongly refused: {bled[:2]}",
+            ))
+
+    # A product photographed edge to edge is not a bleed: that is simply
+    # how an embedded product image arrives, and it is four edges, not
+    # one to three.
+    panel = real_product_crop()
+    runs_off, note = region_runs_off_the_page(
+        panel, (0, 0, panel.shape[1], panel.shape[0]),
+    )
+    results.append(check(
+        "a product filling its own image is not called a bleed",
+        not runs_off, note[:60],
+    ))
+
+    source = inspect.getsource(extract_tile_region)
+    results.append(check(
+        "region extraction refuses a bleed before it rectifies or crops",
+        source.index("region_runs_off_the_page") < source.index("rectify_quad"),
+    ))
+    return results
+
+
+def one_product_split_checks():
+    """One product is never cut up, whatever seams its pattern shows.
+
+    split_tile_designs looks for seams, and a framed panel with a vine
+    up it has plenty. The page knows better than the pattern does: a
+    product is one connected region on it.
+    """
+    if crop_is_one_product is None:
+        return [check(
+            "a single product is not carved into pieces", False,
+            "crop_is_one_product does not exist -- the seam splitter "
+            "still quarters a framed panel",
+        )]
+
+    page = catalog_fixture("mozart_page7_products")
+    if page is None:
+        return [check("page 7 fixture present", False, "missing")]
+
+    results = []
+    # The three largest regions on page 7 are its products: two framed
+    # panels and a mix-and-match tile. Everything smaller is page
+    # furniture -- the index tab, the caption boxes -- which correctly
+    # reads as "more than one product" because it is text.
+    boxes = sorted(page_regions_of(page), key=lambda b: -(b[2] * b[3]))
+    panels = boxes[:3]
+    results.append(check(
+        f"page 7 yields catalogued panels to test ({len(panels)})",
+        len(panels) >= 2, str(panels[:3]),
+    ))
+
+    carved_before = carved_after = 0
+    for x, y, width, height in panels:
+        crop = page[y:y + height, x:x + width]
+        seams = split_tile_designs(crop, max_pieces=4)
+        single, note = crop_is_one_product(page, (x, y, x + width, y + height))
+        if seams:
+            carved_before += 1
+            if not single:
+                carved_after += 1
+        results.append(check(
+            f"a {width}x{height} panel reads as one product on the page",
+            single, note[:60],
+        ))
+
+    results.append(check(
+        "every panel the seam splitter would have carved is now spared",
+        carved_after == 0, f"{carved_after} still carved of {carved_before}",
+    ))
+
+    # A box drawn across two products must NOT read as one.
+    if len(panels) >= 2:
+        first, second = sorted(panels[:2], key=lambda b: b[0])
+        across = (
+            first[0], min(first[1], second[1]),
+            second[0] + second[2], max(first[1] + first[3],
+                                       second[1] + second[3]),
+        )
+        single, note = crop_is_one_product(page, across)
+        results.append(check(
+            "a box across two panels does not read as one product",
+            not single, note[:60],
+        ))
+
+    results.append(check(
+        "the splitter consults it before the seam splitter runs",
+        "crop_is_one_product" in inspect.getsource(pipeline.mine_tile_regions)
+        and "not single_product" in inspect.getsource(
+            pipeline.mine_tile_regions),
+    ))
+    return results
+
+
 def real_page_and_products(page_index=2, dpi=110):
     """A real catalog page, with the true extent of each product on it."""
     import fitz
@@ -944,9 +1127,13 @@ def grow_checks():
             == region_extractor.quad_bounds(quad),
             note[:60],
         ))
+        # The reason now comes from the earlier, cleaner test: a room
+        # photograph has no page margin at all, so none of the page
+        # rules apply to it. The behaviour asserted above -- the region
+        # is left exactly as it was -- is unchanged.
         results.append(check(
-            f"{label}: the reason names the coverage guard",
-            "a scene" in note, note[:60],
+            f"{label}: the reason says a photograph has no page",
+            "photograph" in note, note[:60],
         ))
 
     # A quad spanning two products belongs to the splitter, not here.
@@ -1757,6 +1944,10 @@ def main():
         ("only the tile, not the page it was printed on",
          page_trim_checks()),
         ("half a product is finished, not refused", grow_checks()),
+        ("a hero bled off the page is not a product",
+         page_bleed_checks()),
+        ("one product is never carved into pieces",
+         one_product_split_checks()),
         ("two tiles in one crop are cut apart", gutter_split_checks()),
         ("a narrow product is not dropped for being narrow", size_floor_checks()),
     ]

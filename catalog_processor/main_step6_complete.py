@@ -2642,8 +2642,29 @@ def mine_tile_regions(
                       f"'{reason}' is a verdict on the thing itself, and "
                       f"cutting it up cannot make it a tile")
 
+        # ONE PRODUCT IS NEVER CUT UP, WHATEVER SEAMS ITS PATTERN SHOWS.
+        #
+        # split_tile_designs looks for seams, and a framed panel with a
+        # vine up it has plenty: across the real 41-page Mozart catalog
+        # it carved 32 of 109 whole products into quarters. The page
+        # knows better than the pattern does -- a product is one
+        # connected region on it -- so when the crop sits on a single
+        # such region, the seam splitter is not consulted at all.
+        #
+        # Bare page running THROUGH the crop still splits it. That is
+        # geometry rather than opinion, and it is how two products that
+        # physically touch on the page are still told apart.
+        from app.tile_region_extractor import crop_is_one_product
+
+        single_product, single_note = crop_is_one_product(
+            image_bgr, region_box,
+        )
+        if single_product and not gutter_pieces and designs > 1:
+            print(f"      split              : not splitting -- "
+                  f"{single_note}")
+
         if gutter_pieces or (status == VALIDATION_IMPURE and designs > 1
-                             and not beyond_repair):
+                             and not beyond_repair and not single_product):
             # Several products butted together in one frame. Saving it
             # whole would give one Tile row a picture of its neighbours;
             # rejecting it would throw away every product in it. Cut it
