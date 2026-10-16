@@ -125,6 +125,41 @@ MIN_OUTPUT_SIDE_FRACTION = 0.20
 # size, so the relative rule never descends past it.
 MIN_OUTPUT_SIDE_FLOOR_PX = 96
 
+# A TILE IS NOT A SLIVER -- AND THIS PATH HAD NO SUCH RULE AT ALL.
+#
+# The embedded-image route has refused extreme slivers since it was
+# written (is_thin_strip_image in main_step6_complete.py, same 8.0).
+# The region-mining route never did: it checked AREA (MIN_CLEAN_PIXELS)
+# and each SIDE (effective_min_side), both of which a long thin strip
+# passes comfortably. So a 150x1600 ribbon cut out of a page -- a
+# grout line, a page rule, the edge of a frame -- was a 240,000-pixel
+# crop with both sides over the floor, and it reached Drive as a
+# product. That is the cut-off image this rule exists to stop.
+#
+# WHERE THE BAR IS, AND WHY IT IS NOT 8.0.
+#
+# 8.0 was the obvious choice -- the sibling path's own figure -- and it
+# is WRONG here, which the suite proved immediately: a 1075x110 strip
+# (9.8:1) is a documented real sample from this catalog's logs, a thin
+# product photographed whole, and MIN_OUTPUT_SIDE_PX exists partly to
+# keep it. A listello, a border, a pencil liner IS long and thin. So
+# the honest range:
+#
+#   widest real region on this catalog's pages  :  5.93:1  (a size label;
+#                                                   actual products 2:1)
+#   documented usable thin product              :  9.8:1
+#   the ribbon that reached Drive as a product  : ~14:1    (estimated off
+#                                                   the screenshot, see below)
+#
+# 12.0 sits 22% above the worst good case and ~15% below the bad one.
+# Both margins are real but neither is generous, so this is the number
+# most likely to need revisiting -- and the ~14:1 end is an estimate
+# from a screenshot of the file, not a measurement of the file itself,
+# which was not reachable from here. If a ribbon ever survives this,
+# the crop's own pixels (does the product continue past the edge?) are
+# the better question than its proportions.
+REGION_MAX_ASPECT_RATIO = 12.0
+
 
 def effective_min_side(source_width, source_height):
     """Smallest acceptable crop side for a source of this size."""
@@ -1707,6 +1742,25 @@ def extract_tile_region(image_bgr, quad, occluders=None,
     info["trim"] = trim
     if trim["action"] == "trimmed":
         clean_width, clean_height = crop.shape[1], crop.shape[0]
+
+    # Refuse the sliver, now that the shape is final.
+    #
+    # Checked HERE rather than beside the size gates above because the
+    # trim is what settles the crop's proportions: a frame of page
+    # trimmed off a narrow product is exactly how a reasonable-looking
+    # rectangle becomes a ribbon. The upscale below preserves aspect,
+    # so this is the output's true shape.
+    long_side = max(clean_width, clean_height)
+    short_side = min(clean_width, clean_height)
+    if short_side > 0:
+        aspect = long_side / short_side
+        if aspect > REGION_MAX_ASPECT_RATIO:
+            info["stage"] = "sliver"
+            info["reason"] = (
+                f"{clean_width}x{clean_height}px is an extreme "
+                f"{aspect:.1f}:1 sliver, not a whole product"
+            )
+            return None, info
 
     # A small crop that passed both gates is real tile, just not many
     # pixels of it. Enlarging the pixels that are there beats handing

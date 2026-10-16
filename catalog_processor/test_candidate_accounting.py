@@ -246,10 +246,63 @@ def run_miner():
     return captured.getvalue()
 
 
-ACCOUNTING = re.compile(
-    r"(\d+) detected = (\d+) accepted \+ (\d+) rejected \+ "
-    r"(\d+) already extracted \+ (\d+) failed \+ (\d+) deferred"
+# THE OPERATOR'S ACCOUNTING LINE, AS IT IS NOW WORDED.
+#
+# It used to print all five buckets every time, zeros included, which
+# buried the one number that matters under four noughts and made a
+# normal page read like a fault report. Zeros carry no information, so
+# they are left out -- but every bucket that HAS something in it is
+# still named, the detected count is still stated, and a set of
+# statuses that does not add up still triggers the loud ACCOUNTING
+# MISMATCH line this test also checks for. The guarantee is unchanged:
+# nothing a candidate did can go unreported.
+ACCEPTED_LINE = re.compile(
+    r"ACCEPTED (\d+) of (\d+) candidate\(s\)(.*)"
 )
+NOTHING_LINE = re.compile(
+    r"no tile accepted out of (\d+) candidate\(s\)(.*)"
+)
+# The other route re-finding the same products is the dedup working,
+# and the run says so in its own words rather than as "no tile
+# accepted".
+ALL_DUPLICATES_LINE = re.compile(
+    r"(\d+) candidate\(s\), all already extracted from this page"
+)
+BUCKET = {
+    "rejected": "rejected",
+    "already extracted": "duplicate",
+    "failed": "failed",
+    "deferred, will retry": "deferred",
+}
+
+
+def read_accounting(output):
+    """(detected, {bucket: count}) from the run's own stdout, or None."""
+    match = ACCEPTED_LINE.search(output)
+    if match:
+        accepted, detected, tail = (
+            int(match.group(1)), int(match.group(2)), match.group(3)
+        )
+    else:
+        match = NOTHING_LINE.search(output)
+        if match:
+            accepted, detected, tail = 0, int(match.group(1)), match.group(2)
+        else:
+            match = ALL_DUPLICATES_LINE.search(output)
+            if not match:
+                return None
+            detected = int(match.group(1))
+            return detected, {"accepted": 0, "rejected": 0,
+                              "duplicate": detected, "failed": 0,
+                              "deferred": 0}
+
+    counts = {"accepted": accepted, "rejected": 0, "duplicate": 0,
+              "failed": 0, "deferred": 0}
+    for words, key in BUCKET.items():
+        found = re.search(r"(\d+) " + re.escape(words), tail)
+        if found:
+            counts[key] = int(found.group(1))
+    return detected, counts
 
 
 def check(label, ok, detail=""):
@@ -258,19 +311,22 @@ def check(label, ok, detail=""):
 
 def main():
     output = run_miner()
-    match = ACCOUNTING.search(output)
+    parsed = read_accounting(output)
 
     results = []
-    if match is None:
+    if parsed is None:
         results.append(check(
             "the run prints a candidate accounting line", False,
             "no accounting line in the output",
         ))
         print(output)
     else:
-        detected, accepted, rejected, duplicate, failed, deferred = (
-            int(value) for value in match.groups()
-        )
+        detected, counts = parsed
+        accepted = counts["accepted"]
+        rejected = counts["rejected"]
+        duplicate = counts["duplicate"]
+        failed = counts["failed"]
+        deferred = counts["deferred"]
         total = accepted + rejected + duplicate + failed + deferred
 
         results.append(check(

@@ -1748,6 +1748,200 @@ def gutter_split_checks():
     return results
 
 
+def size_folder_checks():
+    """A catalog is browsed by company, then catalog, then size."""
+    results = []
+    name = pipeline.size_folder_name
+
+    same = ["600X1200", "600 x 1200 mm", "600X1200MM", "600 X 1200 MM"]
+    folders = {name(value) for value in same}
+    results.append(check(
+        "one size spelled four ways is one folder, not four",
+        len(folders) == 1,
+        f"got {sorted(folders)}",
+    ))
+    results.append(check(
+        "and it is named after the size",
+        name("600X1200") == "600X1200MM",
+        name("600X1200"),
+    ))
+    results.append(check(
+        "a unit the catalog printed is kept",
+        name("60x120cm") == "60X120CM",
+        name("60x120cm"),
+    ))
+    results.append(check(
+        "two different sizes are two folders",
+        name("300X600") != name("600X1200"),
+    ))
+
+    # The unlisted case: findable and obviously unclassified, never
+    # guessed into a plausible wrong folder.
+    for empty in ("", None, "   "):
+        results.append(check(
+            f"a product with no printed size ({empty!r}) is still filed",
+            name(empty) == "SIZE-NOT-LISTED",
+            name(empty),
+        ))
+    results.append(check(
+        "an unparseable size is not silently dropped",
+        name("LARGE FORMAT") not in ("", None),
+        name("LARGE FORMAT"),
+    ))
+
+    # A folder name has to be a folder name.
+    for value in ("600X1200", "60x120cm", "LARGE FORMAT", ""):
+        produced = name(value)
+        results.append(check(
+            f"{value!r} yields a usable folder name ({produced!r})",
+            produced and "/" not in produced and produced == produced.strip(),
+        ))
+    return results
+
+
+def lost_product_diagnosis_checks():
+    """A lost product must say which word lost it.
+
+    The material the model named was recorded on ACCEPTED candidates
+    and not on REJECTED ones, which is the wrong way round: the word
+    that let a tile through is of no interest, and the word that
+    deleted one is the whole diagnosis. On a catalog of decorative
+    frames meeting a rule whose vocabulary includes FRAME, ARCHWAY and
+    ORNAMENTAL_FRAME, a report that repeats "a landmark clad in tile"
+    forty times without naming the word cannot be acted on at all.
+    """
+    source = inspect.getsource(pipeline.mine_tile_regions)
+    results = []
+
+    rejected_note = source[source.index('note("REJECTED", validation="FAIL"'):]
+    rejected_note = rejected_note[:rejected_note.index("record(")]
+    results.append(check(
+        "a rejected candidate records the material the model named",
+        "material=" in rejected_note,
+        rejected_note.strip()[:200],
+    ))
+    results.append(check(
+        "...and how much of it read as tile",
+        "tile_fraction=" in rejected_note,
+    ))
+
+    # The terminal roll-up, which is what the operator actually reads.
+    summary = inspect.getsource(pipeline.extract_images_from_pdf)
+    results.append(check(
+        "the run tells the operator why candidates were refused",
+        "did not become tiles" in summary,
+    ))
+    results.append(check(
+        "the roll-up quotes the model's own word for the surface",
+        "model said" in summary,
+    ))
+    results.append(check(
+        "duplicates are not listed as refusals",
+        '"ACCEPTED", "DUPLICATE"' in summary,
+    ))
+
+    # The grouping itself: one repeated verdict is one line.
+    outcomes, reasons = pipeline.summarise_candidate_outcomes([
+        {"final": "REJECTED", "validation_reason": "same reason"},
+        {"final": "REJECTED", "validation_reason": "same reason"},
+        {"final": "REJECTED", "validation_reason": "same reason"},
+    ])
+    results.append(check(
+        "three identical refusals are one line, counted",
+        list(reasons.items()) == [("same reason", 3)],
+        str(reasons),
+    ))
+    return results
+
+
+def sliver_checks():
+    """A ribbon cut out of a page is not a product -- but a thin tile is.
+
+    The cut-off image that reached Drive came through region mining,
+    which checked AREA and each SIDE and had no opinion at all about
+    proportions. The embedded-image route next door has refused slivers
+    since it was written. Both halves of this matter: the bar has to
+    stop a ribbon AND keep a listello, and the first attempt at it (8:1,
+    the sibling path's figure) failed the second half on a documented
+    real sample.
+    """
+    results = []
+    bar = region_extractor.REGION_MAX_ASPECT_RATIO
+
+    results.append(check(
+        "mined regions are held to a shape bar at all",
+        isinstance(bar, (int, float)) and bar > 0,
+        f"REGION_MAX_ASPECT_RATIO = {bar!r}",
+    ))
+
+    # The documented real sample the first threshold broke.
+    results.append(check(
+        "a 1075x110 strip (9.8:1) is a product, not a sliver",
+        (1075 / 110) <= bar,
+        f"9.8:1 must stay under the {bar}:1 bar",
+    ))
+    results.append(check(
+        "a 240x1200 plank (5:1) is nowhere near the bar",
+        (1200 / 240) <= bar,
+    ))
+    # The ribbon itself.
+    results.append(check(
+        "a ~14:1 ribbon is refused",
+        14.0 > bar,
+        f"14:1 must exceed the {bar}:1 bar",
+    ))
+
+    # End to end through the real extractor, not arithmetic on the
+    # constant. The ribbon has to be a standalone thing on the page:
+    # a slice THROUGH a product is grown back out to the whole product
+    # by grow_to_whole_product, which is the correct repair and not
+    # this rule's business. It also has to clear the size gates, or it
+    # dies as "too small" and proves nothing about its shape.
+    page = np.full((1400, 800, 3), 250, np.uint8)
+    band = tile_patch(110, 1360, ((196, 190, 182), (120, 114, 106)), cell=18)
+    page[20:1380, 650:760] = band
+    ribbon = [(650, 20), (760, 20), (760, 1380), (650, 1380)]
+    crop, info = region_extractor.extract_tile_region(page, ribbon)
+    results.append(check(
+        "the extractor refuses a ribbon sliced down the page",
+        crop is None and info.get("stage") == "sliver",
+        f"stage={info.get('stage')!r} reason={info.get('reason')!r}",
+    ))
+    results.append(check(
+        "and says why, in the words the log will carry",
+        "sliver" in str(info.get("reason", "")),
+        repr(info.get("reason")),
+    ))
+
+    # ...while an ordinary product is still extracted unchanged.
+    ordinary = on_catalog_page(checkerboard_tile(400, 340), pad=0.6)
+    oh, ow = ordinary.shape[:2]
+    pad = (oh - 340) // 2
+    whole = [(pad, pad), (ow - pad, pad),
+             (ow - pad, oh - pad), (pad, oh - pad)]
+    crop, info = region_extractor.extract_tile_region(ordinary, whole)
+    results.append(check(
+        "the ordinary tile on that same page is still extracted",
+        crop is not None,
+        f"stage={info.get('stage')!r} reason={info.get('reason')!r}",
+    ))
+
+    # The split path can manufacture a ribbon out of a square region,
+    # so it carries the same bar.
+    piece_gate = inspect.getsource(pipeline.mine_tile_regions)
+    results.append(check(
+        "split pieces are held to the same bar, not just to size",
+        "REGION_MAX_ASPECT_RATIO" in piece_gate,
+    ))
+
+    # Neither path may silently drop a candidate.
+    results.append(check(
+        "a sliver piece is counted as rejected, not discarded",
+        "split piece is a sliver" in piece_gate,
+    ))
+    return results
+
+
 def size_floor_checks():
     """A narrow product must not be dropped for being narrow."""
     results = []
@@ -1950,6 +2144,11 @@ def main():
          one_product_split_checks()),
         ("two tiles in one crop are cut apart", gutter_split_checks()),
         ("a narrow product is not dropped for being narrow", size_floor_checks()),
+        ("a ribbon is not a product, but a thin tile is", sliver_checks()),
+        ("tiles are filed by company, catalog and size",
+         size_folder_checks()),
+        ("a lost product says which word lost it",
+         lost_product_diagnosis_checks()),
     ]
 
     total = passed = 0

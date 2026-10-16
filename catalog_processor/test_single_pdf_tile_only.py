@@ -223,18 +223,21 @@ class Harness:
 
     def __init__(self, fail_upload_on=None):
         self.uploads = []            # (filename, sha256 of the bytes)
+        self.folders = {}            # folder id -> (name, parent id)
+        self.upload_parents = []     # (filename, folder id)
         self.master_rows = []
         self.processed = set()
         self.attempts = 0
         self.fail_upload_on = fail_upload_on
 
     # -- Drive ------------------------------------------------------
-    def upload_file(self, _service, path, _folder_id):
+    def upload_file(self, _service, path, folder_id):
         self.attempts += 1
         if self.fail_upload_on is not None and self.attempts == self.fail_upload_on:
             raise RuntimeError("drive is down")
         digest = hashlib.sha256(Path(path).read_bytes()).hexdigest()
         self.uploads.append((Path(path).name, digest))
+        self.upload_parents.append((Path(path).name, folder_id))
         return {"id": f"drive-{len(self.uploads)}", "webViewLink": "http://d/x"}
 
     # -- processed_files --------------------------------------------
@@ -243,6 +246,25 @@ class Harness:
 
     def mark_processed(self, file_hash, filename):
         self.processed.add(file_hash)
+
+    # -- Drive folders ----------------------------------------------
+    def get_or_create_folder(self, _service, name, parent_id=None):
+        """Real enough to prove a hierarchy: ids remember their parent."""
+        for folder_id, (existing, existing_parent) in self.folders.items():
+            if existing == name and existing_parent == parent_id:
+                return folder_id
+        folder_id = f"folder-{len(self.folders) + 1}"
+        self.folders[folder_id] = (name, parent_id)
+        return folder_id
+
+    def path_of(self, folder_id):
+        """ROOT / BRAND / CATALOG / SIZE, as a readable string."""
+        parts = []
+        while folder_id in self.folders:
+            name, parent = self.folders[folder_id]
+            parts.append(name)
+            folder_id = parent
+        return " / ".join(reversed(parts))
 
     # -- Sheets / backend -------------------------------------------
     def append_product(self, **kwargs):
@@ -270,7 +292,7 @@ def install(harness):
     pipeline.already_processed = harness.already_processed
     pipeline.mark_processed = harness.mark_processed
     pipeline.append_product = harness.append_product
-    pipeline.get_or_create_folder = lambda *a, **k: "folder-id"
+    pipeline.get_or_create_folder = harness.get_or_create_folder
     pipeline.append_brand = lambda **k: None
     pipeline.append_catalog = lambda **k: None
     pipeline.sync_master_product_to_backend = lambda **k: {"ok": True}
@@ -311,6 +333,34 @@ def main():
         len(first.uploads) == EXPECTED_TILES,
         f"{len(first.uploads)} uploaded",
     ))
+    # ROOT / BRAND / CATALOG / SIZE -- the hierarchy a showroom browses
+    # by. Asserted on the PARENT each file was actually uploaded to, not
+    # on the folders that happen to exist, because a folder created and
+    # then not used is exactly the bug this would otherwise miss.
+    upload_paths = [
+        first.path_of(folder_id) for _name, folder_id in first.upload_parents
+    ]
+    results.append(check(
+        "every tile is filed under brand / catalog / size",
+        bool(upload_paths) and all(len(p.split(" / ")) >= 3 for p in upload_paths),
+        f"paths seen: {sorted(set(upload_paths))}",
+    ))
+    # This fixture's pages print no size text anywhere, so the correct
+    # third level for it IS the unlisted one -- the point being that a
+    # product with no printed size still gets filed somewhere findable
+    # instead of being guessed at. The naming itself is exercised on
+    # real size strings in test_product_integrity.
+    results.append(check(
+        "a product with no printed size is filed, not guessed at",
+        all(p.endswith("SIZE-NOT-LISTED") for p in upload_paths),
+        f"paths seen: {sorted(set(upload_paths))}",
+    ))
+    results.append(check(
+        "two tiles of the same size share one folder, not two",
+        len({first.path_of(f) for _n, f in first.upload_parents})
+        <= len(first.upload_parents),
+    ))
+
     results.append(check(
         "no two Drive files hold the same image",
         len(first.unique_uploads) == len(first.uploads),

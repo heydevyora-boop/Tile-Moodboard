@@ -2099,6 +2099,9 @@ def _reinterpret_product_or_artwork(image_bytes, mime_type):
             config={
                 "response_mime_type": "application/json",
                 "response_schema": PRODUCT_OR_ARTWORK_SCHEMA,
+                # Temperature 0: a second opinion that disagrees with
+                # itself between runs is not a second opinion.
+                "temperature": 0.0,
             },
         )
     except Exception:  # noqa: BLE001 -- an optional opinion, never fatal
@@ -2313,6 +2316,10 @@ def detect_tile_regions(image_path, width, height):
             config={
                 "response_mime_type": "application/json",
                 "response_schema": TILE_REGION_SCHEMA,
+                # Temperature 0: these are coordinates. The same page
+                # must yield the same boxes, or every downstream
+                # comparison between two runs is meaningless.
+                "temperature": 0.0,
             },
         )
     except Exception:  # noqa: BLE001 -- never break extraction over this
@@ -2441,6 +2448,17 @@ def verify_tile_only(image_path):
             config={
                 "response_mime_type": "application/json",
                 "response_schema": TILE_PURITY_SCHEMA,
+                # Temperature 0, like every other call in this file.
+                #
+                # This one was the exception, and it is the call whose
+                # answer decides whether a mined region is published or
+                # deleted (purity_is_authoritative). At the default
+                # sampling temperature the same crop could be approved
+                # on one run and refused on the next, which is both a
+                # lost product and -- worse -- an unreproducible bug
+                # report: "it rejected everything this time" could not
+                # be told apart from a real regression.
+                "temperature": 0.0,
             },
         )
     except Exception as exc:  # noqa: BLE001 -- "no verdict", never "clean"
