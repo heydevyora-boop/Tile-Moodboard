@@ -137,6 +137,21 @@ def emit(message=""):
     stream.flush()
 
 
+def diag(message=""):
+    """Writes a per-candidate diagnostic line. DEBUG runs only.
+
+    These lines were already meant to be developer-only -- they went
+    through print() and relied on quiet_stage() to swallow them. That
+    worked until one of them said "cutting it up CANNOT make it a
+    tile": "cannot" is in ERROR_MARKERS, so a perfectly ordinary
+    decision line was mistaken for an error and printed twelve times on
+    a single page. Saying "this is a diagnostic" outright is not
+    subject to the wording of the sentence.
+    """
+    if CATALOG_DEBUG:
+        print(message)
+
+
 
 try:
     from googleapiclient.http import MediaIoBaseDownload
@@ -881,6 +896,37 @@ def sanitize_id_part(value):
     value = value.strip("-")
 
     return value or "UNKNOWN"
+
+
+def size_folder_name(raw_size):
+    """Drive folder name for a tile's printed size.
+
+    The hierarchy a catalog is actually browsed by is company, then
+    catalog, then size -- "show me the 600x1200s" is the question a
+    showroom asks, and a flat folder of 200 files cannot answer it.
+    Brand and catalog folders already existed; this is the third level.
+
+    The size here is whatever was read off the page next to the product
+    (detect_nearby_size_text), so it arrives in whatever form the
+    catalog printed it: "600X1200", "600 x 1200 mm", "60x120cm". They
+    are folded to one spelling so the same size does not become three
+    folders. A product whose page printed no size is NOT guessed at --
+    it goes to a named folder of its own, where it is findable and
+    obviously unclassified, rather than into a plausible-looking wrong
+    one.
+    """
+    text = str(raw_size or "").strip().upper()
+    if not text:
+        return "SIZE-NOT-LISTED"
+
+    match = SIZE_TEXT_PATTERN.search(text)
+    if not match:
+        cleaned = re.sub(r"[^A-Z0-9]+", "-", text).strip("-")
+        return cleaned or "SIZE-NOT-LISTED"
+
+    width, height, unit = match.group(1), match.group(2), match.group(3)
+    unit = (unit or "MM").upper()
+    return f"{width}X{height}{unit}"
 
 
 def make_product_id(
@@ -2166,6 +2212,7 @@ def mine_tile_regions(
         draw_region_overlay,
         MIN_CLEAN_PIXELS,
         MIN_OUTPUT_SIDE_PX,
+        REGION_MAX_ASPECT_RATIO,
         deduplicate_regions,
         quad_bounds,
         signatures_match,
@@ -2355,17 +2402,17 @@ def mine_tile_regions(
         )
 
         print(f"    CANDIDATE -- {label}")
-        print(f"      source             : page {page_number} image "
+        diag(f"      source             : page {page_number} image "
               f"{image_counter} ({source_type})")
-        print(f"      detected surface   : {region['surface']}")
-        print(f"      detector confidence: {region['confidence']:.2f}")
-        print(f"      candidate size     : {region_width}x{region_height}px")
+        diag(f"      detected surface   : {region['surface']}")
+        diag(f"      detector confidence: {region['confidence']:.2f}")
+        diag(f"      candidate size     : {region_width}x{region_height}px")
         # Printed, never enforced. A small sample on a big sheet is a
         # real product; this figure is here to be read, not to reject.
-        print(f"      source-relative    : {relative_area:.2%} of the image "
+        diag(f"      source-relative    : {relative_area:.2%} of the image "
               f"(signal only, not a gate)")
-        print(f"      coordinate space   : {region.get('coordinate_space', '?')}")
-        print(f"      occluder box(es)   : {len(region['occluders'])}")
+        diag(f"      coordinate space   : {region.get('coordinate_space', '?')}")
+        diag(f"      occluder box(es)   : {len(region['occluders'])}")
 
         # A rendered page is a COMPOSITION -- margins, headings, text,
         # usually several elements -- so a candidate spanning all of it
@@ -2381,25 +2428,25 @@ def mine_tile_regions(
             ),
         )
 
-        print(f"      [TILE-REGION] source={source_type}:{output_path.name}")
-        print(f"      [TILE-REGION] bbox={info.get('bbox')}")
-        print(f"      [TILE-REGION] width={region_width} height={region_height}")
-        print(f"      [TILE-REGION] coverage="
+        diag(f"      [TILE-REGION] source={source_type}:{output_path.name}")
+        diag(f"      [TILE-REGION] bbox={info.get('bbox')}")
+        diag(f"      [TILE-REGION] width={region_width} height={region_height}")
+        diag(f"      [TILE-REGION] coverage="
               f"{info.get('source_coverage', 0.0):.1%}")
-        print(f"      [TILE-REGION] candidate_type={region['surface']}")
+        diag(f"      [TILE-REGION] candidate_type={region['surface']}")
         overlay_boxes.append((index, region_box, crop is not None))
 
         # Both geometries are printed on every failure: a candidate that
         # dies here died between "the detector saw a surface" and "there
         # are pixels to crop", and only the before/after shows which.
         if crop is None:
-            print(f"      geometry in        : {info.get('quad_in')}")
-            print(f"      geometry normalized: {info.get('quad_normalized', 'n/a')}")
-            print(f"      geometry           : REJECTED -- {info['reason']} "
+            diag(f"      geometry in        : {info.get('quad_in')}")
+            diag(f"      geometry normalized: {info.get('quad_normalized', 'n/a')}")
+            diag(f"      geometry           : REJECTED -- {info['reason']} "
                   f"[stage={info['stage']}]")
-            print(f"      [TILE-REGION] decision=REJECT")
-            print(f"      [TILE-REGION] reason={info['reason']}")
-            print(f"      FINAL              : REJECTED")
+            diag(f"      [TILE-REGION] decision=REJECT")
+            diag(f"      [TILE-REGION] reason={info['reason']}")
+            diag(f"      FINAL              : REJECTED")
             note(
                 "REJECTED",
                 geometry_in=info.get("quad_in"),
@@ -2412,10 +2459,10 @@ def mine_tile_regions(
             continue
 
         if info.get("surface_source") == "bbox-fallback":
-            print(f"      geometry           : perspective rectification "
+            diag(f"      geometry           : perspective rectification "
                   f"unavailable -- using the region's bounding rectangle")
         if info.get("normalize_note"):
-            print(f"      geometry repair    : {info['normalize_note']}")
+            diag(f"      geometry repair    : {info['normalize_note']}")
 
         # The same tile seen twice by two different routes -- once in an
         # embedded raster, once in the page render -- must not be synced
@@ -2445,9 +2492,9 @@ def mine_tile_regions(
         if signature_already_seen(
             seen_signatures, signature, source_key, page_box,
         ):
-            print(f"      geometry           : extracted, but this tile was "
+            diag(f"      geometry           : extracted, but this tile was "
                   f"already extracted from another source on this page")
-            print(f"      FINAL              : DUPLICATE")
+            diag(f"      FINAL              : DUPLICATE")
             note("DUPLICATE", geometry_stage="duplicate",
                  geometry_reason="already extracted from another source")
             record("DUPLICATE", f"candidate {index}",
@@ -2455,7 +2502,7 @@ def mine_tile_regions(
             continue
 
         crop_width, crop_height = info["crop_size"]
-        print(f"      geometry           : OK -- {crop_width}x{crop_height}px, "
+        diag(f"      geometry           : OK -- {crop_width}x{crop_height}px, "
               f"{info['clean_area_fraction']:.0%} of the rectified surface "
               f"is unobstructed")
 
@@ -2472,7 +2519,7 @@ def mine_tile_regions(
             # A technical failure, not a judgement. Kept in its own
             # bucket so a run that lost products to a disk or encoder
             # problem does not read as a run that rejected them.
-            print(f"      FINAL              : FAILED -- could not save ({exc})")
+            diag(f"      FINAL              : FAILED -- could not save ({exc})")
             note("FAILED", geometry_stage="save", geometry_reason=str(exc))
             record("FAILED", f"candidate {index}", f"could not be saved ({exc})")
             continue
@@ -2492,7 +2539,7 @@ def mine_tile_regions(
             f"{region_confidence:.2f}" if isinstance(region_confidence, (int, float))
             else "?"
         )
-        print(f"      region classification: {region_type} "
+        diag(f"      region classification: {region_type} "
               f"(confidence {confidence_text})")
 
         # What the purity verifier actually saw inside the finished crop.
@@ -2505,21 +2552,21 @@ def mine_tile_regions(
             def flag(key):
                 return 'YES' if observation.get(key) else 'no'
 
-            print(f"      material           : {observation.get('material', '?')}")
-            print(f"      tile fraction      : "
+            diag(f"      material           : {observation.get('material', '?')}")
+            diag(f"      tile fraction      : "
                   f"{observation.get('tile_fraction', 0.0):.0%} of the candidate")
-            print(f"      person detected    : {flag('contains_person')}")
-            print(f"      text detected      : {flag('contains_text')}")
-            print(f"      logo detected      : {flag('contains_logo')}")
-            print(f"      objects detected   : "
+            diag(f"      person detected    : {flag('contains_person')}")
+            diag(f"      text detected      : {flag('contains_text')}")
+            diag(f"      logo detected      : {flag('contains_logo')}")
+            diag(f"      objects detected   : "
                   f"{', '.join(describe_contaminants(observation)) or 'none'}")
-            print(f"      reads as a scene   : {flag('is_scene')}")
+            diag(f"      reads as a scene   : {flag('is_scene')}")
         else:
-            print(f"      purity             : not measured")
+            diag(f"      purity             : not measured")
 
-        print(f"      masking applied    : "
+        diag(f"      masking applied    : "
               f"{'YES' if region['occluders'] else 'no'}")
-        print(f"      perspective corr.  : "
+        diag(f"      perspective corr.  : "
               f"{'YES' if info.get('surface_source') == 'rectified' else 'no'}")
 
         geometry_fields = {
@@ -2579,7 +2626,7 @@ def mine_tile_regions(
                     status, metadata, impure_status=VALIDATION_IMPURE
                 )
             ):
-                print(f"      tile-only contract : soft reject overridden "
+                diag(f"      tile-only contract : soft reject overridden "
                       f"-- accepting despite '{status}: {reason}'")
                 reason = (
                     f"accepted on the tile-only catalog contract "
@@ -2587,15 +2634,15 @@ def mine_tile_regions(
                 )
                 status = VALIDATION_APPROVED
             else:
-                print(f"      tile-only contract : hard non-tile evidence "
+                diag(f"      tile-only contract : hard non-tile evidence "
                       f"kept -- not overriding '{status}: {reason}'")
 
         if status == VALIDATION_DEFERRED:
             # Nothing classified this crop, so it is neither a tile nor
             # not-a-tile yet. Hand it to the caller as deferred: the file
             # survives for a later run, but it does not enter the catalog.
-            print(f"      region validation  : DEFERRED -- {reason}")
-            print(f"      FINAL              : DEFERRED (awaiting validation)")
+            diag(f"      region validation  : DEFERRED -- {reason}")
+            diag(f"      FINAL              : DEFERRED (awaiting validation)")
             note("DEFERRED", validation="DEFERRED", validation_reason=reason,
                  **geometry_fields)
             record("DEFERRED", f"candidate {index}", reason)
@@ -2638,7 +2685,7 @@ def mine_tile_regions(
         if beyond_repair:
             gutter_pieces = []
             if status != VALIDATION_APPROVED:
-                print(f"      split              : not splitting -- "
+                diag(f"      split              : not splitting -- "
                       f"'{reason}' is a verdict on the thing itself, and "
                       f"cutting it up cannot make it a tile")
 
@@ -2660,7 +2707,7 @@ def mine_tile_regions(
             image_bgr, region_box,
         )
         if single_product and not gutter_pieces and designs > 1:
-            print(f"      split              : not splitting -- "
+            diag(f"      split              : not splitting -- "
                   f"{single_note}")
 
         if gutter_pieces or (status == VALIDATION_IMPURE and designs > 1
@@ -2673,14 +2720,18 @@ def mine_tile_regions(
                 crop, max_pieces=max(2, min(designs, 4)),
             )
             if gutter_pieces:
-                print(f"      gutter             : bare page runs through "
+                diag(f"      gutter             : bare page runs through "
                       f"this crop -- {len(pieces)} products in it, cutting "
                       f"them apart")
 
             if pieces:
-                print(f"      region validation  : {designs} designs here -- "
-                      f"splitting into {len(pieces)} piece(s) and judging "
-                      f"each separately")
+                # Operator-visible on purpose. "Two tiles arrived in one
+                # image" is a complaint this pipeline has had before, so
+                # the run should say out loud when it found two and cut
+                # them apart -- one line, and only when it actually
+                # happens.
+                emit(f"      {designs} products in one frame -- cut into "
+                     f"{len(pieces)} piece(s), each judged separately")
                 region_path.unlink(missing_ok=True)
 
                 # A split candidate is still ONE detected candidate, so
@@ -2700,12 +2751,33 @@ def mine_tile_regions(
 
                     if (min(piece_width, piece_height) < MIN_OUTPUT_SIDE_PX
                             or piece_width * piece_height < MIN_CLEAN_PIXELS):
-                        print(f"      piece {piece_label}          : "
+                        diag(f"      piece {piece_label}          : "
                               f"{piece_width}x{piece_height}px -- too small to "
                               f"be a swatch, dropped")
                         note("REJECTED", piece=piece_label,
                              validation="FAIL",
                              validation_reason="split piece below size floor",
+                             **geometry_fields)
+                        pieces_rejected += 1
+                        continue
+
+                    # Same sliver bar the whole region is held to. A
+                    # split cuts ACROSS a region, so it is the one place
+                    # that can manufacture a ribbon out of a perfectly
+                    # square candidate -- the piece gate checked each
+                    # side and the area, and a long thin strip passes
+                    # both.
+                    piece_aspect = (
+                        max(piece_width, piece_height)
+                        / min(piece_width, piece_height)
+                    )
+                    if piece_aspect > REGION_MAX_ASPECT_RATIO:
+                        diag(f"      piece {piece_label}          : "
+                              f"{piece_width}x{piece_height}px is an extreme "
+                              f"{piece_aspect:.1f}:1 sliver, dropped")
+                        note("REJECTED", piece=piece_label,
+                             validation="FAIL",
+                             validation_reason="split piece is a sliver",
                              **geometry_fields)
                         pieces_rejected += 1
                         continue
@@ -2720,7 +2792,7 @@ def mine_tile_regions(
                             cv2.cvtColor(piece, cv2.COLOR_BGR2RGB)
                         ).save(piece_path, "WEBP", quality=IMAGE_QUALITY, method=6)
                     except Exception as exc:  # noqa: BLE001
-                        print(f"      piece {piece_label}          : could not "
+                        diag(f"      piece {piece_label}          : could not "
                               f"save ({exc})")
                         note("FAILED", piece=piece_label,
                              validation_reason=f"could not save ({exc})",
@@ -2736,7 +2808,7 @@ def mine_tile_regions(
                     )
 
                     piece_purity = piece_metadata.get('purity') or {}
-                    print(f"      piece {piece_label}          : "
+                    diag(f"      piece {piece_label}          : "
                           f"{piece_width}x{piece_height}px  "
                           f"material={piece_purity.get('material', '?')}  "
                           f"tile={piece_purity.get('tile_fraction', 0.0):.0%}")
@@ -2772,7 +2844,7 @@ def mine_tile_regions(
                             piece_status = VALIDATION_APPROVED
 
                     if piece_status == VALIDATION_DEFERRED:
-                        print(f"        -> DEFERRED -- {piece_reason}")
+                        diag(f"        -> DEFERRED -- {piece_reason}")
                         note("DEFERRED", piece=piece_label,
                              validation="DEFERRED",
                              validation_reason=piece_reason, **geometry_fields)
@@ -2782,13 +2854,13 @@ def mine_tile_regions(
 
                     if piece_status != VALIDATION_APPROVED:
                         piece_path.unlink(missing_ok=True)
-                        print(f"        -> REJECTED -- {piece_reason}")
+                        diag(f"        -> REJECTED -- {piece_reason}")
                         note("REJECTED", piece=piece_label, validation="FAIL",
                              validation_reason=piece_reason, **geometry_fields)
                         pieces_rejected += 1
                         continue
 
-                    print(f"        -> ACCEPTED -> {piece_path.name}")
+                    diag(f"        -> ACCEPTED -> {piece_path.name}")
                     note("ACCEPTED", piece=piece_label, validation="PASS",
                          validation_reason=piece_reason,
                          image_path=str(piece_path),
@@ -2819,7 +2891,7 @@ def mine_tile_regions(
 
                 continue
 
-            print(f"      region validation  : {designs} designs reported, but "
+            diag(f"      region validation  : {designs} designs reported, but "
                   f"no clear seam between them -- cannot split")
 
         if status != VALIDATION_APPROVED:
@@ -2830,18 +2902,33 @@ def mine_tile_regions(
             # rather than producing a bad image" means in practice.
             region_path.unlink(missing_ok=True)
             if status == VALIDATION_IMPURE:
-                print(f"      region validation  : FAIL -- could not be "
+                diag(f"      region validation  : FAIL -- could not be "
                       f"isolated cleanly: {reason}")
             else:
-                print(f"      region validation  : FAIL -- {reason}")
-            print(f"      FINAL              : REJECTED")
+                diag(f"      region validation  : FAIL -- {reason}")
+            diag(f"      FINAL              : REJECTED")
+            # The material the model actually named, on the REJECTED
+            # note as well as the accepted one.
+            #
+            # It was recorded only on acceptance, which is backwards:
+            # when a product survives, the word that let it through is
+            # of no interest, and when a product is LOST the word that
+            # killed it is the only thing worth knowing. A catalog of
+            # decorative frames meeting a rule whose vocabulary
+            # includes FRAME, ARCHWAY and ORNAMENTAL_FRAME is exactly
+            # the case that cannot be diagnosed without it -- the
+            # report could say "a landmark clad in tile" forty times
+            # and never say which word the model had chosen.
             note("REJECTED", validation="FAIL", validation_reason=reason,
                  purity_state=metadata.get("purity_state"),
+                 material=(metadata.get("purity") or {}).get("material"),
+                 tile_fraction=(metadata.get("purity") or {}).get(
+                     "tile_fraction"),
                  **geometry_fields)
             record("REJECTED", f"candidate {index}", reason)
             continue
 
-        print(f"      region validation  : PASS -- {reason}")
+        diag(f"      region validation  : PASS -- {reason}")
         # THE SAME PRODUCT, ONE PAGE LATER.
         #
         # seen_signatures is rebuilt per PAGE, so it cannot see a product
@@ -2864,9 +2951,9 @@ def mine_tile_regions(
                 None,
             )
             if twin is not None:
-                print(f"      duplicate          : already extracted earlier "
+                diag(f"      duplicate          : already extracted earlier "
                       f"in this catalog as {twin}")
-                print(f"      FINAL              : DUPLICATE")
+                diag(f"      FINAL              : DUPLICATE")
                 region_path.unlink(missing_ok=True)
                 note("DUPLICATE", geometry_stage="catalog-duplicate",
                      geometry_reason=f"same product as {twin}")
@@ -2875,8 +2962,8 @@ def mine_tile_regions(
                 continue
             catalog_signatures.append((region_path.name, signature))
 
-        print(f"      FINAL              : ACCEPTED -> {region_path.name}")
-        print(f"      [tile-region] candidate {index} -> accepted")
+        diag(f"      FINAL              : ACCEPTED -> {region_path.name}")
+        diag(f"      [tile-region] candidate {index} -> accepted")
 
         note("ACCEPTED", validation="PASS", validation_reason=reason,
              image_path=str(region_path),
@@ -2909,16 +2996,53 @@ def mine_tile_regions(
     # accounting nobody sees is not accounting. The per-candidate reasons
     # underneath it are diagnostics and stay behind CATALOG_DEBUG, so the
     # normal terminal gets one line per page instead of a wall.
-    emit(f"      [{source_type}] {detected_count} detected = "
-         f"{len(outcomes['ACCEPTED'])} accepted + "
-         f"{len(outcomes['REJECTED'])} rejected + "
-         f"{len(outcomes['DUPLICATE'])} already extracted + "
-         f"{len(outcomes['FAILED'])} failed + "
-         f"{len(outcomes['DEFERRED'])} deferred")
+    # One readable line per source, and the accepted images by name.
+    #
+    # The old line printed all five buckets whether or not they had
+    # anything in them -- "0 accepted + 12 rejected + 0 already
+    # extracted + 0 failed + 0 deferred" -- so the number that matters
+    # was buried among four zeroes, and the images that WERE accepted
+    # were never named outside a debug run. Empty buckets say nothing
+    # and are left out; the equation itself is preserved in the report
+    # and in DEBUG.
+    accepted_entries = outcomes["ACCEPTED"]
+    rest = [
+        (len(outcomes["REJECTED"]), "rejected"),
+        (len(outcomes["DUPLICATE"]), "already extracted"),
+        (len(outcomes["FAILED"]), "failed"),
+        (len(outcomes["DEFERRED"]), "deferred, will retry"),
+    ]
+    detail = ", ".join(f"{count} {word}" for count, word in rest if count)
+    detail = f" -- {detail}" if detail else ""
+
+    if accepted_entries:
+        # Deliberately NOT listing the accepted candidates by name
+        # here: each one gets its own "Tile n -> uploaded -> brand /
+        # catalog / size / file" line a moment later, and printing the
+        # same tile twice under two different names is how this
+        # terminal became unreadable in the first place.
+        emit(f"      ACCEPTED {len(accepted_entries)} of {detected_count} "
+             f"candidate(s){detail}")
+    elif len(outcomes["DUPLICATE"]) == detected_count and detected_count:
+        # The other route finding the same products is the dedup
+        # working. Saying "no tile accepted" about it reads like a
+        # failure, and it is the opposite of one.
+        emit(f"      {detected_count} candidate(s), all already "
+             f"extracted from this page by the other route")
+    else:
+        emit(f"      no tile accepted out of {detected_count} "
+             f"candidate(s){detail}")
+
+    diag(f"      [{source_type}] {detected_count} detected = "
+          f"{len(outcomes['ACCEPTED'])} accepted + "
+          f"{len(outcomes['REJECTED'])} rejected + "
+          f"{len(outcomes['DUPLICATE'])} already extracted + "
+          f"{len(outcomes['FAILED'])} failed + "
+          f"{len(outcomes['DEFERRED'])} deferred")
 
     for status in ("ACCEPTED", "REJECTED", "DUPLICATE", "FAILED", "DEFERRED"):
         for entry in outcomes[status]:
-            print(f"    [tile-region] {status:<9} {entry}")
+            diag(f"    [tile-region] {status:<9} {entry}")
 
     # A technical fault is the one status that must reach the operator
     # whatever the verbosity: a product lost to a broken encoder looks
@@ -4189,6 +4313,59 @@ def extract_images_from_pdf(
             summarise_candidate_outcomes(region_trace)
         )
 
+        # WHY THE CATALOG CAME OUT THE SIZE IT DID.
+        #
+        # The same roll-up the report gets, on the terminal, once per
+        # catalog. Without it a run that refused forty candidates said
+        # so forty times during the pages and not once at the end, so
+        # the operator could see THAT the catalog was nearly empty but
+        # not WHICH decision emptied it -- which is the only question
+        # worth asking of a disappointing run. Grouped and counted, so
+        # one repeated verdict is one line.
+        # Duplicates are left out of THIS list, though the report
+        # still carries them. "Already extracted from the other route
+        # on this page" is the dedup working, not a product lost, and
+        # listing it under "did not become tiles" turns a healthy run
+        # into an alarming one.
+        refusals = {}
+        materials_by_reason = {}
+        for entry in region_trace:
+            if str(entry.get("final") or "") in ("ACCEPTED", "DUPLICATE"):
+                continue
+            reason = str(
+                entry.get("validation_reason")
+                or entry.get("purity_state")
+                or entry.get("reason")
+                or "no reason recorded"
+            )
+            refusals[reason] = refusals.get(reason, 0) + 1
+            material = entry.get("material")
+            if material:
+                materials_by_reason.setdefault(reason, set()).add(
+                    str(material)
+                )
+        region_reject_reasons_shown = dict(
+            sorted(refusals.items(), key=lambda item: -item[1])
+        )
+
+        if region_reject_reasons_shown:
+            refused = sum(region_reject_reasons_shown.values())
+            emit("")
+            emit(f"   Why {refused} candidate(s) did not become tiles:")
+            for reason, count in list(region_reject_reasons_shown.items())[:8]:
+                # The model's own word for the surface, where it had
+                # one. A sentence like "a landmark clad in tile is
+                # still a landmark" does not say whether the model
+                # answered LANDMARK or FRAME, and on a catalog of
+                # decorative frames those are very different findings.
+                named = sorted(materials_by_reason.get(reason, ()))
+                suffix = f"   [model said: {', '.join(named)}]" if named else ""
+                emit(f"      {count:>3}  {reason}{suffix}")
+            remaining = len(region_reject_reasons_shown) - 8
+            if remaining > 0:
+                emit(f"           ... and {remaining} other reason(s); "
+                     f"the full list is in the report below")
+
         try:
             report_path.write_text(
                 json.dumps(
@@ -4378,6 +4555,10 @@ def process_pdf(
         )
     )
 
+    # One lookup per distinct size per run, not per tile. Filled in by
+    # persist_tile as sizes are met; see size_folder_name().
+    size_folder_ids = {}
+
     # --------------------------------------------------------
     # 4. Register Brand and Catalog
     # --------------------------------------------------------
@@ -4546,11 +4727,34 @@ def process_pdf(
             f"{image['filename']}"
         )
 
+        # ROOT / BRAND / CATALOG / SIZE / the image.
+        #
+        # Resolved per tile and memoised per run, so a catalog with
+        # four sizes costs four folder lookups rather than one per
+        # image. A lookup failure is never fatal: the tile goes to the
+        # catalog folder exactly as it did before, because an image
+        # filed one level up is recoverable and an image not uploaded
+        # at all is not.
+        destination_folder_id = catalog_folder_id
+        folder_label = size_folder_name(image.get("size", ""))
+        try:
+            if folder_label not in size_folder_ids:
+                size_folder_ids[folder_label] = get_or_create_folder(
+                    drive_service,
+                    folder_label,
+                    parent_id=catalog_folder_id,
+                )
+            destination_folder_id = size_folder_ids[folder_label]
+        except Exception as exc:  # noqa: BLE001 -- see comment above
+            print(f"[DRIVE UPLOAD] size folder {folder_label!r} "
+                  f"unavailable ({exc}); using the catalog folder")
+            folder_label = ""
+
         try:
             uploaded = upload_file(
                 drive_service,
                 image["path"],
-                catalog_folder_id,
+                destination_folder_id,
             )
         except Exception as exc:  # noqa: BLE001
             # Not marked processed, so the next run retries THIS tile
@@ -4704,7 +4908,14 @@ def process_pdf(
 
         uploaded_count += 1
         _catalog_tiles.append(image["filename"])
-        emit(f"      Tile {position} \u2192 extracted \u2192 uploaded")
+        # Where it landed, not just that it landed: the folder is the
+        # answer to "where do I find it", and it is the one thing a
+        # bare "uploaded" never told anyone.
+        where = f"{brand} / {catalog}"
+        if folder_label:
+            where += f" / {folder_label}"
+        emit(f"      Tile {position} \u2192 uploaded \u2192 "
+             f"{where} / {image['filename']}")
 
     # --------------------------------------------------------
     # 6. Extract images -- each accepted tile is uploaded and

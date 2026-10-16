@@ -158,10 +158,52 @@ def purity(material="TILE", designs=1):
     }
 
 
-ACCOUNTING = re.compile(
-    r"(\d+) detected = (\d+) accepted \+ (\d+) rejected \+ "
-    r"(\d+) already extracted \+ (\d+) failed \+ (\d+) deferred"
+# The operator's accounting line, as it is worded now: the buckets that
+# are empty are left out, because four noughts beside the one number
+# that matters is how a normal page came to read like a fault report.
+# Parsed back into the same (detected, accepted, rejected, duplicate,
+# failed, deferred) tuple this test has always worked in, with a
+# missing bucket meaning zero.
+ACCEPTED_LINE = re.compile(r"ACCEPTED (\d+) of (\d+) candidate\(s\)([^\n]*)")
+NOTHING_LINE = re.compile(r"no tile accepted out of (\d+) candidate\(s\)([^\n]*)")
+# The all-duplicates shape: the other route re-finding the same
+# products is the dedup working, so the run says so rather than
+# reporting it as "no tile accepted".
+ALL_DUPLICATES_LINE = re.compile(
+    r"(\d+) candidate\(s\), all already extracted from this page"
 )
+BUCKET_WORDS = ("rejected", "already extracted", "failed",
+                "deferred, will retry")
+
+
+def _buckets(tail):
+    found = []
+    for words in BUCKET_WORDS:
+        match = re.search(r"(\d+) " + re.escape(words), tail)
+        found.append(int(match.group(1)) if match else 0)
+    return found
+
+
+def parse_accounting(text):
+    """Every accounting line in the run, oldest first."""
+    rows = []
+    for line in text.splitlines():
+        match = ACCEPTED_LINE.search(line)
+        if match:
+            accepted = int(match.group(1))
+            detected = int(match.group(2))
+            rows.append((detected, accepted, *_buckets(match.group(3))))
+            continue
+        match = NOTHING_LINE.search(line)
+        if match:
+            detected = int(match.group(1))
+            rows.append((detected, 0, *_buckets(match.group(2))))
+            continue
+        match = ALL_DUPLICATES_LINE.search(line)
+        if match:
+            detected = int(match.group(1))
+            rows.append((detected, 0, 0, detected, 0, 0))
+    return rows
 
 
 def run_page(tile_only, reject_first, second_route=True, purity_for=None,
@@ -243,8 +285,7 @@ def run_page(tile_only, reject_first, second_route=True, purity_for=None,
         pipeline.TILE_ONLY_CATALOG = real_flag
         pipeline.emit = real_emit
 
-    for match in ACCOUNTING.finditer(captured.getvalue()):
-        accounting.append(tuple(int(value) for value in match.groups()))
+    accounting.extend(parse_accounting(captured.getvalue()))
 
     return accounting, accepted_paths, captured.getvalue()
 
@@ -385,7 +426,11 @@ def a_multi_product_frame_is_still_split():
     # not wave a merged frame through as a single tile -- a picture of
     # two products saved as one product is the failure this rule exists
     # for, and the mode must not have disabled it.
-    saved_whole = route1[1] == 1 and "splitting into" not in log
+    # The run now says "N products in one frame -- cut into M piece(s)"
+    # where it used to say "splitting into"; the wording moved out of
+    # the debug stream and onto the operator's terminal, because "two
+    # tiles arrived in one image" is a complaint this pipeline has had.
+    saved_whole = route1[1] == 1 and "in one frame -- cut into" not in log
 
     return [
         check("a merged two-product frame is never saved as one tile",

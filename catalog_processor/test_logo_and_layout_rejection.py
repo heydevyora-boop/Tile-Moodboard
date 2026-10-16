@@ -360,7 +360,9 @@ def a_multi_design_frame_still_splits_with_the_new_guard():
     return [check(
         "designs>1 still routes to the split path, unaffected by the "
         "new physical_surface guard",
-        "splitting into" in log,
+        # The split announcement is now an operator-visible line and
+        # reads "N products in one frame -- cut into M piece(s)".
+        "in one frame -- cut into" in log,
         log.splitlines()[-5:],
     )]
 
