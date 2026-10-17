@@ -1,6 +1,7 @@
 import os
 import json
 import math
+import re
 import time
 from pathlib import Path
 from dataclasses import dataclass
@@ -119,6 +120,32 @@ def is_quota_exhausted():
     return GEMINI_QUOTA_EXHAUSTED
 
 
+def _is_daily_quota_error(error):
+    """True when the 429 names a per-DAY quota rather than a per-minute one.
+
+    Only this kind is worth giving up on for the rest of the run. An
+    unnamed 429 is treated as the recoverable kind -- waiting a minute
+    and being wrong costs a minute, while latching and being wrong costs
+    the catalog.
+    """
+    message = str(error).upper().replace("-", "").replace("_", "")
+    return any(marker in message for marker in (
+        "PERDAY", "PER DAY", "DAILY", "PERPROJECTPERDAY",
+    ))
+
+
+def _rate_limit_delay(error):
+    """The retryDelay the API asked for, in seconds, or None."""
+    match = re.search(r"RETRYDELAY['\"]?\s*[:=]\s*['\"]?(\d+(?:\.\d+)?)S",
+                      str(error).upper().replace("_", ""))
+    if not match:
+        return None
+    try:
+        return float(match.group(1))
+    except ValueError:
+        return None
+
+
 def _is_gemini_quota_error(error):
     """
     Return True when the Gemini SDK error indicates a quota/rate-limit
@@ -178,6 +205,29 @@ GEMINI_TRANSIENT_MARKERS = (
     "504",
 )
 
+# A RATE LIMIT IS NOT A DEAD QUOTA.
+#
+# Both arrive as HTTP 429, and the old code treated them as the same
+# thing: the first one latched GEMINI_QUOTA_EXHAUSTED for the whole
+# process, after which every remaining call returned None without being
+# attempted. On a free tier whose limit is per MINUTE -- and which
+# clears itself in under a minute -- that ended the catalog. Two real
+# runs of the same 41-page catalog both died at page 4: the first three
+# pages spent the minute's allowance, the fourth hit the cap, and 51 of
+# 61 candidates were never looked at.
+#
+# A per-minute cap is a transient condition, so it is waited out. A
+# per-day quota genuinely is finished for now, so it still latches. The
+# API says which in the error: the quotaId carries PerMinute or PerDay,
+# and a RetryInfo usually carries the exact delay to honour.
+#
+# Bounded, because waiting forever is its own failure: after this many
+# waits on one call the run gives up and defers, so a catalog still
+# finishes rather than hanging overnight.
+RATE_LIMIT_MAX_WAITS = 4
+RATE_LIMIT_DEFAULT_WAIT = 30
+RATE_LIMIT_MAX_WAIT = 75
+
 GEMINI_TRANSIENT_RETRIES = 3
 GEMINI_TRANSIENT_DELAY = 2
 
@@ -216,6 +266,7 @@ def _generate_content_safe(*args, **kwargs):
         return None
 
     attempt = 0
+    rate_limit_waits = 0
 
     while True:
         attempt += 1
@@ -231,6 +282,25 @@ def _generate_content_safe(*args, **kwargs):
             # Unchanged behaviour: a quota/rate-limit error disables Gemini
             # for the rest of the process and is never retried.
             if _is_gemini_quota_error(error):
+                # Wait out a per-minute cap instead of ending the run.
+                if (
+                    not _is_daily_quota_error(error)
+                    and rate_limit_waits < RATE_LIMIT_MAX_WAITS
+                ):
+                    rate_limit_waits += 1
+                    wait_time = min(
+                        _rate_limit_delay(error) or RATE_LIMIT_DEFAULT_WAIT,
+                        RATE_LIMIT_MAX_WAIT,
+                    )
+                    print(
+                        f"  [tile-validation] rate limited "
+                        f"({rate_limit_waits}/{RATE_LIMIT_MAX_WAITS}) -- "
+                        f"waiting {wait_time:.0f}s for the window to "
+                        f"reset, then retrying"
+                    )
+                    time.sleep(wait_time)
+                    continue
+
                 GEMINI_QUOTA_EXHAUSTED = True
 
                 print("")

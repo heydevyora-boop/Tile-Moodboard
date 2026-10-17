@@ -1854,6 +1854,132 @@ def lost_product_diagnosis_checks():
     return results
 
 
+def rate_limit_checks():
+    """A per-minute cap must be waited out, not treated as a dead quota.
+
+    Both arrive as HTTP 429. The old code latched on the first one and
+    every remaining call in the process returned None without being
+    attempted, so a free tier whose limit is per MINUTE ended the
+    catalog. Two real runs of the same 41-page catalog both died at page
+    4 -- the first three pages spent the minute's allowance, the fourth
+    hit the cap, and 51 of 61 candidates were never looked at.
+    """
+    results = []
+    slept = []
+
+    PER_MINUTE = (
+        "429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'details': "
+        "[{'@type': 'type.googleapis.com/google.rpc.QuotaFailure', "
+        "'violations': [{'quotaId': "
+        "'GenerateRequestsPerMinutePerProjectPerModel-FreeTier'}]}, "
+        "{'@type': 'type.googleapis.com/google.rpc.RetryInfo', "
+        "'retryDelay': '27s'}]}}"
+    )
+    PER_DAY = PER_MINUTE.replace("PerMinute", "PerDay")
+
+    results.append(check(
+        "a per-minute cap is not mistaken for a dead quota",
+        gemini_service._is_gemini_quota_error(Exception(PER_MINUTE))
+        and not gemini_service._is_daily_quota_error(Exception(PER_MINUTE)),
+    ))
+    results.append(check(
+        "a per-day quota still is one",
+        gemini_service._is_daily_quota_error(Exception(PER_DAY)),
+    ))
+    results.append(check(
+        "the delay the API asked for is honoured",
+        gemini_service._rate_limit_delay(Exception(PER_MINUTE)) == 27.0,
+    ))
+    results.append(check(
+        "an unexplained 429 is treated as the recoverable kind",
+        not gemini_service._is_daily_quota_error(
+            Exception("429 Too Many Requests")),
+        "waiting and being wrong costs a minute; latching costs the catalog",
+    ))
+
+    # The real call path, with the clock and the API stubbed.
+    class Models:
+        def __init__(self, script):
+            self.script = list(script)
+            self.calls = 0
+
+        def generate_content(self, *a, **k):
+            self.calls += 1
+            item = self.script.pop(0)
+            if isinstance(item, Exception):
+                raise item
+            return item
+
+    class Client:
+        def __init__(self, models):
+            self.models = models
+
+    real_client = gemini_service.client
+    real_sleep = gemini_service.time.sleep
+    real_flag = gemini_service.GEMINI_QUOTA_EXHAUSTED
+    try:
+        gemini_service.time.sleep = lambda s: slept.append(s)
+
+        # Rate limited once, then fine: the answer must come back.
+        gemini_service.GEMINI_QUOTA_EXHAUSTED = False
+        models = Models([Exception(PER_MINUTE), "the answer"])
+        gemini_service.client = Client(models)
+        got = gemini_service._generate_content_safe(model="m", contents=[])
+        results.append(check(
+            "a rate-limited call is retried and succeeds",
+            got == "the answer" and models.calls == 2,
+            f"got {got!r} after {models.calls} call(s)",
+        ))
+        results.append(check(
+            "...after waiting the delay the API named (27s)",
+            slept == [27.0], str(slept),
+        ))
+        results.append(check(
+            "...and the process is NOT marked exhausted",
+            gemini_service.GEMINI_QUOTA_EXHAUSTED is False,
+        ))
+
+        # A per-day quota still ends it, so a run finishes.
+        slept.clear()
+        gemini_service.GEMINI_QUOTA_EXHAUSTED = False
+        models = Models([Exception(PER_DAY)])
+        gemini_service.client = Client(models)
+        got = gemini_service._generate_content_safe(model="m", contents=[])
+        results.append(check(
+            "a per-day quota returns no verdict and stops trying",
+            got is None and gemini_service.GEMINI_QUOTA_EXHAUSTED is True,
+        ))
+        results.append(check(
+            "...without sleeping on it",
+            slept == [], str(slept),
+        ))
+
+        # Waiting is bounded: a cap that never clears must not hang.
+        slept.clear()
+        gemini_service.GEMINI_QUOTA_EXHAUSTED = False
+        models = Models([Exception(PER_MINUTE)] * 20)
+        gemini_service.client = Client(models)
+        got = gemini_service._generate_content_safe(model="m", contents=[])
+        results.append(check(
+            f"a cap that never clears gives up after "
+            f"{gemini_service.RATE_LIMIT_MAX_WAITS} waits",
+            got is None
+            and len(slept) == gemini_service.RATE_LIMIT_MAX_WAITS,
+            f"{len(slept)} wait(s): {slept}",
+        ))
+        results.append(check(
+            "...so a catalog finishes rather than hanging overnight",
+            all(s <= gemini_service.RATE_LIMIT_MAX_WAIT for s in slept),
+            str(slept),
+        ))
+    finally:
+        gemini_service.client = real_client
+        gemini_service.time.sleep = real_sleep
+        gemini_service.GEMINI_QUOTA_EXHAUSTED = real_flag
+
+    return results
+
+
 def dead_quota_checks():
     """A dead quota must not publish, and must not delete either.
 
@@ -2507,6 +2633,8 @@ def main():
         ("the pre-flight never starts a bill", gold_cost_checks()),
         ("a dead quota publishes nothing and deletes nothing",
          dead_quota_checks()),
+        ("a rate limit is waited out, not treated as a dead quota",
+         rate_limit_checks()),
     ]
 
     total = passed = 0
