@@ -167,16 +167,37 @@ def _is_gemini_quota_error(error):
 
     message = str(error).upper()
 
+    # These name the condition and cannot mean anything else.
     quota_markers = (
-        "429",
         "RESOURCE_EXHAUSTED",
         "QUOTA EXCEEDED",
         "RATE LIMIT",
         "RATE_LIMIT",
         "TOO MANY REQUESTS",
     )
+    if any(marker in message for marker in quota_markers):
+        return True
 
-    return any(marker in message for marker in quota_markers)
+    # "429" USED TO BE IN THAT LIST, AS A BARE SUBSTRING.
+    #
+    # So any error whose text happened to contain those three digits
+    # anywhere was read as a rate limit -- and, until the fix above,
+    # that latched Gemini off for the rest of the process. Real examples
+    # that matched:
+    #
+    #   500 INTERNAL. Request id: req-8f429ac2-11d0
+    #   Deadline exceeded after 14290 ms
+    #   400 INVALID_ARGUMENT: image exceeds 4294967296 bytes
+    #
+    # None of those is a rate limit. One of them, once, anywhere in a
+    # catalog, ended the run -- which looks exactly like "Gemini is fine
+    # but nothing gets judged".
+    #
+    # A status code appears at the start of the message or beside the
+    # word CODE, and is not part of a longer number. Everything else is
+    # some other failure, and is raised rather than swallowed.
+    return bool(re.search(r"(?:^|\bCODE['\"]?\s*[:=]\s*['\"]?)429\b",
+                          message))
 
 
 # A dropped connection or a 5xx is not a verdict about the image. The

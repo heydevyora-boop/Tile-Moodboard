@@ -1890,6 +1890,34 @@ def rate_limit_checks():
         "the delay the API asked for is honoured",
         gemini_service._rate_limit_delay(Exception(PER_MINUTE)) == 27.0,
     ))
+    # "429" WAS MATCHED AS A BARE SUBSTRING.
+    #
+    # So any error text containing those three digits anywhere -- a
+    # request id, a millisecond count, a byte count -- was read as a
+    # rate limit, and latched Gemini off for the rest of the process.
+    # One such error, once, anywhere in a catalog, ended the run. From
+    # outside that looks exactly like "Gemini is working fine and
+    # nothing gets judged".
+    for impostor in (
+        "500 INTERNAL. Request id: req-8f429ac2-11d0",
+        "Deadline exceeded after 14290 ms",
+        "400 INVALID_ARGUMENT: image exceeds 4294967296 bytes",
+        "Connection reset (trace 429)",
+    ):
+        results.append(check(
+            f"not a rate limit: {impostor[:38]}",
+            not gemini_service._is_gemini_quota_error(Exception(impostor)),
+        ))
+    for genuine in (
+        "429 Too Many Requests",
+        "429 RESOURCE_EXHAUSTED. {'error': {'code': 429}}",
+        "ClientError: {'error': {'code': 429, 'status': 'RESOURCE_EXHAUSTED'}}",
+    ):
+        results.append(check(
+            f"still a rate limit: {genuine[:38]}",
+            gemini_service._is_gemini_quota_error(Exception(genuine)),
+        ))
+
     results.append(check(
         "an unexplained 429 is treated as the recoverable kind",
         not gemini_service._is_daily_quota_error(
