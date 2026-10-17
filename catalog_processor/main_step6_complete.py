@@ -3949,6 +3949,20 @@ def extract_images_from_pdf(
                                 f"    isolating the tile surface instead of "
                                 f"saving the frame as-is"
                             )
+                        elif validation_status == VALIDATION_DEFERRED:
+                            # Not a rejection, and saying so matters. The
+                            # line used to read "REJECTED -- validation
+                            # could not run", which is a contradiction:
+                            # nothing judged this frame, so nothing
+                            # rejected it. Reading those as verdicts is
+                            # what made a run whose quota had died look
+                            # like a pipeline refusing everything.
+                            category = "not judged"
+                            print(
+                                f"  NOT JUDGED -- nothing classified this "
+                                f"image (page {page_number} image "
+                                f"{image_counter}): {validation_reason}"
+                            )
                         else:
                             category = categorize_rejection(validation_reason)
                             print(
@@ -4033,6 +4047,7 @@ def extract_images_from_pdf(
                             and tile_only_may_keep_whole(
                                 validation_status, tile_metadata,
                                 impure_status=VALIDATION_IMPURE,
+                                deferred_status=VALIDATION_DEFERRED,
                             )
                         )
 
@@ -4044,6 +4059,24 @@ def extract_images_from_pdf(
                                     output_directory, deferred_records,
                                 ) is not None:
                                     validation_deferred += 1
+
+                            # A frame nothing ever judged is not deleted
+                            # either. Publishing it unseen was the bug
+                            # above; throwing it away on a dead quota is
+                            # the opposite one, and the catalog loses a
+                            # product for an outage. Keep it where a
+                            # later run can finish the job.
+                            if validation_status == VALIDATION_DEFERRED:
+                                if defer_for_revalidation(
+                                    output_path, page_number, image_counter,
+                                    validation_reason, tile_metadata,
+                                    output_directory, deferred_records,
+                                ) is not None:
+                                    validation_deferred += 1
+                                    print(f"    unjudged frame preserved for "
+                                          f"revalidation (page {page_number} "
+                                          f"image {image_counter})")
+                                    continue
 
                             output_path.unlink(missing_ok=True)
 

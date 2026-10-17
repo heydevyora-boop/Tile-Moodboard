@@ -1854,6 +1854,88 @@ def lost_product_diagnosis_checks():
     return results
 
 
+def dead_quota_checks():
+    """A dead quota must not publish, and must not delete either.
+
+    TILE-ONLY mode has a fallback that keeps an embedded frame whole
+    when the classifier merely failed to NAME it -- "" and UNKNOWN are
+    in SOFT_WHOLE_IMAGE_TYPES for that. It was also keeping frames the
+    classifier never ran on at all: a failed call returns DEFERRED with
+    an EMPTY metadata dict, image_type read as "", "" matched the soft
+    set, and the frame was published unseen.
+
+    That is how a catalog title page -- heading, a circular lifestyle
+    photograph, a colour name beside it -- reached Drive as a product.
+    The quota died part-way through a run and everything after it went
+    up unjudged.
+
+    The test that should have caught this sets CATALOG_TILE_ONLY=0
+    (test_quota_deferral, by design), so its guarantee was proven in
+    the mode nobody runs. These checks run with tile-only ON.
+    """
+    from app.image_validator import (
+        SOFT_WHOLE_IMAGE_TYPES,
+        tile_only_may_keep_whole,
+    )
+    results = []
+    IMPURE = pipeline.VALIDATION_IMPURE
+    DEFER = pipeline.VALIDATION_DEFERRED
+
+    results.append(check(
+        "the empty type is still forgiven when a classifier actually looked",
+        "" in SOFT_WHOLE_IMAGE_TYPES,
+        "the soft set is what lets an unnamed but real tile through",
+    ))
+
+    # The exact shape validate_and_correct_tile_image returns when the
+    # model call fails: deferred, and nothing recorded.
+    results.append(check(
+        "a frame nothing judged is NOT kept whole",
+        tile_only_may_keep_whole({}, {}, IMPURE, deferred_status=DEFER)
+        is False or not tile_only_may_keep_whole(
+            DEFER, {}, IMPURE, deferred_status=DEFER),
+        "a dead quota must not publish",
+    ))
+    results.append(check(
+        "...even if the status were not recognised, empty metadata is enough",
+        not tile_only_may_keep_whole("SOMETHING_ELSE", {}, IMPURE,
+                                     deferred_status=DEFER),
+    ))
+
+    # ...while the case the fallback exists for still works.
+    for named in ("", "OTHER", "UNKNOWN", "TEXTURE"):
+        results.append(check(
+            f"a classifier that looked and said {named!r} is still forgiven",
+            tile_only_may_keep_whole("GEMINI_REJECTED", {"image_type": named},
+                                     IMPURE, deferred_status=DEFER),
+        ))
+    results.append(check(
+        "a confidently named non-tile is still refused",
+        not tile_only_may_keep_whole("GEMINI_REJECTED",
+                                     {"image_type": "ROOM_INTERIOR"},
+                                     IMPURE, deferred_status=DEFER),
+    ))
+
+    # The call site passes the status through, and preserves rather
+    # than deletes.
+    source = inspect.getsource(pipeline.extract_images_from_pdf)
+    results.append(check(
+        "the extraction path tells the rule which status means 'unjudged'",
+        "deferred_status=VALIDATION_DEFERRED" in source,
+    ))
+    results.append(check(
+        "an unjudged frame is preserved, not deleted on a dead quota",
+        "unjudged frame preserved" in source,
+    ))
+    results.append(check(
+        "...and that happens before the file is unlinked",
+        source.index("unjudged frame preserved")
+        < source.index("output_path.unlink(missing_ok=True)\n\n"
+                       "                            if not recovered:"),
+    ))
+    return results
+
+
 def gold_cost_checks():
     """The pre-flight must never start a bill. This is the guarantee.
 
@@ -2423,6 +2505,8 @@ def main():
         ("the gold set reports on the run, never decides for it",
          gold_preflight_checks()),
         ("the pre-flight never starts a bill", gold_cost_checks()),
+        ("a dead quota publishes nothing and deletes nothing",
+         dead_quota_checks()),
     ]
 
     total = passed = 0
