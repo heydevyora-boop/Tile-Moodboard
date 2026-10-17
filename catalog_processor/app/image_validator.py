@@ -802,7 +802,8 @@ def tile_only_may_force_accept(status, metadata, impure_status="GEMINI_IMPURE"):
 SOFT_WHOLE_IMAGE_TYPES = {"", "?", "OTHER", "UNKNOWN", "TEXTURE"}
 
 
-def tile_only_may_keep_whole(status, metadata, impure_status):
+def tile_only_may_keep_whole(status, metadata, impure_status,
+                             deferred_status=None):
     """Whether tile-only mode may save a non-approved embedded image whole
     after region mining recovered nothing from it.
 
@@ -817,6 +818,29 @@ def tile_only_may_keep_whole(status, metadata, impure_status):
     metadata = metadata or {}
 
     if status == impure_status:
+        return False
+
+    # NOTHING JUDGED THIS IMAGE, SO THERE IS NOTHING TO BE LENIENT ABOUT.
+    #
+    # This fallback forgives a classifier that LOOKED and could not name
+    # the type -- "" and UNKNOWN are in SOFT_WHOLE_IMAGE_TYPES for
+    # exactly that. It was also forgiving a classifier that never ran.
+    # When the call fails (a dead quota, a rate limit, an API error)
+    # validate_and_correct_tile_image returns DEFERRED with an EMPTY
+    # metadata dict, so image_type read as "", "" matched the soft set,
+    # and the frame was kept whole and published -- unseen.
+    #
+    # That is how a catalog title page, with its heading, a circular
+    # lifestyle photograph and a colour name beside it, reached Drive as
+    # a product: the quota died part-way through the run and every
+    # candidate after it was published without anything looking at it.
+    #
+    # "Could not name it" and "never saw it" are not the same answer,
+    # and only the first one earns the benefit of the doubt.
+    if deferred_status is not None and status == deferred_status:
+        return False
+
+    if not metadata:
         return False
 
     if metadata.get("purity"):
