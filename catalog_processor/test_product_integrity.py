@@ -1884,11 +1884,21 @@ def sliver_checks():
         "a 240x1200 plank (5:1) is nowhere near the bar",
         (1200 / 240) <= bar,
     ))
-    # The ribbon itself.
+    # The ribbon itself -- the REAL one this time. The first bar was set
+    # with this end estimated off a screenshot at ~14:1; the labelled
+    # set in gold/bad measures it at 91x1024, 11.25:1, and 12.0 let it
+    # straight through.
     results.append(check(
-        "a ~14:1 ribbon is refused",
-        14.0 > bar,
-        f"14:1 must exceed the {bar}:1 bar",
+        "the real 91x1024 ribbon (11.25:1) is refused",
+        (1024 / 91) > bar,
+        f"11.25:1 must exceed the {bar}:1 bar",
+    ))
+    # ...and the widest LABELLED product stays comfortably clear, which
+    # is the margin that matters day to day.
+    results.append(check(
+        "the widest labelled good product (5.25:1) has real headroom",
+        (1024 / 195) * 1.5 <= bar,
+        f"5.25:1 plus half again must stay under {bar}:1",
     ))
 
     # End to end through the real extractor, not arithmetic on the
