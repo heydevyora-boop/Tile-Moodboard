@@ -100,6 +100,57 @@ fresh answers.
 
 ---
 
+## It runs by itself, too
+
+Every catalog run prints one line before it starts:
+
+```
+==================================================
+CATALOG EXTRACTION
+==================================================
+   [gold] good 11/11 kept, bad 2/3 caught   -- unchanged
+```
+
+and says so when something has broken:
+
+```
+   [gold] good 10/11 kept, bad 2/3 caught   !! 1 real product(s) that
+          used to survive are now rejected -- something broke
+   [gold] good 11/11 kept, bad 1/3 caught   !! 1 bad image(s) that used
+          to be caught now get through
+```
+
+Losing a real product is reported first, because a tile that never
+reaches Drive is invisible while a bad image at least announces itself.
+
+It is **not a gate.** It judges no candidate and blocks nothing; it
+reports whether this build still behaves the way it did when someone
+last looked. Making it a gate was considered and measured instead:
+nearest-neighbour over these same images agrees with the human label
+12 times out of 22 -- a coin flip -- because the faults here are
+structural (whole? one? edges inside the frame?) rather than a matter
+of appearance. The closest-looking pair in the whole set is one good
+image beside one bad one. A gate built on that would refuse about half
+the real tiles.
+
+It costs about a second, needs no API key, and if anything at all goes
+wrong -- no images, no baseline, an unreadable file -- it says nothing
+and the extraction proceeds untouched.
+
+### The baseline
+
+```bash
+python score_gold_set.py --offline --save-baseline
+```
+
+That records the current offline score as the one future runs compare
+against. It is **never** updated automatically: a baseline that moved
+by itself would quietly ratify every regression, following the score
+down and then reporting "unchanged" about a pipeline that had got
+worse. Save it when you have looked at a score and accepted it.
+
+---
+
 ## How this gets used
 
 ```
