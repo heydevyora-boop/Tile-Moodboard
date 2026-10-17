@@ -133,9 +133,48 @@ of appearance. The closest-looking pair in the whole set is one good
 image beside one bad one. A gate built on that would refuse about half
 the real tiles.
 
-It costs about a second, needs no API key, and if anything at all goes
-wrong -- no images, no baseline, an unreadable file -- it says nothing
-and the extraction proceeds untouched.
+It costs about a second, and if anything at all goes wrong -- no
+images, no baseline, an unreadable file -- it says nothing and the
+extraction proceeds untouched.
+
+### How deep it goes, and what it costs
+
+**It never calls the model. Not once, not ever.** It reads answers
+already in the cache; a miss returns nothing and that image is reported
+unjudged. So the cache is the switch:
+
+| cache | what the line covers |
+|---|---|
+| empty | shape and size only -- it says so, and tells you the command |
+| filled | the whole thing: furniture, page background, half a product, a landmark |
+
+Filling it is one deliberate command, and the only thing that costs:
+
+```bash
+GEMINI_API_KEY=... python score_gold_set.py
+```
+
+That is 44 calls -- two per image, the classifier and the purity check.
+Every run after it is **free**, because the gold images never change, so
+the answers never change.
+
+It is built this way on purpose. A pre-flight allowed to call out would
+put a charge on every extraction anyone ever ran, and adding ten images
+to the gold set would silently raise it. That is the kind of cost nobody
+notices until the invoice.
+
+### Baselines come in two depths
+
+A baseline is only comparable to a score taken at the same depth: the
+pixel rules judge 3 of the bad images, the model judges all 11.
+Comparing one against the other would report a catastrophe -- "9 bad
+images now get through" -- the moment the cache filled. So save each
+separately, and a run compares against its own kind:
+
+```bash
+python score_gold_set.py --offline --save-baseline
+GEMINI_API_KEY=... python score_gold_set.py --save-baseline
+```
 
 ### The baseline
 

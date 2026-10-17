@@ -1854,6 +1854,137 @@ def lost_product_diagnosis_checks():
     return results
 
 
+def gold_cost_checks():
+    """The pre-flight must never start a bill. This is the guarantee.
+
+    It runs inside every extraction, so if it could call the model it
+    would quietly put a charge on every catalog anyone ever ran -- and
+    adding ten images to the gold set would silently raise it. The
+    whole design turns on cache_only never reaching the API, so that is
+    asserted against counters on the real functions rather than read
+    off the source.
+    """
+    import importlib
+    import json as _json
+    import shutil as _shutil
+    import tempfile as _tempfile
+
+    scorer = importlib.import_module("score_gold_set")
+    results = []
+
+    calls = {"n": 0}
+
+    def counting_verify(path):
+        calls["n"] += 1
+        return {"material": "TILE", "tile_fraction": 0.99,
+                "physical_surface": True, "complete_rectangle": True,
+                "distinct_tile_designs": 1, "is_scene": False,
+                "contains_person": False, "contains_text": False,
+                "contains_logo": False, "contains_furniture": False,
+                "contains_fixture": False, "contains_object": False,
+                "reason": "counted"}
+
+    def counting_classify(path, page_text=""):
+        calls["n"] += 1
+        return gemini_service.ProductAnalysis(
+            is_product_image=True, decision="APPROVED", image_type="TILE",
+            confidence=0.9, reason="counted")
+
+    real_verify = gemini_service.verify_tile_only
+    real_classify = gemini_service.analyze_product_image
+    real_cache, real_originals = scorer.CACHE_DIR, dict(scorer._ORIGINALS)
+    scratch = Path(_tempfile.mkdtemp(prefix="gold-cost-"))
+    try:
+        gemini_service.verify_tile_only = counting_verify
+        gemini_service.analyze_product_image = counting_classify
+        scorer.CACHE_DIR = scratch / "_cache"
+        scorer._ORIGINALS.update(verify=None, classify=None)
+
+        # An empty cache plus cache_only must spend nothing at all.
+        calls["n"] = 0
+        rows, stats = scorer.collect(offline=False, cache_only=True)
+        results.append(check(
+            "cache_only with an empty cache makes no model call",
+            calls["n"] == 0,
+            f"{calls['n']} call(s), stats={stats}",
+        ))
+        results.append(check(
+            "...and reports those images as unjudged, not as passes",
+            all(row[3] == "UNJUDGED" for row in rows),
+        ))
+
+        # The deliberate score fills it; the next one is free.
+        calls["n"] = 0
+        scorer.collect(offline=False)
+        first = calls["n"]
+        calls["n"] = 0
+        scorer.collect(offline=False)
+        results.append(check(
+            f"a filled cache makes the next full score free "
+            f"({first} call(s) then 0)",
+            first > 0 and calls["n"] == 0,
+            f"first={first}, second={calls['n']}",
+        ))
+
+        # Both model calls are cached, not just one.
+        kinds = {path.name.split("-")[0]
+                 for path in scorer.CACHE_DIR.glob("*.json")}
+        results.append(check(
+            "both the classifier and the purity answer are cached",
+            kinds == {"purity", "classify"},
+            str(sorted(kinds)),
+        ))
+
+        # Installing twice must not bury the real function.
+        calls["n"] = 0
+        scorer.install_cached_model(cache_only=True)
+        scorer.install_cached_model(cache_only=False)
+        scorer.collect(offline=False)
+        results.append(check(
+            "installing the cache twice does not bury the real model",
+            calls["n"] == 0,
+            f"{calls['n']} call(s) -- a filled cache should still hit",
+        ))
+    finally:
+        gemini_service.verify_tile_only = real_verify
+        gemini_service.analyze_product_image = real_classify
+        scorer.CACHE_DIR = real_cache
+        scorer._ORIGINALS.update(real_originals)
+        _shutil.rmtree(scratch, ignore_errors=True)
+
+    # A baseline is only comparable to a score of its own depth.
+    real_baseline = scorer.BASELINE
+    try:
+        tmp = Path(_tempfile.mkdtemp(prefix="gold-base-"))
+        scorer.BASELINE = tmp / "baseline.json"
+        scorer.save_baseline_counts({"good_kept": 1}, "offline")
+        scorer.save_baseline_counts({"good_kept": 2}, "deep")
+        both = scorer.load_baselines()
+        results.append(check(
+            "the two depths are recorded separately",
+            both.get("offline", {}).get("good_kept") == 1
+            and both.get("deep", {}).get("good_kept") == 2,
+            str(both),
+        ))
+        scorer.BASELINE.write_text(_json.dumps({"good_kept": 7}),
+                                   encoding="utf-8")
+        results.append(check(
+            "a baseline written before depths existed reads as the offline one",
+            scorer.load_baselines() == {"offline": {"good_kept": 7}},
+            str(scorer.load_baselines()),
+        ))
+    finally:
+        scorer.BASELINE = real_baseline
+
+    # The cache key must survive the gate rewriting the file.
+    source = inspect.getsource(scorer._cache_path)
+    results.append(check(
+        "the cache is keyed on the gold file, not the rewritten copy",
+        "_CURRENT_GOLD" in source,
+    ))
+    return results
+
+
 def gold_preflight_checks():
     """The gold set reports on the run; it must never decide for it."""
     import importlib
@@ -2256,6 +2387,7 @@ def main():
          lost_product_diagnosis_checks()),
         ("the gold set reports on the run, never decides for it",
          gold_preflight_checks()),
+        ("the pre-flight never starts a bill", gold_cost_checks()),
     ]
 
     total = passed = 0
