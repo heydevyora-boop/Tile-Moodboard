@@ -83,6 +83,38 @@ CACHE_DIR = GOLD / "_cache"
 # report "the same as before" about a pipeline that had got worse.
 BASELINE = GOLD / "baseline.json"
 
+
+def load_baselines():
+    """{"offline": {...}, "deep": {...}} -- whichever have been saved.
+
+    A baseline is only comparable to a score taken at the SAME depth.
+    The pixel rules judge 3 of the bad images; the model judges all 11.
+    Comparing one against the other reports a catastrophe every time
+    the cache fills -- "9 bad images now get through" -- about a
+    pipeline that just started looking harder. So the depth is part of
+    the record, and a score is only ever measured against its own kind.
+
+    A file written before this existed is a flat set of counts from the
+    offline score; it is read as such rather than thrown away.
+    """
+    try:
+        stored = json.loads(BASELINE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(stored, dict):
+        return {}
+    if "offline" in stored or "deep" in stored:
+        return stored
+    return {"offline": stored}  # legacy flat file
+
+
+def save_baseline_counts(counts, depth):
+    """Records one depth's score, leaving the other depth's alone."""
+    baselines = load_baselines()
+    baselines[depth] = counts
+    BASELINE.parent.mkdir(parents=True, exist_ok=True)
+    BASELINE.write_text(json.dumps(baselines, indent=2), encoding="utf-8")
+
 IMAGE_SUFFIXES = (".webp", ".png", ".jpg", ".jpeg")
 
 # The prefixes gold/README.md asks for on every bad image. The prefix is
@@ -157,43 +189,126 @@ def shape_verdict(path):
     return "APPROVED", f"{width}x{height}px, {aspect:.1f}:1"
 
 
-def install_cached_model():
-    """Points the pipeline's model calls at a cache on disk.
+# WHICH GOLD FILE IS BEING JUDGED RIGHT NOW.
+#
+# The cache cannot key on the file the model is handed, because the
+# gate REWRITES that file halfway through: it crops to the product bbox
+# and saves, so the classifier sees the original bytes and the purity
+# check sees re-encoded ones. Keying on those meant every purity answer
+# was filed under a hash that depended on the classifier's answer and
+# on WEBP encoding being byte-identical forever.
+#
+# The gold file is the thing that is actually stable, so it is the key.
+_CURRENT_GOLD = {"path": None}
 
-    verify_tile_only is looked up through app.gemini_service every time
-    load_tile_purity_verifier runs (it is deliberately not memoised), so
-    replacing the module attribute is enough to reach the real call
-    site without touching pipeline code. The wrapper only remembers
-    answers; it never invents one, and a cache miss goes to the real
-    function exactly as a catalog run would.
+# The model functions as they were before anything here touched them.
+# See install_cached_model for why this is remembered rather than read
+# fresh each time.
+_ORIGINALS = {"verify": None, "classify": None}
+
+
+def _cache_path(kind, image_path):
+    source = _CURRENT_GOLD["path"] or image_path
+    digest = hashlib.sha256(Path(source).read_bytes()).hexdigest()
+    return CACHE_DIR / f"{kind}-{digest}.json", digest
+
+
+def install_cached_model(cache_only=False):
+    """Points BOTH of the pipeline's model calls at a cache on disk.
+
+    Two calls decide a gold image, not one: analyze_product_image
+    classifies it and verify_tile_only judges its purity. Only the
+    second was cached at first, so every full score quietly re-billed
+    the first -- twenty-two classifier calls a run, for answers that
+    could not change, because the images never change.
+
+    cache_only=True makes this spend NOTHING, ever. A miss returns None
+    rather than calling out, and the pipeline already reads None as "no
+    verdict was reached" (both call sites defer rather than reject), so
+    the image is reported UNJUDGED. That is what lets a catalog run
+    carry the full score for free: the run reads what is already known
+    and never starts a bill of its own.
+
+    Filling the cache stays a deliberate act -- one `python
+    score_gold_set.py` with a key. Otherwise adding ten images to the
+    gold set would silently put ten calls on every extraction from then
+    on, which is exactly the kind of cost nobody notices until the
+    invoice.
     """
+    import dataclasses
+
     import app.gemini_service as gemini_service
 
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    real_verify = gemini_service.verify_tile_only
-    stats = {"hits": 0, "calls": 0}
+
+    # Install from the ORIGINALS, every time.
+    #
+    # Installing twice in one process used to stack a wrapper on a
+    # wrapper, so the inner one became "the real model" -- and if the
+    # inner one was a cache_only pass, the outer one could never reach
+    # the API at all and every image came back unjudged, with the run
+    # reporting a catastrophe it had invented. One process legitimately
+    # does this: a pre-flight runs, and then something asks for a full
+    # score.
+    if _ORIGINALS["verify"] is None:
+        _ORIGINALS["verify"] = gemini_service.verify_tile_only
+        _ORIGINALS["classify"] = gemini_service.analyze_product_image
+    real_verify = _ORIGINALS["verify"]
+    real_classify = _ORIGINALS["classify"]
+    stats = {"hits": 0, "calls": 0, "misses": 0}
+
+    def _read(path, digest):
+        # The purity cache predates the kind- prefix; an existing one is
+        # still good, and re-fetching it would be a bill for nothing.
+        for candidate in (path, CACHE_DIR / f"{digest}.json"):
+            if candidate.exists():
+                try:
+                    return json.loads(candidate.read_text(encoding="utf-8"))
+                except (ValueError, OSError):
+                    pass  # a corrupt entry is just a miss
+        return None
+
+    def _write(path, payload):
+        try:
+            path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        except OSError:
+            pass  # scoring must not fail because a cache write did
 
     def cached_verify(image_path):
-        digest = hashlib.sha256(Path(image_path).read_bytes()).hexdigest()
-        entry = CACHE_DIR / f"{digest}.json"
-        if entry.exists():
-            try:
-                stats["hits"] += 1
-                return json.loads(entry.read_text(encoding="utf-8"))
-            except (ValueError, OSError):
-                pass  # a corrupt entry is just a miss
-
+        path, digest = _cache_path("purity", image_path)
+        stored = _read(path, digest)
+        if stored is not None:
+            stats["hits"] += 1
+            return stored
+        if cache_only:
+            stats["misses"] += 1
+            return None
         stats["calls"] += 1
         observation = real_verify(image_path)
         if observation is not None:
-            try:
-                entry.write_text(json.dumps(observation, indent=2),
-                                 encoding="utf-8")
-            except OSError:
-                pass  # scoring must not fail because a cache write did
+            _write(path, observation)
         return observation
 
+    def cached_classify(image_path, page_text=""):
+        path, digest = _cache_path("classify", image_path)
+        stored = _read(path, digest)
+        if stored is not None:
+            stats["hits"] += 1
+            try:
+                return gemini_service.ProductAnalysis(**stored)
+            except TypeError:
+                pass  # the dataclass changed shape; treat as a miss
+        if cache_only:
+            stats["misses"] += 1
+            return None
+        stats["calls"] += 1
+        result = real_classify(image_path, page_text=page_text)
+        if dataclasses.is_dataclass(result):
+            _write(path, dataclasses.asdict(result))
+        return result
+
     gemini_service.verify_tile_only = cached_verify
+    gemini_service.analyze_product_image = cached_classify
     return stats
 
 
@@ -219,6 +334,7 @@ def full_verdict(path, workdir):
 
     scratch = workdir / path.name
     shutil.copy2(path, scratch)
+    _CURRENT_GOLD["path"] = path
 
     try:
         status, reason, _metadata = pipeline.validate_and_correct_tile_image(
@@ -230,6 +346,8 @@ def full_verdict(path, workdir):
         )
     except Exception as exc:  # noqa: BLE001 -- report, never crash the score
         return "UNJUDGED", f"the gate raised {type(exc).__name__}: {exc}"
+    finally:
+        _CURRENT_GOLD["path"] = None
 
     if status == pipeline.VALIDATION_APPROVED:
         return "APPROVED", reason or "approved"
@@ -244,7 +362,7 @@ def full_verdict(path, workdir):
     return "REJECTED", reason or "rejected"
 
 
-def collect(offline):
+def collect(offline, cache_only=False):
     """Runs the set and returns its rows, or None when there is nothing.
 
     Separated from the printing so the pre-flight inside a catalog run
@@ -257,7 +375,8 @@ def collect(offline):
     if not good and not bad:
         return None, None
 
-    stats = install_cached_model() if not offline else None
+    stats = (install_cached_model(cache_only=cache_only)
+             if not offline else None)
 
     workdir = Path(tempfile.mkdtemp(prefix="gold-score-"))
     rows = []
@@ -314,15 +433,11 @@ def score(offline, verbose, save_baseline=False):
     outcome = report(rows, offline, verbose, stats)
 
     if save_baseline:
-        if not offline:
-            print("Baselines are saved from the OFFLINE score only, so the "
-                  "pre-flight can check against them without a key.")
-            return outcome
+        depth = "offline" if offline else "deep"
         try:
-            BASELINE.write_text(json.dumps(tally(rows), indent=2),
-                                encoding="utf-8")
-            print(f"Baseline saved to {BASELINE}. Future runs compare "
-                  f"against it.")
+            save_baseline_counts(tally(rows), depth)
+            print(f"Baseline saved ({depth}) to {BASELINE}. Runs compare "
+                  f"against the baseline taken at their own depth.")
         except OSError as exc:
             print(f"Could not save the baseline: {exc}")
     return outcome
@@ -435,20 +550,53 @@ def preflight():
     must never fail because a measuring tool did.
     """
     try:
-        rows, _stats = collect(offline=True)
+        # DEPTH IS CHOSEN BY WHAT IS ALREADY PAID FOR, NOT BY WHAT IS
+        # AVAILABLE.
+        #
+        # With a key and a filled cache this reports the FULL score --
+        # furniture, a page background, half a product, a landmark --
+        # the half the pixel rules are blind to. It still costs nothing,
+        # because cache_only=True never calls out: a miss returns None,
+        # the pipeline defers, and the image is reported UNJUDGED.
+        #
+        # So the cache is the switch. One deliberate
+        # `python score_gold_set.py` fills it, and every run after that
+        # carries the full score for free. Without a key, or with an
+        # empty cache, this falls back to the pixel rules rather than
+        # starting a bill nobody asked for.
+        deep = bool(os.getenv("GEMINI_API_KEY", "").strip())
+        rows, stats = collect(offline=not deep, cache_only=True)
         if not rows:
             return None
-        now = tally(rows)
 
-        if not BASELINE.exists():
+        # A deep pass that knew almost nothing is worse than an honest
+        # shallow one: it would report a handful of judged images as if
+        # that were the score. Fall back and say why.
+        unfilled = (stats or {}).get("misses", 0)
+        if deep and unfilled > len(rows) // 2:
+            rows, stats = collect(offline=True)
+            now = tally(rows)
             return (f"[gold] good {now['good_kept']}/{now['good_judged']} kept, "
                     f"bad {now['bad_caught']}/{now['bad_judged']} caught "
-                    f"-- no baseline yet (python score_gold_set.py "
-                    f"--offline --save-baseline)")
+                    f"-- pixel rules only; run "
+                    f"`python score_gold_set.py` once to fill the model "
+                    f"cache and get the full check free from then on")
 
-        was = json.loads(BASELINE.read_text(encoding="utf-8"))
+        now = tally(rows)
+
+        depth = "deep" if deep else "offline"
+        was = load_baselines().get(depth)
+        if not was:
+            flag = "" if deep else "--offline "
+            return (f"[gold] good {now['good_kept']}/{now['good_judged']} kept, "
+                    f"bad {now['bad_caught']}/{now['bad_judged']} caught "
+                    f"-- no baseline yet at this depth (python "
+                    f"score_gold_set.py {flag}--save-baseline)")
+
         line = (f"[gold] good {now['good_kept']}/{now['good_judged']} kept, "
                 f"bad {now['bad_caught']}/{now['bad_judged']} caught")
+        if deep and unfilled:
+            line += f" ({unfilled} image(s) not in the model cache)"
 
         lost = was.get("good_kept", 0) - now["good_kept"]
         missed = was.get("bad_caught", 0) - now["bad_caught"]
