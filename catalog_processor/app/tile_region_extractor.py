@@ -136,29 +136,37 @@ MIN_OUTPUT_SIDE_FLOOR_PX = 96
 # crop with both sides over the floor, and it reached Drive as a
 # product. That is the cut-off image this rule exists to stop.
 #
-# WHERE THE BAR IS, AND WHY IT IS NOT 8.0.
+# WHERE THE BAR IS. MEASURED, NOT ESTIMATED.
 #
-# 8.0 was the obvious choice -- the sibling path's own figure -- and it
-# is WRONG here, which the suite proved immediately: a 1075x110 strip
-# (9.8:1) is a documented real sample from this catalog's logs, a thin
-# product photographed whole, and MIN_OUTPUT_SIDE_PX exists partly to
-# keep it. A listello, a border, a pencil liner IS long and thin. So
-# the honest range:
+# 8.0 was the first attempt -- the embedded path's own figure -- and the
+# suite refused it at once: a 1075x110 strip (9.8:1) is a documented
+# real sample from this catalog's logs, a thin product photographed
+# whole. A listello, a border, a pencil liner IS long and thin.
 #
-#   widest real region on this catalog's pages  :  5.93:1  (a size label;
-#                                                   actual products 2:1)
-#   documented usable thin product              :  9.8:1
-#   the ribbon that reached Drive as a product  : ~14:1    (estimated off
-#                                                   the screenshot, see below)
+# 12.0 was the second attempt, and it was set with the good end
+# measured and the BAD end estimated off a screenshot at ~14:1, because
+# the file itself could not be reached from here. That estimate was
+# wrong, and the gold set found it on its first run: the real ribbon is
+# 11.25:1 and sailed straight through.
 #
-# 12.0 sits 22% above the worst good case and ~15% below the bad one.
-# Both margins are real but neither is generous, so this is the number
-# most likely to need revisiting -- and the ~14:1 end is an estimate
-# from a screenshot of the file, not a measurement of the file itself,
-# which was not reachable from here. If a ribbon ever survives this,
-# the crop's own pixels (does the product continue past the edge?) are
-# the better question than its proportions.
-REGION_MAX_ASPECT_RATIO = 12.0
+# The labelled set now answers it properly (catalog_processor/gold):
+#
+#   11 good images, every one a product   1.97 .. 5.25:1
+#      (the widest is a pink ribbed highlighter, 1024x195)
+#   documented thin product, from the logs      9.80:1
+#   the ribbon that reached Drive              11.25:1
+#
+# 10.5 is the midpoint of the only two numbers that actually contend --
+# 9.8 and 11.25 -- so it clears each by about 7%. Against the labelled
+# good images it has 100% headroom, which is the margin that matters
+# day to day; the 7% is against one legacy sample no longer in hand.
+#
+# That 7% is thin, and it is the honest state of this rule: proportions
+# alone cannot separate a thin PRODUCT from a thin SLICE much better
+# than this. If a ribbon ever survives 10.5, the answer is not a tighter
+# number -- it is to ask the pixels whether the product continues past
+# the crop edge, which is a different question and a better one.
+REGION_MAX_ASPECT_RATIO = 10.5
 
 
 def effective_min_side(source_width, source_height):
