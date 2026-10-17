@@ -338,7 +338,30 @@ def integration_mixed_page_through_real_pipeline():
             "distinct_tile_designs": 1, "reason": "synthetic",
         }
 
+    # The CLASSIFIER has to be scripted too, not just the purity check.
+    #
+    # Without it this test ran with no usable key, analyze_product_image
+    # returned a 400, validate_and_correct_tile_image deferred with empty
+    # metadata -- and the product reached `images` only because tile-only
+    # mode used to publish frames nothing had judged. The assertion below
+    # was passing on the strength of that hole: it proved the product got
+    # past the HARD FILTERS, and then measured it arriving in the catalog
+    # unseen.
+    #
+    # With the hole closed an unjudged frame is preserved for a later run
+    # instead, which is correct and would make "one product survives"
+    # read 0. So the product is now actually judged, which is what the
+    # check always meant to assert.
+    real_classify = gemini_service.analyze_product_image
+
+    def fake_classify(_path, page_text=""):
+        return gemini_service.ProductAnalysis(
+            is_product_image=True, decision="APPROVED", image_type="TILE",
+            confidence=0.95, reason="synthetic",
+        )
+
     gemini_service.verify_tile_only = fake_purity
+    gemini_service.analyze_product_image = fake_classify
     real_tile_only = pipeline.TILE_ONLY_CATALOG
     pipeline.TILE_ONLY_CATALOG = True
 
@@ -349,6 +372,7 @@ def integration_mixed_page_through_real_pipeline():
             images = pipeline.extract_images_from_pdf(pdf_path, directory)
     finally:
         gemini_service.verify_tile_only = real_verify
+        gemini_service.analyze_product_image = real_classify
         pipeline.TILE_ONLY_CATALOG = real_tile_only
 
     log = captured.getvalue()

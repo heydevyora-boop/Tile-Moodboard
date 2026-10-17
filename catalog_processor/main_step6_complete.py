@@ -3949,6 +3949,20 @@ def extract_images_from_pdf(
                                 f"    isolating the tile surface instead of "
                                 f"saving the frame as-is"
                             )
+                        elif validation_status == VALIDATION_DEFERRED:
+                            # Not a rejection, and saying so matters. The
+                            # line used to read "REJECTED -- validation
+                            # could not run", which is a contradiction:
+                            # nothing judged this frame, so nothing
+                            # rejected it. Reading those as verdicts is
+                            # what made a run whose quota had died look
+                            # like a pipeline refusing everything.
+                            category = "not judged"
+                            print(
+                                f"  NOT JUDGED -- nothing classified this "
+                                f"image (page {page_number} image "
+                                f"{image_counter}): {validation_reason}"
+                            )
                         else:
                             category = categorize_rejection(validation_reason)
                             print(
