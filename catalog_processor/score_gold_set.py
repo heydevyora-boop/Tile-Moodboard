@@ -73,6 +73,16 @@ GOOD_DIR = GOLD / "good"
 BAD_DIR = GOLD / "bad"
 CACHE_DIR = GOLD / "_cache"
 
+# The last score someone deliberately accepted. The pre-flight compares
+# against this, so a run can say "the same as before" or "something
+# broke" rather than printing a number nobody can interpret.
+#
+# It is updated ONLY by --save-baseline, never automatically. A baseline
+# that moved by itself would quietly ratify every regression: the score
+# would drop, the file would follow it down, and the next run would
+# report "the same as before" about a pipeline that had got worse.
+BASELINE = GOLD / "baseline.json"
+
 IMAGE_SUFFIXES = (".webp", ".png", ".jpg", ".jpeg")
 
 # The prefixes gold/README.md asks for on every bad image. The prefix is
@@ -234,23 +244,20 @@ def full_verdict(path, workdir):
     return "REJECTED", reason or "rejected"
 
 
-def score(offline, verbose):
+def collect(offline):
+    """Runs the set and returns its rows, or None when there is nothing.
+
+    Separated from the printing so the pre-flight inside a catalog run
+    can reuse the exact same scoring path. Two ways of working out the
+    score would eventually disagree, and the one nobody watches would be
+    the one that was wrong.
+    """
     good = discover(GOOD_DIR)
     bad = discover(BAD_DIR)
-
     if not good and not bad:
-        print(f"No images found in {GOOD_DIR} or {BAD_DIR}.")
-        print("See gold/README.md for what to put there.")
-        return 2
+        return None, None
 
-    stats = None
-    if not offline:
-        if not os.getenv("GEMINI_API_KEY", "").strip():
-            print("GEMINI_API_KEY is not set, so the model half cannot run.")
-            print("Re-run with --offline for the pixel-only score, or set "
-                  "the key for the full one.")
-            return 2
-        stats = install_cached_model()
+    stats = install_cached_model() if not offline else None
 
     workdir = Path(tempfile.mkdtemp(prefix="gold-score-"))
     rows = []
@@ -276,7 +283,49 @@ def score(offline, verbose):
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
 
-    return report(rows, offline, verbose, stats)
+    return rows, stats
+
+
+def tally(rows):
+    """The four numbers the pre-flight and the baseline both speak in."""
+    good = [row for row in rows if row[0] == "good"]
+    bad = [row for row in rows if row[0] == "bad"]
+    return {
+        "good_kept": sum(1 for r in good if r[3] == "APPROVED"),
+        "good_judged": sum(1 for r in good if r[3] in ("APPROVED", "REJECTED")),
+        "bad_caught": sum(1 for r in bad if r[3] == "REJECTED"),
+        "bad_judged": sum(1 for r in bad if r[3] in ("APPROVED", "REJECTED")),
+    }
+
+
+def score(offline, verbose, save_baseline=False):
+    if not offline and not os.getenv("GEMINI_API_KEY", "").strip():
+        print("GEMINI_API_KEY is not set, so the model half cannot run.")
+        print("Re-run with --offline for the pixel-only score, or set "
+              "the key for the full one.")
+        return 2
+
+    rows, stats = collect(offline)
+    if rows is None:
+        print(f"No images found in {GOOD_DIR} or {BAD_DIR}.")
+        print("See gold/README.md for what to put there.")
+        return 2
+
+    outcome = report(rows, offline, verbose, stats)
+
+    if save_baseline:
+        if not offline:
+            print("Baselines are saved from the OFFLINE score only, so the "
+                  "pre-flight can check against them without a key.")
+            return outcome
+        try:
+            BASELINE.write_text(json.dumps(tally(rows), indent=2),
+                                encoding="utf-8")
+            print(f"Baseline saved to {BASELINE}. Future runs compare "
+                  f"against it.")
+        except OSError as exc:
+            print(f"Could not save the baseline: {exc}")
+    return outcome
 
 
 def report(rows, offline, verbose, stats):
@@ -366,6 +415,61 @@ def report(rows, offline, verbose, stats):
     return 1 if (good_fail or bad_leaked) else 0
 
 
+def preflight():
+    """One line for a catalog run to print before it starts, or None.
+
+    THIS IS NOT A GATE. It judges no candidate and blocks nothing; it
+    runs the labelled set through the pixel rules and says whether the
+    pipeline still behaves the way it did when someone last looked.
+    Turning the gold set into a gate was considered and measured
+    instead: nearest-neighbour over these same 22 images agrees with
+    the human label 12 times out of 22, which is a coin flip, because
+    the faults here are structural (whole? one? edges inside?) and not
+    a matter of appearance. The closest pair in the whole set is one
+    good image and one bad one. A gate built on that would refuse about
+    half of the real tiles.
+
+    Silent and harmless by construction: no images, no baseline, a
+    missing folder, an unreadable file, anything at all -- it returns
+    None and the catalog runs exactly as it would have. An extraction
+    must never fail because a measuring tool did.
+    """
+    try:
+        rows, _stats = collect(offline=True)
+        if not rows:
+            return None
+        now = tally(rows)
+
+        if not BASELINE.exists():
+            return (f"[gold] good {now['good_kept']}/{now['good_judged']} kept, "
+                    f"bad {now['bad_caught']}/{now['bad_judged']} caught "
+                    f"-- no baseline yet (python score_gold_set.py "
+                    f"--offline --save-baseline)")
+
+        was = json.loads(BASELINE.read_text(encoding="utf-8"))
+        line = (f"[gold] good {now['good_kept']}/{now['good_judged']} kept, "
+                f"bad {now['bad_caught']}/{now['bad_judged']} caught")
+
+        lost = was.get("good_kept", 0) - now["good_kept"]
+        missed = was.get("bad_caught", 0) - now["bad_caught"]
+
+        # Losing real products is the louder of the two, and always has
+        # been: a tile that never reaches Drive is invisible, while a bad
+        # image at least announces itself.
+        if lost > 0:
+            return (f"{line}   !! {lost} real product(s) that used to "
+                    f"survive are now rejected -- something broke")
+        if missed > 0:
+            return (f"{line}   !! {missed} bad image(s) that used to be "
+                    f"caught now get through")
+        if (now["good_kept"] > was.get("good_kept", 0)
+                or now["bad_caught"] > was.get("bad_caught", 0)):
+            return f"{line}   (better than the saved baseline)"
+        return f"{line}   -- unchanged"
+    except Exception:  # noqa: BLE001 -- see the docstring
+        return None
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument(
@@ -376,8 +480,12 @@ def main():
         "--verbose", action="store_true",
         help="list every image, not only the failures",
     )
+    parser.add_argument(
+        "--save-baseline", action="store_true",
+        help="record this offline score as the one catalog runs compare against",
+    )
     args = parser.parse_args()
-    return score(args.offline, args.verbose)
+    return score(args.offline, args.verbose, args.save_baseline)
 
 
 if __name__ == "__main__":

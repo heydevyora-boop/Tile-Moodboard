@@ -1854,6 +1854,101 @@ def lost_product_diagnosis_checks():
     return results
 
 
+def gold_preflight_checks():
+    """The gold set reports on the run; it must never decide for it."""
+    import importlib
+    import json as _json
+    import tempfile as _tempfile
+
+    scorer = importlib.import_module("score_gold_set")
+    results = []
+
+    # It is wired into the run, and it is wired in as a REPORT.
+    run_source = inspect.getsource(pipeline.process_drive)
+    results.append(check(
+        "a catalog run asks the gold set how the pipeline is behaving",
+        "preflight" in run_source,
+    ))
+    results.append(check(
+        "...and whatever it says, the run still proceeds",
+        "if gold_line:" in run_source and "return" not in
+        run_source.split("preflight()")[1].split("emit(f\"   {gold_line}\")")[0],
+        "the pre-flight must not be able to stop an extraction",
+    ))
+
+    # Harmless by construction: no folder, no images, no baseline.
+    real_gold, real_good, real_bad, real_base = (
+        scorer.GOLD, scorer.GOOD_DIR, scorer.BAD_DIR, scorer.BASELINE)
+    try:
+        empty = Path(_tempfile.mkdtemp(prefix="gold-empty-"))
+        scorer.GOLD = empty
+        scorer.GOOD_DIR = empty / "good"
+        scorer.BAD_DIR = empty / "bad"
+        scorer.BASELINE = empty / "baseline.json"
+        results.append(check(
+            "an empty gold set says nothing rather than failing",
+            scorer.preflight() is None,
+        ))
+        scorer.GOOD_DIR = Path("/nonexistent/good")
+        scorer.BAD_DIR = Path("/nonexistent/bad")
+        results.append(check(
+            "a missing gold folder says nothing rather than failing",
+            scorer.preflight() is None,
+        ))
+    finally:
+        scorer.GOLD, scorer.GOOD_DIR = real_gold, real_good
+        scorer.BAD_DIR, scorer.BASELINE = real_bad, real_base
+
+    # The tally the baseline and the pre-flight both speak in.
+    rows = [
+        ("good", "good", Path("a"), "APPROVED", ""),
+        ("good", "good", Path("b"), "REJECTED", ""),
+        ("good", "good", Path("c"), "UNJUDGED", ""),
+        ("bad", "half", Path("d"), "REJECTED", ""),
+        ("bad", "half", Path("e"), "APPROVED", ""),
+        ("bad", "two", Path("f"), "UNJUDGED", ""),
+    ]
+    counts = scorer.tally(rows)
+    results.append(check(
+        "unjudged images are counted in neither column",
+        counts == {"good_kept": 1, "good_judged": 2,
+                   "bad_caught": 1, "bad_judged": 2},
+        str(counts),
+    ))
+
+    # The baseline must not drift on its own.
+    scorer_source = inspect.getsource(scorer)
+    results.append(check(
+        "the baseline is written only when explicitly asked for",
+        scorer_source.count("BASELINE.write_text") == 1
+        and "save_baseline" in scorer_source,
+    ))
+    results.append(check(
+        "a baseline that moved by itself would ratify every regression",
+        "--save-baseline" in scorer_source,
+    ))
+
+    # And it reports a real regression in the louder direction first.
+    preflight_source = inspect.getsource(scorer.preflight)
+    results.append(check(
+        "losing a real product is reported before letting a bad one through",
+        preflight_source.index("real product(s)")
+        < preflight_source.index("now get through"),
+    ))
+    results.append(check(
+        "the pre-flight swallows everything it could raise",
+        "except Exception" in preflight_source
+        and preflight_source.rstrip().endswith("return None"),
+    ))
+
+    # It is a ruler, not a gate, and the reason is recorded.
+    results.append(check(
+        "the measurement that ruled out a gate is written down",
+        "coin flip" in preflight_source,
+    ))
+    return results
+
+
 def sliver_checks():
     """A ribbon cut out of a page is not a product -- but a thin tile is.
 
@@ -2159,6 +2254,8 @@ def main():
          size_folder_checks()),
         ("a lost product says which word lost it",
          lost_product_diagnosis_checks()),
+        ("the gold set reports on the run, never decides for it",
+         gold_preflight_checks()),
     ]
 
     total = passed = 0
