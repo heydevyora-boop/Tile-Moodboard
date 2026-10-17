@@ -63,11 +63,12 @@ grouped as `unlabelled`.
 ```bash
 cd catalog_processor
 
-# Pixel gates only -- shape and size. No API key needed, runs anywhere.
+# Pixel gates only -- shape and size. No key needed, runs anywhere.
 python score_gold_set.py --offline
 
-# The real thing: the same gate the catalog run uses.
-GEMINI_API_KEY=... python score_gold_set.py
+# The real thing: the same gate the catalog run uses. The key is read
+# from catalog_processor/.env, so there is nothing to type.
+python score_gold_set.py
 ```
 
 What it prints:
@@ -151,10 +152,11 @@ unjudged. So the cache is the switch:
 Filling it is one deliberate command, and the only thing that costs:
 
 ```bash
-GEMINI_API_KEY=... python score_gold_set.py
+python score_gold_set.py
 ```
 
-That is 44 calls -- two per image, the classifier and the purity check.
+The key is read from `catalog_processor/.env`, the same file the
+pipeline uses. That is 44 calls -- two per image, the classifier and the purity check.
 Every run after it is **free**, because the gold images never change, so
 the answers never change.
 
@@ -165,28 +167,26 @@ notices until the invoice.
 
 ### Baselines come in two depths
 
-A baseline is only comparable to a score taken at the same depth: the
-pixel rules judge 3 of the bad images, the model judges all 11.
-Comparing one against the other would report a catastrophe -- "9 bad
-images now get through" -- the moment the cache filled. So save each
-separately, and a run compares against its own kind:
+A baseline records the score someone looked at and accepted, and a run
+reports whether it still matches.
+
+It is only comparable to a score taken at the **same depth**: the pixel
+rules judge 3 of the bad images, the model judges all 11. Comparing one
+against the other would report a catastrophe -- "9 bad images now get
+through" -- the moment the cache filled, about a pipeline that had just
+started looking harder. So each depth is saved separately and a run
+compares against its own kind:
 
 ```bash
-python score_gold_set.py --offline --save-baseline
-GEMINI_API_KEY=... python score_gold_set.py --save-baseline
+python score_gold_set.py --offline --save-baseline   # the pixel rules
+python score_gold_set.py --save-baseline             # the full thing
 ```
 
-### The baseline
-
-```bash
-python score_gold_set.py --offline --save-baseline
-```
-
-That records the current offline score as the one future runs compare
-against. It is **never** updated automatically: a baseline that moved
-by itself would quietly ratify every regression, following the score
-down and then reporting "unchanged" about a pipeline that had got
-worse. Save it when you have looked at a score and accepted it.
+A baseline is **never** updated automatically. One that moved by itself
+would quietly ratify every regression -- the score drops, the file
+follows it down, and the next run reports "unchanged" about a pipeline
+that had got worse. Save it when you have looked at a score and decided
+it is the one to beat.
 
 ---
 
