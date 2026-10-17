@@ -1976,6 +1976,41 @@ def gold_cost_checks():
     finally:
         scorer.BASELINE = real_baseline
 
+    # The key lives in .env, not in the shell.
+    #
+    # This file checks for GEMINI_API_KEY before any module that calls
+    # load_dotenv() has been imported, so without reading .env itself it
+    # would tell someone their key was missing while it sat in the file
+    # beside it.
+    # Asserted on behaviour, not on the source: a key present only in
+    # .env must be visible to this module.
+    real_env = os.environ.pop("GEMINI_API_KEY", None)
+    env_file = Path(scorer.HERE) / ".env"
+    had_env = env_file.exists()
+    try:
+        if not had_env:
+            env_file.write_text("GEMINI_API_KEY=from-dotenv\n", encoding="utf-8")
+            importlib.reload(scorer)
+            results.append(check(
+                "a key that exists only in .env is seen by the scorer",
+                bool(os.getenv("GEMINI_API_KEY")),
+            ))
+            env_file.unlink()
+        os.environ.pop("GEMINI_API_KEY", None)
+        importlib.reload(scorer)
+        results.append(check(
+            "...and no .env at all is normal, not an error",
+            scorer.preflight() is not None,
+        ))
+    finally:
+        if real_env is not None:
+            os.environ["GEMINI_API_KEY"] = real_env
+        else:
+            os.environ.pop("GEMINI_API_KEY", None)
+        if not had_env:
+            env_file.unlink(missing_ok=True)
+        importlib.reload(scorer)
+
     # The cache key must survive the gate rewriting the file.
     source = inspect.getsource(scorer._cache_path)
     results.append(check(

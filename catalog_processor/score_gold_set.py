@@ -68,6 +68,21 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
+# THE KEY USUALLY LIVES IN .env, NOT IN THE SHELL.
+#
+# Every module in this package that talks to Gemini calls load_dotenv()
+# at import, and the pipeline reads catalog_processor/.env. This file
+# checks for GEMINI_API_KEY BEFORE any of those modules is imported, so
+# without this it would announce "GEMINI_API_KEY is not set" to someone
+# whose key was sitting right there in the file beside it -- and send
+# them off to the offline score for no reason.
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(dotenv_path=str(HERE / ".env"))
+except Exception:  # noqa: BLE001 -- an absent .env is normal, not an error
+    pass
+
 GOLD = HERE / "gold"
 GOOD_DIR = GOLD / "good"
 BAD_DIR = GOLD / "bad"
