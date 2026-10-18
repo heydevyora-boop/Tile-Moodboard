@@ -143,23 +143,22 @@ MIN_OUTPUT_SIDE_FLOOR_PX = 96
 # real sample from this catalog's logs, a thin product photographed
 # whole. A listello, a border, a pencil liner IS long and thin.
 #
-# 12.0 was the second attempt, and it was set with the good end
-# measured and the BAD end estimated off a screenshot at ~14:1, because
-# the file itself could not be reached from here. That estimate was
-# wrong, and the gold set found it on its first run: the real ribbon is
-# 11.25:1 and sailed straight through.
+# 12.0 was the second attempt, set with the good end measured and the
+# bad end ESTIMATED off a screenshot at ~14:1, because the file itself
+# could not be reached. The estimate was wrong. Measured against a set
+# of the catalog's own output, labelled by hand:
 #
-# The labelled set now answers it properly (catalog_processor/gold):
+#   22 real product images              1.97 .. 5.25:1
+#      (the widest a pink ribbed highlighter, 1024x195)
+#   documented thin product, from the logs   9.80:1
+#   the ribbon that reached Drive           11.25:1
 #
-#   11 good images, every one a product   1.97 .. 5.25:1
-#      (the widest is a pink ribbed highlighter, 1024x195)
-#   documented thin product, from the logs      9.80:1
-#   the ribbon that reached Drive              11.25:1
+# 11.25 sits under 12.0, so the ribbon sailed straight through.
 #
 # 10.5 is the midpoint of the only two numbers that actually contend --
-# 9.8 and 11.25 -- so it clears each by about 7%. Against the labelled
-# good images it has 100% headroom, which is the margin that matters
-# day to day; the 7% is against one legacy sample no longer in hand.
+# 9.8 and 11.25 -- clearing each by about 7%. Against the real product
+# images it has 100% headroom, which is the margin that matters day to
+# day; the 7% is against one legacy sample no longer in hand.
 #
 # That 7% is thin, and it is the honest state of this rule: proportions
 # alone cannot separate a thin PRODUCT from a thin SLICE much better
