@@ -2731,9 +2731,41 @@ def mine_tile_regions(
             diag(f"      split              : not splitting -- "
                   f"{single_note}")
 
-        several_products = designs > 1 or pieces_seen > 1
-        if gutter_pieces or (status == VALIDATION_IMPURE and several_products
-                             and not beyond_repair and not single_product):
+        # A COUNT OF PIECES IS NOT A VERDICT ABOUT CONTAMINATION, AND
+        # NOT A GUESS ABOUT SEAMS. IT CLEARS BOTH GATES ON ITS OWN.
+        #
+        # separate_pieces was added, parsed and carried -- and then
+        # never consulted for the frame it was added for, because two
+        # conditions stood in front of it:
+        #
+        #   status == IMPURE   a wall of eight identical panels is 100%
+        #                      tile with nothing else in the frame, so
+        #                      purity calls it CLEAN and the status is
+        #                      APPROVED. "Clean" answers "is there
+        #                      anything in here that is not tile", not
+        #                      "is there one piece in here".
+        #
+        #   not single_product butted panels have no page showing
+        #                      between them, so the page sees ONE
+        #                      connected region and says so --
+        #                      measured at 100% on a four-panel wall.
+        #
+        # crop_is_one_product exists to stop the SEAM splitter carving a
+        # patterned product into quarters, which it did to 32 of 109
+        # products. That is a guess about seams. A piece count is not a
+        # guess: the model was asked how many pieces it can see, told
+        # that printed pattern is not pieces, and told to answer 1 when
+        # unsure. Where it says more than one, it has seen grout the
+        # page cannot see.
+        #
+        # beyond_repair still blocks everything: cutting a non-tile up
+        # cannot make it a tile.
+        split_for_designs = (status == VALIDATION_IMPURE and designs > 1
+                             and not single_product)
+        split_for_pieces = pieces_seen > 1
+
+        if gutter_pieces or ((split_for_designs or split_for_pieces)
+                             and not beyond_repair):
             # Several products butted together in one frame. Saving it
             # whole would give one Tile row a picture of its neighbours;
             # rejecting it would throw away every product in it. Cut it

@@ -2145,19 +2145,69 @@ def one_piece_per_image_checks():
         got = (observation or {}).get("separate_pieces")
         results.append(check(f"{label} ({got})", got == expected, str(got)))
 
-    # The gate reads it, and still honours every guard already there.
+    # TWO GATES STOOD IN FRONT OF THE COUNT, AND BOTH HAD TO GO.
+    #
+    # The field was added, parsed and carried -- and never consulted
+    # for the frame it was added for. A wall of eight identical panels
+    # is 100% tile with nothing else in it, so purity calls it CLEAN
+    # (asserted below) and the status is APPROVED, never IMPURE. And
+    # butted panels show no page between them, so crop_is_one_product
+    # measures them as one region (100% on a four-panel wall) and said
+    # so.
+    results.append(check(
+        "a wall of identical panels really does read as CLEAN",
+        image_validator_module.assess_tile_purity({
+            "material": "TILE", "tile_fraction": 1.0,
+            "contains_person": False, "contains_text": False,
+            "contains_logo": False, "contains_furniture": False,
+            "contains_fixture": False, "contains_object": False,
+            "is_scene": False, "physical_surface": True,
+            "complete_rectangle": True, "distinct_tile_designs": 1,
+            "separate_pieces": 8, "reason": "eight identical panels",
+        })["state"] == PURITY_CLEAN,
+        "if this ever stops being CLEAN the reasoning below is stale",
+    ))
+
+    # The gate itself, simulated exactly as the source computes it.
+    def splits(status, designs, pieces, single, beyond, gutters=False):
+        for_designs = (status == pipeline.VALIDATION_IMPURE
+                       and designs > 1 and not single)
+        for_pieces = pieces > 1
+        return bool(gutters or ((for_designs or for_pieces) and not beyond))
+
+    APPROVED = pipeline.VALIDATION_APPROVED
+    IMPURE = pipeline.VALIDATION_IMPURE
+    for label, args, want in (
+        ("a clean wall of 8 panels IS split",
+         (APPROVED, 1, 8, True, False), True),
+        ("...even though the page calls it one region",
+         (APPROVED, 1, 6, True, False), True),
+        ("a single tile is not", (APPROVED, 1, 1, True, False), False),
+        ("a patterned tile the model counted as 1 is not",
+         (APPROVED, 1, 1, True, False), False),
+        ("two designs butted together still split, as before",
+         (IMPURE, 2, 1, False, False), True),
+        ("...and are still protected when the page says one product",
+         (IMPURE, 2, 1, True, False), False),
+        ("a non-tile verdict is never laundered by splitting",
+         (APPROVED, 1, 4, False, True), False),
+    ):
+        results.append(check(f"{label}", splits(*args) is want))
+
+    # The source must actually be shaped that way.
     source = inspect.getsource(pipeline.mine_tile_regions)
     results.append(check(
-        "the split gate asks about pieces as well as designs",
-        "pieces_seen > 1" in source and "designs > 1" in source,
+        "the piece count is not gated behind IMPURE",
+        "split_for_pieces = pieces_seen > 1" in source,
+    ))
+    results.append(check(
+        "the design count still is, and still respects the page",
+        "status == VALIDATION_IMPURE and designs > 1" in source
+        and "not single_product" in source,
     ))
     results.append(check(
         "a hard non-tile verdict still cannot be laundered by splitting",
         "not beyond_repair" in source,
-    ))
-    results.append(check(
-        "a crop the page says is one product is still not carved up",
-        "not single_product" in source,
     ))
     return results
 
