@@ -2208,7 +2208,9 @@ def mine_tile_regions(
     import cv2  # local: only needed when mining actually runs
 
     from app.tile_region_extractor import (
+        MAX_BLANK_PAGE_FRACTION,
         MAX_PAGE_SOURCE_COVERAGE,
+        blank_page_fraction,
         draw_region_overlay,
         MIN_CLEAN_PIXELS,
         MIN_OUTPUT_SIDE_PX,
@@ -2731,41 +2733,51 @@ def mine_tile_regions(
             diag(f"      split              : not splitting -- "
                   f"{single_note}")
 
-        # A COUNT OF PIECES IS NOT A VERDICT ABOUT CONTAMINATION, AND
-        # NOT A GUESS ABOUT SEAMS. IT CLEARS BOTH GATES ON ITS OWN.
+        # Reported so a run can be audited for it, never acted on --
+        # see the block below for why it does not get to split
+        # anything. A catalog whose walls need splitting can be found
+        # in a debug run by looking for this line.
+        if pieces_seen > 1:
+            diag(f"      pieces reported    : the model counts "
+                  f"{pieces_seen} separate piece(s) here (recorded, "
+                  f"not acted on)")
+
+        # WHY A PIECE COUNT IS NOT ALLOWED TO DRIVE THE SEAM SPLITTER.
         #
-        # separate_pieces was added, parsed and carried -- and then
-        # never consulted for the frame it was added for, because two
-        # conditions stood in front of it:
+        # It was, briefly, and it cut real products in half. A Mozart
+        # panel -- one tile, printed with a moulded border around a vine
+        # design -- came out of Drive as region_4_2: the inner design
+        # with its border sliced off. Measured on that exact panel, the
+        # strongest seam in it scores 23.95 against a SPLIT_MIN_STEP of
+        # 22.0. It is a border, not a join, and it clears the bar by
+        # less than two points.
         #
-        #   status == IMPURE   a wall of eight identical panels is 100%
-        #                      tile with nothing else in the frame, so
-        #                      purity calls it CLEAN and the status is
-        #                      APPROVED. "Clean" answers "is there
-        #                      anything in here that is not tile", not
-        #                      "is there one piece in here".
+        # crop_is_one_product is what stands between that panel and the
+        # splitter, and letting the count past it was the mistake. The
+        # count is a real observation -- the model was asked how many
+        # pieces it can see -- but "there is more than one piece here"
+        # does not say WHERE the join is, and split_tile_designs has to
+        # guess. A guess restrained by the page is the whole reason that
+        # function stopped carving patterned products into quarters,
+        # which it had done to 32 of 109.
         #
-        #   not single_product butted panels have no page showing
-        #                      between them, so the page sees ONE
-        #                      connected region and says so --
-        #                      measured at 100% on a four-panel wall.
+        # Nor did the count deliver what it was added for. A wall of
+        # eight identical panels is ONE design, so max_pieces below
+        # resolves to 2: the wall was cut into two images of four panels
+        # each, not eight of one. It never produced one tile per image.
         #
-        # crop_is_one_product exists to stop the SEAM splitter carving a
-        # patterned product into quarters, which it did to 32 of 109
-        # products. That is a guess about seams. A piece count is not a
-        # guess: the model was asked how many pieces it can see, told
-        # that printed pattern is not pieces, and told to answer 1 when
-        # unsure. Where it says more than one, it has seen grout the
-        # page cannot see.
+        # So the count is parsed and carried, and no longer splits
+        # anything on its own. A wall of identical panels reaching Drive
+        # whole is the open case; cutting whole tiles up to chase it was
+        # the worse of the two, and it needs evidence of where the joins
+        # are, not a bigger guess.
         #
         # beyond_repair still blocks everything: cutting a non-tile up
         # cannot make it a tile.
         split_for_designs = (status == VALIDATION_IMPURE and designs > 1
                              and not single_product)
-        split_for_pieces = pieces_seen > 1
 
-        if gutter_pieces or ((split_for_designs or split_for_pieces)
-                             and not beyond_repair):
+        if gutter_pieces or (split_for_designs and not beyond_repair):
             # Several products butted together in one frame. Saving it
             # whole would give one Tile row a picture of its neighbours;
             # rejecting it would throw away every product in it. Cut it
@@ -2832,6 +2844,26 @@ def mine_tile_regions(
                         note("REJECTED", piece=piece_label,
                              validation="FAIL",
                              validation_reason="split piece is a sliver",
+                             **geometry_fields)
+                        pieces_rejected += 1
+                        continue
+
+                    # Same blank-page bar the whole region is held
+                    # to, and for the same reason the sliver bar is
+                    # repeated here: a split cuts ACROSS a region, so a
+                    # crop that was mostly product can yield a piece
+                    # that is mostly paper. The region gate ran before
+                    # the cut and cannot see that piece.
+                    piece_blank = blank_page_fraction(piece)
+                    if piece_blank > MAX_BLANK_PAGE_FRACTION:
+                        diag(f"      piece {piece_label}          : "
+                              f"{piece_blank:.0%} of it is blank page, "
+                              f"dropped")
+                        note("REJECTED", piece=piece_label,
+                             validation="FAIL",
+                             validation_reason=(
+                                 f"split piece is {piece_blank:.0%} "
+                                 f"blank page"),
                              **geometry_fields)
                         pieces_rejected += 1
                         continue

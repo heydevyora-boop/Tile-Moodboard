@@ -2170,43 +2170,108 @@ def one_piece_per_image_checks():
         "if this ever stops being CLEAN the reasoning below is stale",
     ))
 
+    # A BORDER IS NOT A JOIN, AND THE SEAM SPLITTER CANNOT TELL.
+    #
+    # The piece count was briefly allowed to drive split_tile_designs
+    # on its own. It cut a Mozart panel -- one tile, a vine design
+    # inside a moulded border -- into region_4_2: the inner design with
+    # its border sliced off. Measured on that exact panel, its
+    # strongest seam scores 23.95 against a SPLIT_MIN_STEP of 22.0.
+    #
+    # The fixture below is the same shape, and the first check proves
+    # it is a real reproduction rather than a hopeful one: the splitter
+    # WOULD cut it. What must stop it is crop_is_one_product, which the
+    # piece count had been allowed past.
+    def bordered_panel(height=520, width=228):
+        rng = np.random.default_rng(5)
+        panel = np.full((height, width, 3), (232, 238, 240), np.uint8)
+        for _ in range(120):
+            y = int(rng.integers(20, height - 20))
+            x = int(rng.integers(20, width - 20))
+            cv2.circle(panel, (x, y), int(rng.integers(3, 9)),
+                       (int(rng.integers(90, 170)),
+                        int(rng.integers(140, 200)),
+                        int(rng.integers(90, 150))), -1)
+        cv2.rectangle(panel, (10, 10), (width - 11, height - 11),
+                      (205, 212, 216), 7)
+        return panel
+
+    panel = bordered_panel()
+    cuts = region_extractor.split_tile_designs(panel, max_pieces=2)
+    results.append(check(
+        "the seam splitter really would cut a bordered panel in two",
+        len(cuts) == 2,
+        f"{len(cuts)} piece(s) -- if this is 0 the fixture stopped "
+        f"reproducing the failure and the checks below prove nothing",
+    ))
+
     # The gate itself, simulated exactly as the source computes it.
     def splits(status, designs, pieces, single, beyond, gutters=False):
         for_designs = (status == pipeline.VALIDATION_IMPURE
                        and designs > 1 and not single)
-        for_pieces = pieces > 1
-        return bool(gutters or ((for_designs or for_pieces) and not beyond))
+        return bool(gutters or (for_designs and not beyond))
 
     APPROVED = pipeline.VALIDATION_APPROVED
     IMPURE = pipeline.VALIDATION_IMPURE
     for label, args, want in (
-        ("a clean wall of 8 panels IS split",
-         (APPROVED, 1, 8, True, False), True),
-        ("...even though the page calls it one region",
-         (APPROVED, 1, 6, True, False), True),
-        ("a single tile is not", (APPROVED, 1, 1, True, False), False),
-        ("a patterned tile the model counted as 1 is not",
+        ("a bordered panel the model counted as 4 pieces is kept whole",
+         (APPROVED, 1, 4, True, False), False),
+        ("a single tile is kept whole", (APPROVED, 1, 1, True, False), False),
+        ("a patterned tile the model counted as 1 is kept whole",
          (APPROVED, 1, 1, True, False), False),
         ("two designs butted together still split, as before",
          (IMPURE, 2, 1, False, False), True),
         ("...and are still protected when the page says one product",
          (IMPURE, 2, 1, True, False), False),
+        ("bare page running through still splits, whatever the counts",
+         (APPROVED, 1, 1, True, False, True), True),
         ("a non-tile verdict is never laundered by splitting",
          (APPROVED, 1, 4, False, True), False),
     ):
         results.append(check(f"{label}", splits(*args) is want))
 
+    # The open case, stated rather than claimed fixed: a wall of
+    # identical panels is kept whole, because nothing here knows where
+    # its joins are. Pinned so the next attempt starts from the truth.
+    results.append(check(
+        "a wall of 8 identical panels is KEPT WHOLE -- still open",
+        splits(APPROVED, 1, 8, True, False) is False,
+        "cutting it needs evidence of where the joins are",
+    ))
+
     # The source must actually be shaped that way.
     source = inspect.getsource(pipeline.mine_tile_regions)
     results.append(check(
-        "the piece count is not gated behind IMPURE",
-        "split_for_pieces = pieces_seen > 1" in source,
+        "the piece count does not drive the splitter",
+        "split_for_pieces" not in source,
     ))
     results.append(check(
-        "the design count still is, and still respects the page",
+        "...but is still parsed and reported, so a run can be audited",
+        "pieces_seen = int(purity_now.get('separate_pieces', 1) or 1)"
+        in source and "pieces reported" in source,
+    ))
+    results.append(check(
+        "the design count is gated on IMPURE and respects the page",
         "status == VALIDATION_IMPURE and designs > 1" in source
         and "not single_product" in source,
     ))
+
+    # A split cuts ACROSS a region, so a piece can be mostly paper even
+    # when the region was not. The region gate ran before the cut.
+    results.append(check(
+        "a split piece is held to the blank-page bar too",
+        "piece_blank = blank_page_fraction(piece)" in source
+        and "MAX_BLANK_PAGE_FRACTION" in source,
+    ))
+    mostly_paper = np.full((300, 300, 3), 252, np.uint8)
+    mostly_paper[:, 140:170] = 30
+    results.append(check(
+        f"...and such a piece ({region_extractor.blank_page_fraction(mostly_paper):.0%} "
+        f"paper) is over it",
+        region_extractor.blank_page_fraction(mostly_paper)
+        > region_extractor.MAX_BLANK_PAGE_FRACTION,
+    ))
+
     results.append(check(
         "a hard non-tile verdict still cannot be laundered by splitting",
         "not beyond_repair" in source,
