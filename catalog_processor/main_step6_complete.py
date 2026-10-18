@@ -5222,32 +5222,6 @@ def process_drive(
     emit("CATALOG EXTRACTION")
     emit("=" * 50)
 
-    # IS THE PIPELINE STILL BEHAVING? ONE LINE, BEFORE ANY WORK.
-    #
-    # The labelled set in gold/ run through the pixel rules, compared
-    # against the last score someone accepted. It gates nothing and
-    # judges no candidate -- it reports whether this build still keeps
-    # the products it used to keep and still refuses the images it used
-    # to refuse.
-    #
-    # Why not a gate: measured on those same images, nearest-neighbour
-    # by appearance agrees with the human label 12 times out of 22 -- a
-    # coin flip -- because the faults are structural, not a matter of
-    # looks. The closest pair in the whole set is one good image beside
-    # one bad one.
-    #
-    # Deliberately cheap and deliberately harmless: offline only, no
-    # API key, a couple of seconds, and preflight() swallows everything
-    # it could possibly raise. An extraction must never fail because a
-    # measuring tool did.
-    try:
-        from score_gold_set import preflight
-        gold_line = preflight()
-    except Exception:  # noqa: BLE001 -- see above
-        gold_line = None
-    if gold_line:
-        emit(f"   {gold_line}")
-
     # --------------------------------------------------------
     # Process every PDF
     # --------------------------------------------------------
