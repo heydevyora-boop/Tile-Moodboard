@@ -168,6 +168,55 @@ MIN_OUTPUT_SIDE_FLOOR_PX = 96
 REGION_MAX_ASPECT_RATIO = 10.5
 
 
+# A CROP THAT IS MOSTLY BLANK PAGE IS NOT A SWATCH.
+#
+# assess_tile_purity already refuses a frame under MIN_TILE_FRACTION
+# (0.80) -- "only 37% of the frame is tile surface" -- but that number
+# is the MODEL's own estimate. When the model is not reached, or
+# answers generously, nothing measures it, and a crop that is
+# two-thirds blank paper is published as a product.
+#
+# One did: 724x1024, a dark band running corner to corner with both
+# opposite corners pure white, 62.9% of its pixels blank page.
+#
+# Measured on this catalog's own product crops, the separation is not
+# close:
+#
+#   real product crops   0.0% .. 0.3%   flat page-white
+#   the published crop          61.0%
+#
+# "Flat page-white" is deliberately narrower than "light": a printed
+# page is near-255 AND locally featureless, while a pale tile has
+# texture, shading and grout. Judging on brightness alone would refuse
+# an off-white tile, which is a real product in this catalog.
+#
+# 0.35 sits ~100x above the worst real crop and well under the bad one,
+# so this is a backstop for a number nobody measured, not a new opinion
+# about what a tile looks like.
+MAX_BLANK_PAGE_FRACTION = 0.35
+BLANK_PAGE_BRIGHTNESS = 244
+BLANK_PAGE_FLATNESS = 2.0
+
+
+def blank_page_fraction(image_bgr):
+    """Share of the crop that is flat, page-white paper."""
+    if image_bgr is None or getattr(image_bgr, "size", 0) == 0:
+        return 0.0
+    if image_bgr.ndim != 3:
+        return 0.0
+
+    grey = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY).astype(np.float32)
+    # Local standard deviation, the cheap way: E[x^2] - E[x]^2 over a
+    # small box. Paper is bright and featureless; a pale tile is bright
+    # and is not.
+    mean = cv2.boxFilter(grey, -1, (5, 5), normalize=True)
+    mean_sq = cv2.boxFilter(grey * grey, -1, (5, 5), normalize=True)
+    variance = np.maximum(mean_sq - mean * mean, 0.0)
+    flat = np.sqrt(variance) < BLANK_PAGE_FLATNESS
+    bright = grey >= BLANK_PAGE_BRIGHTNESS
+    return float((bright & flat).mean())
+
+
 def effective_min_side(source_width, source_height):
     """Smallest acceptable crop side for a source of this size."""
     relative = int(min(source_width, source_height) * MIN_OUTPUT_SIDE_FRACTION)
@@ -1757,6 +1806,16 @@ def extract_tile_region(image_bgr, quad, occluders=None,
     # trimmed off a narrow product is exactly how a reasonable-looking
     # rectangle becomes a ribbon. The upscale below preserves aspect,
     # so this is the output's true shape.
+    blank = blank_page_fraction(crop)
+    if blank > MAX_BLANK_PAGE_FRACTION:
+        info["stage"] = "mostly_page"
+        info["reason"] = (
+            f"{blank:.0%} of the crop is blank page, above the "
+            f"{MAX_BLANK_PAGE_FRACTION:.0%} limit -- this is paper with "
+            f"something crossing it, not a swatch"
+        )
+        return None, info
+
     long_side = max(clean_width, clean_height)
     short_side = min(clean_width, clean_height)
     if short_side > 0:

@@ -2216,6 +2216,94 @@ def whole_image_duplicate_checks():
     return results
 
 
+def blank_page_checks():
+    """A crop that is mostly blank paper is not a swatch.
+
+    assess_tile_purity already refuses a frame under MIN_TILE_FRACTION,
+    but that number is the MODEL's estimate. When the model is not
+    reached, or answers generously, nothing measures it -- and a
+    724x1024 crop, a dark band running corner to corner with both
+    opposite corners pure white and 62.9% of its pixels blank page, was
+    published as a product.
+
+    This is a backstop for a number nobody measured, not a new opinion
+    about what a tile looks like.
+    """
+    results = []
+    bar = region_extractor.MAX_BLANK_PAGE_FRACTION
+    blank = region_extractor.blank_page_fraction
+
+    # Flat page-white is deliberately narrower than "light". An
+    # off-white tile is a real product in this catalog, and judging on
+    # brightness alone would refuse it.
+    paper = np.full((200, 200, 3), 252, np.uint8)
+    results.append(check(
+        "flat paper reads as blank page",
+        blank(paper) > 0.9, f"{blank(paper):.1%}",
+    ))
+
+    pale = tile_patch(200, 200, ((248, 246, 243), (232, 229, 225)), cell=18)
+    results.append(check(
+        "a pale tile with grout does NOT",
+        blank(pale) < 0.2, f"{blank(pale):.1%}",
+    ))
+
+    dark = tile_patch(200, 200, ((70, 68, 66), (40, 39, 38)), cell=18)
+    results.append(check(
+        "a dark tile does not either",
+        blank(dark) < 0.05, f"{blank(dark):.1%}",
+    ))
+
+    # The shape of the failure: a band across otherwise blank paper.
+    band = np.full((400, 300, 3), 252, np.uint8)
+    band[:, 110:190] = 25
+    results.append(check(
+        f"a band across blank paper is refused ({blank(band):.0%} blank)",
+        blank(band) > bar,
+    ))
+
+    # ...and a crop that is MOSTLY product with a little page is kept.
+    mostly = np.full((400, 300, 3), 252, np.uint8)
+    mostly[:, :255] = tile_patch(255, 400, ((196, 190, 182), (120, 114, 106)),
+                                 cell=20)
+    results.append(check(
+        f"a crop that is mostly product is kept ({blank(mostly):.0%} blank)",
+        blank(mostly) <= bar,
+    ))
+
+    # Degenerate inputs must not raise inside the extractor.
+    for bad, label in ((None, "None"), (np.zeros((0, 0, 3), np.uint8), "empty")):
+        try:
+            value = blank(bad)
+            ok = value == 0.0
+        except Exception as exc:  # noqa: BLE001
+            ok, value = False, exc
+        results.append(check(f"{label} input is 0.0, not a crash", ok, str(value)))
+
+    # End to end: the extractor refuses it and says why.
+    page = np.full((900, 700, 3), 252, np.uint8)
+    page[:, 300:400] = 25
+    crop, info = region_extractor.extract_tile_region(
+        page, [(20, 20), (680, 20), (680, 880), (20, 880)])
+    results.append(check(
+        "the extractor refuses a mostly-blank region",
+        crop is None and info.get("stage") == "mostly_page",
+        f"stage={info.get('stage')!r} reason={info.get('reason')!r}",
+    ))
+    results.append(check(
+        "...and the reason names blank page, not something else",
+        "blank page" in str(info.get("reason", "")),
+        repr(info.get("reason")),
+    ))
+
+    # The bar has room on both sides, measured on this catalog's pages.
+    results.append(check(
+        "the bar leaves real products a wide margin",
+        0.10 < bar < 0.50, f"{bar}",
+    ))
+    return results
+
+
 def sliver_checks():
     """A ribbon cut out of a page is not a product -- but a thin tile is.
 
@@ -2516,6 +2604,8 @@ def main():
         ("two tiles in one crop are cut apart", gutter_split_checks()),
         ("a narrow product is not dropped for being narrow", size_floor_checks()),
         ("a ribbon is not a product, but a thin tile is", sliver_checks()),
+        ("a crop that is mostly blank page is not a swatch",
+         blank_page_checks()),
         ("the whole-image path asks before it accepts",
          whole_image_duplicate_checks()),
         ("one image, one piece", one_piece_per_image_checks()),
