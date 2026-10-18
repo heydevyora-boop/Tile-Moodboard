@@ -974,6 +974,59 @@ def split_tile_designs(image_bgr, max_pieces=4):
 # page in it at all.
 PAGE_MARGIN_MIN_SHARE = 0.15
 
+# A band of rows is read at a time rather than the whole image, so a
+# full-resolution catalog page never has to find one contiguous block
+# the size of itself. 4 MiB is the working size, not a quality knob:
+# the result is identical whatever it is set to.
+BACKGROUND_SCAN_BAND_BYTES = 4 * 1024 * 1024
+
+
+def background_mask(image_bgr, background, tolerance, within=False):
+    """Which pixels sit within `tolerance` of one background colour.
+
+    Returns 1 where the pixel is background and 0 where it is not, or
+    the other way round with within=False. The arithmetic is unchanged;
+    only its footprint is.
+
+    np.median returns float64 whatever it is handed, so the obvious
+    spelling --
+
+        np.linalg.norm(image_bgr.astype(np.float32) - background, axis=2)
+
+    -- promoted the WHOLE image back to float64 on the subtraction. For
+    one 3202x2264 catalog page that is a 166 MiB temporary, live at the
+    same time as the 83 MiB float32 cast it was built from, and
+    np.linalg.norm then allocates two more arrays on top: 442 MiB peak
+    to answer a question whose answer is a 7 MiB mask. Three sites did
+    this on full-resolution pages, and a real run died mid-catalog with
+
+        Unable to allocate 166. MiB for an array with shape
+        (3202, 2264, 3) and data type float64
+
+    Peak is now 16 MiB on that same page. Distances are compared
+    squared because sqrt is monotonic over non-negative values, so the
+    verdict is the same and the root is never taken; the largest value
+    that can arise is 3*255**2, exact in float32.
+    """
+    background = np.asarray(background, dtype=np.float32).reshape(1, 1, -1)
+    height, width = image_bgr.shape[:2]
+    mask = np.empty((height, width), dtype=np.uint8)
+
+    row_bytes = max(1, width * image_bgr.shape[2] * 4)
+    rows = max(1, BACKGROUND_SCAN_BAND_BYTES // row_bytes)
+    limit = float(tolerance) ** 2
+
+    for top in range(0, height, rows):
+        band = image_bgr[top:top + rows].astype(np.float32)
+        band -= background
+        np.multiply(band, band, out=band)
+        squared = band.sum(axis=2)
+        mask[top:top + rows] = (
+            squared <= limit if within else squared > limit
+        )
+    return mask
+
+
 _PAGE_LIKE_CACHE = {"key": None, "value": None}
 
 
@@ -994,10 +1047,9 @@ def parent_is_a_catalog_page(image_bgr):
     ])
     page = np.median(border, axis=0)
 
-    margin = (
-        np.linalg.norm(image_bgr.astype(np.float32) - page, axis=2)
-        <= GROW_BACKGROUND_TOLERANCE
-    ).astype(np.uint8)
+    margin = background_mask(
+        image_bgr, page, GROW_BACKGROUND_TOLERANCE, within=True,
+    )
     margin = cv2.morphologyEx(margin, cv2.MORPH_OPEN, np.ones((5, 5), np.uint8))
 
     count, labels, stats, _ = cv2.connectedComponentsWithStats(margin, 4)
@@ -1256,10 +1308,7 @@ def _page_regions(image_bgr):
     ])
     page = np.median(border, axis=0)
 
-    product = (
-        np.linalg.norm(small.astype(np.float32) - page, axis=2)
-        > GROW_BACKGROUND_TOLERANCE
-    ).astype(np.uint8)
+    product = background_mask(small, page, GROW_BACKGROUND_TOLERANCE)
     product = cv2.morphologyEx(
         product, cv2.MORPH_CLOSE, np.ones((7, 7), np.uint8),
     )
@@ -1421,10 +1470,7 @@ def _product_blob(image_bgr):
     ])
     background = np.median(border, axis=0)
 
-    distance = np.linalg.norm(
-        image_bgr.astype(np.float32) - background, axis=2,
-    )
-    mask = (distance > TRIM_BACKGROUND_TOLERANCE).astype(np.uint8)
+    mask = background_mask(image_bgr, background, TRIM_BACKGROUND_TOLERANCE)
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8))
 
     contours, _ = cv2.findContours(

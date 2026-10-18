@@ -50,6 +50,8 @@ os.environ.setdefault("GEMINI_API_KEY", "test-key-not-used")
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import cv2  # noqa: E402
+import tracemalloc
+
 import numpy as np  # noqa: E402
 from PIL import Image  # noqa: E402
 
@@ -2266,6 +2268,107 @@ def whole_image_duplicate_checks():
     return results
 
 
+def background_scan_memory_checks():
+    """Finding the page colour must not allocate the page several times.
+
+    A real run died mid-catalog on a 3202x2264 page with "Unable to
+    allocate 166. MiB for an array with shape (3202, 2264, 3) and data
+    type float64". Nothing wanted a float64 image: np.median returns
+    float64 whatever it is given, so subtracting the background colour
+    promoted the whole float32 image back to float64, and
+    np.linalg.norm then allocated two more arrays on top -- 442 MiB to
+    produce a 7 MiB mask.
+
+    The verdicts are the ones that matter, so they are compared against
+    the old spelling directly. The footprint is pinned too, because a
+    future edit can restore the old one without changing a single
+    answer.
+    """
+    results = []
+    mask = region_extractor.background_mask
+    rng = np.random.default_rng(11)
+
+    # The old spelling, kept here as the reference the new one must match.
+    def previous(image_bgr, background, tolerance, within):
+        distance = np.linalg.norm(
+            image_bgr.astype(np.float32) - background, axis=2)
+        return ((distance <= tolerance) if within
+                else (distance > tolerance)).astype(np.uint8)
+
+    disagreements = 0
+    for trial in range(40):
+        height, width = int(rng.integers(40, 300)), int(rng.integers(40, 300))
+        image = rng.integers(0, 256, (height, width, 3), dtype=np.uint8)
+        if trial % 2:
+            # Near-background: every pixel sits close to the bar, which
+            # is where a rounding difference would show if there were one.
+            image = np.clip(image // 8 + 230, 0, 255).astype(np.uint8)
+        border = np.concatenate([image[:4].reshape(-1, 3),
+                                 image[-4:].reshape(-1, 3)])
+        background = np.median(border, axis=0)
+        tolerance = float(rng.choice([5.0, 18.0, 40.0]))
+        for within in (True, False):
+            got = mask(image, background, tolerance, within=within)
+            want = previous(image, background, tolerance, within)
+            if not np.array_equal(got, want) or got.dtype != np.uint8:
+                disagreements += 1
+    results.append(check(
+        "80 verdicts match the old spelling exactly, dtype included",
+        disagreements == 0, f"{disagreements} disagreed",
+    ))
+
+    # The band is a working size, not a parameter of the answer.
+    page = rng.integers(0, 256, (503, 311, 3), dtype=np.uint8)
+    colour = np.median(page[:5].reshape(-1, 3), axis=0)
+    reference = mask(page, colour, 18.0)
+    band_was = region_extractor.BACKGROUND_SCAN_BAND_BYTES
+    try:
+        steady = True
+        for size in (1024, 64 * 1024, 4 * 1024 * 1024, 999 * 1024 * 1024):
+            region_extractor.BACKGROUND_SCAN_BAND_BYTES = size
+            steady &= np.array_equal(reference, mask(page, colour, 18.0))
+    finally:
+        region_extractor.BACKGROUND_SCAN_BAND_BYTES = band_was
+    results.append(check(
+        "the band size cannot change the answer", steady,
+    ))
+
+    # The page that actually died, at its real size.
+    killer = np.zeros((3202, 2264, 3), np.uint8)
+    one_float64_copy = killer.size * 8
+    tracemalloc.start()
+    try:
+        mask(killer, np.zeros(3), 18.0)
+        peak = tracemalloc.get_traced_memory()[1]
+    finally:
+        tracemalloc.stop()
+    results.append(check(
+        f"the page that died now peaks at {peak / 2 ** 20:.0f} MiB, "
+        f"not {one_float64_copy / 2 ** 20:.0f}",
+        peak < one_float64_copy // 4,
+        f"peak={peak / 2 ** 20:.1f} MiB",
+    ))
+
+    # The specific mistake: no float64 anywhere on the way.
+    results.append(check(
+        "the mask comes back uint8, not a float image",
+        mask(page, colour, 18.0).dtype == np.uint8,
+    ))
+
+    # Degenerate shapes must not raise -- these reach it from real crops.
+    for shape, label in (((1, 1, 3), "one pixel"),
+                         ((1, 400, 3), "a single row"),
+                         ((400, 1, 3), "a single column")):
+        try:
+            got = mask(np.zeros(shape, np.uint8), np.zeros(3), 18.0)
+            ok = got.shape == shape[:2]
+        except Exception as exc:  # noqa: BLE001
+            ok, got = False, exc
+        results.append(check(f"{label} is handled, not a crash", ok, str(got)))
+
+    return results
+
+
 def blank_page_checks():
     """A crop that is mostly blank paper is not a swatch.
 
@@ -2690,6 +2793,8 @@ def main():
         ("a ribbon is not a product, but a thin tile is", sliver_checks()),
         ("a crop that is mostly blank page is not a swatch",
          blank_page_checks()),
+        ("finding the page colour stays within its memory",
+         background_scan_memory_checks()),
         ("the whole-image path asks before it accepts",
          whole_image_duplicate_checks()),
         ("one image, one piece", one_piece_per_image_checks()),
