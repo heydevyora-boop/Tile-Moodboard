@@ -2090,6 +2090,132 @@ def dead_quota_checks():
     return results
 
 
+def one_piece_per_image_checks():
+    """Six identical panels are one DESIGN and six PIECES.
+
+    The split gate only ever asked about designs, and the prompt tells
+    the model plainly that "one tile repeated across the whole frame is
+    1, however many individual units you can count". Both are correct
+    about designs -- and together they meant a photographed wall of
+    identical panels was saved as one image, which is the opposite of
+    "one tile per image".
+    """
+    prompt = flat(gemini_service.TILE_PURITY_PROMPT)
+    results = []
+
+    results.append(check(
+        "the verifier is asked how many separate pieces are in the frame",
+        "separate_pieces" in prompt,
+    ))
+    results.append(check(
+        "...and told the wall-of-panels case explicitly",
+        "ONE design and SIX pieces" in prompt,
+    ))
+    results.append(check(
+        "a printed pattern is not pieces",
+        "never the artwork on them" in prompt,
+    ))
+    results.append(check(
+        "unsure means 1, so a doubt cannot carve a real product up",
+        "answer 1" in prompt,
+    ))
+    results.append(check(
+        "the field is in the schema the model must fill",
+        "separate_pieces" in str(gemini_service.TILE_PURITY_SCHEMA),
+    ))
+
+    # The parser: present, absent and unusable.
+    for payload, expected, label in (
+        ({"separate_pieces": 6}, 6, "a six-piece wall is carried through"),
+        ({}, 1, "absent reads as 1, leaving behaviour unchanged"),
+        ({"separate_pieces": "lots"}, 1, "an unusable answer reads as 1"),
+        ({"separate_pieces": 0}, 1, "zero reads as 1, never as 'no product'"),
+        ({"separate_pieces": -3}, 1, "a negative reads as 1"),
+    ):
+        observation = verify_with_model(
+            dict({"material": "TILE", "tile_fraction": 0.99,
+                  "physical_surface": True, "complete_rectangle": True,
+                  "is_scene": False, "contains_person": False,
+                  "contains_text": False, "contains_logo": False,
+                  "contains_furniture": False, "contains_fixture": False,
+                  "contains_object": False, "distinct_tile_designs": 1,
+                  "reason": "x"}, **payload),
+            None,
+        )
+        got = (observation or {}).get("separate_pieces")
+        results.append(check(f"{label} ({got})", got == expected, str(got)))
+
+    # The gate reads it, and still honours every guard already there.
+    source = inspect.getsource(pipeline.mine_tile_regions)
+    results.append(check(
+        "the split gate asks about pieces as well as designs",
+        "pieces_seen > 1" in source and "designs > 1" in source,
+    ))
+    results.append(check(
+        "a hard non-tile verdict still cannot be laundered by splitting",
+        "not beyond_repair" in source,
+    ))
+    results.append(check(
+        "a crop the page says is one product is still not carved up",
+        "not single_product" in source,
+    ))
+    return results
+
+
+def whole_image_duplicate_checks():
+    """The whole-image path must ASK before it accepts, not only tell.
+
+    It registered its signature in the page list and the catalog list
+    and never read either of them. So a product already extracted --
+    as a region, or whole on an earlier page -- was accepted a second
+    time here under a different filename. That is the "same tile, two
+    names" the catalog owner reported, and no amount of work in the
+    region path could have prevented it, because the region path was
+    not the one accepting the second copy.
+    """
+    source = inspect.getsource(pipeline.extract_images_from_pdf)
+    results = []
+
+    results.append(check(
+        "the whole-image path still registers what it accepted",
+        "catalog_signatures.append(" in source
+        and "page_signatures.append((" in source,
+    ))
+    results.append(check(
+        "it asks the page-level question before accepting",
+        "signature_already_seen(" in source,
+    ))
+    results.append(check(
+        "it asks the catalog-wide question too",
+        "CATALOG_DUPLICATE_MAX_DIFFERENCE" in source,
+    ))
+    results.append(check(
+        "a duplicate is dropped rather than published",
+        "DUPLICATE -- page" in source
+        and "output_path.unlink(missing_ok=True)" in source,
+    ))
+    results.append(check(
+        "...and counted, so the tally still adds up",
+        source.count("duplicates_skipped += 1") >= 2,
+        f"{source.count('duplicates_skipped += 1')} site(s)",
+    ))
+
+    # Asking must happen BEFORE registering, or every image matches
+    # itself and nothing is ever accepted.
+    results.append(check(
+        "it asks before it registers, not after",
+        source.index("signature_already_seen(")
+        < source.index("catalog_signatures.append("),
+        "registering first would make every image its own duplicate",
+    ))
+    results.append(check(
+        "the catalog-wide tolerance is unchanged at 0.005",
+        pipeline.CATALOG_DUPLICATE_MAX_DIFFERENCE == 0.005,
+        str(pipeline.CATALOG_DUPLICATE_MAX_DIFFERENCE),
+    ))
+    return results
+
+
 def sliver_checks():
     """A ribbon cut out of a page is not a product -- but a thin tile is.
 
@@ -2390,6 +2516,9 @@ def main():
         ("two tiles in one crop are cut apart", gutter_split_checks()),
         ("a narrow product is not dropped for being narrow", size_floor_checks()),
         ("a ribbon is not a product, but a thin tile is", sliver_checks()),
+        ("the whole-image path asks before it accepts",
+         whole_image_duplicate_checks()),
+        ("one image, one piece", one_piece_per_image_checks()),
         ("tiles are filed by company, catalog and size",
          size_folder_checks()),
         ("a lost product says which word lost it",
