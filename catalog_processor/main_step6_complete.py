@@ -2649,7 +2649,23 @@ def mine_tile_regions(
             deferred.append((region_path, reason, metadata))
             continue
 
-        designs = (metadata.get('purity') or {}).get('distinct_tile_designs', 1)
+        # TWO QUESTIONS, NOT ONE.
+        #
+        # distinct_tile_designs asks how many DESIGNS are visible, and
+        # the prompt tells the model outright that "one tile repeated
+        # across the whole frame is 1, however many individual units
+        # you can count". That is the right answer to that question --
+        # and it meant a wall of six identical panels was never split,
+        # because the split gate only ever asked about designs.
+        #
+        # separate_pieces asks the question the catalog actually needs:
+        # how many pieces could you pick up one at a time. Six identical
+        # panels are 1 design and 6 pieces.
+        #
+        # Absent reads as 1, so a verifier that does not answer it
+        # leaves behaviour exactly as it was.
+        purity_now = metadata.get('purity') or {}
+        designs = purity_now.get('distinct_tile_designs', 1)
         try:
             designs = int(designs)
         except (TypeError, ValueError):
@@ -2661,6 +2677,11 @@ def mine_tile_regions(
         # geometry, not opinion. Checked first, because this is the case
         # that was reaching Drive as one image of two tiles with a white
         # stripe down the middle.
+        try:
+            pieces_seen = int(purity_now.get('separate_pieces', 1) or 1)
+        except (TypeError, ValueError):
+            pieces_seen = 1
+
         gutter_pieces = split_at_background_gutters(crop)
 
         # CUTTING SOMETHING UP MUST NOT LAUNDER A VERDICT OF "NOT A TILE".
@@ -2710,7 +2731,8 @@ def mine_tile_regions(
             diag(f"      split              : not splitting -- "
                   f"{single_note}")
 
-        if gutter_pieces or (status == VALIDATION_IMPURE and designs > 1
+        several_products = designs > 1 or pieces_seen > 1
+        if gutter_pieces or (status == VALIDATION_IMPURE and several_products
                              and not beyond_repair and not single_product):
             # Several products butted together in one frame. Saving it
             # whole would give one Tile row a picture of its neighbours;
@@ -4136,6 +4158,54 @@ def extract_images_from_pdf(
                         _whole = cv2.imread(str(output_path), cv2.IMREAD_COLOR)
                         if _whole is not None:
                             _whole_signature = crop_signature(_whole)
+
+                            # ASK BEFORE TELLING.
+                            #
+                            # This path registered its signature in both
+                            # lists and never once read either of them,
+                            # so the checks it was feeding could not see
+                            # it coming. A product already extracted --
+                            # as a region, or whole on an earlier page --
+                            # was accepted a second time here under a
+                            # different filename, which is precisely the
+                            # "same tile, two names" the catalog owner
+                            # reported.
+                            #
+                            # The region path asks both questions before
+                            # accepting; this one now asks the same two,
+                            # in the same order, with the same
+                            # tolerances.
+                            from app.tile_region_extractor import (
+                                signatures_match,
+                            )
+
+                            _twin = None
+                            if signature_already_seen(
+                                page_signatures, _whole_signature,
+                                source_key=f"embedded-image:{output_filename}",
+                                page_box=(tuple(float(v) for v in image_rect)
+                                          if image_rect is not None else None),
+                            ):
+                                _twin = "another route on this page"
+                            else:
+                                _twin = next(
+                                    (name for name, other in catalog_signatures
+                                     if signatures_match(
+                                         _whole_signature, other,
+                                         max_difference_fraction=(
+                                             CATALOG_DUPLICATE_MAX_DIFFERENCE),
+                                     )),
+                                    None,
+                                )
+
+                            if _twin is not None:
+                                print(f"  DUPLICATE -- page {page_number} "
+                                      f"image {image_counter}: already "
+                                      f"extracted as {_twin}")
+                                output_path.unlink(missing_ok=True)
+                                duplicates_skipped += 1
+                                continue
+
                             page_signatures.append((
                                 f"embedded-image:{output_filename}",
                                 _whole_signature,

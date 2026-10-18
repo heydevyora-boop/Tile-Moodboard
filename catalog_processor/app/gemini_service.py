@@ -2038,6 +2038,20 @@ Report:
   from the catalog; a wrong TRUE only lets one odd crop through, and
   every other rule here still applies to it.
 
+- separate_pieces: how many SEPARATE PHYSICAL PIECES are in the frame.
+  This is a different question from the one below, and the two
+  routinely disagree. A wall of six identical panels with grout lines
+  between them is ONE design and SIX pieces: count 6.
+  Count the pieces you could pick up one at a time. Two tiles butted
+  together is 2. A run of four panels is 4. A single tile is 1.
+  A pattern PRINTED on one face is not pieces: a tile whose design
+  draws a brick layout, a mosaic sheet sold as one sheet, a panel with
+  moulded sections inside its own outline -- all 1. Count real,
+  separable products, never the artwork on them.
+  If you cannot tell whether the lines are grout or print, answer 1.
+  A wrong 1 keeps the frame as it is; a wrong higher number cuts a real
+  product into strips.
+
 - distinct_tile_designs: how many DIFFERENT products are visible.
   One tile repeated across the whole frame is 1, however many individual
   units you can count. Two panels of different colour, pattern or
@@ -2078,6 +2092,7 @@ TILE_PURITY_SCHEMA = {
         "is_scene": {"type": "BOOLEAN"},
         "physical_surface": {"type": "BOOLEAN"},
         "complete_rectangle": {"type": "BOOLEAN"},
+        "separate_pieces": {"type": "INTEGER"},
         "distinct_tile_designs": {"type": "INTEGER"},
         "reason": {"type": "STRING"},
     },
@@ -2614,11 +2629,17 @@ def verify_tile_only(image_path):
         return None
 
     try:
+        separate_pieces = int(payload.get("separate_pieces", 1))
+    except (TypeError, ValueError):
+        separate_pieces = 1
+
+    try:
         distinct_designs = int(payload.get("distinct_tile_designs", 1))
     except (TypeError, ValueError):
         distinct_designs = 1
 
     observation = {
+        "separate_pieces": max(1, separate_pieces),
         "distinct_tile_designs": max(1, distinct_designs),
         "tile_fraction": max(0.0, min(1.0, tile_fraction)),
         "material": str(payload.get("material") or "OTHER").strip().upper(),
