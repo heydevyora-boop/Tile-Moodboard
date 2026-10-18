@@ -2346,6 +2346,40 @@ def blank_page_checks():
         repr(info.get("reason")),
     ))
 
+    # The SECOND report of this failure was a different shape: not a
+    # straight bar but a soft-edged diagonal running corner to corner,
+    # shaded from black to grey across its width -- the "pipe" in
+    # Exotica Decotech 600X1200 Catalogue page 3, image 8, region 1.
+    #
+    # It matters that the band is a GRADIENT. Gradient pixels are not
+    # flat, so none of them count as blank page; what refuses this crop
+    # is the two pure-white triangles the diagonal leaves behind. That
+    # is the same measurement as the bar above, but it is not obvious
+    # from the bar alone that it survives a shape with no flat band in
+    # it at all, so the reported shape is pinned here in its own right.
+    diagonal = np.full((539, 381, 3), 255, np.uint8)
+    yy, xx = np.mgrid[0:539, 0:381]
+    across = (yy - xx * 1.4) / 90.0          # distance across the band
+    inside = np.abs(across) < 1.0
+    shade = (25 + 120 * np.abs(across)).astype(np.uint8)
+    for channel in range(3):
+        diagonal[..., channel] = np.where(inside, shade, 255)
+    results.append(check(
+        f"a shaded diagonal across blank paper is refused "
+        f"({blank(diagonal):.0%} blank)",
+        blank(diagonal) > bar,
+    ))
+
+    page = np.full((679, 521, 3), 255, np.uint8)
+    page[70:609, 70:451] = diagonal[:539, :381]
+    crop, info = region_extractor.extract_tile_region(
+        page, [(70, 70), (451, 70), (451, 609), (70, 609)])
+    results.append(check(
+        "the extractor refuses the reported diagonal region",
+        crop is None and info.get("stage") == "mostly_page",
+        f"stage={info.get('stage')!r} reason={info.get('reason')!r}",
+    ))
+
     # The bar has room on both sides, measured on this catalog's pages.
     results.append(check(
         "the bar leaves real products a wide margin",
