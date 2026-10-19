@@ -1324,6 +1324,15 @@ GROW_MAX_PARENT_COVERAGE = 0.50
 GROW_BACKGROUND_TOLERANCE = 18.0
 GROW_MIN_GAIN = 1.08
 
+# HOW FAR A PRODUCT MAY STICK OUT OF ITS OWN QUAD BEFORE THE QUAD MOVES.
+#
+# A fraction of the product's own side, so it scales with the product
+# rather than with the page's resolution. Measured on a Mozart sheet of
+# two framed panels: a correctly placed quad sits within 8px of its
+# 512x1022 panel (1.6%), and the misplaced one that reached Drive was
+# out by 70px (13.7%). 2% is above the first and far below the second.
+GROW_EDGE_SLACK = 0.02
+
 
 def grow_to_whole_product(image_bgr, quad):
     """Extends a quad that cuts a product to the whole of that product.
@@ -1377,14 +1386,32 @@ def grow_to_whole_product(image_bgr, quad):
     if rw < 8 or rh < 8:
         return quad, "the region is too small to be a product"
 
+    # A BOX OF THE RIGHT SIZE IN THE WRONG PLACE IS NOT THE WHOLE
+    # PRODUCT.
+    #
+    # Only the AREAS were compared here, so a quad sitting 70px to the
+    # left of its panel -- holding a strip of the neighbour and cutting
+    # its own border off -- measured as a 1.02x gain and was called
+    # finished. That is page_6_render_region_4: a vine panel with the
+    # moulding sliced off one side and somebody else's moulding on the
+    # other. Same area, wrong 512x1022.
+    #
+    # So the question is not "is the product bigger than the quad" but
+    # "does the product reach past the quad", which is the one the name
+    # of this function always implied.
+    slack_x = max(2.0, rw * GROW_EDGE_SLACK)
+    slack_y = max(2.0, rh * GROW_EDGE_SLACK)
+    reaches_past = (rx < bx1 - slack_x or ry < by1 - slack_y
+                    or rx + rw > bx2 + slack_x or ry + rh > by2 + slack_y)
+
     gain = (rw * rh) / float(max(1, box_width * box_height))
-    if gain < GROW_MIN_GAIN:
+    if gain < GROW_MIN_GAIN and not reaches_past:
         return quad, "the quad already holds the whole product"
 
     return (
         [(rx, ry), (rx + rw, ry), (rx + rw, ry + rh), (rx, ry + rh)],
-        f"the product continues past this quad -- grown {gain:.1f}x to the "
-        f"whole of it ({rw}x{rh})",
+        f"the product continues past this quad -- snapped to the whole "
+        f"of it ({rw}x{rh}, {gain:.2f}x the quad's area)",
     )
 
 
