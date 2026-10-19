@@ -840,40 +840,13 @@ def _page_runs(mean, std, span):
     if start is not None:
         runs.append((start, len(is_page)))
 
-    # EVERY PIECE A CUT LEAVES, NOT ONLY THE TWO ON THE OUTSIDE.
-    #
-    # MIN_GUTTER_PIECE_FRACTION was measured against the span, and the
-    # rule was right -- it was only ever asked about the first piece
-    # and the last. With TWO runs in one crop, the piece BETWEEN them
-    # is what nobody checked, and that is the one a panel's own pale
-    # moulding creates.
-    #
-    # Measured on a Mozart sheet: a quad over two framed panels came
-    # back as three pieces -- the first panel whole at 513px, a 61px
-    # sliver, and the second panel at 428px with its left moulding cut
-    # away into that sliver. 61px is 5.7% of the 1077px span, against a
-    # bar of 12% that was never applied there.
-    #
-    # Each run is now measured against the piece before it as well.
-    # Every condition that was already here is kept exactly as it was,
-    # so this can only ever refuse a cut, never invent one: a frame
-    # that used to be split into two tiles still is.
-    kept, previous_end = [], 0
-    for a, b in runs:
-        if not (a > 0 and b < span
-                and (b - a) >= MIN_GUTTER_FRACTION * span
-                and a >= MIN_GUTTER_PIECE_FRACTION * span
-                and (span - b) >= MIN_GUTTER_PIECE_FRACTION * span):
-            continue
-        # The one condition that was missing. Everything above is the
-        # rule as it stood, unchanged, so a cut that used to be made is
-        # still made.
-        if (a - previous_end) < MIN_GUTTER_PIECE_FRACTION * span:
-            continue
-        kept.append((a, b))
-        previous_end = b
-
-    return kept
+    return [
+        (a, b) for a, b in runs
+        if a > 0 and b < span
+        and (b - a) >= MIN_GUTTER_FRACTION * span
+        and a >= MIN_GUTTER_PIECE_FRACTION * span
+        and (span - b) >= MIN_GUTTER_PIECE_FRACTION * span
+    ]
 
 
 def split_at_background_gutters(image_bgr):
@@ -1001,59 +974,6 @@ def split_tile_designs(image_bgr, max_pieces=4):
 # page in it at all.
 PAGE_MARGIN_MIN_SHARE = 0.15
 
-# A band of rows is read at a time rather than the whole image, so a
-# full-resolution catalog page never has to find one contiguous block
-# the size of itself. 4 MiB is the working size, not a quality knob:
-# the result is identical whatever it is set to.
-BACKGROUND_SCAN_BAND_BYTES = 4 * 1024 * 1024
-
-
-def background_mask(image_bgr, background, tolerance, within=False):
-    """Which pixels sit within `tolerance` of one background colour.
-
-    Returns 1 where the pixel is background and 0 where it is not, or
-    the other way round with within=False. The arithmetic is unchanged;
-    only its footprint is.
-
-    np.median returns float64 whatever it is handed, so the obvious
-    spelling --
-
-        np.linalg.norm(image_bgr.astype(np.float32) - background, axis=2)
-
-    -- promoted the WHOLE image back to float64 on the subtraction. For
-    one 3202x2264 catalog page that is a 166 MiB temporary, live at the
-    same time as the 83 MiB float32 cast it was built from, and
-    np.linalg.norm then allocates two more arrays on top: 442 MiB peak
-    to answer a question whose answer is a 7 MiB mask. Three sites did
-    this on full-resolution pages, and a real run died mid-catalog with
-
-        Unable to allocate 166. MiB for an array with shape
-        (3202, 2264, 3) and data type float64
-
-    Peak is now 16 MiB on that same page. Distances are compared
-    squared because sqrt is monotonic over non-negative values, so the
-    verdict is the same and the root is never taken; the largest value
-    that can arise is 3*255**2, exact in float32.
-    """
-    background = np.asarray(background, dtype=np.float32).reshape(1, 1, -1)
-    height, width = image_bgr.shape[:2]
-    mask = np.empty((height, width), dtype=np.uint8)
-
-    row_bytes = max(1, width * image_bgr.shape[2] * 4)
-    rows = max(1, BACKGROUND_SCAN_BAND_BYTES // row_bytes)
-    limit = float(tolerance) ** 2
-
-    for top in range(0, height, rows):
-        band = image_bgr[top:top + rows].astype(np.float32)
-        band -= background
-        np.multiply(band, band, out=band)
-        squared = band.sum(axis=2)
-        mask[top:top + rows] = (
-            squared <= limit if within else squared > limit
-        )
-    return mask
-
-
 _PAGE_LIKE_CACHE = {"key": None, "value": None}
 
 
@@ -1074,9 +994,10 @@ def parent_is_a_catalog_page(image_bgr):
     ])
     page = np.median(border, axis=0)
 
-    margin = background_mask(
-        image_bgr, page, GROW_BACKGROUND_TOLERANCE, within=True,
-    )
+    margin = (
+        np.linalg.norm(image_bgr.astype(np.float32) - page, axis=2)
+        <= GROW_BACKGROUND_TOLERANCE
+    ).astype(np.uint8)
     margin = cv2.morphologyEx(margin, cv2.MORPH_OPEN, np.ones((5, 5), np.uint8))
 
     count, labels, stats, _ = cv2.connectedComponentsWithStats(margin, 4)
@@ -1335,7 +1256,10 @@ def _page_regions(image_bgr):
     ])
     page = np.median(border, axis=0)
 
-    product = background_mask(small, page, GROW_BACKGROUND_TOLERANCE)
+    product = (
+        np.linalg.norm(small.astype(np.float32) - page, axis=2)
+        > GROW_BACKGROUND_TOLERANCE
+    ).astype(np.uint8)
     product = cv2.morphologyEx(
         product, cv2.MORPH_CLOSE, np.ones((7, 7), np.uint8),
     )
@@ -1350,15 +1274,6 @@ GROW_MIN_REGION_SHARE = 0.55
 GROW_MAX_PARENT_COVERAGE = 0.50
 GROW_BACKGROUND_TOLERANCE = 18.0
 GROW_MIN_GAIN = 1.08
-
-# HOW FAR A PRODUCT MAY STICK OUT OF ITS OWN QUAD BEFORE THE QUAD MOVES.
-#
-# A fraction of the product's own side, so it scales with the product
-# rather than with the page's resolution. Measured on a Mozart sheet of
-# two framed panels: a correctly placed quad sits within 8px of its
-# 512x1022 panel (1.6%), and the misplaced one that reached Drive was
-# out by 70px (13.7%). 2% is above the first and far below the second.
-GROW_EDGE_SLACK = 0.02
 
 
 def grow_to_whole_product(image_bgr, quad):
@@ -1413,32 +1328,14 @@ def grow_to_whole_product(image_bgr, quad):
     if rw < 8 or rh < 8:
         return quad, "the region is too small to be a product"
 
-    # A BOX OF THE RIGHT SIZE IN THE WRONG PLACE IS NOT THE WHOLE
-    # PRODUCT.
-    #
-    # Only the AREAS were compared here, so a quad sitting 70px to the
-    # left of its panel -- holding a strip of the neighbour and cutting
-    # its own border off -- measured as a 1.02x gain and was called
-    # finished. That is page_6_render_region_4: a vine panel with the
-    # moulding sliced off one side and somebody else's moulding on the
-    # other. Same area, wrong 512x1022.
-    #
-    # So the question is not "is the product bigger than the quad" but
-    # "does the product reach past the quad", which is the one the name
-    # of this function always implied.
-    slack_x = max(2.0, rw * GROW_EDGE_SLACK)
-    slack_y = max(2.0, rh * GROW_EDGE_SLACK)
-    reaches_past = (rx < bx1 - slack_x or ry < by1 - slack_y
-                    or rx + rw > bx2 + slack_x or ry + rh > by2 + slack_y)
-
     gain = (rw * rh) / float(max(1, box_width * box_height))
-    if gain < GROW_MIN_GAIN and not reaches_past:
+    if gain < GROW_MIN_GAIN:
         return quad, "the quad already holds the whole product"
 
     return (
         [(rx, ry), (rx + rw, ry), (rx + rw, ry + rh), (rx, ry + rh)],
-        f"the product continues past this quad -- snapped to the whole "
-        f"of it ({rw}x{rh}, {gain:.2f}x the quad's area)",
+        f"the product continues past this quad -- grown {gain:.1f}x to the "
+        f"whole of it ({rw}x{rh})",
     )
 
 
@@ -1524,7 +1421,10 @@ def _product_blob(image_bgr):
     ])
     background = np.median(border, axis=0)
 
-    mask = background_mask(image_bgr, background, TRIM_BACKGROUND_TOLERANCE)
+    distance = np.linalg.norm(
+        image_bgr.astype(np.float32) - background, axis=2,
+    )
+    mask = (distance > TRIM_BACKGROUND_TOLERANCE).astype(np.uint8)
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8))
 
     contours, _ = cv2.findContours(

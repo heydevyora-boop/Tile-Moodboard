@@ -50,8 +50,6 @@ os.environ.setdefault("GEMINI_API_KEY", "test-key-not-used")
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import cv2  # noqa: E402
-import tracemalloc
-
 import numpy as np  # noqa: E402
 from PIL import Image  # noqa: E402
 
@@ -1173,79 +1171,6 @@ def grow_checks():
         < inspect.getsource(extract_tile_region).index("normalize_quad("),
     ))
 
-    # A BOX OF THE RIGHT SIZE IN THE WRONG PLACE.
-    #
-    # Only the AREAS were compared, so a quad sitting beside its panel
-    # -- holding a strip of the neighbour and cutting its own moulding
-    # off -- measured as a 1.02x gain and was called finished. That is
-    # page_6_render_region_4, next to page_13_image_20_region_2 which
-    # came out whole: same catalog, same kind of panel, one placed and
-    # one not.
-    #
-    # Measured on this page: 70px out of a 512x1022 panel is 13.7% of
-    # its width, and 1.02x of its area. Area could not see it.
-    for index, (x, y, width, height) in enumerate(products):
-        true_bounds = region_extractor.quad_bounds(
-            grow_to_whole_product(page, as_quad(x, y, width, height))[0])
-        shift = int(round(width * 0.14))
-
-        for label, moved in (
-                ("left", as_quad(x - shift, y, width, height)),
-                ("right", as_quad(x + shift, y, width, height))):
-            snapped, note = grow_to_whole_product(page, moved)
-            bounds = region_extractor.quad_bounds(snapped)
-            off = max(abs(a - b) for a, b in zip(bounds, true_bounds))
-            results.append(check(
-                f"product {index}: a quad {shift}px to the {label} snaps "
-                f"back onto it",
-                off <= 6, f"off by {off}px -- {note}",
-            ))
-
-        # ...and a quad that IS on its product is left alone. The inset
-        # is 2px because that is the scale of real disagreement: the
-        # two ways this file and _page_regions find a product differ by
-        # up to 2px on the same panel. The slack has to sit above that
-        # noise and far below a misplacement, and it does -- 2px of
-        # noise, a 6.9px to 20px slack, a 48px to 72px misplacement.
-        placed = as_quad(x + 2, y + 2, width - 4, height - 4)
-        kept, note = grow_to_whole_product(page, placed)
-        results.append(check(
-            f"product {index}: a correctly placed quad is left alone",
-            [tuple(map(int, pt)) for pt in kept]
-            == [tuple(map(int, pt)) for pt in placed],
-            note,
-        ))
-
-        # Whether it moves or not, it must never land on something
-        # else. This is the guarantee; "left alone" is how it is
-        # usually kept.
-        landed = region_extractor.quad_bounds(kept)
-        results.append(check(
-            f"product {index}: and never lands on a neighbour",
-            max(abs(a - b) for a, b in zip(landed, true_bounds)) <= 8,
-            f"landed={landed} product={true_bounds}",
-        ))
-
-    # End to end: the crop that comes out has all four of its edges.
-    x, y, width, height = products[0]
-    shift = int(round(width * 0.14))
-    crop, info = region_extractor.extract_tile_region(
-        page, as_quad(x - shift, y, width, height), [],
-        max_source_coverage=0.92,
-    )
-    results.append(check(
-        "the misplaced quad still produces a crop, not a refusal",
-        crop is not None, f"stage={info.get('stage')} {info.get('reason', '')}",
-    ))
-    if crop is not None:
-        got = info.get("bbox")
-        results.append(check(
-            "...and that crop is the whole product, not the neighbour's edge",
-            max(abs(a - b) for a, b in zip(got, (x, y, x + width, y + height)))
-            <= 6,
-            f"bbox={got} product={(x, y, x + width, y + height)}",
-        ))
-
     # The superseded header for the first, refusing version of the trim
     # was left in the file when that version was replaced, so the module
     # carried two headers and the first described behaviour that is not
@@ -1815,71 +1740,6 @@ def gutter_split_checks():
         len(split_at_background_gutters(three)) == 3,
     ))
 
-    # EVERY PIECE A CUT LEAVES, NOT ONLY THE TWO ON THE OUTSIDE.
-    #
-    # MIN_GUTTER_PIECE_FRACTION was only ever asked about the first
-    # piece and the last. With TWO runs in one crop, the piece BETWEEN
-    # them went unchecked -- and that is the one a panel's own pale
-    # moulding creates.
-    #
-    # On a real Mozart sheet, a quad over two framed panels came back
-    # as three pieces: the first panel whole at 513px, a 61px sliver,
-    # and the second panel at 428px with its left moulding cut away
-    # into that sliver. 61px is 5.7% of the 1077px span, against a bar
-    # of 12%.
-    if REAL_PDF.exists():
-        real_page, _products = real_page_and_products()
-        two_panels = real_page[573:1595, 389:1466]
-        pieces = split_at_background_gutters(two_panels)
-        results.append(check(
-            "two real framed panels cut into exactly two pieces",
-            len(pieces) == 2,
-            f"{len(pieces)}: {pieces}",
-        ))
-        widths = sorted(b[2] - b[0] for b in pieces)
-        results.append(check(
-            "...and neither piece is a sliver of the other's moulding",
-            bool(widths) and widths[0] > 0.12 * two_panels.shape[1],
-            f"narrowest piece {widths[0] if widths else 0}px of "
-            f"{two_panels.shape[1]}px",
-        ))
-
-        # A single panel, with and without page around it, is never cut.
-        count, _lab, stats, scale = region_extractor._page_regions(real_page)
-        intact = True
-        for index in range(1, count):
-            x, y, w, h = (int(round(v / scale)) for v in stats[index, :4])
-            for pad in (0, 30, 60):
-                piece = real_page[max(0, y - pad):y + h + pad,
-                                  max(0, x - pad):x + w + pad]
-                intact &= not split_at_background_gutters(piece)
-        results.append(check(
-            "no single panel is ever cut, with or without page margin",
-            intact,
-        ))
-
-    # A sliver between two gutters is refused outright, at any scale.
-    span = 1000
-    mean = np.full(span, 100.0, np.float32)
-    std = np.full(span, 20.0, np.float32)
-    for a, b in ((300, 330), (380, 410)):   # leaves a 50px piece: 5%
-        mean[a:b], std[a:b] = 200.0, 0.5
-    runs = region_extractor._page_runs(mean, std, span)
-    results.append(check(
-        "a 5% piece between two gutters does not become its own piece",
-        len(runs) == 1, f"runs={runs}",
-    ))
-
-    # ...and the message the operator reads says what happened.
-    source = inspect.getsource(pipeline.mine_tile_regions)
-    results.append(check(
-        "a gutter split is not reported as the design count",
-        "bare page runs through this frame" in source
-        and "{designs} products in one frame" not in source,
-        "'1 products in one frame -- cut into 2 piece(s)' reads as one "
-        "tile halved, and was reported as that",
-    ))
-
     results.append(check(
         "the splitter is wired into mine_tile_regions",
         "split_at_background_gutters" in
@@ -2285,134 +2145,19 @@ def one_piece_per_image_checks():
         got = (observation or {}).get("separate_pieces")
         results.append(check(f"{label} ({got})", got == expected, str(got)))
 
-    # TWO GATES STOOD IN FRONT OF THE COUNT, AND BOTH HAD TO GO.
-    #
-    # The field was added, parsed and carried -- and never consulted
-    # for the frame it was added for. A wall of eight identical panels
-    # is 100% tile with nothing else in it, so purity calls it CLEAN
-    # (asserted below) and the status is APPROVED, never IMPURE. And
-    # butted panels show no page between them, so crop_is_one_product
-    # measures them as one region (100% on a four-panel wall) and said
-    # so.
-    results.append(check(
-        "a wall of identical panels really does read as CLEAN",
-        image_validator_module.assess_tile_purity({
-            "material": "TILE", "tile_fraction": 1.0,
-            "contains_person": False, "contains_text": False,
-            "contains_logo": False, "contains_furniture": False,
-            "contains_fixture": False, "contains_object": False,
-            "is_scene": False, "physical_surface": True,
-            "complete_rectangle": True, "distinct_tile_designs": 1,
-            "separate_pieces": 8, "reason": "eight identical panels",
-        })["state"] == PURITY_CLEAN,
-        "if this ever stops being CLEAN the reasoning below is stale",
-    ))
-
-    # A BORDER IS NOT A JOIN, AND THE SEAM SPLITTER CANNOT TELL.
-    #
-    # The piece count was briefly allowed to drive split_tile_designs
-    # on its own. It cut a Mozart panel -- one tile, a vine design
-    # inside a moulded border -- into region_4_2: the inner design with
-    # its border sliced off. Measured on that exact panel, its
-    # strongest seam scores 23.95 against a SPLIT_MIN_STEP of 22.0.
-    #
-    # The fixture below is the same shape, and the first check proves
-    # it is a real reproduction rather than a hopeful one: the splitter
-    # WOULD cut it. What must stop it is crop_is_one_product, which the
-    # piece count had been allowed past.
-    def bordered_panel(height=520, width=228):
-        rng = np.random.default_rng(5)
-        panel = np.full((height, width, 3), (232, 238, 240), np.uint8)
-        for _ in range(120):
-            y = int(rng.integers(20, height - 20))
-            x = int(rng.integers(20, width - 20))
-            cv2.circle(panel, (x, y), int(rng.integers(3, 9)),
-                       (int(rng.integers(90, 170)),
-                        int(rng.integers(140, 200)),
-                        int(rng.integers(90, 150))), -1)
-        cv2.rectangle(panel, (10, 10), (width - 11, height - 11),
-                      (205, 212, 216), 7)
-        return panel
-
-    panel = bordered_panel()
-    cuts = region_extractor.split_tile_designs(panel, max_pieces=2)
-    results.append(check(
-        "the seam splitter really would cut a bordered panel in two",
-        len(cuts) == 2,
-        f"{len(cuts)} piece(s) -- if this is 0 the fixture stopped "
-        f"reproducing the failure and the checks below prove nothing",
-    ))
-
-    # The gate itself, simulated exactly as the source computes it.
-    def splits(status, designs, pieces, single, beyond, gutters=False):
-        for_designs = (status == pipeline.VALIDATION_IMPURE
-                       and designs > 1 and not single)
-        return bool(gutters or (for_designs and not beyond))
-
-    APPROVED = pipeline.VALIDATION_APPROVED
-    IMPURE = pipeline.VALIDATION_IMPURE
-    for label, args, want in (
-        ("a bordered panel the model counted as 4 pieces is kept whole",
-         (APPROVED, 1, 4, True, False), False),
-        ("a single tile is kept whole", (APPROVED, 1, 1, True, False), False),
-        ("a patterned tile the model counted as 1 is kept whole",
-         (APPROVED, 1, 1, True, False), False),
-        ("two designs butted together still split, as before",
-         (IMPURE, 2, 1, False, False), True),
-        ("...and are still protected when the page says one product",
-         (IMPURE, 2, 1, True, False), False),
-        ("bare page running through still splits, whatever the counts",
-         (APPROVED, 1, 1, True, False, True), True),
-        ("a non-tile verdict is never laundered by splitting",
-         (APPROVED, 1, 4, False, True), False),
-    ):
-        results.append(check(f"{label}", splits(*args) is want))
-
-    # The open case, stated rather than claimed fixed: a wall of
-    # identical panels is kept whole, because nothing here knows where
-    # its joins are. Pinned so the next attempt starts from the truth.
-    results.append(check(
-        "a wall of 8 identical panels is KEPT WHOLE -- still open",
-        splits(APPROVED, 1, 8, True, False) is False,
-        "cutting it needs evidence of where the joins are",
-    ))
-
-    # The source must actually be shaped that way.
+    # The gate reads it, and still honours every guard already there.
     source = inspect.getsource(pipeline.mine_tile_regions)
     results.append(check(
-        "the piece count does not drive the splitter",
-        "split_for_pieces" not in source,
+        "the split gate asks about pieces as well as designs",
+        "pieces_seen > 1" in source and "designs > 1" in source,
     ))
-    results.append(check(
-        "...but is still parsed and reported, so a run can be audited",
-        "pieces_seen = int(purity_now.get('separate_pieces', 1) or 1)"
-        in source and "pieces reported" in source,
-    ))
-    results.append(check(
-        "the design count is gated on IMPURE and respects the page",
-        "status == VALIDATION_IMPURE and designs > 1" in source
-        and "not single_product" in source,
-    ))
-
-    # A split cuts ACROSS a region, so a piece can be mostly paper even
-    # when the region was not. The region gate ran before the cut.
-    results.append(check(
-        "a split piece is held to the blank-page bar too",
-        "piece_blank = blank_page_fraction(piece)" in source
-        and "MAX_BLANK_PAGE_FRACTION" in source,
-    ))
-    mostly_paper = np.full((300, 300, 3), 252, np.uint8)
-    mostly_paper[:, 140:170] = 30
-    results.append(check(
-        f"...and such a piece ({region_extractor.blank_page_fraction(mostly_paper):.0%} "
-        f"paper) is over it",
-        region_extractor.blank_page_fraction(mostly_paper)
-        > region_extractor.MAX_BLANK_PAGE_FRACTION,
-    ))
-
     results.append(check(
         "a hard non-tile verdict still cannot be laundered by splitting",
         "not beyond_repair" in source,
+    ))
+    results.append(check(
+        "a crop the page says is one product is still not carved up",
+        "not single_product" in source,
     ))
     return results
 
@@ -2468,107 +2213,6 @@ def whole_image_duplicate_checks():
         pipeline.CATALOG_DUPLICATE_MAX_DIFFERENCE == 0.005,
         str(pipeline.CATALOG_DUPLICATE_MAX_DIFFERENCE),
     ))
-    return results
-
-
-def background_scan_memory_checks():
-    """Finding the page colour must not allocate the page several times.
-
-    A real run died mid-catalog on a 3202x2264 page with "Unable to
-    allocate 166. MiB for an array with shape (3202, 2264, 3) and data
-    type float64". Nothing wanted a float64 image: np.median returns
-    float64 whatever it is given, so subtracting the background colour
-    promoted the whole float32 image back to float64, and
-    np.linalg.norm then allocated two more arrays on top -- 442 MiB to
-    produce a 7 MiB mask.
-
-    The verdicts are the ones that matter, so they are compared against
-    the old spelling directly. The footprint is pinned too, because a
-    future edit can restore the old one without changing a single
-    answer.
-    """
-    results = []
-    mask = region_extractor.background_mask
-    rng = np.random.default_rng(11)
-
-    # The old spelling, kept here as the reference the new one must match.
-    def previous(image_bgr, background, tolerance, within):
-        distance = np.linalg.norm(
-            image_bgr.astype(np.float32) - background, axis=2)
-        return ((distance <= tolerance) if within
-                else (distance > tolerance)).astype(np.uint8)
-
-    disagreements = 0
-    for trial in range(40):
-        height, width = int(rng.integers(40, 300)), int(rng.integers(40, 300))
-        image = rng.integers(0, 256, (height, width, 3), dtype=np.uint8)
-        if trial % 2:
-            # Near-background: every pixel sits close to the bar, which
-            # is where a rounding difference would show if there were one.
-            image = np.clip(image // 8 + 230, 0, 255).astype(np.uint8)
-        border = np.concatenate([image[:4].reshape(-1, 3),
-                                 image[-4:].reshape(-1, 3)])
-        background = np.median(border, axis=0)
-        tolerance = float(rng.choice([5.0, 18.0, 40.0]))
-        for within in (True, False):
-            got = mask(image, background, tolerance, within=within)
-            want = previous(image, background, tolerance, within)
-            if not np.array_equal(got, want) or got.dtype != np.uint8:
-                disagreements += 1
-    results.append(check(
-        "80 verdicts match the old spelling exactly, dtype included",
-        disagreements == 0, f"{disagreements} disagreed",
-    ))
-
-    # The band is a working size, not a parameter of the answer.
-    page = rng.integers(0, 256, (503, 311, 3), dtype=np.uint8)
-    colour = np.median(page[:5].reshape(-1, 3), axis=0)
-    reference = mask(page, colour, 18.0)
-    band_was = region_extractor.BACKGROUND_SCAN_BAND_BYTES
-    try:
-        steady = True
-        for size in (1024, 64 * 1024, 4 * 1024 * 1024, 999 * 1024 * 1024):
-            region_extractor.BACKGROUND_SCAN_BAND_BYTES = size
-            steady &= np.array_equal(reference, mask(page, colour, 18.0))
-    finally:
-        region_extractor.BACKGROUND_SCAN_BAND_BYTES = band_was
-    results.append(check(
-        "the band size cannot change the answer", steady,
-    ))
-
-    # The page that actually died, at its real size.
-    killer = np.zeros((3202, 2264, 3), np.uint8)
-    one_float64_copy = killer.size * 8
-    tracemalloc.start()
-    try:
-        mask(killer, np.zeros(3), 18.0)
-        peak = tracemalloc.get_traced_memory()[1]
-    finally:
-        tracemalloc.stop()
-    results.append(check(
-        f"the page that died now peaks at {peak / 2 ** 20:.0f} MiB, "
-        f"not {one_float64_copy / 2 ** 20:.0f}",
-        peak < one_float64_copy // 4,
-        f"peak={peak / 2 ** 20:.1f} MiB",
-    ))
-
-    # The specific mistake: no float64 anywhere on the way.
-    results.append(check(
-        "the mask comes back uint8, not a float image",
-        mask(page, colour, 18.0).dtype == np.uint8,
-    ))
-
-    # Degenerate shapes must not raise -- these reach it from real crops.
-    for shape, label in (((1, 1, 3), "one pixel"),
-                         ((1, 400, 3), "a single row"),
-                         ((400, 1, 3), "a single column")):
-        try:
-            got = mask(np.zeros(shape, np.uint8), np.zeros(3), 18.0)
-            ok = got.shape == shape[:2]
-        except Exception as exc:  # noqa: BLE001
-            ok, got = False, exc
-        results.append(check(f"{label} is handled, not a crash", ok, str(got)))
-
     return results
 
 
@@ -2650,40 +2294,6 @@ def blank_page_checks():
         "...and the reason names blank page, not something else",
         "blank page" in str(info.get("reason", "")),
         repr(info.get("reason")),
-    ))
-
-    # The SECOND report of this failure was a different shape: not a
-    # straight bar but a soft-edged diagonal running corner to corner,
-    # shaded from black to grey across its width -- the "pipe" in
-    # Exotica Decotech 600X1200 Catalogue page 3, image 8, region 1.
-    #
-    # It matters that the band is a GRADIENT. Gradient pixels are not
-    # flat, so none of them count as blank page; what refuses this crop
-    # is the two pure-white triangles the diagonal leaves behind. That
-    # is the same measurement as the bar above, but it is not obvious
-    # from the bar alone that it survives a shape with no flat band in
-    # it at all, so the reported shape is pinned here in its own right.
-    diagonal = np.full((539, 381, 3), 255, np.uint8)
-    yy, xx = np.mgrid[0:539, 0:381]
-    across = (yy - xx * 1.4) / 90.0          # distance across the band
-    inside = np.abs(across) < 1.0
-    shade = (25 + 120 * np.abs(across)).astype(np.uint8)
-    for channel in range(3):
-        diagonal[..., channel] = np.where(inside, shade, 255)
-    results.append(check(
-        f"a shaded diagonal across blank paper is refused "
-        f"({blank(diagonal):.0%} blank)",
-        blank(diagonal) > bar,
-    ))
-
-    page = np.full((679, 521, 3), 255, np.uint8)
-    page[70:609, 70:451] = diagonal[:539, :381]
-    crop, info = region_extractor.extract_tile_region(
-        page, [(70, 70), (451, 70), (451, 609), (70, 609)])
-    results.append(check(
-        "the extractor refuses the reported diagonal region",
-        crop is None and info.get("stage") == "mostly_page",
-        f"stage={info.get('stage')!r} reason={info.get('reason')!r}",
     ))
 
     # The bar has room on both sides, measured on this catalog's pages.
@@ -2996,8 +2606,6 @@ def main():
         ("a ribbon is not a product, but a thin tile is", sliver_checks()),
         ("a crop that is mostly blank page is not a swatch",
          blank_page_checks()),
-        ("finding the page colour stays within its memory",
-         background_scan_memory_checks()),
         ("the whole-image path asks before it accepts",
          whole_image_duplicate_checks()),
         ("one image, one piece", one_piece_per_image_checks()),

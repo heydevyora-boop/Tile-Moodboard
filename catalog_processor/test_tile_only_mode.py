@@ -426,14 +426,11 @@ def a_multi_product_frame_is_still_split():
     # not wave a merged frame through as a single tile -- a picture of
     # two products saved as one product is the failure this rule exists
     # for, and the mode must not have disabled it.
-    # A split says one of two things depending on what found it -- a
-    # gutter names the bare page, a design count names the designs --
-    # and both end "each judged separately". That is what is matched,
-    # so the wording can be made truthful without this losing its grip.
+    # The run now says "N products in one frame -- cut into M piece(s)"
     # where it used to say "splitting into"; the wording moved out of
     # the debug stream and onto the operator's terminal, because "two
     # tiles arrived in one image" is a complaint this pipeline has had.
-    saved_whole = route1[1] == 1 and "each judged separately" not in log
+    saved_whole = route1[1] == 1 and "in one frame -- cut into" not in log
 
     return [
         check("a merged two-product frame is never saved as one tile",
