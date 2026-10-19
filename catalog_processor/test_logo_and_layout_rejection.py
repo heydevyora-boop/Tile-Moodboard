@@ -357,13 +357,18 @@ def a_multi_design_frame_still_splits_with_the_new_guard():
         pipeline.emit = real_emit
 
     log = captured.getvalue()
+    # The point of this check is that the physical_surface guard did
+    # not change what happens to a multi-product frame. It still does
+    # not: the frame is handled by the multi-product path, which now
+    # REFUSES rather than cuts (pipeline.SPLIT_MERGED_FRAMES), and the
+    # line it prints says so in those words. What would fail this is
+    # the guard claiming the frame instead -- a rejection that talks
+    # about a printed graphic or a physical surface.
     return [check(
-        "designs>1 still routes to the split path, unaffected by the "
-        "new physical_surface guard",
-        # The split announcement is now an operator-visible line and
-        # ends "each judged separately", whether a gutter or a design
-        # count is what found the pieces.
-        "each judged separately" in log,
+        "designs>1 still goes to the multi-product path, unaffected by "
+        "the physical_surface guard",
+        "more than one product in this frame" in log
+        and "physical" not in log.lower(),
         log.splitlines()[-5:],
     )]
 
