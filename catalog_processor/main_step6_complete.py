@@ -1477,6 +1477,27 @@ def is_mostly_text_image(image_bytes):
     )
 
 
+# CUTTING A FRAME UP IS OFF.
+#
+# The splitter exists to rescue a quad that merged two products: cut
+# it along the seam and judge each side. Every version of that has
+# eventually cut a real tile instead -- the seam splitter at a panel's
+# moulding, the gutter finder at a panel's own pale border -- and the
+# catalog owner's requirement is not "cut well", it is "one whole tile
+# per image, never a piece of one".
+#
+# So no frame is cut. A frame that holds more than one product is
+# refused instead, which loses it rather than publishing half a tile
+# or a picture of two. With quads now snapped to the product they sit
+# on (grow_to_whole_product), a merged quad is the exception rather
+# than the rule, and on the run that prompted this every piece the
+# splitter produced was a duplicate of a tile already extracted.
+#
+# Set this True to put the splitter back. Everything it needs is still
+# here and still tested; only this gate stands in front of it.
+SPLIT_MERGED_FRAMES = False
+
+
 # The same product, found again on a LATER page.
 #
 # Tighter than the within-page CONTENT_SIGNATURE_MAX_DIFFERENCE (0.03) on
@@ -2777,7 +2798,30 @@ def mine_tile_regions(
         split_for_designs = (status == VALIDATION_IMPURE and designs > 1
                              and not single_product)
 
-        if gutter_pieces or (split_for_designs and not beyond_repair):
+        would_split = gutter_pieces or (split_for_designs
+                                        and not beyond_repair)
+
+        if would_split and not SPLIT_MERGED_FRAMES:
+            # More than one product in this frame, and cutting is off.
+            # Saving it whole would give one Tile row a picture of its
+            # neighbours, so it is refused and said out loud -- a
+            # product lost here is lost visibly, not silently.
+            found = (f"bare page runs through it, {len(gutter_pieces)} "
+                     f"separate tile(s) in it" if gutter_pieces
+                     else f"{designs} different designs in it")
+            region_path.unlink(missing_ok=True)
+            emit(f"      more than one product in this frame ({found}) "
+                 f"-- refused rather than cut")
+            note("REJECTED",
+                 geometry_reason=f"more than one product in the frame: "
+                                 f"{found}",
+                 **geometry_fields)
+            record("REJECTED", f"candidate {index}",
+                   f"more than one product in the frame: {found} "
+                   f"-- cutting is off (SPLIT_MERGED_FRAMES)")
+            continue
+
+        if would_split:
             # Several products butted together in one frame. Saving it
             # whole would give one Tile row a picture of its neighbours;
             # rejecting it would throw away every product in it. Cut it

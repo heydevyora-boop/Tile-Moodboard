@@ -2357,11 +2357,11 @@ def one_piece_per_image_checks():
         ("a single tile is kept whole", (APPROVED, 1, 1, True, False), False),
         ("a patterned tile the model counted as 1 is kept whole",
          (APPROVED, 1, 1, True, False), False),
-        ("two designs butted together still split, as before",
+        ("two designs butted together would route to the splitter",
          (IMPURE, 2, 1, False, False), True),
         ("...and are still protected when the page says one product",
          (IMPURE, 2, 1, True, False), False),
-        ("bare page running through still splits, whatever the counts",
+        ("bare page running through would route to it too",
          (APPROVED, 1, 1, True, False, True), True),
         ("a non-tile verdict is never laundered by splitting",
          (APPROVED, 1, 4, False, True), False),
@@ -2372,7 +2372,7 @@ def one_piece_per_image_checks():
     # identical panels is kept whole, because nothing here knows where
     # its joins are. Pinned so the next attempt starts from the truth.
     results.append(check(
-        "a wall of 8 identical panels is KEPT WHOLE -- still open",
+        "a wall of 8 identical panels would not route to it either",
         splits(APPROVED, 1, 8, True, False) is False,
         "cutting it needs evidence of where the joins are",
     ))
@@ -2569,6 +2569,72 @@ def background_scan_memory_checks():
             ok, got = False, exc
         results.append(check(f"{label} is handled, not a crash", ok, str(got)))
 
+    return results
+
+
+def nothing_is_ever_cut_checks():
+    """No frame is cut up. A frame holding two products is refused.
+
+    Every version of cutting has eventually cut a real tile instead of
+    a seam: split_tile_designs at a panel's moulding (measured at 23.95
+    against a bar of 22.0), the gutter finder at a panel's own pale
+    border (a 61px sliver out of a 1077px span). The requirement is not
+    "cut well", it is one whole tile per image and never a piece of
+    one, so the splitter is simply not reached.
+
+    The machinery is kept, and kept tested, because the decision is a
+    single switch. These checks are about the switch and about what
+    happens in its place -- not about whether cutting could work.
+    """
+    results = []
+
+    results.append(check(
+        "cutting is off",
+        pipeline.SPLIT_MERGED_FRAMES is False,
+        f"SPLIT_MERGED_FRAMES={pipeline.SPLIT_MERGED_FRAMES}",
+    ))
+
+    source = inspect.getsource(pipeline.mine_tile_regions)
+    results.append(check(
+        "the switch stands in front of the splitter, not inside it",
+        "if would_split and not SPLIT_MERGED_FRAMES:" in source,
+    ))
+    results.append(check(
+        "a multi-product frame is refused, not saved whole",
+        "refused rather than cut" in source
+        and "region_path.unlink(missing_ok=True)" in source,
+    ))
+    results.append(check(
+        "...and the refusal is counted, so the tally still adds up",
+        'record("REJECTED", f"candidate {index}",' in source,
+    ))
+    results.append(check(
+        "...and says which of the two things was seen in the frame",
+        "separate tile(s) in it" in source
+        and "different designs in it" in source,
+    ))
+
+    # A product lost this way must be lost VISIBLY. The one thing worse
+    # than refusing it is refusing it quietly.
+    results.append(check(
+        "the operator is told, not just the report",
+        "more than one product in this frame" in source
+        and "emit(" in source,
+    ))
+
+    # The machinery is still here and still works, so the switch is a
+    # real switch rather than a one-way door.
+    single = tile_patch(400, 400, ((198, 192, 184), (122, 116, 108)), cell=22)
+    gap = np.full((400, 120, 3), 252, np.uint8)
+    two = np.hstack([single, gap, single])
+    results.append(check(
+        "the gutter finder still works, for when it is wanted again",
+        len(region_extractor.split_at_background_gutters(two) or []) == 2,
+    ))
+    results.append(check(
+        "...and still refuses a single tile",
+        not region_extractor.split_at_background_gutters(single),
+    ))
     return results
 
 
@@ -2996,6 +3062,8 @@ def main():
         ("a ribbon is not a product, but a thin tile is", sliver_checks()),
         ("a crop that is mostly blank page is not a swatch",
          blank_page_checks()),
+        ("nothing is ever cut; a merged frame is refused",
+         nothing_is_ever_cut_checks()),
         ("finding the page colour stays within its memory",
          background_scan_memory_checks()),
         ("the whole-image path asks before it accepts",

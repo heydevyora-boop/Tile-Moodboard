@@ -586,25 +586,27 @@ def main():
         len(accepted_by_scene["dubai_frame"]) == 0,
         f"{len(accepted_by_scene['dubai_frame'])} saved",
     ))
-    # Two products butted together must become two swatches -- not one
-    # picture of both, and not nothing.
+    # TWO PRODUCTS BUTTED TOGETHER ARE REFUSED, NOT CUT.
+    #
+    # This used to assert they became two swatches. Cutting is off
+    # (pipeline.SPLIT_MERGED_FRAMES), because every version of it has
+    # eventually cut a real tile instead of a seam, and one whole tile
+    # per image outranks recovering both products from a merged frame.
+    #
+    # The cost is stated rather than hidden: these two products are
+    # LOST. What must never happen is the other two outcomes -- one
+    # picture showing both, or a piece of one.
     two = accepted_by_scene["two_designs"]
     results.append(check(
-        "two designs in one frame -> split into two separate products",
-        len(two) == 2, f"{len(two)} saved",
+        "two designs in one frame -> refused, not cut and not saved whole",
+        len(two) == 0, f"{len(two)} saved",
     ))
-
-    if len(two) == 2:
-        observations = [oracle_verify_tile_only(path) for path, _r, _m in two]
+    for path, _reason, _meta in two:
+        observation = oracle_verify_tile_only(path)
         results.append(check(
-            "each split piece shows exactly one design",
-            all(o["distinct_tile_designs"] == 1 for o in observations),
-            str([o["distinct_tile_designs"] for o in observations]),
-        ))
-        results.append(check(
-            "the split separated the designs rather than halving one",
-            {dominant_design(path) for path, _r, _m in two} == {"A", "C"},
-            str(sorted(dominant_design(path) for path, _r, _m in two)),
+            "...nothing saved from it shows two designs",
+            observation["distinct_tile_designs"] == 1,
+            str(observation["distinct_tile_designs"]),
         ))
     results.append(check(
         "one wall detected 5 times -> one swatch, not five",
