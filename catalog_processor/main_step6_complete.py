@@ -169,7 +169,6 @@ from app.visualization_api import (
 
 from app.database import (
     initialize_database,
-    already_processed,
     mark_processed,
 )
 
@@ -4941,31 +4940,34 @@ def process_pdf(
             f"{pdf_path.resolve()}::content::{image_content_hash}"
         )
 
-        if image_content_hash != "unreadable" and (
-            image_content_hash in uploaded_content_hashes
-            or already_processed(content_key)
-        ):
+        # A RE-RUN RE-EXTRACTS. ONLY THIS RUN'S OWN WORK IS DEDUPED.
+        #
+        # already_processed() reads the processed-files table, which
+        # outlives the run, so running the same catalog again skipped
+        # every tile it had ever produced. That is not duplicate
+        # prevention -- it is a one-way door. Delete a tile from Drive
+        # by accident and no command could ever bring it back: the row
+        # saying "done" is still there, and the only thing that would
+        # have re-made the image is the run that now refuses to.
+        #
+        # So the cross-run memory no longer suppresses anything. It is
+        # still WRITTEN (mark_processed below), because the table is
+        # read by other parts of the system and losing its rows would
+        # be a different kind of damage.
+        #
+        # uploaded_content_hashes is this run's own set and still
+        # applies: the same tile found twice by two routes in ONE pass
+        # is a duplicate and is still dropped, which is the "same tile,
+        # two names" case. Across runs it is not a duplicate; it is the
+        # same catalog being extracted again, deliberately.
+        if (image_content_hash != "unreadable"
+                and image_content_hash in uploaded_content_hashes):
             print(
                 "SKIP duplicate target image: "
                 f"{image['filename']}"
             )
-            emit(f"      Tile {position} \u2192 already processed "
-                 f"\u2192 skipped")
-            skipped_count += 1
-            return
-
-        if already_processed(
-            file_hash
-        ):
-
-            print(
-                "SKIP already processed: "
-                f"{image['filename']}"
-            )
-
-            emit(f"      Tile {position} \u2192 already processed "
-                 f"\u2192 skipped")
-
+            emit(f"      Tile {position} \u2192 already extracted in this "
+                 f"run \u2192 skipped")
             skipped_count += 1
             return
 
