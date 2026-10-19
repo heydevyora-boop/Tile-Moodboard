@@ -1815,6 +1815,71 @@ def gutter_split_checks():
         len(split_at_background_gutters(three)) == 3,
     ))
 
+    # EVERY PIECE A CUT LEAVES, NOT ONLY THE TWO ON THE OUTSIDE.
+    #
+    # MIN_GUTTER_PIECE_FRACTION was only ever asked about the first
+    # piece and the last. With TWO runs in one crop, the piece BETWEEN
+    # them went unchecked -- and that is the one a panel's own pale
+    # moulding creates.
+    #
+    # On a real Mozart sheet, a quad over two framed panels came back
+    # as three pieces: the first panel whole at 513px, a 61px sliver,
+    # and the second panel at 428px with its left moulding cut away
+    # into that sliver. 61px is 5.7% of the 1077px span, against a bar
+    # of 12%.
+    if REAL_PDF.exists():
+        real_page, _products = real_page_and_products()
+        two_panels = real_page[573:1595, 389:1466]
+        pieces = split_at_background_gutters(two_panels)
+        results.append(check(
+            "two real framed panels cut into exactly two pieces",
+            len(pieces) == 2,
+            f"{len(pieces)}: {pieces}",
+        ))
+        widths = sorted(b[2] - b[0] for b in pieces)
+        results.append(check(
+            "...and neither piece is a sliver of the other's moulding",
+            bool(widths) and widths[0] > 0.12 * two_panels.shape[1],
+            f"narrowest piece {widths[0] if widths else 0}px of "
+            f"{two_panels.shape[1]}px",
+        ))
+
+        # A single panel, with and without page around it, is never cut.
+        count, _lab, stats, scale = region_extractor._page_regions(real_page)
+        intact = True
+        for index in range(1, count):
+            x, y, w, h = (int(round(v / scale)) for v in stats[index, :4])
+            for pad in (0, 30, 60):
+                piece = real_page[max(0, y - pad):y + h + pad,
+                                  max(0, x - pad):x + w + pad]
+                intact &= not split_at_background_gutters(piece)
+        results.append(check(
+            "no single panel is ever cut, with or without page margin",
+            intact,
+        ))
+
+    # A sliver between two gutters is refused outright, at any scale.
+    span = 1000
+    mean = np.full(span, 100.0, np.float32)
+    std = np.full(span, 20.0, np.float32)
+    for a, b in ((300, 330), (380, 410)):   # leaves a 50px piece: 5%
+        mean[a:b], std[a:b] = 200.0, 0.5
+    runs = region_extractor._page_runs(mean, std, span)
+    results.append(check(
+        "a 5% piece between two gutters does not become its own piece",
+        len(runs) == 1, f"runs={runs}",
+    ))
+
+    # ...and the message the operator reads says what happened.
+    source = inspect.getsource(pipeline.mine_tile_regions)
+    results.append(check(
+        "a gutter split is not reported as the design count",
+        "bare page runs through this frame" in source
+        and "{designs} products in one frame" not in source,
+        "'1 products in one frame -- cut into 2 piece(s)' reads as one "
+        "tile halved, and was reported as that",
+    ))
+
     results.append(check(
         "the splitter is wired into mine_tile_regions",
         "split_at_background_gutters" in

@@ -840,13 +840,40 @@ def _page_runs(mean, std, span):
     if start is not None:
         runs.append((start, len(is_page)))
 
-    return [
-        (a, b) for a, b in runs
-        if a > 0 and b < span
-        and (b - a) >= MIN_GUTTER_FRACTION * span
-        and a >= MIN_GUTTER_PIECE_FRACTION * span
-        and (span - b) >= MIN_GUTTER_PIECE_FRACTION * span
-    ]
+    # EVERY PIECE A CUT LEAVES, NOT ONLY THE TWO ON THE OUTSIDE.
+    #
+    # MIN_GUTTER_PIECE_FRACTION was measured against the span, and the
+    # rule was right -- it was only ever asked about the first piece
+    # and the last. With TWO runs in one crop, the piece BETWEEN them
+    # is what nobody checked, and that is the one a panel's own pale
+    # moulding creates.
+    #
+    # Measured on a Mozart sheet: a quad over two framed panels came
+    # back as three pieces -- the first panel whole at 513px, a 61px
+    # sliver, and the second panel at 428px with its left moulding cut
+    # away into that sliver. 61px is 5.7% of the 1077px span, against a
+    # bar of 12% that was never applied there.
+    #
+    # Each run is now measured against the piece before it as well.
+    # Every condition that was already here is kept exactly as it was,
+    # so this can only ever refuse a cut, never invent one: a frame
+    # that used to be split into two tiles still is.
+    kept, previous_end = [], 0
+    for a, b in runs:
+        if not (a > 0 and b < span
+                and (b - a) >= MIN_GUTTER_FRACTION * span
+                and a >= MIN_GUTTER_PIECE_FRACTION * span
+                and (span - b) >= MIN_GUTTER_PIECE_FRACTION * span):
+            continue
+        # The one condition that was missing. Everything above is the
+        # rule as it stood, unchanged, so a cut that used to be made is
+        # still made.
+        if (a - previous_end) < MIN_GUTTER_PIECE_FRACTION * span:
+            continue
+        kept.append((a, b))
+        previous_end = b
+
+    return kept
 
 
 def split_at_background_gutters(image_bgr):
