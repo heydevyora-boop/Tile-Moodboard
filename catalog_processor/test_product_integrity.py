@@ -2762,6 +2762,160 @@ def rerun_reextracts_checks():
     return results
 
 
+def two_products_in_one_crop_checks():
+    """Half of one tile and half of another is not a tile.
+
+    This catalog lays its products at an angle, so where a quad catches
+    two of them the join is a straight line across the crop at an angle
+    nobody chose. Row and column averages cannot see such a line, and
+    the purity model calls the frame clean because everything in it
+    really is tile.
+
+    Measured at the 256px working size:
+
+        six Mozart panels                  25.98 .. 34.44
+        the vine panel, moulding and all           32.57
+        the pink reference crop                    37.85
+        a 6x6 vector tile sheet                    55.12
+        a 190px sample of a tiled surface          58.00
+        ---------------------------------------- 105.00  bar
+        half navy / half pale blue                167.67
+        half brown / half floral                  203.78
+
+    WHERE THE BAR IS NOT. A floral tile with a second one cut across it
+    measures 70.41 and is a crop the catalog owner refused -- but the
+    190px sample measures 58.00, because with two and a half units
+    across it one grout line dominates exactly as a join would. 1.21x
+    apart, and a bar between them costs real products: it did, and
+    test_tile_only_output lost one of six. Two of the five crops is
+    what this measure carries honestly.
+    """
+    results = []
+    bar = region_extractor.MAX_STRAIGHT_STEP
+    step = region_extractor.straight_step_across
+
+    results.append(check(
+        "the bar is in the plateau, not between the overlapping pair",
+        70.41 < bar < 167.67, f"{bar}",
+    ))
+
+    # A join at an angle: two halves of different products meeting on a
+    # straight line. The pixels either side are real tile, so nothing
+    # about colour or texture alone separates this from a product.
+    def joined(slope, left, right, size=320):
+        crop = np.empty((size, size, 3), np.uint8)
+        yy, xx = np.mgrid[0:size, 0:size]
+        side = (xx + yy * slope) < size * 0.55
+        for channel in range(3):
+            crop[..., channel] = np.where(side, left[channel], right[channel])
+        return crop
+
+    for label, slope in (("a diagonal join", 0.8), ("a steeper join", 0.35),
+                         ("a vertical join", 0.0)):
+        crop = joined(slope, (70, 60, 55), (205, 215, 220))
+        results.append(check(
+            f"{label} between two products is refused ({step(crop):.0f})",
+            step(crop) > bar,
+        ))
+
+    # ...and the same geometry with the SAME product either side is not
+    # a join at all.
+    one_product = joined(0.8, (150, 150, 150), (152, 151, 150))
+    results.append(check(
+        f"the same angle with one product either side is kept "
+        f"({step(one_product):.0f})",
+        step(one_product) <= bar,
+    ))
+
+    # The two shapes that sit just under the bar and must stay under
+    # it. Both are real products; both look like a join to this
+    # measure, which is exactly why the bar is where it is.
+    sheet = np.zeros((468, 468, 3), np.uint8)
+    for row in range(6):
+        for column in range(6):
+            tone = 189 if (row + column) % 2 == 0 else 168
+            sheet[row * 78:row * 78 + 74, column * 78:column * 78 + 74] = (
+                tone - 23, tone - 10, tone)
+    results.append(check(
+        f"a 6x6 tile sheet is kept ({step(sheet):.0f})",
+        step(sheet) <= bar,
+    ))
+    small = tile_patch(190, 190, ((206, 200, 192), (96, 90, 84)), cell=72)
+    results.append(check(
+        f"a small sample of a tiled surface is kept ({step(small):.0f})",
+        step(small) <= bar,
+        "one grout line dominates a sample this size, as a join would",
+    ))
+
+    patterned = tile_patch(320, 320, ((206, 200, 192), (96, 90, 84)), cell=22)
+    results.append(check(
+        f"a patterned tile is kept ({step(patterned):.0f})",
+        step(patterned) <= bar,
+    ))
+
+    # Real products from the catalog, through the real measure.
+    if REAL_PDF.exists():
+        real_page, products = real_page_and_products()
+        values = []
+        for x, y, width, height in products:
+            if width < 200:
+                continue
+            values.append(step(real_page[y:y + height, x:x + width]))
+        results.append(check(
+            f"every real product on the page is kept "
+            f"(highest {max(values):.1f})",
+            bool(values) and max(values) <= bar,
+            f"{[round(v, 1) for v in values]}",
+        ))
+
+    # Degenerate inputs must not raise inside the extractor.
+    for bad, label in ((None, "None"),
+                       (np.zeros((0, 0, 3), np.uint8), "empty"),
+                       (np.zeros((8, 8, 3), np.uint8), "tiny")):
+        try:
+            value = step(bad)
+            ok = value == 0.0
+        except Exception as exc:  # noqa: BLE001
+            ok, value = False, exc
+        results.append(check(f"{label} input is 0.0, not a crash", ok,
+                             str(value)))
+
+    # INSIDE A PHOTOGRAPH THIS RULE DOES NOT APPLY, because every
+    # surface there meets another along a straight line. Same reason
+    # grow_to_whole_product stays out of photographs.
+    source = inspect.getsource(region_extractor.extract_tile_region)
+    results.append(check(
+        "the rule only runs on a catalog page",
+        "if parent_is_a_catalog_page(image_bgr):" in source,
+        "a wall swatch out of a room shot measures 128",
+    ))
+
+    # End to end: the extractor refuses it and says why.
+    page = np.full((900, 700, 3), 252, np.uint8)
+    page[60:640, 60:640] = joined(0.8, (70, 60, 55), (205, 215, 220), 580)
+    crop, info = region_extractor.extract_tile_region(
+        page, [(60, 60), (640, 60), (640, 640), (60, 640)])
+    results.append(check(
+        "the extractor refuses a crop holding two products",
+        crop is None and info.get("stage") == "two_products",
+        f"stage={info.get('stage')!r} reason={info.get('reason')!r}",
+    ))
+    results.append(check(
+        "...and the reason says it holds part of two, not something else",
+        "part of another" in str(info.get("reason", "")),
+        repr(info.get("reason")),
+    ))
+
+    # What it does NOT catch, written down so nobody re-measures it.
+    results.append(check(
+        "the three it cannot carry are recorded beside the number",
+        all(value in inspect.getsource(region_extractor)
+            for value in ("70.41", "58.00")),
+        "the overlapping pair, and why the bar is above both",
+    ))
+    return results
+
+
 def blank_page_checks():
     """A crop that is mostly blank paper is not a swatch.
 
@@ -3186,6 +3340,8 @@ def main():
         ("a ribbon is not a product, but a thin tile is", sliver_checks()),
         ("a crop that is mostly blank page is not a swatch",
          blank_page_checks()),
+        ("half of one tile and half of another is not a tile",
+         two_products_in_one_crop_checks()),
         ("nothing is ever cut; a merged frame is refused",
          nothing_is_ever_cut_checks()),
         ("running a catalog again re-extracts it",
