@@ -2754,14 +2754,9 @@ def mine_tile_regions(
             diag(f"      split              : not splitting -- "
                   f"{single_note}")
 
-        # Reported so a run can be audited for it, never acted on --
-        # see the block below for why it does not get to split
-        # anything. A catalog whose walls need splitting can be found
-        # in a debug run by looking for this line.
         if pieces_seen > 1:
             diag(f"      pieces reported    : the model counts "
-                  f"{pieces_seen} separate piece(s) here (recorded, "
-                  f"not acted on)")
+                  f"{pieces_seen} separate piece(s) here")
 
         # WHY A PIECE COUNT IS NOT ALLOWED TO DRIVE THE SEAM SPLITTER.
         #
@@ -2787,11 +2782,10 @@ def mine_tile_regions(
         # resolves to 2: the wall was cut into two images of four panels
         # each, not eight of one. It never produced one tile per image.
         #
-        # So the count is parsed and carried, and no longer splits
-        # anything on its own. A wall of identical panels reaching Drive
-        # whole is the open case; cutting whole tiles up to chase it was
-        # the worse of the two, and it needs evidence of where the joins
-        # are, not a bigger guess.
+        # So the count never splits anything. It does refuse -- see
+        # multi_product below, where "more than one piece here" is
+        # answered by refusing the frame rather than by guessing a cut
+        # through it.
         #
         # beyond_repair still blocks everything: cutting a non-tile up
         # cannot make it a tile.
@@ -2801,14 +2795,42 @@ def mine_tile_regions(
         would_split = gutter_pieces or (split_for_designs
                                         and not beyond_repair)
 
-        if would_split and not SPLIT_MERGED_FRAMES:
+        # THE COUNT REFUSES. IT STILL DOES NOT CUT.
+        #
+        # Reported but never acted on, because the only thing it had
+        # been wired to was the seam splitter -- and a count says there
+        # is more than one piece here, never WHERE the join is, so the
+        # splitter had to guess and guessed through a panel's moulding.
+        #
+        # Refusing needs no such guess. "Four tiles laid up as a wall"
+        # is not a swatch of any one of them whatever the joins look
+        # like, and the one thing this frame must not do is become a
+        # Tile row showing four products.
+        #
+        # The count is trustworthy for this question in a way it was
+        # not for the other one: the prompt tells the model that
+        # printed pattern is never pieces and to answer 1 when unsure,
+        # both pinned in one_piece_per_image_checks. The one frame it
+        # read as 2 pieces that looked like a single panel -- the vine
+        # tile -- was a quad sitting 70px off its product, holding a
+        # strip of the neighbour. The count was right about the pixels
+        # it was shown; the quad was wrong, and grow_to_whole_product
+        # now snaps it.
+        multi_product = would_split or pieces_seen > 1
+
+        if multi_product and not SPLIT_MERGED_FRAMES:
             # More than one product in this frame, and cutting is off.
             # Saving it whole would give one Tile row a picture of its
             # neighbours, so it is refused and said out loud -- a
             # product lost here is lost visibly, not silently.
-            found = (f"bare page runs through it, {len(gutter_pieces)} "
-                     f"separate tile(s) in it" if gutter_pieces
-                     else f"{designs} different designs in it")
+            if gutter_pieces:
+                found = (f"bare page runs through it, "
+                         f"{len(gutter_pieces)} separate tile(s) in it")
+            elif pieces_seen > 1:
+                found = (f"the model counts {pieces_seen} separate "
+                         f"piece(s) in it")
+            else:
+                found = f"{designs} different designs in it"
             region_path.unlink(missing_ok=True)
             emit(f"      more than one product in this frame ({found}) "
                  f"-- refused rather than cut")
