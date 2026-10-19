@@ -2597,7 +2597,7 @@ def nothing_is_ever_cut_checks():
     source = inspect.getsource(pipeline.mine_tile_regions)
     results.append(check(
         "the switch stands in front of the splitter, not inside it",
-        "if would_split and not SPLIT_MERGED_FRAMES:" in source,
+        "if multi_product and not SPLIT_MERGED_FRAMES:" in source,
     ))
     results.append(check(
         "a multi-product frame is refused, not saved whole",
@@ -2627,6 +2627,58 @@ def nothing_is_ever_cut_checks():
     single = tile_patch(400, 400, ((198, 192, 184), (122, 116, 108)), cell=22)
     gap = np.full((400, 120, 3), 252, np.uint8)
     two = np.hstack([single, gap, single])
+    # THE COUNT REFUSES NOW. IT STILL DOES NOT CUT.
+    #
+    # Four tiles laid up as a wall reached Drive as one image
+    # (page_18_image_39_region_2). The model's separate_pieces count is
+    # what sees that, and it was being reported and ignored, because
+    # the only thing it had ever been wired to was the seam splitter --
+    # which needs to know WHERE the join is, and a count does not say.
+    #
+    # Refusing needs no such guess, so the count drives that instead.
+    def refuses(status, designs, pieces, single, beyond, gutters=False):
+        for_designs = (status == pipeline.VALIDATION_IMPURE
+                       and designs > 1 and not single)
+        would_split = bool(gutters or (for_designs and not beyond))
+        return would_split or pieces > 1
+
+    APPROVED = pipeline.VALIDATION_APPROVED
+    IMPURE = pipeline.VALIDATION_IMPURE
+    for label, args, want in (
+        ("a wall of 4 tiles the model counted is refused",
+         (APPROVED, 1, 4, True, False), True),
+        ("...and a wall of 8, the frame this started from",
+         (APPROVED, 1, 8, True, False), True),
+        ("one tile counted as one is kept",
+         (APPROVED, 1, 1, True, False), False),
+        ("a patterned tile is kept -- printed pattern is not pieces",
+         (APPROVED, 1, 1, True, False), False),
+        ("two designs butted together are refused as before",
+         (IMPURE, 2, 1, False, False), True),
+        ("bare page through the frame still refuses it",
+         (APPROVED, 1, 1, True, False, True), True),
+    ):
+        results.append(check(label, refuses(*args) is want))
+
+    source = inspect.getsource(pipeline.mine_tile_regions)
+    results.append(check(
+        "the count reaches the refusal",
+        "multi_product = would_split or pieces_seen > 1" in source,
+    ))
+    results.append(check(
+        "...and still does not reach the splitter",
+        "would_split = gutter_pieces or (split_for_designs" in source
+        and "pieces_seen" not in source.split("would_split =")[1]
+                                       .split("multi_product")[0],
+    ))
+    results.append(check(
+        "the refusal says the count is what saw it",
+        # Written across two source lines, so the two halves are what
+        # is matched rather than the joined sentence.
+        "the model counts {pieces_seen} separate " in source
+        and 'piece(s) in it' in source,
+    ))
+
     results.append(check(
         "the gutter finder still works, for when it is wanted again",
         len(region_extractor.split_at_background_gutters(two) or []) == 2,
