@@ -335,6 +335,12 @@ def a_multi_design_frame_still_splits_with_the_new_guard():
     real_emit = pipeline.emit
     pipeline.emit = lambda message="": captured.write(f"{message}\n")
 
+    # The reason a candidate was refused is a per-candidate diagnostic,
+    # so it only reaches the log on a DEBUG run. This check is ABOUT
+    # which reason claimed the frame, so it asks for them.
+    real_debug = pipeline.CATALOG_DEBUG
+    pipeline.CATALOG_DEBUG = True
+
     try:
         with contextlib.redirect_stdout(captured):
             accepted, _deferred = pipeline.mine_tile_regions(
@@ -355,20 +361,26 @@ def a_multi_design_frame_still_splits_with_the_new_guard():
         gemini_service.verify_tile_only = real_verify
         pipeline.TILE_ONLY_CATALOG = real_flag
         pipeline.emit = real_emit
+        pipeline.CATALOG_DEBUG = real_debug
 
     log = captured.getvalue()
     # The point of this check is that the physical_surface guard did
     # not change what happens to a multi-product frame. It still does
-    # not: the frame is handled by the multi-product path, which now
-    # REFUSES rather than cuts (pipeline.SPLIT_MERGED_FRAMES), and the
-    # line it prints says so in those words. What would fail this is
-    # the guard claiming the frame instead -- a rejection that talks
-    # about a printed graphic or a physical surface.
+    # not. The frame is refused for holding two products -- now by the
+    # geometry gate, which sees the straight edge between them before
+    # anything is cropped (step 186 against a bar of 105), rather than
+    # by the multi-product path further down. Either is the same answer
+    # for the same reason, and both say so in those words.
+    #
+    # What would fail this is the GUARD claiming the frame instead: a
+    # rejection that talks about a printed graphic or a physical
+    # surface.
+    refused_as_multi = ("more than one product in this frame" in log
+                        or "part of one product and part of another" in log)
     return [check(
-        "designs>1 still goes to the multi-product path, unaffected by "
+        "designs>1 is still refused for holding two products, not by "
         "the physical_surface guard",
-        "more than one product in this frame" in log
-        and "physical" not in log.lower(),
+        refused_as_multi and "physical" not in log.lower(),
         log.splitlines()[-5:],
     )]
 

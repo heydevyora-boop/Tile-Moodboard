@@ -193,6 +193,90 @@ REGION_MAX_ASPECT_RATIO = 10.5
 # 0.35 sits ~100x above the worst real crop and well under the bad one,
 # so this is a backstop for a number nobody measured, not a new opinion
 # about what a tile looks like.
+# HALF OF ONE TILE AND HALF OF ANOTHER IS NOT A TILE.
+#
+# This catalog lays its products at an angle, so where a quad catches
+# two of them the join is a straight line across the crop at an angle
+# nobody chose. Row and column averages cannot see such a line -- which
+# is why the gutter finder and the seam splitter both miss it -- and
+# the purity model calls the frame clean, because everything in it
+# really is tile.
+#
+# The measure is the strongest colour STEP across the crop at any
+# angle. Measured at a 256px working size:
+#
+#   six Mozart panels                         25.98 .. 34.44
+#   the vine panel, moulding and all                  32.57
+#   the pink reference crop                           37.85
+#   a 190px sample of a tiled surface                 58.00
+#   a 6x6 vector tile sheet                           55.12
+#   ----------------------------------------------- 105.00 bar
+#   half navy / half pale blue                       167.67
+#   half brown / half floral                         203.78
+#
+# WHERE THE BAR IS NOT, AND WHY. A floral tile with a second one cut
+# across it measures 70.41 and is a crop the catalog owner refused --
+# but a real 190px sample of a tiled surface measures 58.00, because
+# with two and a half units across the sample one grout line dominates
+# it exactly as a join would. Those two are 1.21x apart, and a bar
+# between them costs real products: it did, in test_tile_only_output,
+# which lost one of six. So the bar sits in the plateau above BOTH, at
+# 105 -- 1.49x above the highest crop it keeps and 1.60x below the
+# lowest it refuses -- and the 70.41 case is left for something that
+# can tell it from a small sample. Two of five is what this measure
+# can carry honestly.
+#
+# AND IT ONLY APPLIES ON A CATALOG PAGE. Inside a photograph every
+# surface meets another along a straight line -- a wall swatch out of a
+# room shot measures 128 -- so the same rule that keeps
+# grow_to_whole_product out of photographs keeps this out too.
+STRAIGHT_STEP_SCAN_PX = 256
+STRAIGHT_STEP_ANGLES = 18
+MAX_STRAIGHT_STEP = 105.0
+
+
+def straight_step_across(image_bgr):
+    """Strongest straight colour step across the crop, at any angle."""
+    if image_bgr is None or getattr(image_bgr, "size", 0) == 0:
+        return 0.0
+    if image_bgr.ndim != 3 or min(image_bgr.shape[:2]) < 32:
+        return 0.0
+
+    height, width = image_bgr.shape[:2]
+    scale = min(1.0, STRAIGHT_STEP_SCAN_PX / float(max(height, width)))
+    if scale < 1.0:
+        image_bgr = cv2.resize(
+            image_bgr,
+            (max(32, int(width * scale)), max(32, int(height * scale))),
+            interpolation=cv2.INTER_AREA,
+        )
+        height, width = image_bgr.shape[:2]
+
+    diagonal = int(np.hypot(height, width))
+    pad = int((diagonal - min(height, width)) / 2)
+    if diagonal - 2 * pad < 32:
+        return 0.0
+
+    strongest = 0.0
+    for index in range(STRAIGHT_STEP_ANGLES):
+        angle = index * (180.0 / STRAIGHT_STEP_ANGLES)
+        matrix = cv2.getRotationMatrix2D((width / 2, height / 2), angle, 1.0)
+        matrix[0, 2] += diagonal / 2 - width / 2
+        matrix[1, 2] += diagonal / 2 - height / 2
+        rotated = cv2.warpAffine(image_bgr, matrix, (diagonal, diagonal))
+
+        # Only the inscribed area: the warp leaves black corners, and a
+        # step into black is the rotation's, not the catalog's.
+        core = rotated[pad:diagonal - pad, pad:diagonal - pad]
+        if min(core.shape[:2]) < 32:
+            continue
+        _position, strength = _best_seam(_slice_profile(core, 0))
+        if strength and strength > strongest:
+            strongest = float(strength)
+
+    return strongest
+
+
 MAX_BLANK_PAGE_FRACTION = 0.35
 BLANK_PAGE_BRIGHTNESS = 244
 BLANK_PAGE_FLATNESS = 2.0
@@ -1915,6 +1999,25 @@ def extract_tile_region(image_bgr, quad, occluders=None,
             f"something crossing it, not a swatch"
         )
         return None, info
+
+    # Half of one tile and half of another. Checked here, beside the
+    # page bar and for the same reason: the trim has settled what the
+    # crop actually holds, and this asks whether that is ONE thing.
+    #
+    # Only on a catalog page. Inside a photograph every surface meets
+    # another along a straight line, which is the same reason
+    # grow_to_whole_product stays out of photographs.
+    if parent_is_a_catalog_page(image_bgr):
+        step = straight_step_across(crop)
+        info["straight_step"] = round(step, 2)
+        if step > MAX_STRAIGHT_STEP:
+            info["stage"] = "two_products"
+            info["reason"] = (
+                f"a straight edge runs across this crop (step {step:.0f}, "
+                f"above {MAX_STRAIGHT_STEP:.0f}) -- it holds part of one "
+                f"product and part of another, not one whole tile"
+            )
+            return None, info
 
     long_side = max(clean_width, clean_height)
     short_side = min(clean_width, clean_height)
