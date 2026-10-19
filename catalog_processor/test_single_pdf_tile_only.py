@@ -13,12 +13,16 @@ duplicate handling can quietly break:
           files, three MASTER rows -- and no two Drive files hold the
           same image.
 
-  RUN 2   the same PDF again produces no new Drive files at all. Every
-          tile is recognised as already processed.
+  RUN 2   the same PDF again re-extracts and re-uploads every tile,
+          and Drive still holds each one ONCE: the upload replaces the
+          file of that name rather than adding a second. The
+          processed-files table no longer suppresses anything, because
+          a tile deleted from Drive has to be recoverable by running
+          the catalog again.
 
   RETRY   when one tile's upload fails, the other tiles are still
-          recorded, and the next run retries ONLY the failed one. A
-          page is not marked done because part of it succeeded.
+          recorded, and the next run uploads the failed one too. What
+          must not happen is the failure being remembered as done.
 
 Why a stubbed Drive is enough: the property under test is how many
 distinct images the pipeline HANDS to Drive and which ones it hands
@@ -226,6 +230,7 @@ class Harness:
         self.folders = {}            # folder id -> (name, parent id)
         self.upload_parents = []     # (filename, folder id)
         self.master_rows = []
+        self.master_keys = set()
         self.processed = set()
         self.attempts = 0
         self.fail_upload_on = fail_upload_on
@@ -268,11 +273,31 @@ class Harness:
 
     # -- Sheets / backend -------------------------------------------
     def append_product(self, **kwargs):
+        # The real one is append_unique_row, keyed on the product id,
+        # so a row already in the sheet is not written twice. Modelled
+        # here because a re-run now re-extracts: without this the test
+        # would "prove" duplicate MASTER rows that the sheet does not
+        # actually get.
+        key = kwargs.get("product_id") or kwargs["image_filename"]
+        if key in self.master_keys:
+            return False
+        self.master_keys.add(key)
         self.master_rows.append(kwargs["image_filename"])
+        return True
 
     @property
     def unique_uploads(self):
         return {digest for _name, digest in self.uploads}
+
+    @property
+    def drive_contents(self):
+        """Name -> bytes, as Drive actually ends up.
+
+        upload_file replaces the file of that name in that folder
+        rather than adding a second one, so what matters is the last
+        upload under each name, not how many times it was sent.
+        """
+        return {name: digest for name, digest in self.uploads}
 
 
 def install(harness):
@@ -374,20 +399,41 @@ def main():
     # ---------------- RUN 2 ----------------
     print("")
     print("=" * 72)
-    print("RUN 2 -- the same PDF again must upload nothing")
+    print("RUN 2 -- the same PDF again must re-extract every tile")
     print("=" * 72)
     second = Harness()
     second.processed = set(first.processed)
+    second.master_keys = set(first.master_keys)
     run(pdf_path, second, "run2")
 
+    # THE POINT OF THE RE-RUN: a tile deleted from Drive comes back.
+    #
+    # This used to assert the opposite -- that a second run uploaded
+    # nothing -- which made the processed-files table a one-way door.
+    # Delete a tile by accident and no command could re-make it: the
+    # row saying "done" was still there, and the only thing that would
+    # have produced the image was the run that refused to.
     results.append(check(
-        f"a re-run uploads nothing ({len(second.uploads)})",
-        len(second.uploads) == 0,
-        f"{len(second.uploads)} duplicate upload(s)",
+        f"a re-run extracts every tile again "
+        f"({len(second.uploads)}/{EXPECTED_TILES})",
+        len(second.uploads) == EXPECTED_TILES,
+        f"{len(second.uploads)} uploaded",
     ))
     results.append(check(
-        "a re-run writes no MASTER rows",
+        "...the same tiles, not different ones",
+        second.unique_uploads == first.unique_uploads,
+    ))
+    # ...and the catalog does not grow by re-running it.
+    results.append(check(
+        f"Drive still holds each tile once "
+        f"({len(second.drive_contents)}/{EXPECTED_TILES})",
+        len(second.drive_contents) == EXPECTED_TILES,
+        "the upload replaces the file of that name",
+    ))
+    results.append(check(
+        "a re-run adds no second MASTER row",
         len(second.master_rows) == 0,
+        f"{len(second.master_rows)} duplicate row(s)",
     ))
 
     # ---------------- RETRY ----------------
@@ -409,23 +455,22 @@ def main():
     retry.processed = set(broken.processed)
     run(pdf_path, retry, "run4")
 
+    # The failure must not be remembered as done. That is the whole
+    # guarantee here -- not how many tiles the next run touches, which
+    # is now all of them by design.
+    missed = broken.unique_uploads ^ first.unique_uploads
     results.append(check(
-        f"the retry uploads exactly the one that failed "
-        f"({len(retry.uploads)})",
-        len(retry.uploads) == 1,
-        f"{len(retry.uploads)} uploaded",
-    ))
-    results.append(check(
-        "the retry does not re-upload anything that succeeded",
-        not (retry.unique_uploads & broken.unique_uploads),
-        "a tile was uploaded twice across the two runs",
+        "the tile that failed is uploaded on the next run",
+        missed and missed <= retry.unique_uploads,
+        f"still missing: {missed - retry.unique_uploads}",
     ))
 
     combined = broken.unique_uploads | retry.unique_uploads
     results.append(check(
         f"after the retry every tile exists in Drive exactly once "
         f"({len(combined)}/{EXPECTED_TILES})",
-        len(combined) == EXPECTED_TILES,
+        len(combined) == EXPECTED_TILES
+        and len(retry.drive_contents) == EXPECTED_TILES,
     ))
 
     print("")

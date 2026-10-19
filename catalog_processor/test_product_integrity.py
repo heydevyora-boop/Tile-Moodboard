@@ -57,7 +57,8 @@ from PIL import Image  # noqa: E402
 
 import app.gemini_service as gemini_service  # noqa: E402
 import app.image_validator as image_validator_module  # noqa: E402
-import main_step6_complete as pipeline  # noqa: E402
+import main_step6_complete as pipeline
+import app.google_services as google_services  # noqa: E402
 import app.image_processor as image_processor  # noqa: E402
 from app.image_processor import (  # noqa: E402
     OUTPUT_CANVAS_SIZE,
@@ -2690,6 +2691,77 @@ def nothing_is_ever_cut_checks():
     return results
 
 
+def rerun_reextracts_checks():
+    """Running a catalog again must produce its tiles again.
+
+    already_processed() reads a table that outlives the run, so a
+    second pass over the same catalog skipped every tile it had ever
+    produced. That is not duplicate prevention, it is a one-way door:
+    delete a tile from Drive by accident and no command could bring it
+    back, because the row saying "done" was still there and the only
+    thing that would have re-made the image was the run now refusing
+    to.
+    """
+    results = []
+    upload_source = inspect.getsource(google_services.upload_file)
+    # persist_tile lives inside process_pdf, so the whole of it is read.
+    pipeline_source = inspect.getsource(pipeline.process_pdf)
+
+    # Comments in here discuss already_processed by name, so the
+    # comments are stripped before asking whether anything CALLS it.
+    code_only = "\n".join(
+        line for line in pipeline_source.splitlines()
+        if not line.lstrip().startswith("#")
+    )
+    results.append(check(
+        "the cross-run table no longer suppresses an upload",
+        "already_processed(" not in code_only,
+        "a re-run would skip everything it had done before",
+    ))
+    results.append(check(
+        "...and it is not even imported, so it cannot creep back",
+        "already_processed" not in inspect.getsource(pipeline).split(
+            "from app.database import")[1].split(")")[0],
+    ))
+    results.append(check(
+        "...but is still written, so nothing else loses its rows",
+        "mark_processed(" in pipeline_source,
+    ))
+
+    # The dedup that is still wanted: the same tile found twice by two
+    # routes in ONE pass is one tile.
+    results.append(check(
+        "this run's own duplicates are still dropped",
+        "image_content_hash in uploaded_content_hashes" in pipeline_source,
+    ))
+    results.append(check(
+        "...and the line says it was this run, not some earlier one",
+        "already extracted in this " in pipeline_source,
+    ))
+
+    # Re-extracting every run would double the Drive folder every run,
+    # because files().create happily holds two files of one name.
+    results.append(check(
+        "an upload replaces the file of that name",
+        "files().update(" in upload_source
+        and "fileId=existing_id" in upload_source,
+    ))
+    results.append(check(
+        "...found by name within the same folder only",
+        "in parents" in upload_source and "trashed=false" in upload_source,
+    ))
+    results.append(check(
+        "...and a lookup failure still uploads rather than losing the tile",
+        "uploading as new" in upload_source
+        and "files().create(" in upload_source,
+    ))
+    results.append(check(
+        "the name is escaped, so a quote in a filename cannot break the query",
+        "escape_drive_query_value(file_path.name)" in upload_source,
+    ))
+    return results
+
+
 def blank_page_checks():
     """A crop that is mostly blank paper is not a swatch.
 
@@ -3116,6 +3188,8 @@ def main():
          blank_page_checks()),
         ("nothing is ever cut; a merged frame is refused",
          nothing_is_ever_cut_checks()),
+        ("running a catalog again re-extracts it",
+         rerun_reextracts_checks()),
         ("finding the page colour stays within its memory",
          background_scan_memory_checks()),
         ("the whole-image path asks before it accepts",

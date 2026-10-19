@@ -555,11 +555,49 @@ def upload_file(
         resumable=True,
     )
 
-    uploaded_file = drive_service.files().create(
-        body=metadata,
-        media_body=media,
-        fields="id,name,webViewLink,webContentLink",
-    ).execute()
+    # REPLACE THE FILE OF THAT NAME, DO NOT ADD A SECOND ONE.
+    #
+    # files().create always makes a NEW file, and Drive is happy to
+    # hold any number of them under one name in one folder. That was
+    # harmless only while a re-run skipped everything it had done
+    # before. A re-run now re-extracts on purpose -- so that a tile
+    # deleted from Drive can be brought back -- and with create alone
+    # every re-run would double the folder.
+    #
+    # Same name, same folder, so it is the same tile from the same
+    # page of the same catalog: the new bytes replace the old ones and
+    # the file keeps its id, which is what any link already pointing
+    # at it needs.
+    existing_id = None
+    try:
+        safe_name = escape_drive_query_value(file_path.name)
+        found = drive_service.files().list(
+            q=(f"name='{safe_name}' and '{folder_id}' in parents "
+               f"and trashed=false"),
+            spaces="drive",
+            fields="files(id,name)",
+            pageSize=1,
+        ).execute().get("files", [])
+        if found:
+            existing_id = found[0]["id"]
+    except Exception as exc:  # noqa: BLE001 -- never fatal
+        # A lookup failure must not cost the upload. Worst case this
+        # behaves exactly as it did before: a second file of that name.
+        print(f"[DRIVE] could not check for an existing "
+              f"{file_path.name} ({exc}) -- uploading as new")
+
+    if existing_id:
+        uploaded_file = drive_service.files().update(
+            fileId=existing_id,
+            media_body=media,
+            fields="id,name,webViewLink,webContentLink",
+        ).execute()
+    else:
+        uploaded_file = drive_service.files().create(
+            body=metadata,
+            media_body=media,
+            fields="id,name,webViewLink,webContentLink",
+        ).execute()
 
     # --------------------------------------------------------
     # PUBLIC VIEW PERMISSION
