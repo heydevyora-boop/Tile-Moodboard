@@ -1173,6 +1173,79 @@ def grow_checks():
         < inspect.getsource(extract_tile_region).index("normalize_quad("),
     ))
 
+    # A BOX OF THE RIGHT SIZE IN THE WRONG PLACE.
+    #
+    # Only the AREAS were compared, so a quad sitting beside its panel
+    # -- holding a strip of the neighbour and cutting its own moulding
+    # off -- measured as a 1.02x gain and was called finished. That is
+    # page_6_render_region_4, next to page_13_image_20_region_2 which
+    # came out whole: same catalog, same kind of panel, one placed and
+    # one not.
+    #
+    # Measured on this page: 70px out of a 512x1022 panel is 13.7% of
+    # its width, and 1.02x of its area. Area could not see it.
+    for index, (x, y, width, height) in enumerate(products):
+        true_bounds = region_extractor.quad_bounds(
+            grow_to_whole_product(page, as_quad(x, y, width, height))[0])
+        shift = int(round(width * 0.14))
+
+        for label, moved in (
+                ("left", as_quad(x - shift, y, width, height)),
+                ("right", as_quad(x + shift, y, width, height))):
+            snapped, note = grow_to_whole_product(page, moved)
+            bounds = region_extractor.quad_bounds(snapped)
+            off = max(abs(a - b) for a, b in zip(bounds, true_bounds))
+            results.append(check(
+                f"product {index}: a quad {shift}px to the {label} snaps "
+                f"back onto it",
+                off <= 6, f"off by {off}px -- {note}",
+            ))
+
+        # ...and a quad that IS on its product is left alone. The inset
+        # is 2px because that is the scale of real disagreement: the
+        # two ways this file and _page_regions find a product differ by
+        # up to 2px on the same panel. The slack has to sit above that
+        # noise and far below a misplacement, and it does -- 2px of
+        # noise, a 6.9px to 20px slack, a 48px to 72px misplacement.
+        placed = as_quad(x + 2, y + 2, width - 4, height - 4)
+        kept, note = grow_to_whole_product(page, placed)
+        results.append(check(
+            f"product {index}: a correctly placed quad is left alone",
+            [tuple(map(int, pt)) for pt in kept]
+            == [tuple(map(int, pt)) for pt in placed],
+            note,
+        ))
+
+        # Whether it moves or not, it must never land on something
+        # else. This is the guarantee; "left alone" is how it is
+        # usually kept.
+        landed = region_extractor.quad_bounds(kept)
+        results.append(check(
+            f"product {index}: and never lands on a neighbour",
+            max(abs(a - b) for a, b in zip(landed, true_bounds)) <= 8,
+            f"landed={landed} product={true_bounds}",
+        ))
+
+    # End to end: the crop that comes out has all four of its edges.
+    x, y, width, height = products[0]
+    shift = int(round(width * 0.14))
+    crop, info = region_extractor.extract_tile_region(
+        page, as_quad(x - shift, y, width, height), [],
+        max_source_coverage=0.92,
+    )
+    results.append(check(
+        "the misplaced quad still produces a crop, not a refusal",
+        crop is not None, f"stage={info.get('stage')} {info.get('reason', '')}",
+    ))
+    if crop is not None:
+        got = info.get("bbox")
+        results.append(check(
+            "...and that crop is the whole product, not the neighbour's edge",
+            max(abs(a - b) for a, b in zip(got, (x, y, x + width, y + height)))
+            <= 6,
+            f"bbox={got} product={(x, y, x + width, y + height)}",
+        ))
+
     # The superseded header for the first, refusing version of the trim
     # was left in the file when that version was replaced, so the module
     # carried two headers and the first described behaviour that is not
