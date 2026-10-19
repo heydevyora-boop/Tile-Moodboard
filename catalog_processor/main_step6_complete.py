@@ -2796,8 +2796,23 @@ def mine_tile_regions(
                 # the run should say out loud when it found two and cut
                 # them apart -- one line, and only when it actually
                 # happens.
-                emit(f"      {designs} products in one frame -- cut into "
-                     f"{len(pieces)} piece(s), each judged separately")
+                # SAY WHAT HAPPENED, NOT WHAT THE MODEL COUNTED.
+                #
+                # This printed `designs`, which is the number of
+                # distinct DESIGNS, so two tiles of the same design
+                # with page between them produced "1 products in one
+                # frame -- cut into 2 piece(s)". Read plainly that says
+                # one tile was cut in half, which is the one thing this
+                # pipeline must never do, and it was reported as a bug
+                # on a run where the split had been entirely correct.
+                if gutter_pieces:
+                    emit(f"      bare page runs through this frame -- "
+                         f"{len(pieces)} separate tile(s) in it, cut "
+                         f"apart, each judged separately")
+                else:
+                    emit(f"      {designs} different designs in one frame "
+                         f"-- cut into {len(pieces)} piece(s), each "
+                         f"judged separately")
                 region_path.unlink(missing_ok=True)
 
                 # A split candidate is still ONE detected candidate, so
@@ -2959,10 +2974,12 @@ def mine_tile_regions(
                     pieces_accepted += 1
 
                 split_detail = (
-                    f"{designs} products in one frame -- split into "
-                    f"{len(pieces)} piece(s): {pieces_accepted} accepted, "
-                    f"{pieces_deferred} deferred, {pieces_rejected} rejected, "
-                    f"{pieces_failed} failed"
+                    (f"bare page ran through this frame -- "
+                     if gutter_pieces else
+                     f"{designs} different designs in one frame -- ")
+                    + f"split into {len(pieces)} piece(s): "
+                    f"{pieces_accepted} accepted, {pieces_deferred} deferred, "
+                    f"{pieces_rejected} rejected, {pieces_failed} failed"
                 )
                 if pieces_accepted:
                     record("ACCEPTED", f"candidate {index}", split_detail)

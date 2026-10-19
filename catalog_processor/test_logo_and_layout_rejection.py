@@ -361,8 +361,9 @@ def a_multi_design_frame_still_splits_with_the_new_guard():
         "designs>1 still routes to the split path, unaffected by the "
         "new physical_surface guard",
         # The split announcement is now an operator-visible line and
-        # reads "N products in one frame -- cut into M piece(s)".
-        "in one frame -- cut into" in log,
+        # ends "each judged separately", whether a gutter or a design
+        # count is what found the pieces.
+        "each judged separately" in log,
         log.splitlines()[-5:],
     )]
 
