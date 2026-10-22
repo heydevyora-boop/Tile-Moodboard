@@ -119,6 +119,9 @@ This section shapes only the surrounding, non-designated parts of the bathroom. 
 - Mirrors: the vanity mirror must not cover the highlighted tile wall. A secondary or full-length mirror may appear only in a dry area, never in the wet zone.
 - Greenery and softness: one or two healthy plants in planters, placed in a dry corner or on a ledge, never in front of the tile. A small side table or stool beside the tub is allowed if a tub exists.
 - Palette: metals (brass, black, chrome) and woods follow the selected style; do not force a fixed palette.
+- Clearances: leave real, usable floor space in front of the toilet, the vanity and the shower entry -- roughly the depth of the fixture itself. No fixture may be jammed into a corner or against another with no space to stand, and any door must be able to swing fully without striking a fixture.
+- Shower enclosure: where a shower zone is shown, show how it is actually closed -- a clear glass screen or partition with visible fixings and a visible edge profile, or an open walk-in with a kerb or level threshold. A shower that simply ends in mid-air is not a built room.
+- No intersections: no two objects may overlap, pass through, or merge into one another, and nothing may float. Every fixture meets the floor or the wall it is fixed to, and pipes, wastes and fixings are either concealed or shown as real hardware.
 - No artwork, plants or accessories may be placed over a tiled wall. No text, logos or labels on any accessory.
 
 ═══════════════════════════════════════
@@ -127,6 +130,8 @@ This section shapes only the surrounding, non-designated parts of the bathroom. 
 The image must read as a professional architectural visualization or high-quality interior photograph — avoid an obviously-AI look, warped architecture, malformed furniture, floating objects, impossible proportions, fake-looking repetition, unnatural lighting, or a cartoon/illustration/surreal appearance (unless surrealism was explicitly requested).
 
 Frame the camera so a viewer can clearly verify the tile's identity, its exact location, its scale, the joint, the laying pattern, the height/coverage, and its relationship to surrounding materials — don't choose an angle or extreme perspective that hides the requested application, and don't let decorative elements block the surfaces that matter. The composition should be suitable for showing directly to a showroom client, architect, or contractor.
+
+Unless a specific camera angle was requested, use the default: a balanced, front-facing architectural view in landscape framing, at roughly standing eye level, far enough back that the main tiled surfaces and the main fixtures are all visible in one frame. Keep vertical lines vertical — walls, door frames, the vanity and the shower screen must run straight up and down, not converge or lean. No wide-angle distortion, no tilted horizon, no looking up or down at the room. Where a camera angle WAS requested, that request governs this paragraph.
 
 Do not generate any text, product labels, SKU numbers, brand names, logos, watermarks, signage, captions, or UI elements inside the visualization unless explicitly requested as part of the scene.
 

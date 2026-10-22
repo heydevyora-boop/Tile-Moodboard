@@ -178,21 +178,33 @@ MATERIAL_ROLE_SURFACES = {
         "This is the dominant material and must cover most of the tiled area."
     ),
     "highlight": (
-        "the HIGHLIGHT surfaces -- one feature area within the "
-        "{surface_description}, such as a single feature wall, the wall "
-        "behind the vanity or inside the shower niche. Secondary to the "
-        "base, clearly visible, but covering much less area than it."
+        "the HIGHLIGHT surfaces -- ONE feature area within the "
+        "{surface_description}. Prefer the shower feature wall where the "
+        "room has a shower; otherwise the wall behind the vanity, or a "
+        "single feature wall. Secondary to the base, clearly visible, "
+        "but covering much less area than it. It must read as ONE "
+        "unbroken panel from end to end -- a single rectangular field "
+        "running corner to corner of the area it occupies, not split "
+        "into separate patches and not interrupted part-way by another "
+        "material."
     ),
     "accent": (
         "the ACCENT surfaces -- decorative detail within the "
         "{surface_description}, such as a border course, a framed panel, "
         "a strip between fields, or a niche/inset surround. The smallest "
-        "area of the three, used as trim rather than as a field."
+        "area of the three, used as trim rather than as a field. If it "
+        "runs as a strip it must be a whole number of its own tiles "
+        "high, perfectly level, continuous for the full run, and its "
+        "edges must land on the base's grout lines rather than cutting "
+        "across the middle of a base tile. Do not invent a second "
+        "border, an outline, or a frame that was not asked for."
     ),
     "border": (
         "the BORDER surfaces -- a trim course or framing band within the "
         "{surface_description}, running between or around the other "
-        "materials rather than filling an area."
+        "materials rather than filling an area. Same geometry as an "
+        "accent strip: a whole number of its own tiles wide, level, "
+        "continuous, and meeting the base on a grout line."
     ),
 }
 
@@ -617,7 +629,12 @@ texture, finish, geometry and markings -- and must NOT be invented,
 substituted, or inferred from a product name, SKU or brand.
 
 Where two materials meet, finish the junction the way real tiling does:
-a clean cut, a trim piece or a grout line, never a blur or a fade.
+a clean cut, a trim piece or a grout line, never a blur or a fade. The
+junction must be straight and must follow the room's own geometry --
+level with the floor or plumb with the corner, never at an arbitrary
+angle, and never stepping up and down along its run. An accent or
+border crosses in FRONT of the base field; it must not cut the
+highlight panel into pieces.
 
 {identity}
 {selections_section}

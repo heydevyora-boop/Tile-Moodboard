@@ -214,6 +214,96 @@ def each_role_gets_its_own_surfaces():
     ]
 
 
+def an_accent_strip_has_a_real_geometry():
+    """"Put an accent somewhere" is what produced the crooked strips.
+
+    The pipeline was already correct -- each material's image is
+    labelled with its role immediately before its own bytes, and the
+    numbering matches the prompt. What the model was never told is what
+    a strip IS: how tall, how straight, how it meets the field it
+    crosses. Audited against the reported bathrooms, those were the
+    missing instructions, not the plumbing.
+    """
+    contents, _paths = capture_request(["base", "highlight", "accent"])
+    text = "\n".join(part_texts(contents))
+
+    return [
+        check("an accent strip is a whole number of its own tiles",
+              "whole number of its own tiles" in text),
+        check("...level and continuous for its full run",
+              "perfectly level" in text and "continuous for the full run" in text),
+        check("...and lands on the base's grout lines",
+              "land on the base's grout lines" in text),
+        check("no border is invented that nobody asked for",
+              "Do not invent a second border" in text),
+        check("the highlight panel is one unbroken field",
+              "ONE unbroken panel" in text),
+        check("...and the accent may not cut it into pieces",
+              "must not cut the" in text and "highlight panel into pieces" in text),
+        check("a junction follows the room's geometry, not an arbitrary angle",
+              # The sentence wraps in the prompt, so the halves are what
+              # is matched rather than the joined line.
+              "follow the room's own geometry" in text
+              and "never at an arbitrary" in text),
+        check("the highlight prefers the shower feature wall",
+              "Prefer the shower feature wall" in text),
+        check("...but a room with no shower still gets a highlight",
+              "otherwise the wall behind the vanity" in text,
+              "a powder washroom has no shower -- see section 8A"),
+    ]
+
+
+def the_room_has_to_be_buildable():
+    """Section 8A said what is in the room, never how it fits together."""
+    from app.devyora_system_prompt import DEVYORA_SYSTEM_PROMPT as prompt
+
+    return [
+        check("fixtures have usable clearance in front of them",
+              "usable floor space in front of the toilet" in prompt),
+        check("...and a door can open without hitting one",
+              "swing fully without striking a fixture" in prompt),
+        check("a shower is shown as actually enclosed",
+              "clear glass screen or partition with visible fixings" in prompt),
+        check("...or honestly open, with a threshold",
+              "kerb or level threshold" in prompt),
+        check("nothing overlaps, passes through, or floats",
+              "overlap, pass through, or merge into one another" in prompt
+              and "nothing may float" in prompt),
+    ]
+
+
+def a_default_camera_exists():
+    """With no angle requested the camera section is empty by design.
+
+    engine.build_tile_application_prompt emits camera_section = "" and
+    only "- change camera" when no angle is given, which is right for a
+    supplied scene -- the camera belongs to IMAGE 1. For a GENERATED
+    scene there is no IMAGE 1, and section 9 described how to frame FOR
+    THE TILE without ever saying what the view should be.
+    """
+    from app.devyora_system_prompt import DEVYORA_SYSTEM_PROMPT as prompt
+    no_angle = engine.build_tile_application_prompt(
+        surface="WALL", tile_product_id="P1", tile_name="T", angle="",
+        materials=None, requirements=None,
+    )
+
+    return [
+        check("a default view is stated for when no angle is asked for",
+              "balanced, front-facing architectural view" in prompt),
+        check("...in landscape, at eye level",
+              "landscape framing" in prompt and "standing eye level" in prompt),
+        check("...with verticals kept vertical",
+              "Keep vertical lines vertical" in prompt),
+        check("...and no wide-angle or tilted-horizon look",
+              "No wide-angle distortion" in prompt
+              and "no tilted horizon" in prompt),
+        check("a requested angle still overrides the default",
+              "that request governs this paragraph" in prompt),
+        check("the default reaches a request that named no angle",
+              "balanced, front-facing architectural view" in no_angle),
+    ]
+
+
 def an_unknown_role_is_not_dropped():
     """Dropping a selected material is the bug; an odd role is not licence to."""
     contents, _paths = capture_request(["base", "border"])
@@ -252,6 +342,9 @@ def main():
         ("all three materials are sent", all_three_materials_are_sent()),
         ("each role gets its own surfaces", each_role_gets_its_own_surfaces()),
         ("an unrecognised role is not dropped", an_unknown_role_is_not_dropped()),
+        ("an accent strip has a real geometry", an_accent_strip_has_a_real_geometry()),
+        ("the room has to be buildable", the_room_has_to_be_buildable()),
+        ("a default camera exists", a_default_camera_exists()),
         ("a single-tile request is unchanged", a_single_tile_request_is_unchanged()),
     ]
 
