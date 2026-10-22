@@ -159,6 +159,7 @@ Return ONLY a JSON array (no markdown, no commentary, no code fences) of mood bo
 Rules for the "tiles" array:
 - "tileId" MUST be copied exactly from the "id" field of one of the tiles listed below. Never invent a tileId, and never use a tile that is not in the list.
 - Every combination needs exactly one "base" tile, plus at least one of "highlight", "border", or "accent" — follow the design rules above for exactly which roles to combine.
+- Each role in a combination must use a DIFFERENT tile. Never give the same tileId two roles — a board whose base and highlight are the same product is not a combination.
 - "name" should match the tile's listed name, for readability.
 `.trim();
 
@@ -254,6 +255,12 @@ export function validateCombinations(raw: unknown, consideredTileIds: Set<string
     }
 
     const validTiles: GeneratedTileRef[] = [];
+    // One product cannot be two roles at once. Validation checked that
+    // every tileId was real and every role was spelled correctly, and
+    // never that the ids differed — so "base: X, highlight: X" passed
+    // silently, and the board that came out had the same tile twice.
+    // The first role wins; a repeat is dropped and said out loud.
+    const usedTileIds = new Set<string>();
     for (const tileRaw of obj.tiles) {
       if (typeof tileRaw !== 'object' || tileRaw === null) continue;
       const t = tileRaw as Record<string, unknown>;
@@ -268,6 +275,11 @@ export function validateCombinations(raw: unknown, consideredTileIds: Set<string
         warnings.push(`Combination ${index}: dropped tileId "${tileId}" — not in the tile list we provided (likely hallucinated)`);
         continue;
       }
+      if (usedTileIds.has(tileId)) {
+        warnings.push(`Combination ${index}: dropped the "${role}" role — tileId "${tileId}" is already used by another role in this combination`);
+        continue;
+      }
+      usedTileIds.add(tileId);
       validTiles.push({ role: role as GeneratedTileRef['role'], tileId, name: typeof t.name === 'string' ? t.name : '' });
     }
 

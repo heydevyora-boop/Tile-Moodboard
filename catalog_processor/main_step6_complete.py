@@ -3352,6 +3352,10 @@ def append_recovered_regions(
             "height": region_height,
             "product_name": region_metadata.get("product_name", ""),
             "size": region_metadata.get("size", ""),
+            # The classifier's own product type. It was already being
+            # derived and then dropped here, so every tile reached the
+            # backend as BASE -- see backend_sync.backend_tile_type.
+            "image_type": region_metadata.get("image_type", ""),
         }
 
         extracted_images.append(record)
@@ -4296,6 +4300,7 @@ def extract_images_from_pdf(
                         # already-derived values, and either may be "".
                         "product_name": tile_metadata.get("product_name", ""),
                         "size": tile_metadata.get("size", ""),
+                        "image_type": tile_metadata.get("image_type", ""),
                     }
 
                     try:
@@ -5098,6 +5103,7 @@ def process_pdf(
             image_url=drive_url,
             size=image.get("size", ""),
             collection=catalog,
+            image_type=image.get("image_type", ""),
         )
 
         # Same rule the sheet write above follows, for the same reason: a
