@@ -190,9 +190,13 @@
   /* ---- detail ---- */
   .detail-back { display:flex; align-items:center; gap:10px; min-height:44px; padding:0 4px; background:transparent; border:none; cursor:pointer; font-size:10px; letter-spacing:.18em; color:var(--muted); }
   .detail-back:hover { color:var(--ink); }
-  .detail-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(320px,100%),1fr)); gap:clamp(16px,2vw,24px); margin-top:14px; }
-  .detail-thumbs { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; border-radius:16px; overflow:hidden; }
-  .detail-thumbs .board-thumb { width:100%; height:100px; border-radius:0; }
+  /* One centred column. The left column used to repeat, as swatches
+     and as SPECIFIED PALETTE FORMULA, exactly what PRODUCTS USED on
+     the right already lists -- the same three products twice, which
+     also pushed the bathroom scene below the fold. */
+  .detail-single { max-width:760px; margin:14px auto 0; display:flex; flex-direction:column; gap:14px; }
+  .detail-head { display:flex; flex-direction:column; gap:10px; text-align:center; }
+  .detail-head .detail-desc { max-width:62ch; margin-inline:auto; }
   .detail-part { font-size:9.5px; letter-spacing:.18em; color:var(--gold); }
   .detail-name { font-weight:600; font-size:clamp(28px,3.4vw,40px); line-height:1.08; margin:0; }
   .detail-desc { margin:0; font-size:clamp(14px,1.1vw,15.5px); line-height:1.6; color:var(--text2); }
@@ -209,8 +213,11 @@
   /* ---- bathroom scene visualization (same tokens as the rest of this page) ---- */
   .btn-amber:disabled { opacity:.55; cursor:not-allowed; }
   .viz-error { padding:14px 16px; background:var(--err-bg); border-radius:13px; font-size:12.5px; line-height:1.5; color:var(--err); }
-  .viz-image-frame { border-radius:16px; overflow:hidden; background:var(--sand); border:1px solid var(--line); }
+  .viz-image-frame { border-radius:16px; overflow:hidden; background:var(--sand); border:1px solid var(--line); cursor:zoom-in; }
   .viz-image-frame img { width:100%; display:block; object-fit:cover; }
+  .viz-lightbox { position:fixed; inset:0; background:rgba(26,21,18,.88); display:flex; align-items:center; justify-content:center; padding:clamp(16px,4vw,48px); z-index:90; cursor:zoom-out; animation:fadeIn .18s ease both; }
+  .viz-lightbox img { max-width:100%; max-height:100%; display:block; border-radius:14px; box-shadow:0 24px 70px rgba(0,0,0,.45); }
+  .viz-lightbox-close { position:absolute; top:16px; right:20px; background:transparent; border:none; color:#FBF6EC; font-size:26px; line-height:1; cursor:pointer; }
 
   /* ---- shared ---- */
   .toast { position:fixed; left:50%; bottom:32px; transform:translateX(-50%); z-index:80; display:flex; align-items:center; gap:11px; max-width:calc(100vw - 32px); padding:14px 20px; background:var(--ink); color:#FBF6EC; border-radius:100px; box-shadow:0 14px 34px rgba(26,21,18,.28); font-size:10.5px; letter-spacing:.12em; }
@@ -823,21 +830,24 @@
       state.visualization = { status: 'idle', imageUrl: null, error: null, forIndex: state.detailIndex };
     }
 
-    const thumbTiles = combo.tiles.map((t) => state.tilesById[t.tileId]).filter((t) => t && t.imageUrl);
-
+    // ONE COLUMN, AND THE SCENE ABOVE THE PRODUCT LIST.
+    //
+    // The left column showed the same three products the right column
+    // already lists under PRODUCTS USED -- once as swatches, once as
+    // SPECIFIED PALETTE FORMULA -- and the bathroom scene sat last,
+    // under both, so it opened below the fold and was only found by
+    // scrolling. The scene is the thing the client came to see, so it
+    // now follows the description directly.
     main.innerHTML =
       '<div class="stage">' +
       '<button class="detail-back mono" id="backToResultsBtn">← ALL ' + state.combinations.length + ' CONCEPTS</button>' +
-      '<div class="detail-grid">' +
-      '<div>' +
-      (thumbTiles.length ? '<div class="detail-thumbs">' + thumbTiles.map((t) => '<span class="board-thumb"><img src="' + CasaApi.resolveBackendImageUrl(t.imageUrl) + '" alt=""></span>').join('') + '</div>' : '<div class="empty-state">No tile images available for this combination.</div>') +
-      '<div class="formula-lbl mono">SPECIFIED PALETTE FORMULA</div>' +
-      formulaRowsHtml(combo.tiles) +
-      '</div>' +
-      '<div style="display:flex; flex-direction:column; gap:14px">' +
+      '<div class="detail-single">' +
+      '<header class="detail-head">' +
       '<div class="detail-part mono">PART 0' + (state.detailIndex + 1) + '</div>' +
       '<h1 class="detail-name serif">' + escapeHtml(combo.board_name) + '</h1>' +
       '<p class="detail-desc">' + escapeHtml(combo.reason_for_selection || 'No description provided.') + '</p>' +
+      '</header>' +
+      (state.savedBoardIndex === state.detailIndex ? visualizationSectionHtml() : '') +
       '<div class="mono" style="font-size:9.5px; letter-spacing:.18em; color:var(--muted)">SUITABLE ROOMS</div>' +
       '<p style="margin:0; font-size:13.5px; color:var(--text2)">' + (combo.rooms_suitable.length ? escapeHtml(combo.rooms_suitable.join(', ')) : '—') + '</p>' +
       (combo.grout_recommendation ? '<div class="mono" style="font-size:9.5px; letter-spacing:.18em; color:var(--muted)">GROUT RECOMMENDATION</div><p style="margin:0; font-size:13.5px; color:var(--text2)">' + escapeHtml(combo.grout_recommendation) + '</p>' : '') +
@@ -846,8 +856,6 @@
       '<div class="detail-actions">' +
       '<button class="btn-primary mono" id="useDetailBtn">' + (state.savedBoardIndex === state.detailIndex ? 'SAVED ✓' : 'USE THIS DESIGN →') + '</button>' +
       '<button class="btn-secondary mono" id="exportDetailBtn">⇩ EXPORT PDF</button>' +
-      '</div>' +
-      (state.savedBoardIndex === state.detailIndex ? visualizationSectionHtml() : '') +
       '</div>' +
       '</div>' +
       '</div>';
@@ -873,6 +881,42 @@
     document.getElementById('exportDetailBtn').addEventListener('click', notReady);
     const generateSceneBtn = document.getElementById('generateSceneBtn');
     if (generateSceneBtn) generateSceneBtn.addEventListener('click', generateBathroomScene);
+
+    // The finished scene opens full size on click -- it is rendered at
+    // the column's width, which is not enough to judge a tile by.
+    const sceneFrame = main.querySelector('.viz-image-frame');
+    if (sceneFrame) {
+      sceneFrame.addEventListener('click', () => {
+        const img = sceneFrame.querySelector('img');
+        if (img) openSceneLightbox(img.src);
+      });
+    }
+  }
+
+  // ============================================================
+  // SCENE LIGHTBOX
+  // ============================================================
+
+  function openSceneLightbox(src) {
+    if (!src || document.querySelector('.viz-lightbox')) return;
+
+    const overlay = document.createElement('div');
+    overlay.className = 'viz-lightbox';
+    overlay.innerHTML =
+      '<button class="viz-lightbox-close mono" aria-label="Close">×</button>' +
+      '<img src="' + src + '" alt="Generated bathroom scene">';
+
+    function close() {
+      overlay.remove();
+      document.removeEventListener('keydown', onKey);
+    }
+    function onKey(event) {
+      if (event.key === 'Escape') close();
+    }
+
+    overlay.addEventListener('click', close);
+    document.addEventListener('keydown', onKey);
+    document.body.appendChild(overlay);
   }
 
   // ============================================================
