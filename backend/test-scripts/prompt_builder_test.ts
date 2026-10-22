@@ -14,9 +14,20 @@ function check(label: string, cond: boolean, extra?: unknown) {
 }
 
 const sampleTiles: TileSummary[] = [
-  { id: 'tile-1', name: 'Calacatta Grey', brandName: 'Somany', size: '600x600mm', finish: 'Matte', type: 'BASE', colorTone: 'Grey', bestRoom: 'Bathroom', productCode: 'SOM-1042', catalogGroup: 'catalog:somany-1' },
-  { id: 'tile-2', name: 'Bronze Highlighter Strip', brandName: 'Somany', size: '100x600mm', finish: 'Glossy', type: 'HIGHLIGHTER', colorTone: 'Bronze', bestRoom: 'Kitchen', productCode: 'SOM-2087', catalogGroup: 'catalog:somany-2' },
+  { id: 'tile-1', name: 'Calacatta Grey', brandName: 'Somany', size: '600x600mm', finish: 'Matte', type: 'BASE', colorTone: 'Grey', bestRoom: 'Bathroom', productCode: 'SOM-1042', catalogGroup: 'catalog:somany-1', fromLatestExtraction: false },
+  { id: 'tile-2', name: 'Bronze Highlighter Strip', brandName: 'Somany', size: '100x600mm', finish: 'Glossy', type: 'HIGHLIGHTER', colorTone: 'Bronze', bestRoom: 'Kitchen', productCode: 'SOM-2087', catalogGroup: 'catalog:somany-2', fromLatestExtraction: false },
 ];
+
+// What a product looks like the moment it is synced out of an
+// extraction: a code, a size, an image, and nothing else. backend_sync.py
+// sends no finish, colour or room, so these really are absent, not blank
+// strings -- which is the whole reason the marker below has to exist.
+const freshlyExtractedTile: TileSummary = {
+  id: 'tile-new', name: 'BR-CEREAMICS-VALUE-SERIES-CATALOGUE-LATTEST-0015', brandName: 'BR Ceramics',
+  size: '1200x1800', finish: null, type: 'BASE', colorTone: null, bestRoom: null,
+  productCode: 'BR-CEREAMICS-VALUE-SERIES-CATALOGUE-LATTEST-0015', catalogGroup: 'code:BR-CEREAMICS-VALUE-SERIES-CATALOGUE-LATTEST',
+  fromLatestExtraction: true,
+};
 
 const sampleBrief: ClientBriefContext = { text: 'Pink washroom, female client, subtle style, mid budget', style: 'SUBTLE', room: 'BATHROOM', budget: 'Mid', customerName: 'Anjali Mehta' };
 
@@ -162,6 +173,28 @@ function main() {
   {
     const built = buildPrompt('rules', [], { text: 'brief' }, 1);
     check('20. The prompt tells the model each role needs a different tile', built.userPrompt.includes('Never give the same tileId two roles'), built.userPrompt.slice(-400));
+  }
+
+  {
+    const { userPrompt } = buildPrompt('rules', [...sampleTiles, freshlyExtractedTile], sampleBrief, 4);
+    const lines = userPrompt.split('\n');
+    const freshLine = lines.find((l) => l.includes('id="tile-new"')) ?? '';
+    const oldLine = lines.find((l) => l.includes('id="tile-1"')) ?? '';
+
+    check('21a. A tile from the latest extraction is marked in the list', freshLine.includes('batch=LATEST'), freshLine);
+    check('21b. An older tile carries no marker', !oldLine.includes('batch=LATEST'), oldLine);
+    check('21c. The unclassified tile still shows what it does have', freshLine.includes('brand="BR Ceramics"') && freshLine.includes('size=1200x1800'), freshLine);
+    check('21d. ...and does not invent the fields it lacks', !freshLine.includes('finish=') && !freshLine.includes('color=') && !freshLine.includes('room='), freshLine);
+    check('21e. The prompt says a missing attribute means unrecorded, not unsuitable', userPrompt.includes('"not recorded", never "unsuitable"'), userPrompt.slice(-900));
+    check('21f. The prompt requires at least one board to use the new stock', userPrompt.includes('must use a batch=LATEST product'), userPrompt.slice(-900));
+    check('21g. The prompt forbids returning the same series over and over', userPrompt.includes('do not keep reusing one product series'), userPrompt.slice(-900));
+  }
+
+  {
+    // With nothing newly extracted the marker must not appear at all --
+    // otherwise the rule above points at a set that does not exist.
+    const { userPrompt } = buildPrompt('rules', sampleTiles, sampleBrief, 4);
+    check('22. No tile is marked when nothing came from a recent extraction', !userPrompt.split('Rules about the tile list')[0].includes('batch=LATEST'), userPrompt.slice(0, 600));
   }
 
   {
