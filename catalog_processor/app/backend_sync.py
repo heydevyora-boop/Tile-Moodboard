@@ -128,6 +128,49 @@ def preflight_internal_sync() -> tuple[bool, str]:
     )
 
 
+# THE FIVE WORDS THE BACKEND'S Tile.type COLUMN ACCEPTS.
+#
+# The classifier already answers this question -- image_type is one of
+# ALLOWED_PRODUCT_TYPES, which has HIGHLIGHTER, BORDER_TILE, LISTELLO
+# and ACCENT_TILE in it -- and that answer was being thrown away here,
+# because this payload never carried a type. The backend then filled
+# the gap with its own default:
+#
+#     type: (input.type ?? 'BASE')        masterTileSync.service.ts
+#
+# So every product from this pipeline arrived as BASE, there was not
+# one HIGHLIGHTER in the table, and a mood board asked for "one base
+# plus at least one highlight" had nothing but base tiles to pick
+# from. It therefore nominated a base tile as the highlight -- which
+# is the "highlighter and base are the same tile" the catalog owner
+# reported.
+#
+# Anything this map does not recognise stays BASE, which is exactly
+# what the backend would have done with it anyway, so a classifier
+# that did not run costs nothing.
+BACKEND_TILE_TYPES = {
+    "HIGHLIGHTER": "HIGHLIGHTER",
+    "HIGHLIGHTER_TILE": "HIGHLIGHTER",
+    "DECOR_PANEL": "HIGHLIGHTER",
+    "DECORATIVE_TILE": "HIGHLIGHTER",
+
+    "BORDER_TILE": "BORDER",
+    "LISTELLO": "BORDER",
+
+    "ACCENT_TILE": "ACCENT",
+
+    "SLAB": "LARGE_FORMAT_BASE",
+    "TILE_SLAB": "LARGE_FORMAT_BASE",
+}
+
+
+def backend_tile_type(image_type) -> str:
+    """The classifier's product type, in the backend's vocabulary."""
+    return BACKEND_TILE_TYPES.get(
+        str(image_type or "").strip().upper(), "BASE",
+    )
+
+
 def sync_master_product_to_backend(
     product_code: str,
     brand: str,
@@ -138,6 +181,7 @@ def sync_master_product_to_backend(
     color_tone: str = "",
     best_room: str = "",
     collection: str = "",
+    image_type: str = "",
 ) -> Optional[Dict[str, Any]]:
     """
     POST one MASTER product to the backend so it becomes eligible for
@@ -181,6 +225,9 @@ def sync_master_product_to_backend(
         "colorTone": color_tone,
         "bestRoom": best_room,
         "collection": collection,
+        # Always a real word, never blank, so the filter below keeps it.
+        # BASE is what the backend would default to in any case.
+        "type": backend_tile_type(image_type),
     }
 
     for key, value in optional_fields.items():

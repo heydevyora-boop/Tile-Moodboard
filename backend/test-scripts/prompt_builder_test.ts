@@ -108,6 +108,62 @@ function main() {
     check('15b. Warnings recorded for each malformed entry', warnings.length === 3, warnings);
   }
 
+  // ONE PRODUCT CANNOT BE TWO ROLES AT ONCE.
+  //
+  // Validation checked that every tileId was real and every role was
+  // spelled correctly, and never that the ids differed. So
+  // "base: X, highlight: X" passed silently and the board that came
+  // out showed the same tile twice -- reported by the catalog owner as
+  // "highlighter and base are the same tile".
+  {
+    const raw = [{
+      board_name: 'Same Tile Twice',
+      tiles: [
+        { role: 'base', tileId: 'tile-1', name: 'Mozart Ivory' },
+        { role: 'highlight', tileId: 'tile-1', name: 'Mozart Ivory' },
+      ],
+      grout_recommendation: 'x', rooms_suitable: [], reason_for_selection: 'x',
+    }];
+    const { combinations, warnings } = validateCombinations(raw, new Set(['tile-1', 'tile-2']));
+    check('17a. The same tileId is not allowed two roles', combinations[0].tiles.length === 1, combinations[0].tiles);
+    check('17b. The first role is the one kept', combinations[0].tiles[0].role === 'base', combinations[0].tiles);
+    check('17c. A warning names the role that was dropped', warnings.some((w) => w.includes('already used by another role')), warnings);
+  }
+
+  {
+    const raw = [{
+      board_name: 'Three Distinct',
+      tiles: [
+        { role: 'base', tileId: 'tile-1', name: 'a' },
+        { role: 'highlight', tileId: 'tile-2', name: 'b' },
+        { role: 'border', tileId: 'tile-3', name: 'c' },
+      ],
+      grout_recommendation: 'x', rooms_suitable: [], reason_for_selection: 'x',
+    }];
+    const { combinations, warnings } = validateCombinations(raw, new Set(['tile-1', 'tile-2', 'tile-3']));
+    check('18a. Three different tiles in three roles all survive', combinations[0].tiles.length === 3, combinations[0].tiles);
+    check('18b. ...with no warnings', warnings.length === 0, warnings);
+  }
+
+  // The same tile in two SEPARATE combinations is not a duplicate --
+  // one board's base may legitimately be another board's highlight.
+  {
+    const raw = [
+      { board_name: 'A', tiles: [{ role: 'base', tileId: 'tile-1', name: 'a' }], grout_recommendation: 'x', rooms_suitable: [], reason_for_selection: 'x' },
+      { board_name: 'B', tiles: [{ role: 'highlight', tileId: 'tile-1', name: 'a' }], grout_recommendation: 'x', rooms_suitable: [], reason_for_selection: 'x' },
+    ];
+    const { combinations, warnings } = validateCombinations(raw, new Set(['tile-1']));
+    check('19a. The same tile may appear in two different combinations', combinations.length === 2 && combinations[0].tiles.length === 1 && combinations[1].tiles.length === 1, combinations);
+    check('19b. ...and that is not warned about', !warnings.some((w) => w.includes('already used by another role')), warnings);
+  }
+
+  // The model is told the rule, so the drop above is a backstop rather
+  // than the only thing holding the line.
+  {
+    const built = buildPrompt('rules', [], { text: 'brief' }, 1);
+    check('20. The prompt tells the model each role needs a different tile', built.userPrompt.includes('Never give the same tileId two roles'), built.userPrompt.slice(-400));
+  }
+
   {
     let threw = false;
     try {

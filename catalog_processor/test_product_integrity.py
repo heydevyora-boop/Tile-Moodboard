@@ -2916,6 +2916,108 @@ def two_products_in_one_crop_checks():
     return results
 
 
+def tile_type_reaches_the_backend_checks():
+    """A highlighter must arrive at the backend AS a highlighter.
+
+    The classifier already answers this -- image_type is one of
+    ALLOWED_PRODUCT_TYPES, which has HIGHLIGHTER, BORDER_TILE, LISTELLO
+    and ACCENT_TILE in it -- and the answer was being dropped twice on
+    the way out: the tile record did not carry it, and the sync payload
+    had no type field at all. The backend then filled the gap itself:
+
+        type: (input.type ?? 'BASE')     masterTileSync.service.ts
+
+    So every product from this pipeline landed as BASE. With no
+    HIGHLIGHTER in the table, a mood board asked for "one base plus at
+    least one highlight" had nothing but base tiles to choose from, and
+    nominated a base tile as the highlight -- the "highlighter and base
+    are the same tile" the catalog owner reported.
+    """
+    from app import backend_sync
+
+    results = []
+    translate = backend_sync.backend_tile_type
+
+    for image_type, want in (
+        ("HIGHLIGHTER", "HIGHLIGHTER"),
+        ("HIGHLIGHTER_TILE", "HIGHLIGHTER"),
+        ("DECOR_PANEL", "HIGHLIGHTER"),
+        ("DECORATIVE_TILE", "HIGHLIGHTER"),
+        ("BORDER_TILE", "BORDER"),
+        ("LISTELLO", "BORDER"),
+        ("ACCENT_TILE", "ACCENT"),
+        ("SLAB", "LARGE_FORMAT_BASE"),
+        ("TILE_SLAB", "LARGE_FORMAT_BASE"),
+        ("TILE", "BASE"),
+        ("CERAMIC_TILE", "BASE"),
+    ):
+        results.append(check(
+            f"{image_type} syncs as {want}",
+            translate(image_type) == want, translate(image_type),
+        ))
+
+    # A classifier that did not run must cost nothing: BASE is what the
+    # backend would have defaulted to anyway.
+    for absent in ("", None, "?", "UNKNOWN", "SOMETHING_NEW"):
+        results.append(check(
+            f"{absent!r} stays BASE, exactly as before",
+            translate(absent) == "BASE", translate(absent),
+        ))
+    results.append(check(
+        "the word is matched however the model cased it",
+        translate("highlighter") == "HIGHLIGHTER"
+        and translate("  Border_Tile  ") == "BORDER",
+    ))
+
+    # Every value here must be one the backend's own enum accepts, or
+    # the sync is rejected by its validator rather than stored.
+    backend_enum = {"BASE", "HIGHLIGHTER", "BORDER", "ACCENT",
+                    "LARGE_FORMAT_BASE"}
+    produced = set(backend_sync.BACKEND_TILE_TYPES.values()) | {"BASE"}
+    results.append(check(
+        "every value this can produce is in the backend's enum",
+        produced <= backend_enum, f"{sorted(produced - backend_enum)}",
+    ))
+
+    # Every decorative type the classifier is allowed to return must be
+    # mapped, or a real highlighter silently becomes a BASE again.
+    from app import gemini_service
+    decorative = {t for t in gemini_service.ALLOWED_PRODUCT_TYPES
+                  if any(word in t for word in
+                         ("HIGHLIGHT", "DECOR", "BORDER", "LISTELLO",
+                          "ACCENT"))}
+    unmapped = {t for t in decorative if translate(t) == "BASE"}
+    results.append(check(
+        f"every decorative type the classifier can return is mapped "
+        f"({len(decorative)} of them)",
+        not unmapped, f"unmapped: {sorted(unmapped)}",
+    ))
+
+    # ...and the whole chain is wired, not just the translation.
+    sync_source = inspect.getsource(backend_sync.sync_master_product_to_backend)
+    results.append(check(
+        "the sync payload carries a type",
+        '"type": backend_tile_type(image_type)' in sync_source,
+    ))
+    pipeline_source = inspect.getsource(pipeline.process_pdf)
+    results.append(check(
+        "...and the pipeline passes the classifier's answer to it",
+        'image_type=image.get("image_type", "")' in pipeline_source,
+    ))
+    region_source = inspect.getsource(pipeline.append_recovered_regions)
+    results.append(check(
+        "a region record carries the type it was classified with",
+        '"image_type": region_metadata.get("image_type", "")'
+        in region_source,
+    ))
+    whole_source = inspect.getsource(pipeline.extract_images_from_pdf)
+    results.append(check(
+        "...and so does a whole-image record",
+        '"image_type": tile_metadata.get("image_type", "")' in whole_source,
+    ))
+    return results
+
+
 def blank_page_checks():
     """A crop that is mostly blank paper is not a swatch.
 
@@ -3346,6 +3448,8 @@ def main():
          nothing_is_ever_cut_checks()),
         ("running a catalog again re-extracts it",
          rerun_reextracts_checks()),
+        ("a highlighter reaches the backend as a highlighter",
+         tile_type_reaches_the_backend_checks()),
         ("finding the page colour stays within its memory",
          background_scan_memory_checks()),
         ("the whole-image path asks before it accepts",
