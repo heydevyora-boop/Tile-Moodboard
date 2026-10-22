@@ -58,6 +58,37 @@ const SECRETS_WITH_MIN_LENGTH = [
 
 const MIN_SECRET_LENGTH = 16;
 
+// Vercel sets these itself on every deployment (its System Environment
+// Variables -- nothing has to be configured for them to be present). They
+// are reported alongside a missing-variable error because the two questions
+// that follow such an error cannot be answered from the message otherwise:
+// which environment the variable has to be saved for, and whether this
+// deployment is even running the commit that was just pushed. A variable
+// saved for Production only is genuinely absent from a Preview deployment,
+// which is what makes the error look like it comes back on its own.
+
+function deploymentNote(): string {
+  const facts: string[] = [];
+
+  if (process.env.VERCEL_ENV) {
+    facts.push(`environment: ${process.env.VERCEL_ENV}`);
+  }
+
+  if (process.env.VERCEL_GIT_COMMIT_REF) {
+    facts.push(`branch: ${process.env.VERCEL_GIT_COMMIT_REF}`);
+  }
+
+  if (process.env.VERCEL_GIT_COMMIT_SHA) {
+    facts.push(
+      `commit: ${process.env.VERCEL_GIT_COMMIT_SHA.slice(0, 7)}`,
+    );
+  }
+
+  return facts.length > 0
+    ? ` (this deployment -- ${facts.join(', ')})`
+    : '';
+}
+
 type ExpressApp = (req: any, res: any) => void;
 
 let app: ExpressApp | null = null;
@@ -70,8 +101,11 @@ function assertRequiredEnv(): void {
 
   if (missing.length > 0) {
     throw new Error(
-      `Missing required environment variable(s) on the server: ${missing.join(', ')}. ` +
-        'Add them in the Vercel project\'s Environment Variables and redeploy.',
+      `Missing required environment variable(s) on the server: ${missing.join(', ')}` +
+        `${deploymentNote()}. ` +
+        'Add them in the Vercel project\'s Environment Variables with all three ' +
+        'environments (Production, Preview, Development) ticked and no branch ' +
+        'filter, then redeploy.',
     );
   }
 

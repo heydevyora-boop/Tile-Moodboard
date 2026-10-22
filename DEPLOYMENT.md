@@ -1,6 +1,6 @@
 # Deployment Guide
 
-Two supported paths: **Docker Compose** (recommended — postgres, backend, and nginx all managed together) or a **bare VM with PM2** (if you already have Postgres and a reverse proxy managed some other way). Don't mix them — running PM2 *inside* the Docker container on top of the container's own process supervision is redundant and makes shutdown signal handling worse, not better.
+Two self-hosted paths: **Docker Compose** (recommended — postgres, backend, and nginx all managed together) or a **bare VM with PM2** (if you already have Postgres and a reverse proxy managed some other way). Don't mix them — running PM2 *inside* the Docker container on top of the container's own process supervision is redundant and makes shutdown signal handling worse, not better.
 
 ## Docker Compose (recommended)
 
@@ -197,6 +197,46 @@ copy .env.example .env
 Since it imports `main_step6_complete.py` directly (not over HTTP), it needs the *same* Python dependencies as the containerized service (`requirements.txt`) installed locally on that Windows machine, and reads its config from `catalog_processor/.env` — same file, just read from disk instead of an env var passed into a container. It resolves both `.env` and its `output/` write directory relative to its own script location, so it works the same way regardless of what directory it's launched from (double-click, a desktop shortcut, Task Scheduler, etc.).
 
 When it detects a new removable drive, it walks the drive for PDF catalogs and runs the full pipeline — no separate step needed.
+
+## Vercel
+
+`vercel.json` in the repo root is what makes the project deployable to Vercel: the Express API builds as one serverless function (`backend/api/index.ts`), the Python AI service as another (`catalog_processor/api/index.py`), and `frontend/` is served as static files. Nothing in `vercel.json` is per-environment, so everything below is set in the Vercel dashboard, once.
+
+### Production Branch
+
+**Settings -> Git -> Production Branch** must be `main`.
+
+When it is set to anything else, every push to `main` still deploys, but as a **Preview** deployment, and the project's stable domain keeps serving whichever deployment was last promoted to Production -- which can be weeks old. The symptom is a merged change that is live on a `*-<hash>-*.vercel.app` URL but missing from the main domain. Both GitHub's deployment list and Vercel's own deployment list label each deployment Preview or Production, so this is visible without guessing.
+
+### Environment variables
+
+The API function refuses to start without these three, and says so in its response body rather than failing opaquely:
+
+| Variable | Why |
+|---|---|
+| `DATABASE_URL` | Prisma's connection string. Use the **pooled** Supabase string (port `6543`, with `&pgbouncer=true`) -- a serverless function opens a connection per cold start and would exhaust the direct-connection limit. |
+| `JWT_SECRET` | Signs access tokens. At least 16 characters. |
+| `JWT_REFRESH_SECRET` | Signs refresh tokens. At least 16 characters, different from `JWT_SECRET`. |
+
+`DIRECT_URL` is **not** needed here. It only exists for `prisma migrate deploy`, which never runs on Vercel -- `backend/prisma/schema.prisma` has no `url` in its `datasource` block at all, and `src/db/connection.ts` hands `process.env.DATABASE_URL` to the Postgres adapter itself.
+
+Two things about how Vercel scopes these, both of which cause the same "I already added this" loop:
+
+- **Tick all three environments** (Production, Preview, Development) when saving each variable. A variable saved for Production only is genuinely absent from every Preview deployment, and with the Production Branch misconfigured above, *every* deployment is a Preview one.
+- **Leave the branch filter empty.** A Preview variable can be pinned to one git branch; pinned to `claude/some-branch`, it does not exist for the next branch, so the error returns on the next merge even though the variable is still sitting there in the dashboard.
+
+A deployment reads the variables that existed when it was created. Adding one does not reach back and repair deployments that already exist -- **Deployments -> ... -> Redeploy** on the newest one is what applies it.
+
+### Reading the error
+
+A missing variable now answers both follow-up questions in the response body itself:
+
+```
+Missing required environment variable(s) on the server: DATABASE_URL
+(this deployment -- environment: preview, branch: main, commit: f15d2bd).
+```
+
+`environment:` is the scope the variable has to be ticked for. `commit:` is the commit this deployment is actually running -- if it does not match the merge you are looking for, the problem is the deployment, not the variable.
 
 ## Health Checks
 
