@@ -40,6 +40,9 @@ export interface TileSummary {
   bestRoom: string | null;
   productCode: string | null;
   catalogGroup: string;
+  // Whether this tile came from the newest extraction in the pool.
+  // rankTiles decides it; the prompt below says it out loud.
+  fromLatestExtraction: boolean;
 }
 
 const MAX_TILES_IN_PROMPT = 80;
@@ -77,6 +80,7 @@ export async function getAvailableTiles(filter: { brandId?: string; room?: strin
     bestRoom: t.bestRoom ?? null,
     productCode: t.productCode ?? null,
     catalogGroup: t.catalogGroup ?? `tile:${t.id}`,
+    fromLatestExtraction: t.fromLatestExtraction === true,
   }));
 }
 
@@ -141,6 +145,23 @@ function formatTileForPrompt(t: TileSummary): string {
     t.colorTone ? `color=${t.colorTone}` : null,
     t.bestRoom ? `room=${t.bestRoom}` : null,
     t.productCode ? `code=${t.productCode}` : null,
+    // Why this marker exists.
+    //
+    // A tile synced straight from an extraction carries a product code, a
+    // size, an image and nothing else: backend_sync.py sends no finish, no
+    // colour and no room, because main_step6_complete has not classified
+    // the product at that stage. So a freshly extracted product reaches
+    // this list with its colour and finish simply absent -- while the
+    // brief above asks for a palette and a finish by name. The model does
+    // the reasonable thing with that and picks the products it can match,
+    // which are always the older, fully described ones. The catalog owner
+    // sees a board built entirely from the same two old series however
+    // much new stock was just extracted.
+    //
+    // Marking them is what lets the rules below say "judge these on name,
+    // brand and size, and do not pass over them for fields nobody has
+    // filled in yet".
+    t.fromLatestExtraction ? 'batch=LATEST' : null,
   ].filter(Boolean);
   return `- ${bits.join(', ')}`;
 }
@@ -161,6 +182,11 @@ Rules for the "tiles" array:
 - Every combination needs exactly one "base" tile, plus at least one of "highlight", "border", or "accent" — follow the design rules above for exactly which roles to combine.
 - Each role in a combination must use a DIFFERENT tile. Never give the same tileId two roles — a board whose base and highlight are the same product is not a combination.
 - "name" should match the tile's listed name, for readability.
+
+Rules about the tile list itself:
+- A tile marked batch=LATEST came from the most recent catalog extraction. Those products have not been classified yet, which is why their finish, colour and room are missing from the list — that means "not recorded", never "unsuitable". Judge them on their name, brand, size and type, exactly as seriously as the older products whose attributes are filled in.
+- At least one of the combinations you return must use a batch=LATEST product, whenever any appear in the list. Do not return a set of combinations built entirely from the older products while new stock is sitting in the list unused.
+- Across all the combinations together, do not keep reusing one product series. Two boards whose base tiles differ only by a trailing index are the same board twice.
 `.trim();
 
 /**

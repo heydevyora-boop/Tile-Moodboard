@@ -82,6 +82,51 @@ function main() {
     check('16. Empty tile pool returns an empty ranked list without crashing', ranked.length === 0);
   }
 
+  {
+    // The three labels frontend/mood-board.html actually puts in `style`.
+    // None of them used to resolve, so the client's palette scored zero
+    // on every tile and decided nothing.
+    const palettes = ['Warm Neutral', 'Cool Grey', 'High Contrast'];
+    const scoredSomething = palettes.filter((style) => {
+      const ranked = rankTiles(tiles, { style });
+      return ranked.some((t) => t.matchReasons.length > 0);
+    });
+
+    check('17a. Every palette the wizard sends is recognised by the scorer', scoredSomething.length === palettes.length, scoredSomething);
+
+    const warm = rankTiles(tiles, { style: 'Warm Neutral' });
+    const ivory = warm.find((t) => t.id === 't-bath-ivory')!;
+    const black = warm.find((t) => t.id === 't-kitchen-black')!;
+    check('17b. Warm Neutral puts an ivory matte base above a polished black one', ivory.score > black.score, { ivory, black });
+
+    const contrast = rankTiles(tiles, { style: 'High Contrast' });
+    const champagne = contrast.find((t) => t.id === 't-gold-accent')!;
+    const grey = contrast.find((t) => t.id === 't-versatile-grey')!;
+    check('17c. High Contrast rates a champagne accent above a plain grey base', champagne.score > grey.score, { champagne, grey });
+
+    // The palettes must discriminate, not hand every tile the same bonus.
+    const spread = new Set(warm.map((t) => t.score));
+    check('17d. A palette separates the pool rather than scoring it flat', spread.size > 1, [...spread]);
+  }
+
+  {
+    const older = new Date('2026-01-01T00:00:00Z');
+    const fresh = new Date('2026-06-01T00:00:00Z');
+    const mixed: TileForRanking[] = [
+      { id: 't-old', name: 'Old Base', type: 'BASE', colorTone: 'Ivory', bestRoom: 'Bathroom', createdAt: older, updatedAt: older },
+      { id: 't-fresh', name: 'BR-CEREAMICS-0015', type: 'BASE', colorTone: null, bestRoom: null, createdAt: fresh, updatedAt: fresh },
+    ];
+    const ranked = rankTiles(mixed, { room: 'Bathroom' });
+
+    check('18a. The newest extraction is flagged, so the prompt can point at it', ranked.find((t) => t.id === 't-fresh')!.fromLatestExtraction === true);
+    check('18b. An older tile is not flagged', ranked.find((t) => t.id === 't-old')!.fromLatestExtraction === false);
+    check('18c. The flag tracks the recency credit, not the ranking order', ranked.find((t) => t.id === 't-fresh')!.matchReasons.includes('From the latest extraction'));
+
+    // With no timestamps at all nothing is "latest", so nothing is marked.
+    const undated = rankTiles(tiles, { room: 'Bathroom' });
+    check('18d. Nothing is flagged when no tile carries a timestamp', undated.every((t) => t.fromLatestExtraction === false));
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail > 0 ? 1 : 0);
 }

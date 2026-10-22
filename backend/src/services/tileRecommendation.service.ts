@@ -23,6 +23,27 @@ const STYLE_PROFILES: Record<string, StyleProfile> = {
   BOLD: { finishes: ['glossy', 'textured'], colorFamilies: ['dark', 'earth', 'blue', 'green'], types: ['ACCENT', 'HIGHLIGHTER'] },
   TRADITIONAL: { finishes: ['matte', 'textured'], colorFamilies: ['earth', 'warm-neutral'], types: ['BASE', 'BORDER'] },
   FEMININE: { finishes: ['glossy', 'polished'], colorFamilies: ['rose', 'gold', 'warm-neutral'], types: ['HIGHLIGHTER', 'ACCENT'] },
+
+  // The three labels the mood board wizard actually sends.
+  //
+  // frontend/mood-board.html puts the chosen PALETTE in the request's
+  // `style` field -- "Warm Neutral", "Cool Grey", "High Contrast" -- and
+  // none of the five keys above is one of them. scoreStyle looks the
+  // label up, finds nothing, and returns zero for every tile, so the
+  // palette the client picked has been deciding nothing at all: measured,
+  // a fully classified bathroom tile scores 42 under "Warm Neutral" and
+  // 82 under "SUBTLE", purely because one of the two names is in this
+  // table. Forty points of discrimination, silently discarded on every
+  // single generation.
+  //
+  // Each entry is read off that palette's own spec line in the wizard,
+  // not invented here: "BEIGE / SAND / TRAVERTINE", "ASH / SILK / SLATE",
+  // "IVORY / CHARCOAL / BRASS". The finish vocabulary is the one the Tile
+  // rows actually store, which is what scoreStyle compares against -- not
+  // the wizard's separate finish step, which goes into the brief text.
+  'WARM NEUTRAL': { finishes: ['matte', 'textured'], colorFamilies: ['warm-neutral', 'earth'], types: ['BASE'] },
+  'COOL GREY': { finishes: ['matte', 'polished'], colorFamilies: ['cool-neutral'], types: ['BASE'] },
+  'HIGH CONTRAST': { finishes: ['glossy', 'polished'], colorFamilies: ['cool-neutral', 'dark', 'gold'], types: ['HIGHLIGHTER', 'ACCENT'] },
 };
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -79,6 +100,10 @@ export interface RankingCriteria {
 export interface RankedTile extends TileForRanking {
   score: number;
   matchReasons: string[];
+  // True for the tiles scoreRecency credited -- the newest extraction in
+  // this pool. Carried out of the scorer because the prompt has to be
+  // able to point at them; see formatTileForPrompt in promptBuilder.
+  fromLatestExtraction: boolean;
   // Only populated by getRecommendedTiles() (rankTiles() alone has no
   // notion of catalogs) -- see sourceGroupKey() below.
   catalogGroup?: string;
@@ -211,6 +236,7 @@ export function rankTiles(tiles: TileForRanking[], criteria: RankingCriteria): R
       ...tile,
       score: room.points + style.points + color.points + recency.points + baseTieBreak,
       matchReasons: [...room.reasons, ...style.reasons, ...color.reasons, ...recency.reasons],
+      fromLatestExtraction: recency.points > 0,
     };
   });
 
