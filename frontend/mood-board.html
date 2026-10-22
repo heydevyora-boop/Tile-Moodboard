@@ -325,10 +325,15 @@
     { label: 'Textured Grip', spec: 'R11 · OUTDOOR RATED', img: 'img/tex-terrazzo.png' },
   ];
 
+  // Per sq ft, supply only, in rupees. Converted from the dollar bands
+  // this started with -- $2/$4/$8/$16 at about Rs 87.5 -- and rounded to
+  // the nearest 25 so the bands stay readable and keep the exact
+  // doubling they always had. This string is shown to the client AND
+  // sent to the model as part of the brief, so the two cannot drift.
   const BUDGETS = [
-    { tier: 'ESSENTIAL', range: '$2 – $4', desc: 'Porcelain bodies and matte neutrals held in bulk stock.' },
-    { tier: 'MID-RANGE', range: '$4 – $8', desc: 'Vein-cut travertine, fluted accents and polished marfil.' },
-    { tier: 'SIGNATURE', range: '$8 – $16', desc: 'Bookmatched slabs, mosaic sheets and brass-trimmed niches.' },
+    { tier: 'ESSENTIAL', range: '₹175 – ₹350', desc: 'Porcelain bodies and matte neutrals held in bulk stock.' },
+    { tier: 'MID-RANGE', range: '₹350 – ₹700', desc: 'Vein-cut travertine, fluted accents and polished marfil.' },
+    { tier: 'SIGNATURE', range: '₹700 – ₹1,400', desc: 'Bookmatched slabs, mosaic sheets and brass-trimmed niches.' },
   ];
 
   const PALETTES = [
