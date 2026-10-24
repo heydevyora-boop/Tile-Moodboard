@@ -21,7 +21,6 @@ from app import scene_manager
 #   - change sanitary fixtures
 #   - change faucets
 #   - change basin
-#   - change WC
 #   - change shower
 #   - change partition
 #   - change colors
@@ -55,8 +54,6 @@ You MUST preserve:
 - Exact highlight products
 - Exact basin
 - Exact faucet
-- Exact WC
-- Exact flush plate
 - Exact shower
 - Exact shower configuration
 - Exact shower partition
@@ -84,7 +81,6 @@ DO NOT:
 - Change sanitary fixtures
 - Change faucets
 - Change basin
-- Change WC
 - Change shower
 - Change partition
 

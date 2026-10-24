@@ -31,6 +31,7 @@ Run:  python3 app/test_multi_material_scene.py
 """
 
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -259,7 +260,7 @@ def the_room_has_to_be_buildable():
 
     return [
         check("fixtures have usable clearance in front of them",
-              "usable floor space in front of the toilet" in prompt),
+              "usable floor space in front of the vanity" in prompt),
         check("...and a door can open without hitting one",
               "swing fully without striking a fixture" in prompt),
         check("a shower is shown as actually enclosed",
@@ -337,6 +338,61 @@ def a_single_tile_request_is_unchanged():
     ]
 
 
+def the_room_has_no_wc():
+    """Every prompt that decides what is in the room must exclude it.
+
+    Deleting the old "toilet privacy" rule is not enough on its own: a
+    model asked for a bathroom draws a toilet by default, so each prompt
+    that shapes the room has to say so outright, and none of them may
+    still ask for one to be preserved or framed.
+    """
+    from app.devyora_system_prompt import DEVYORA_SYSTEM_PROMPT as system
+    from app.scene_image_generator import build_room_scene_prompt
+    from app.tile_application_engine import ANGLE_CAMERA_INSTRUCTIONS, build_tile_application_prompt
+    from app.client_selections import describe_space
+
+    room = build_room_scene_prompt("modern", "warm neutral", {"room": "Bathroom", "surface": "WALL"})
+    powder = build_room_scene_prompt("modern", "warm neutral", {"room": "Powder Room", "surface": "WALL"})
+    tile_step = build_tile_application_prompt("WALL", tile_name="Elite Whitebody")
+
+    # Whole words only -- "toiletries" on the vanity shelf is not a WC.
+    banned = re.compile(r"\b(toilets?|wc|commodes?|bidets?|cisterns?|flush plates?)\b")
+
+    def only_as_a_ban(text):
+        """No mention of the fixture outside a sentence forbidding it."""
+        for line in text.lower().splitlines():
+            if not banned.search(line):
+                continue
+            if not any(marker in line for marker in ("no toilet", "no wc", "not add a toilet", "contains no", "contain no")):
+                return False, line.strip()[:90]
+        return True, ""
+
+    room_clean, room_line = only_as_a_ban(room)
+    tile_clean, tile_line = only_as_a_ban(tile_step)
+    system_clean, system_line = only_as_a_ban(system)
+
+    space = describe_space("Powder Room")
+
+    return [
+        check("the room prompt forbids it outright",
+              "NO toilet, WC, commode, bidet, cistern or flush plate" in room),
+        check("...and names the ways it tends to sneak back in",
+              "cropped at an edge" in room and "reflected in a mirror" in room),
+        check("...with no other mention of it left in that prompt", room_clean, room_line),
+        check("section 8A forbids it for every bathroom",
+              "- No WC:" in system),
+        check("...and the self-check at the end looks for its absence",
+              "no toilet/WC/commode anywhere in the frame" in system),
+        check("...with no other mention left in the system prompt", system_clean, system_line),
+        check("the tile step never mentions it either", tile_clean, tile_line),
+        check("a powder washroom is no longer described as having one",
+              space is not None and "wc" not in space["description"].lower()),
+        check("...and that prompt is clean too", only_as_a_ban(powder)[0], only_as_a_ban(powder)[1]),
+        check("no camera preset frames it any more",
+              not any("wc" in key.lower() for key in ANGLE_CAMERA_INSTRUCTIONS)),
+    ]
+
+
 def main():
     groups = [
         ("all three materials are sent", all_three_materials_are_sent()),
@@ -344,6 +400,7 @@ def main():
         ("an unrecognised role is not dropped", an_unknown_role_is_not_dropped()),
         ("an accent strip has a real geometry", an_accent_strip_has_a_real_geometry()),
         ("the room has to be buildable", the_room_has_to_be_buildable()),
+        ("the room has no WC", the_room_has_no_wc()),
         ("a default camera exists", a_default_camera_exists()),
         ("a single-tile request is unchanged", a_single_tile_request_is_unchanged()),
     ]

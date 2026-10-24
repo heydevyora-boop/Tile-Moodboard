@@ -434,10 +434,6 @@ ANGLE_CAMERA_INSTRUCTIONS = {
         "detail-focused shot of the basin, countertop, and the "
         "surrounding surface."
     ),
-    "wc area": (
-        "Move and reframe the camera so the WC/toilet area of the room "
-        "is clearly and directly in frame."
-    ),
 }
 
 
@@ -758,7 +754,6 @@ DO NOT:
 - move windows
 - move fixtures
 - move vanity
-- change WC
 - change basin
 - change faucets
 - change shower

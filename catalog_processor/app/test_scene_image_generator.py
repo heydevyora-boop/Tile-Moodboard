@@ -608,7 +608,7 @@ ABSOLUTE RULES:
 9. Preserve finishes.
 10. Preserve sanitary fixtures.
 11. Preserve basin and faucet.
-12. Preserve WC and flush plate.
+12. Do not add a toilet, WC, commode or flush plate.
 13. Preserve shower configuration.
 14. Preserve glass/partition configuration.
 15. Preserve architectural layout.
