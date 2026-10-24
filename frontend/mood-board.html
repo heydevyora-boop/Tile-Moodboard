@@ -724,7 +724,7 @@
 
     const iterateBoxHtml = state.viewOnly
       ? '<div class="iterate-box"><h3 class="serif" style="margin:0; font-size:clamp(20px,2vw,26px)">Saved project</h3><p style="margin:8px 0 0; font-size:14px; color:var(--text2); line-height:1.55">Viewing a previously saved mood board.</p><div class="iterate-actions"><button class="btn-dashed mono" id="backToProjectsBtn">← BACK TO PROJECTS</button></div></div>'
-      : '<div class="iterate-box"><h3 class="serif" style="margin:0; font-size:clamp(20px,2vw,26px)">Iterate the design</h3><p style="margin:8px 0 0; font-size:14px; color:var(--text2); line-height:1.55">Keeps the same room, feature and budget while generating a fresh set.</p><div class="iterate-actions"><button class="btn-amber mono" id="regenBtn">↻ TRY ' + COMBINATION_COUNT + ' MORE VARIATIONS</button><button class="btn-dashed mono" id="editDnaBtn">◇ EDIT DESIGN DNA</button></div></div>';
+      : '<div class="iterate-box"><h3 class="serif" style="margin:0; font-size:clamp(20px,2vw,26px)">Iterate the design</h3><p style="margin:8px 0 0; font-size:14px; color:var(--text2); line-height:1.55">Keeps the same room, feature and budget while generating a fresh set.</p><div class="iterate-actions"><button class="btn-amber mono" id="regenBtn">↻ TRY ' + COMBINATION_COUNT + ' MORE VARIATIONS</button></div></div>';
 
     main.innerHTML =
       '<div class="stage">' +
@@ -771,7 +771,6 @@
       document.getElementById('backToProjectsBtn').addEventListener('click', () => { location.href = 'projects.html'; });
     } else {
       document.getElementById('regenBtn').addEventListener('click', runGenerate);
-      document.getElementById('editDnaBtn').addEventListener('click', () => { state.stage = 'wizard'; state.step = 1; render(); });
     }
   }
 
