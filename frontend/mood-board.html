@@ -166,7 +166,7 @@
   .board-name-row h3 { font-weight:600; font-size:clamp(21px,2vw,26px); margin:0; line-height:1.15; }
   .board-desc { margin:0; font-size:14px; line-height:1.55; color:var(--text2); }
   .board-thumbs { display:flex; gap:6px; }
-  .board-thumb { width:44px; height:44px; border-radius:8px; overflow:hidden; background:var(--sand); flex:0 0 auto; }
+  .board-thumb { width:44px; height:44px; border-radius:8px; overflow:hidden; background:var(--sand); flex:0 0 auto; cursor:zoom-in; }
   .board-thumb img { width:100%; height:100%; object-fit:cover; display:block; }
   .formula-lbl { font-size:9.5px; letter-spacing:.18em; color:var(--muted); margin-top:2px; }
   .formula-list { display:flex; flex-direction:column; gap:1px; background:var(--line); border:1px solid var(--line); border-radius:12px; overflow:hidden; }
@@ -201,8 +201,13 @@
   .viz-error { padding:14px 16px; background:var(--err-bg); border-radius:13px; font-size:12.5px; line-height:1.5; color:var(--err); }
   .viz-image-frame { border-radius:16px; overflow:hidden; background:var(--sand); border:1px solid var(--line); cursor:zoom-in; }
   .viz-image-frame img { width:100%; display:block; object-fit:cover; }
-  .viz-lightbox { position:fixed; inset:0; background:rgba(26,21,18,.88); display:flex; align-items:center; justify-content:center; padding:clamp(16px,4vw,48px); z-index:90; cursor:zoom-out; animation:fadeIn .18s ease both; }
+  .viz-lightbox { position:fixed; inset:0; background:rgba(26,21,18,.88); display:flex; align-items:center; justify-content:center; padding:clamp(16px,4vw,48px); z-index:100; cursor:zoom-out; animation:fadeIn .18s ease both; }
   .viz-lightbox img { max-width:100%; max-height:100%; display:block; border-radius:14px; box-shadow:0 24px 70px rgba(0,0,0,.45); }
+  /* A tile is opened to be looked at, and a stored tile shot can be a few
+     hundred pixels -- at its natural size it would come up barely larger
+     than the swatch that was clicked. The scene keeps its own sizing: it
+     is already wide, and holding it to this width would shrink it. */
+  .viz-lightbox.is-tile img { width:min(640px,92vw); height:auto; max-height:92vh; }
   /* ---- mood board panel: the concept as a presentation sheet ---- */
   .mb-overlay { position:fixed; inset:0; z-index:95; display:flex; align-items:flex-start; justify-content:center; padding:clamp(10px,3vw,40px); background:rgba(26,21,18,.82); overflow-y:auto; animation:fadeIn .18s ease both; }
   .mb-panel { width:min(980px,100%); background:var(--card); border:1px solid var(--line); border-radius:20px; overflow:hidden; animation:rise .3s ease both; }
@@ -228,6 +233,7 @@
      run a 600x1200 across the sheet. */
   .mb-tile.is-large { grid-column:span 2; }
   @media (max-width:620px) { .mb-tile.is-large { grid-column:auto; } }
+  .mb-shot.is-zoomable { cursor:zoom-in; }
   .mb-shot { position:relative; border-radius:14px; overflow:hidden; background:var(--sand); border:1px solid var(--line); }
   .mb-shot img { width:100%; height:100%; display:block; object-fit:cover; }
   .mb-shot-empty { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; padding:14px; text-align:center; font-size:8.5px; letter-spacing:.08em; line-height:1.5; color:var(--muted); word-break:break-word; }
@@ -813,6 +819,13 @@
     grid.querySelectorAll('[data-mood-board]').forEach((btn) =>
       btn.addEventListener('click', () => openMoodBoard(parseInt(btn.dataset.moodBoard, 10))));
 
+    // The swatch row is the tile itself at 44px. Opening it full size is
+    // the only way to actually see the surface being proposed.
+    grid.querySelectorAll('.board-thumb').forEach((thumb) => thumb.addEventListener('click', () => {
+      const img = thumb.querySelector('img');
+      if (img) openSceneLightbox(img.src, { tile: true });
+    }));
+
     if (state.viewOnly) {
       document.getElementById('backToProjectsBtn').addEventListener('click', () => { location.href = 'projects.html'; });
     } else {
@@ -1011,7 +1024,11 @@
   }
 
   function moodBoardKeydown(event) {
-    if (event.key === 'Escape') closeMoodBoard();
+    if (event.key !== 'Escape') return;
+    // A tile opened from inside the panel sits above it, and Escape
+    // should close that first rather than both at once.
+    if (document.querySelector('.viz-lightbox')) return;
+    closeMoodBoard();
   }
 
   function openMoodBoard(index) {
@@ -1048,17 +1065,27 @@
 
     document.getElementById('moodBoardClose').addEventListener('click', closeMoodBoard);
     wireMoodBoardScene(index);
+
+    // Each plate opens its own tile full size. A plate showing only a
+    // product code has no image to open, so it stays inert rather than
+    // offering a zoom cursor that does nothing.
+    overlay.querySelectorAll('.mb-shot').forEach((shot) => {
+      const img = shot.querySelector('img');
+      if (!img) return;
+      shot.classList.add('is-zoomable');
+      shot.addEventListener('click', () => openSceneLightbox(img.src, { tile: true }));
+    });
   }
 
   // ============================================================
   // SCENE LIGHTBOX
   // ============================================================
 
-  function openSceneLightbox(src) {
+  function openSceneLightbox(src, options) {
     if (!src || document.querySelector('.viz-lightbox')) return;
 
     const overlay = document.createElement('div');
-    overlay.className = 'viz-lightbox';
+    overlay.className = 'viz-lightbox' + (options && options.tile ? ' is-tile' : '');
     overlay.innerHTML =
       '<button class="viz-lightbox-close mono" aria-label="Close">×</button>' +
       '<img src="' + src + '" alt="Generated bathroom scene">';
