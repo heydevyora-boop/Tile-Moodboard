@@ -41,7 +41,7 @@ def describe_space(room: Any) -> Optional[Dict[str, str]]:
         return {
             "noun": "powder washroom",
             "description": (
-                "a compact powder washroom -- vanity, basin, WC and "
+                "a compact powder washroom -- vanity, basin and "
                 "mirror, with no shower and no bathtub"
             ),
         }

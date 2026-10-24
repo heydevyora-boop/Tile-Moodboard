@@ -195,7 +195,7 @@ def build_room_scene_prompt(
     requirements: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
-    The prompt for the room itself -- the step where the vanity, WC,
+    The prompt for the room itself -- the step where the vanity,
     window, shower, lighting and decor are decided.
 
     The tile step that follows is told to change nothing but the tile,
@@ -266,9 +266,12 @@ def build_room_scene_prompt(
         f"interior, styled as \"{theme_text}\". "
         "Shoot it like a professional real-estate or architectural photograph: "
         "natural and fixture lighting, true-to-life material textures, correct "
-        "perspective and shadows, a real vanity, mirror, sanitaryware and "
+        "perspective and shadows, a real vanity, basin, mirror and "
         "fixtures. Include a clear, unobstructed wall area and floor area "
         "suitable for a tile to be applied to later. "
+        "The room must contain NO toilet, WC, commode, bidet, cistern or "
+        "flush plate anywhere -- not in the frame, not cropped at an edge, "
+        "not behind a screen, not reflected in a mirror or in glass. "
         "This must look like an actual photograph of a real room — not an "
         "illustration, rendering, drawing, diagram, or CGI-looking image — "
         "and with no text, watermark or logo anywhere in the frame."
@@ -796,7 +799,8 @@ STRICT PRESERVATION RULES:
 7. Preserve the exact tile and material selections.
 8. Preserve colors and finishes.
 9. Preserve basin and faucet.
-10. Preserve WC and flush plate.
+10. Do not add a toilet, WC, commode or flush plate -- the locked
+    scene has none and the new view must not introduce one.
 11. Preserve shower configuration.
 12. Preserve shower partition and glass.
 13. Preserve architectural layout.
