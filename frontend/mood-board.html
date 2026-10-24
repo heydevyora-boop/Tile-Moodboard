@@ -212,6 +212,7 @@
 
   /* ---- bathroom scene visualization (same tokens as the rest of this page) ---- */
   .btn-amber:disabled { opacity:.55; cursor:not-allowed; }
+  .viz-section { display:flex; flex-direction:column; gap:10px; }
   .viz-error { padding:14px 16px; background:var(--err-bg); border-radius:13px; font-size:12.5px; line-height:1.5; color:var(--err); }
   .viz-image-frame { border-radius:16px; overflow:hidden; background:var(--sand); border:1px solid var(--line); cursor:zoom-in; }
   .viz-image-frame img { width:100%; display:block; object-fit:cover; }
@@ -270,6 +271,12 @@
   // ============================================================
   // NAV (same pattern as dashboard.html)
   // ============================================================
+
+  // How many combinations one generation produces. Read by the wizard's
+  // own button, by the request, and by the "try more variations" box, so
+  // the number the client is promised and the number asked for can never
+  // drift apart.
+  const COMBINATION_COUNT = 2;
 
   const NAV_ITEMS = [
     { id: 'dashboard', label: 'Dashboard', href: 'dashboard.html', ready: true },
@@ -384,11 +391,14 @@
     errorMessage: null,
     productsModalIndex: null,
     useInFlight: false,
-    // Bathroom scene visualization for the currently-viewed detail
-    // combination only -- forIndex lets renderDetail() tell a stale
-    // result (from a previously-viewed combination) apart from a fresh
-    // one and reset to idle when the user navigates to a different combo.
-    visualization: { status: 'idle', imageUrl: null, error: null, forIndex: null },
+    // One bathroom scene per combination, keyed by its index, because
+    // every card now carries its own. A single slot with a forIndex tag
+    // was enough while the scene lived on the detail page, where exactly
+    // one combination was ever open; it cannot hold two cards' scenes at
+    // once. Index is the key the rest of this file already identifies a
+    // combination by (data-use, data-view-products, savedBoardIndex), and
+    // it is cleared wherever state.combinations is replaced.
+    visualizations: {},
     // Set when this page was opened via ?boardId= from Projects "Open
     // Board" -- viewing a previously-saved board rather than a live
     // wizard session, so the wizard-only fields above (feature/size/
@@ -445,7 +455,7 @@
       '<div id="stepBody"></div>' +
       '<div class="step-actions">' +
       '<button class="btn-back mono" id="prevBtn">← ' + (state.step === 1 ? 'DASHBOARD' : 'BACK') + '</button>' +
-      '<button class="btn-next mono" id="nextBtn"' + (stepValid(state.step) ? '' : ' disabled') + '><span style="width:6px;height:6px;border-radius:50%;background:#E3C58E"></span><span style="flex:1;text-align:left">' + (state.step === 7 ? 'GENERATE 4 MOOD BOARDS' : 'CONTINUE TO STEP ' + (state.step + 1)) + '</span><span>→</span></button>' +
+      '<button class="btn-next mono" id="nextBtn"' + (stepValid(state.step) ? '' : ' disabled') + '><span style="width:6px;height:6px;border-radius:50%;background:#E3C58E"></span><span style="flex:1;text-align:left">' + (state.step === 7 ? 'GENERATE ' + COMBINATION_COUNT + ' MOOD BOARDS' : 'CONTINUE TO STEP ' + (state.step + 1)) + '</span><span>→</span></button>' +
       '</div>' +
       '</div>';
 
@@ -584,10 +594,12 @@
         room: state.room,
         style: state.palette,
         budget: state.budget.tier + ' (' + state.budget.range + '/sqft)',
-        combinationCount: 4,
+        combinationCount: COMBINATION_COUNT,
       };
       const result = await CasaApi.moodBoards.generate(payload);
       state.combinations = result.combinations || [];
+      // Index 0 now means a different board than it did a moment ago.
+      state.visualizations = {};
       state.warnings = result.warnings || [];
 
       if (state.combinations.length === 0) {
@@ -633,6 +645,7 @@
       const board = await CasaApi.moodBoards.get(boardId);
       state.loadedBoard = board;
       state.combinations = board.combinations || [];
+      state.visualizations = {};
       state.room = board.room;
       state.palette = board.style;
       state.savedBoardId = board.id;
@@ -738,7 +751,7 @@
 
     const iterateBoxHtml = state.viewOnly
       ? '<div class="iterate-box"><h3 class="serif" style="margin:0; font-size:clamp(20px,2vw,26px)">Saved project</h3><p style="margin:8px 0 0; font-size:14px; color:var(--text2); line-height:1.55">Viewing a previously saved mood board.</p><div class="iterate-actions"><button class="btn-dashed mono" id="backToProjectsBtn">← BACK TO PROJECTS</button></div></div>'
-      : '<div class="iterate-box"><h3 class="serif" style="margin:0; font-size:clamp(20px,2vw,26px)">Iterate the design</h3><p style="margin:8px 0 0; font-size:14px; color:var(--text2); line-height:1.55">Keeps the same room, feature and budget while generating a fresh set.</p><div class="iterate-actions"><button class="btn-amber mono" id="regenBtn">↻ TRY 4 MORE VARIATIONS</button><button class="btn-dashed mono" id="editDnaBtn">◇ EDIT DESIGN DNA</button></div></div>';
+      : '<div class="iterate-box"><h3 class="serif" style="margin:0; font-size:clamp(20px,2vw,26px)">Iterate the design</h3><p style="margin:8px 0 0; font-size:14px; color:var(--text2); line-height:1.55">Keeps the same room, feature and budget while generating a fresh set.</p><div class="iterate-actions"><button class="btn-amber mono" id="regenBtn">↻ TRY ' + COMBINATION_COUNT + ' MORE VARIATIONS</button><button class="btn-dashed mono" id="editDnaBtn">◇ EDIT DESIGN DNA</button></div></div>';
 
     main.innerHTML =
       '<div class="stage">' +
@@ -769,11 +782,14 @@
         '<div class="formula-lbl mono">SPECIFIED TILES (' + combo.tiles.length + ')</div>' +
         formulaRowsHtml(combo.tiles) +
         (combo.grout_recommendation ? '<div class="mono" style="font-size:10px;color:var(--muted)">GROUT: ' + escapeHtml(combo.grout_recommendation) + '</div>' : '') +
+        '<div class="viz-section" id="vizSection-' + i + '">' + visualizationSectionHtml(i) + '</div>' +
         '<button class="btn-use mono" data-use="' + i + '">' + (state.savedBoardIndex === i ? 'SAVED ✓' : 'USE THIS DESIGN') + ' →</button>' +
         '<button class="btn-view-products mono" data-view-products="' + i + '">VIEW PRODUCTS USED (' + combo.tiles.length + ') ↗</button>' +
         '</div>';
       grid.appendChild(card);
     });
+
+    state.combinations.forEach((_, i) => wireVizSection(i));
 
     grid.querySelectorAll('[data-use]').forEach((btn) => btn.addEventListener('click', () => useDesign(parseInt(btn.dataset.use, 10))));
     grid.querySelectorAll('[data-view-products]').forEach((btn) => btn.addEventListener('click', () => {
@@ -829,20 +845,15 @@
     const combo = state.combinations[state.detailIndex];
     if (!combo) { state.stage = 'results'; render(); return; }
 
-    // A visualization from a previously-viewed combination must not carry
-    // over when the user opens a different one.
-    if (state.visualization.forIndex !== state.detailIndex) {
-      state.visualization = { status: 'idle', imageUrl: null, error: null, forIndex: state.detailIndex };
-    }
-
-    // ONE COLUMN, AND THE SCENE ABOVE THE PRODUCT LIST.
+    // ONE COLUMN, AND NO SCENE.
     //
     // The left column showed the same three products the right column
     // already lists under PRODUCTS USED -- once as swatches, once as
-    // SPECIFIED PALETTE FORMULA -- and the bathroom scene sat last,
-    // under both, so it opened below the fold and was only found by
-    // scrolling. The scene is the thing the client came to see, so it
-    // now follows the description directly.
+    // SPECIFIED PALETTE FORMULA -- so it went, and this is the product
+    // list for one combination and nothing more. The bathroom scene used
+    // to sit here too, reachable only by opening this page and only
+    // after saving the board; it is on the combination's own card now,
+    // which is where the client is choosing between them.
     main.innerHTML =
       '<div class="stage">' +
       '<button class="detail-back mono" id="backToResultsBtn">← ALL ' + state.combinations.length + ' CONCEPTS</button>' +
@@ -852,7 +863,6 @@
       '<h1 class="detail-name serif">' + escapeHtml(combo.board_name) + '</h1>' +
       '<p class="detail-desc">' + escapeHtml(combo.reason_for_selection || 'No description provided.') + '</p>' +
       '</header>' +
-      (state.savedBoardIndex === state.detailIndex ? visualizationSectionHtml() : '') +
       '<div class="mono" style="font-size:9.5px; letter-spacing:.18em; color:var(--muted)">SUITABLE ROOMS</div>' +
       '<p style="margin:0; font-size:13.5px; color:var(--text2)">' + (combo.rooms_suitable.length ? escapeHtml(combo.rooms_suitable.join(', ')) : '—') + '</p>' +
       (combo.grout_recommendation ? '<div class="mono" style="font-size:9.5px; letter-spacing:.18em; color:var(--muted)">GROUT RECOMMENDATION</div><p style="margin:0; font-size:13.5px; color:var(--text2)">' + escapeHtml(combo.grout_recommendation) + '</p>' : '') +
@@ -884,18 +894,6 @@
     document.getElementById('backToResultsBtn').addEventListener('click', () => { state.stage = 'results'; render(); });
     document.getElementById('useDetailBtn').addEventListener('click', () => useDesign(state.detailIndex));
     document.getElementById('exportDetailBtn').addEventListener('click', notReady);
-    const generateSceneBtn = document.getElementById('generateSceneBtn');
-    if (generateSceneBtn) generateSceneBtn.addEventListener('click', generateBathroomScene);
-
-    // The finished scene opens full size on click -- it is rendered at
-    // the column's width, which is not enough to judge a tile by.
-    const sceneFrame = main.querySelector('.viz-image-frame');
-    if (sceneFrame) {
-      sceneFrame.addEventListener('click', () => {
-        const img = sceneFrame.querySelector('img');
-        if (img) openSceneLightbox(img.src);
-      });
-    }
   }
 
   // ============================================================
@@ -927,34 +925,86 @@
   // ============================================================
   // BATHROOM SCENE VISUALIZATION — reuses the existing
   // POST /ai/visualizations pipeline (CasaApi.ai.generateImageUrl),
-  // scoped to the BASE tile of the currently-viewed, already-saved
-  // combination. No new backend, no new API-client method.
+  // scoped to the BASE tile of ONE combination. No new backend, no new
+  // API-client method.
+  //
+  // It lives on the combination's own card. It used to be reachable only
+  // by opening that combination's detail page AND having saved the board
+  // first, which put two clicks and a commitment between the client and
+  // the one picture that tells them which board they want.
   // ============================================================
 
-  function visualizationSectionHtml() {
-    const v = state.visualization;
+  const IDLE_VISUALIZATION = { status: 'idle', imageUrl: null, error: null };
+
+  function vizStateFor(index) {
+    return state.visualizations[index] || IDLE_VISUALIZATION;
+  }
+
+  function visualizationSectionHtml(index) {
+    const v = vizStateFor(index);
     const label = '<div class="mono" style="font-size:9.5px; letter-spacing:.18em; color:var(--muted)">BATHROOM SCENE VISUALIZATION</div>';
+    // Two cards are on screen at once, so the button is found by a data
+    // attribute scoped to this card -- an id would be duplicated and
+    // getElementById would wire only the first one.
+    const button = (cls, text, extra) => '<button class="' + cls + ' mono" data-generate-scene="' + index + '"' + (extra || '') + '>' + text + '</button>';
 
     if (v.status === 'loading') {
-      return label + '<button class="btn-amber mono" id="generateSceneBtn" disabled>GENERATING BATHROOM SCENE…</button>';
+      return label + button('btn-amber', 'GENERATING BATHROOM SCENE…', ' disabled');
     }
     if (v.status === 'error') {
       return label +
         '<div class="viz-error mono">COULD NOT GENERATE: ' + escapeHtml(v.error || 'Unknown error') + '</div>' +
-        '<button class="btn-dashed mono" id="generateSceneBtn">↻ TRY AGAIN</button>';
+        button('btn-dashed', '↻ TRY AGAIN');
     }
     if (v.status === 'success' && v.imageUrl) {
       return label +
         '<div class="viz-image-frame"><img src="' + v.imageUrl + '" alt="Generated bathroom scene"></div>' +
-        '<button class="btn-dashed mono" id="generateSceneBtn">↻ GENERATE AGAIN</button>';
+        button('btn-dashed', '↻ GENERATE AGAIN');
     }
-    return label + '<button class="btn-amber mono" id="generateSceneBtn">GENERATE BATHROOM SCENE →</button>';
+    return label + button('btn-amber', 'GENERATE BATHROOM SCENE →');
   }
 
-  async function generateBathroomScene() {
-    if (state.visualization.status === 'loading') return;
+  function wireVizSection(index) {
+    const host = document.getElementById('vizSection-' + index);
+    if (!host) return;
 
-    const combo = state.combinations[state.detailIndex];
+    const btn = host.querySelector('[data-generate-scene]');
+    if (btn) btn.addEventListener('click', () => generateBathroomScene(index));
+
+    // The finished scene opens full size on click -- inside a card it is
+    // rendered at half the page width, which is not enough to judge a
+    // tile by.
+    const frame = host.querySelector('.viz-image-frame');
+    if (frame) {
+      frame.addEventListener('click', () => {
+        const img = frame.querySelector('img');
+        if (img) openSceneLightbox(img.src);
+      });
+    }
+  }
+
+  /**
+   * Repaints one card's scene block instead of calling render().
+   *
+   * A full re-render rebuilds both cards and sends the page back to the
+   * top, so the image the client just asked for would appear off-screen,
+   * and the other card's finished scene would flash away and back. The
+   * state above is the record; this only repaints what changed. Returns
+   * silently when the host is gone -- the request may land after the
+   * user has opened a detail page or started a new generation, and
+   * state.visualizations keeps the result either way.
+   */
+  function renderVizSection(index) {
+    const host = document.getElementById('vizSection-' + index);
+    if (!host) return;
+    host.innerHTML = visualizationSectionHtml(index);
+    wireVizSection(index);
+  }
+
+  async function generateBathroomScene(index) {
+    if (vizStateFor(index).status === 'loading') return;
+
+    const combo = state.combinations[index];
     if (!combo) return;
 
     // The combination's foundational tile -- every combination is
@@ -963,8 +1013,8 @@
     // the real, already-selected product to visualize, not a guess.
     const baseTile = combo.tiles.find((t) => t.role === 'base');
     if (!baseTile) {
-      state.visualization = { status: 'error', imageUrl: null, error: 'This combination has no base tile to visualize.', forIndex: state.detailIndex };
-      render();
+      state.visualizations[index] = { status: 'error', imageUrl: null, error: 'This combination has no base tile to visualize.' };
+      renderVizSection(index);
       return;
     }
 
@@ -1002,8 +1052,8 @@
       });
     }
 
-    state.visualization = { status: 'loading', imageUrl: null, error: null, forIndex: state.detailIndex };
-    render();
+    state.visualizations[index] = { status: 'loading', imageUrl: null, error: null };
+    renderVizSection(index);
 
     try {
       const imageUrl = await CasaApi.ai.generateImageUrl({
@@ -1014,11 +1064,11 @@
         materials,
         requirements,
       });
-      state.visualization = { status: 'success', imageUrl, error: null, forIndex: state.detailIndex };
+      state.visualizations[index] = { status: 'success', imageUrl, error: null };
     } catch (err) {
-      state.visualization = { status: 'error', imageUrl: null, error: (err && err.message) || 'Something went wrong generating the bathroom scene.', forIndex: state.detailIndex };
+      state.visualizations[index] = { status: 'error', imageUrl: null, error: (err && err.message) || 'Something went wrong generating the bathroom scene.' };
     }
-    render();
+    renderVizSection(index);
   }
 
   // ============================================================
