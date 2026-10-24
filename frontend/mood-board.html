@@ -174,9 +174,6 @@
   .formula-row img { width:26px; height:26px; flex:0 0 auto; border-radius:7px; object-fit:cover; background:#EFE7DA; }
   .formula-role { width:64px; flex:0 0 auto; font-size:9px; letter-spacing:.1em; color:var(--muted); text-transform:uppercase; }
   .formula-val { flex:1; min-width:0; font-size:10.5px; color:#3A322A; }
-  .btn-use { display:flex; align-items:center; gap:12px; min-height:52px; padding:0 20px; margin-top:6px; background:var(--ink); color:#FBF6EC; border:none; border-radius:13px; cursor:pointer; font-size:11px; letter-spacing:.16em; }
-  .btn-use:hover:not(:disabled) { background:#33291F; }
-  .btn-use:disabled { opacity:.55; cursor:not-allowed; }
   .btn-view-products { display:flex; align-items:center; justify-content:center; gap:10px; min-height:48px; background:#fff; border:1px solid var(--line); border-radius:13px; cursor:pointer; font-size:10.5px; letter-spacing:.14em; color:#4A4038; }
   .btn-view-products:hover { background:#F1EADD; }
 
@@ -187,19 +184,8 @@
   .btn-dashed { display:flex; align-items:center; justify-content:center; gap:10px; min-height:54px; padding:0 18px; background:transparent; color:#4A4038; border:1px dashed #D8C9AE; border-radius:13px; cursor:pointer; font-size:11px; letter-spacing:.14em; }
   .btn-dashed:hover { background:#EFE7DA; }
 
-  /* ---- detail ---- */
-  .detail-back { display:flex; align-items:center; gap:10px; min-height:44px; padding:0 4px; background:transparent; border:none; cursor:pointer; font-size:10px; letter-spacing:.18em; color:var(--muted); }
-  .detail-back:hover { color:var(--ink); }
-  /* One centred column. The left column used to repeat, as swatches
-     and as SPECIFIED PALETTE FORMULA, exactly what PRODUCTS USED on
-     the right already lists -- the same three products twice, which
-     also pushed the bathroom scene below the fold. */
-  .detail-single { max-width:760px; margin:14px auto 0; display:flex; flex-direction:column; gap:14px; }
-  .detail-head { display:flex; flex-direction:column; gap:10px; text-align:center; }
-  .detail-head .detail-desc { max-width:62ch; margin-inline:auto; }
-  .detail-part { font-size:9.5px; letter-spacing:.18em; color:var(--gold); }
-  .detail-name { font-weight:600; font-size:clamp(28px,3.4vw,40px); line-height:1.08; margin:0; }
-  .detail-desc { margin:0; font-size:clamp(14px,1.1vw,15.5px); line-height:1.6; color:var(--text2); }
+  /* ---- products used, expanded inside the card ---- */
+  .products-section { display:flex; flex-direction:column; gap:10px; }
   .products-list { display:flex; flex-direction:column; gap:10px; }
   .product-row { display:flex; gap:14px; align-items:center; padding:12px; background:#fff; border:1px solid var(--line); border-radius:14px; }
   .product-row img { width:50px; height:50px; flex:0 0 auto; border-radius:12px; object-fit:cover; background:var(--sand); }
@@ -208,7 +194,6 @@
   .stock-badge { font-size:8.5px; letter-spacing:.08em; }
   .stock-yes { color:#6E5228; }
   .stock-no { color:var(--err); }
-  .detail-actions { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(190px,100%),1fr)); gap:10px; margin-top:auto; padding-top:6px; }
 
   /* ---- bathroom scene visualization (same tokens as the rest of this page) ---- */
   .btn-amber:disabled { opacity:.55; cursor:not-allowed; }
@@ -221,7 +206,6 @@
   .viz-lightbox-close { position:absolute; top:16px; right:20px; background:transparent; border:none; color:#FBF6EC; font-size:26px; line-height:1; cursor:pointer; }
 
   /* ---- shared ---- */
-  .toast { position:fixed; left:50%; bottom:32px; transform:translateX(-50%); z-index:80; display:flex; align-items:center; gap:11px; max-width:calc(100vw - 32px); padding:14px 20px; background:var(--ink); color:#FBF6EC; border-radius:100px; box-shadow:0 14px 34px rgba(26,21,18,.28); font-size:10.5px; letter-spacing:.12em; }
   .modal-overlay { position:fixed; inset:0; background:rgba(26,21,18,.5); display:flex; align-items:center; justify-content:center; padding:20px; z-index:70; }
   .modal-box { background:#fff; border-radius:20px; padding:24px; max-width:480px; width:100%; max-height:80vh; overflow-y:auto; }
   .modal-close { float:right; background:transparent; border:none; cursor:pointer; font-size:18px; color:var(--muted); }
@@ -260,7 +244,6 @@
   <main class="main" id="mainContent"></main>
 </div>
 
-<div id="toastHost"></div>
 <div id="modalHost"></div>
 
 <script src="assets/api-client.js"></script>
@@ -372,7 +355,7 @@
   // ============================================================
 
   const state = {
-    stage: 'wizard', // wizard | generating | error | results | detail
+    stage: 'wizard', // wizard | generating | error | results
     step: 1,
     room: null,
     feature: FEATURES[0].label,
@@ -385,19 +368,18 @@
     combinations: [],
     warnings: [],
     tilesById: {},
-    savedBoardId: null,
-    savedBoardIndex: null,
-    detailIndex: null,
     errorMessage: null,
-    productsModalIndex: null,
-    useInFlight: false,
+    // Which cards have PRODUCTS USED open, keyed by combination index.
+    // Kept in state rather than read off the DOM so a re-render of the
+    // results stage puts every card back the way the user left it.
+    expandedProducts: {},
     // One bathroom scene per combination, keyed by its index, because
     // every card now carries its own. A single slot with a forIndex tag
     // was enough while the scene lived on the detail page, where exactly
     // one combination was ever open; it cannot hold two cards' scenes at
     // once. Index is the key the rest of this file already identifies a
-    // combination by (data-use, data-view-products, savedBoardIndex), and
-    // it is cleared wherever state.combinations is replaced.
+    // combination by (data-view-products, data-generate-scene), and it is
+    // cleared wherever state.combinations is replaced.
     visualizations: {},
     // Set when this page was opened via ?boardId= from Projects "Open
     // Board" -- viewing a previously-saved board rather than a live
@@ -414,15 +396,8 @@
       case 'generating': return renderGenerating();
       case 'error': return renderError();
       case 'results': return renderResults();
-      case 'detail': return renderDetail();
       default: return renderWizard();
     }
-  }
-
-  function showToast(message) {
-    const host = document.getElementById('toastHost');
-    host.innerHTML = '<div class="toast mono">' + message + '</div>';
-    setTimeout(() => { host.innerHTML = ''; }, 3200);
   }
 
   // ============================================================
@@ -600,6 +575,7 @@
       state.combinations = result.combinations || [];
       // Index 0 now means a different board than it did a moment ago.
       state.visualizations = {};
+      state.expandedProducts = {};
       state.warnings = result.warnings || [];
 
       if (state.combinations.length === 0) {
@@ -618,8 +594,6 @@
         state.tilesById = {}; // non-fatal -- formula still renders with names, just no images/stock
       }
 
-      state.savedBoardId = null;
-      state.savedBoardIndex = null;
       state.stage = 'results';
       render();
     } catch (err) {
@@ -646,10 +620,9 @@
       state.loadedBoard = board;
       state.combinations = board.combinations || [];
       state.visualizations = {};
+      state.expandedProducts = {};
       state.room = board.room;
       state.palette = board.style;
-      state.savedBoardId = board.id;
-      state.savedBoardIndex = board.selectedIndex != null ? board.selectedIndex : null;
 
       if (state.combinations.length === 0) {
         state.errorMessage = 'This saved project has no combinations.';
@@ -779,24 +752,21 @@
         '<div class="board-name-row"><h3 class="serif">' + escapeHtml(combo.board_name) + '</h3></div>' +
         '<p class="board-desc">' + escapeHtml(combo.reason_for_selection || 'No description provided.') + '</p>' +
         (thumbTiles.length ? '<div class="board-thumbs">' + thumbTiles.map((t) => '<span class="board-thumb"><img src="' + CasaApi.resolveBackendImageUrl(t.imageUrl) + '" alt=""></span>').join('') + '</div>' : '') +
+        // The scene is what the client is choosing between, so it comes
+        // before the specification rather than under it. Below the tile
+        // list it opened off the bottom of the card and had to be
+        // scrolled to, which is the one thing a picture cannot survive.
+        '<div class="viz-section" id="vizSection-' + i + '">' + visualizationSectionHtml(i) + '</div>' +
         '<div class="formula-lbl mono">SPECIFIED TILES (' + combo.tiles.length + ')</div>' +
         formulaRowsHtml(combo.tiles) +
         (combo.grout_recommendation ? '<div class="mono" style="font-size:10px;color:var(--muted)">GROUT: ' + escapeHtml(combo.grout_recommendation) + '</div>' : '') +
-        '<div class="viz-section" id="vizSection-' + i + '">' + visualizationSectionHtml(i) + '</div>' +
-        '<button class="btn-use mono" data-use="' + i + '">' + (state.savedBoardIndex === i ? 'SAVED ✓' : 'USE THIS DESIGN') + ' →</button>' +
-        '<button class="btn-view-products mono" data-view-products="' + i + '">VIEW PRODUCTS USED (' + combo.tiles.length + ') ↗</button>' +
+        '<div class="products-section" id="productsSection-' + i + '">' + productsSectionHtml(combo, i) + '</div>' +
         '</div>';
       grid.appendChild(card);
     });
 
-    state.combinations.forEach((_, i) => wireVizSection(i));
+    state.combinations.forEach((_, i) => { wireVizSection(i); wireProductsSection(i); });
 
-    grid.querySelectorAll('[data-use]').forEach((btn) => btn.addEventListener('click', () => useDesign(parseInt(btn.dataset.use, 10))));
-    grid.querySelectorAll('[data-view-products]').forEach((btn) => btn.addEventListener('click', () => {
-      state.detailIndex = parseInt(btn.dataset.viewProducts, 10);
-      state.stage = 'detail';
-      render();
-    }));
     if (state.viewOnly) {
       document.getElementById('backToProjectsBtn').addEventListener('click', () => { location.href = 'projects.html'; });
     } else {
@@ -806,94 +776,65 @@
   }
 
   // ============================================================
-  // USE THIS DESIGN — save() persists all combinations, approve()
-  // marks the chosen index. Both existing endpoints, reused as-is.
+  // PRODUCTS USED — expands inside the card
+  //
+  // This used to be a link to a separate detail page whose whole job was
+  // to list these same three products one size larger. The client is
+  // comparing two boards; sending them to a page that shows one of them
+  // is the wrong direction, so the list opens where it is referred to.
   // ============================================================
 
-  async function useDesign(index) {
-    if (state.useInFlight) return;
-    state.useInFlight = true;
-    try {
-      let boardId = state.savedBoardId;
-      if (!boardId) {
-        const board = await CasaApi.moodBoards.save({
-          clientBrief: buildBriefText(),
-          style: state.palette,
-          room: state.room,
-          combinations: state.combinations,
-        });
-        boardId = board.id;
-        state.savedBoardId = boardId;
-      }
-      await CasaApi.moodBoards.approve(boardId, index);
-      state.savedBoardIndex = index;
-      showToast('SAVED TO CLIENT PROOFS');
-      render();
-    } catch (err) {
-      showToast('COULD NOT SAVE: ' + ((err && err.message) || 'Unknown error'));
-    } finally {
-      state.useInFlight = false;
+  function productRowHtml(tileRef) {
+    const detail = state.tilesById[tileRef.tileId];
+    const role = '<span class="ps mono">' + escapeHtml(String(tileRef.role || '').toUpperCase()) + '</span>';
+
+    if (!detail) {
+      return '<div class="product-row">' +
+        '<span style="width:50px;height:50px;flex:0 0 auto;border-radius:12px;background:var(--sand)"></span>' +
+        '<span style="flex:1;min-width:0"><span class="pn">' + escapeHtml(tileRef.name || 'Tile no longer available') + '</span>' + role + '</span>' +
+        '</div>';
     }
+
+    const img = detail.imageUrl
+      ? '<img src="' + CasaApi.resolveBackendImageUrl(detail.imageUrl) + '" alt="' + escapeHtml(detail.name) + '">'
+      : '<span style="width:50px;height:50px;flex:0 0 auto;border-radius:12px;background:var(--sand)"></span>';
+    // The role is what the card promised -- BASE, HIGHLIGHT, ACCENT --
+    // so it leads, and the brand/size/finish follows it. Without it the
+    // three rows are just three product names in no stated order.
+    const spec = [String(tileRef.role || '').toUpperCase(), detail.brand ? detail.brand.name : null, detail.size, detail.finish].filter(Boolean).join(' · ');
+
+    return '<div class="product-row">' + img +
+      '<span style="flex:1;min-width:0"><span class="pn">' + escapeHtml(detail.name) + '</span><span class="ps mono">' + escapeHtml(spec) + '</span></span>' +
+      '<span style="flex:0 0 auto; text-align:right"><span class="stock-badge mono ' + (detail.inStock ? 'stock-yes' : 'stock-no') + '">' + (detail.inStock ? 'IN STOCK' : 'OUT OF STOCK') + '</span></span>' +
+      '</div>';
   }
 
-  // ============================================================
-  // DETAIL
-  // ============================================================
+  function productsSectionHtml(combo, index) {
+    const open = state.expandedProducts[index] === true;
+    const count = combo.tiles.length;
 
-  function renderDetail() {
-    const main = document.getElementById('mainContent');
-    const combo = state.combinations[state.detailIndex];
-    if (!combo) { state.stage = 'results'; render(); return; }
+    return '<button class="btn-view-products mono" data-view-products="' + index + '" aria-expanded="' + open + '">' +
+      (open ? 'HIDE PRODUCTS USED (' + count + ') ↑' : 'VIEW PRODUCTS USED (' + count + ') ↓') +
+      '</button>' +
+      (open ? '<div class="products-list">' + combo.tiles.map(productRowHtml).join('') + '</div>' : '');
+  }
 
-    // ONE COLUMN, AND NO SCENE.
-    //
-    // The left column showed the same three products the right column
-    // already lists under PRODUCTS USED -- once as swatches, once as
-    // SPECIFIED PALETTE FORMULA -- so it went, and this is the product
-    // list for one combination and nothing more. The bathroom scene used
-    // to sit here too, reachable only by opening this page and only
-    // after saving the board; it is on the combination's own card now,
-    // which is where the client is choosing between them.
-    main.innerHTML =
-      '<div class="stage">' +
-      '<button class="detail-back mono" id="backToResultsBtn">← ALL ' + state.combinations.length + ' CONCEPTS</button>' +
-      '<div class="detail-single">' +
-      '<header class="detail-head">' +
-      '<div class="detail-part mono">PART 0' + (state.detailIndex + 1) + '</div>' +
-      '<h1 class="detail-name serif">' + escapeHtml(combo.board_name) + '</h1>' +
-      '<p class="detail-desc">' + escapeHtml(combo.reason_for_selection || 'No description provided.') + '</p>' +
-      '</header>' +
-      '<div class="mono" style="font-size:9.5px; letter-spacing:.18em; color:var(--muted)">SUITABLE ROOMS</div>' +
-      '<p style="margin:0; font-size:13.5px; color:var(--text2)">' + (combo.rooms_suitable.length ? escapeHtml(combo.rooms_suitable.join(', ')) : '—') + '</p>' +
-      (combo.grout_recommendation ? '<div class="mono" style="font-size:9.5px; letter-spacing:.18em; color:var(--muted)">GROUT RECOMMENDATION</div><p style="margin:0; font-size:13.5px; color:var(--text2)">' + escapeHtml(combo.grout_recommendation) + '</p>' : '') +
-      '<div class="mono" style="font-size:9.5px; letter-spacing:.18em; color:var(--muted)">PRODUCTS USED</div>' +
-      '<div class="products-list" id="productsList"></div>' +
-      '<div class="detail-actions">' +
-      '<button class="btn-primary mono" id="useDetailBtn">' + (state.savedBoardIndex === state.detailIndex ? 'SAVED ✓' : 'USE THIS DESIGN →') + '</button>' +
-      '<button class="btn-secondary mono" id="exportDetailBtn">⇩ EXPORT PDF</button>' +
-      '</div>' +
-      '</div>' +
-      '</div>';
+  function wireProductsSection(index) {
+    const host = document.getElementById('productsSection-' + index);
+    if (!host) return;
 
-    const productsList = document.getElementById('productsList');
-    combo.tiles.forEach((t) => {
-      const detail = state.tilesById[t.tileId];
-      const row = document.createElement('div');
-      row.className = 'product-row';
-      if (!detail) {
-        row.innerHTML = '<span style="width:50px;height:50px;flex:0 0 auto;border-radius:12px;background:var(--sand)"></span><span style="flex:1;min-width:0"><span class="pn">' + escapeHtml(t.name || 'Tile no longer available') + '</span><span class="ps mono">' + t.role + '</span></span>';
-      } else {
-        const img = detail.imageUrl ? '<img src="' + detail.imageUrl + '" alt="' + escapeHtml(detail.name) + '">' : '<span style="width:50px;height:50px;flex:0 0 auto;border-radius:12px;background:var(--sand)"></span>';
-        const spec = [detail.brand ? detail.brand.name : null, detail.size, detail.finish].filter(Boolean).join(' · ');
-        row.innerHTML = img + '<span style="flex:1;min-width:0"><span class="pn">' + escapeHtml(detail.name) + '</span><span class="ps mono">' + escapeHtml(spec) + '</span></span>' +
-          '<span style="flex:0 0 auto; text-align:right"><span class="stock-badge mono ' + (detail.inStock ? 'stock-yes' : 'stock-no') + '">' + (detail.inStock ? 'IN STOCK' : 'OUT OF STOCK') + '</span></span>';
-      }
-      productsList.appendChild(row);
+    const btn = host.querySelector('[data-view-products]');
+    if (!btn) return;
+
+    btn.addEventListener('click', () => {
+      state.expandedProducts[index] = !(state.expandedProducts[index] === true);
+      // Repaint this card only, for the same reason renderVizSection
+      // does: a full render() rebuilds both cards and sends the page back
+      // to the top, so the list the user just opened would scroll away
+      // from them.
+      host.innerHTML = productsSectionHtml(state.combinations[index], index);
+      wireProductsSection(index);
     });
-
-    document.getElementById('backToResultsBtn').addEventListener('click', () => { state.stage = 'results'; render(); });
-    document.getElementById('useDetailBtn').addEventListener('click', () => useDesign(state.detailIndex));
-    document.getElementById('exportDetailBtn').addEventListener('click', notReady);
   }
 
   // ============================================================
