@@ -203,6 +203,39 @@
   .viz-image-frame img { width:100%; display:block; object-fit:cover; }
   .viz-lightbox { position:fixed; inset:0; background:rgba(26,21,18,.88); display:flex; align-items:center; justify-content:center; padding:clamp(16px,4vw,48px); z-index:90; cursor:zoom-out; animation:fadeIn .18s ease both; }
   .viz-lightbox img { max-width:100%; max-height:100%; display:block; border-radius:14px; box-shadow:0 24px 70px rgba(0,0,0,.45); }
+  /* ---- mood board panel: the concept as a presentation sheet ---- */
+  .mb-overlay { position:fixed; inset:0; z-index:95; display:flex; align-items:flex-start; justify-content:center; padding:clamp(10px,3vw,40px); background:rgba(26,21,18,.82); overflow-y:auto; animation:fadeIn .18s ease both; }
+  .mb-panel { width:min(980px,100%); background:var(--card); border:1px solid var(--line); border-radius:20px; overflow:hidden; animation:rise .3s ease both; }
+  .mb-head { display:flex; align-items:flex-start; justify-content:space-between; gap:14px; padding:clamp(16px,2vw,26px); background:var(--sand); border-bottom:1px solid var(--line); }
+  .mb-eyebrow { font-size:9px; letter-spacing:.18em; color:var(--gold); }
+  .mb-title { font-weight:600; font-size:clamp(21px,2.4vw,30px); line-height:1.12; margin:7px 0 0; }
+  .mb-sub { margin:8px 0 0; font-size:13.5px; line-height:1.55; color:var(--text2); max-width:62ch; }
+  .mb-close { flex:0 0 auto; min-width:44px; min-height:44px; background:transparent; border:none; cursor:pointer; font-size:24px; line-height:1; color:var(--muted); }
+  .mb-close:hover { color:var(--ink); }
+  .mb-body { padding:clamp(16px,2vw,26px); display:flex; flex-direction:column; gap:clamp(14px,1.8vw,22px); }
+  .mb-lbl { font-size:9.5px; letter-spacing:.18em; color:var(--muted); }
+  .mb-scene { border-radius:16px; overflow:hidden; background:var(--sand); border:1px solid var(--line); }
+  /* Capped so the tile grid below is not pushed off the first screen
+     of the panel. contain, not cover -- a bathroom the client is
+     judging must not be cropped to fit a box. */
+  .mb-scene img { width:100%; display:block; max-height:min(540px,54vh); object-fit:contain; }
+  .mb-scene-empty { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; min-height:clamp(170px,24vw,280px); padding:26px; text-align:center; border-radius:16px; background:var(--sand); border:1px dashed #D8C9AE; }
+  .mb-scene-empty p { margin:0; font-size:13.5px; line-height:1.55; color:var(--text2); max-width:46ch; }
+  .mb-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(190px,100%),1fr)); gap:clamp(12px,1.5vw,20px); }
+  .mb-tile { display:flex; flex-direction:column; gap:10px; }
+  /* A large-format tile reads as a slab, not a swatch -- it takes the
+     width two of the smaller ones would, the way the reference panels
+     run a 600x1200 across the sheet. */
+  .mb-tile.is-large { grid-column:span 2; }
+  @media (max-width:620px) { .mb-tile.is-large { grid-column:auto; } }
+  .mb-shot { position:relative; border-radius:14px; overflow:hidden; background:var(--sand); border:1px solid var(--line); }
+  .mb-shot img { width:100%; height:100%; display:block; object-fit:cover; }
+  .mb-shot-empty { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; padding:14px; text-align:center; font-size:8.5px; letter-spacing:.08em; line-height:1.5; color:var(--muted); word-break:break-word; }
+  .mb-role { position:absolute; top:10px; left:10px; padding:5px 9px; border-radius:7px; background:rgba(251,246,236,.93); border:1px solid var(--line); font-size:8.5px; letter-spacing:.12em; color:#6E5228; }
+  .mb-cap { text-align:center; }
+  .mb-name { display:block; font-size:13px; font-weight:500; line-height:1.35; word-break:break-word; }
+  .mb-size { display:block; margin-top:5px; font-size:9.5px; letter-spacing:.1em; color:var(--muted); }
+  .mb-grout { padding-top:14px; border-top:1px solid var(--line); text-align:center; font-size:10px; letter-spacing:.12em; color:var(--muted); }
   .viz-lightbox-close { position:absolute; top:16px; right:20px; background:transparent; border:none; color:#FBF6EC; font-size:26px; line-height:1; cursor:pointer; }
 
   /* ---- shared ---- */
@@ -369,6 +402,8 @@
     warnings: [],
     tilesById: {},
     errorMessage: null,
+    // The combination whose mood board panel is open, or null.
+    moodBoardIndex: null,
     // Which cards have PRODUCTS USED open, keyed by combination index.
     // Kept in state rather than read off the DOM so a re-render of the
     // results stage puts every card back the way the user left it.
@@ -391,6 +426,11 @@
   };
 
   function render() {
+    // The panel lives in modalHost, outside the stage that render()
+    // rewrites, so it would otherwise survive a regeneration and go on
+    // showing a combination that no longer exists.
+    closeMoodBoard();
+
     switch (state.stage) {
       case 'wizard': return renderWizard();
       case 'generating': return renderGenerating();
@@ -757,6 +797,9 @@
         // list it opened off the bottom of the card and had to be
         // scrolled to, which is the one thing a picture cannot survive.
         '<div class="viz-section" id="vizSection-' + i + '">' + visualizationSectionHtml(i) + '</div>' +
+        // The card's own secondary button style, the same one PRODUCTS
+        // USED wears at the bottom.
+        '<button class="btn-view-products mono" data-mood-board="' + i + '">◇ VIEW MOOD BOARD ↗</button>' +
         '<div class="formula-lbl mono">SPECIFIED TILES (' + combo.tiles.length + ')</div>' +
         formulaRowsHtml(combo.tiles) +
         (combo.grout_recommendation ? '<div class="mono" style="font-size:10px;color:var(--muted)">GROUT: ' + escapeHtml(combo.grout_recommendation) + '</div>' : '') +
@@ -766,6 +809,9 @@
     });
 
     state.combinations.forEach((_, i) => { wireVizSection(i); wireProductsSection(i); });
+
+    grid.querySelectorAll('[data-mood-board]').forEach((btn) =>
+      btn.addEventListener('click', () => openMoodBoard(parseInt(btn.dataset.moodBoard, 10))));
 
     if (state.viewOnly) {
       document.getElementById('backToProjectsBtn').addEventListener('click', () => { location.href = 'projects.html'; });
@@ -834,6 +880,174 @@
       host.innerHTML = productsSectionHtml(state.combinations[index], index);
       wireProductsSection(index);
     });
+  }
+
+  // ============================================================
+  // MOOD BOARD PANEL
+  //
+  // The concept as a presentation sheet, in the shape the printed
+  // Fusion panels use: the rendered scene across the top, then every
+  // specified tile at its own proportion with its name and size set
+  // underneath it. Nothing here is new data -- it is the combination's
+  // own tiles and the scene the card already generated.
+  // ============================================================
+
+  // "600x1200", "600X1200X5MM" and "310x310mm" all mean the same pair
+  // of numbers. Anything that does not carry two of them is left alone
+  // rather than guessed at.
+  function parseTileSize(size) {
+    const numbers = String(size || '').match(/\d+(?:\.\d+)?/g);
+    if (!numbers || numbers.length < 2) return null;
+    const w = parseFloat(numbers[0]);
+    const h = parseFloat(numbers[1]);
+    if (!(w > 0) || !(h > 0)) return null;
+    return { w: w, h: h };
+  }
+
+  function formatTileSize(size) {
+    const parsed = parseTileSize(size);
+    if (parsed) return parsed.w + ' × ' + parsed.h + ' mm';
+    return String(size || '').trim();
+  }
+
+  // A slab runs across two columns; everything else keeps one.
+  function isLargeFormat(parsed) {
+    return !!parsed && Math.max(parsed.w, parsed.h) >= 1000;
+  }
+
+  /**
+   * The aspect ratio the thumbnail is drawn at.
+   *
+   * The caption carries the real size, so this is free to be a crop:
+   * a 43x243 listello drawn true to proportion would be six times
+   * taller than it is wide and would wreck the row it sits in. A wide
+   * cell is laid out landscape, a single cell is clamped near square,
+   * and the image is cover-fitted into whichever it gets.
+   */
+  function tileCellRatio(parsed, wide) {
+    if (!parsed) return 1;
+    if (wide) return Math.min(Math.max(parsed.w, parsed.h) / Math.min(parsed.w, parsed.h), 2.6);
+    return Math.min(Math.max(parsed.w / parsed.h, 0.55), 1.6);
+  }
+
+  function moodBoardTileHtml(tileRef) {
+    const detail = state.tilesById[tileRef.tileId];
+    const name = (detail && detail.name) || tileRef.name || 'Tile unavailable';
+    const size = detail ? detail.size : null;
+    const parsed = parseTileSize(size);
+    const wide = isLargeFormat(parsed);
+    const sizeText = formatTileSize(size);
+
+    // TODO(backend): detail.imageUrl is the catalog thumbnail the Tile
+    // row already carries, which is all this panel has to work with. If
+    // a print-resolution asset is added later it belongs on the same
+    // object -- read it here as `detail.highResUrl || detail.imageUrl`
+    // and nothing else on this page has to change. getTilesByIds in
+    // moodBoard.service.ts is the one select that would widen.
+    const shot = detail && detail.imageUrl
+      ? '<img src="' + CasaApi.resolveBackendImageUrl(detail.imageUrl) + '" alt="' + escapeHtml(name) + '">'
+      : '<span class="mb-shot-empty mono">' + escapeHtml((detail && detail.productCode) || name) + '</span>';
+
+    return '<figure class="mb-tile' + (wide ? ' is-large' : '') + '">' +
+      '<div class="mb-shot" style="aspect-ratio:' + tileCellRatio(parsed, wide).toFixed(3) + '">' +
+      shot +
+      '<span class="mb-role mono">' + escapeHtml(String(tileRef.role || '').toUpperCase()) + '</span>' +
+      '</div>' +
+      '<figcaption class="mb-cap">' +
+      '<span class="mb-name">' + escapeHtml(name) + '</span>' +
+      (sizeText ? '<span class="mb-size mono">' + escapeHtml(sizeText) + '</span>' : '') +
+      '</figcaption>' +
+      '</figure>';
+  }
+
+  function moodBoardSceneHtml(index) {
+    const v = vizStateFor(index);
+
+    if (v.status === 'success' && v.imageUrl) {
+      return '<div class="mb-scene"><img src="' + v.imageUrl + '" alt="Generated bathroom scene"></div>';
+    }
+    if (v.status === 'loading') {
+      return '<div class="mb-scene-empty">' +
+        '<p>Rendering the scene for this combination. It stays on this panel when it is done.</p>' +
+        '<button class="btn-amber mono" data-generate-scene="' + index + '" disabled>GENERATING BATHROOM SCENE…</button>' +
+        '</div>';
+    }
+    if (v.status === 'error') {
+      return '<div class="mb-scene-empty">' +
+        '<div class="viz-error mono">COULD NOT GENERATE: ' + escapeHtml(v.error || 'Unknown error') + '</div>' +
+        '<button class="btn-dashed mono" data-generate-scene="' + index + '">↻ TRY AGAIN</button>' +
+        '</div>';
+    }
+    return '<div class="mb-scene-empty">' +
+      '<p>No scene has been rendered for this combination yet.</p>' +
+      '<button class="btn-amber mono" data-generate-scene="' + index + '">GENERATE BATHROOM SCENE →</button>' +
+      '</div>';
+  }
+
+  // Repaints only the scene half of an open panel. Called by
+  // renderVizSection, so the card and the panel can never disagree
+  // about what has been generated.
+  function renderMoodBoardScene(index) {
+    if (state.moodBoardIndex !== index) return;
+    const host = document.getElementById('moodBoardScene');
+    if (!host) return;
+    host.innerHTML = moodBoardSceneHtml(index);
+    wireMoodBoardScene(index);
+  }
+
+  function wireMoodBoardScene(index) {
+    const host = document.getElementById('moodBoardScene');
+    if (!host) return;
+    const btn = host.querySelector('[data-generate-scene]');
+    // The same call the card's own button makes, on the same state.
+    if (btn) btn.addEventListener('click', () => generateBathroomScene(index));
+  }
+
+  function closeMoodBoard() {
+    state.moodBoardIndex = null;
+    const overlay = document.querySelector('.mb-overlay');
+    if (overlay) overlay.remove();
+    document.removeEventListener('keydown', moodBoardKeydown);
+  }
+
+  function moodBoardKeydown(event) {
+    if (event.key === 'Escape') closeMoodBoard();
+  }
+
+  function openMoodBoard(index) {
+    const combo = state.combinations[index];
+    if (!combo) return;
+    closeMoodBoard();
+    state.moodBoardIndex = index;
+
+    const overlay = document.createElement('div');
+    overlay.className = 'mb-overlay';
+    overlay.innerHTML =
+      '<section class="mb-panel" role="dialog" aria-modal="true" aria-label="Mood board">' +
+      '<header class="mb-head">' +
+      '<div>' +
+      '<div class="mb-eyebrow mono">PART 0' + (index + 1) + ' · MOOD BOARD</div>' +
+      '<h2 class="mb-title serif">' + escapeHtml(combo.board_name) + '</h2>' +
+      '<p class="mb-sub">' + escapeHtml(combo.reason_for_selection || 'No description provided.') + '</p>' +
+      '</div>' +
+      '<button class="mb-close" id="moodBoardClose" aria-label="Close">×</button>' +
+      '</header>' +
+      '<div class="mb-body">' +
+      '<div class="mb-lbl mono">BATHROOM SCENE</div>' +
+      '<div id="moodBoardScene">' + moodBoardSceneHtml(index) + '</div>' +
+      '<div class="mb-lbl mono">SPECIFIED TILES (' + combo.tiles.length + ')</div>' +
+      '<div class="mb-grid">' + combo.tiles.map(moodBoardTileHtml).join('') + '</div>' +
+      (combo.grout_recommendation ? '<div class="mb-grout mono">GROUT: ' + escapeHtml(combo.grout_recommendation) + '</div>' : '') +
+      '</div>' +
+      '</section>';
+
+    // Clicking the backdrop closes; clicking inside the panel does not.
+    overlay.addEventListener('click', (event) => { if (event.target === overlay) closeMoodBoard(); });
+    document.addEventListener('keydown', moodBoardKeydown);
+    document.getElementById('modalHost').appendChild(overlay);
+
+    document.getElementById('moodBoardClose').addEventListener('click', closeMoodBoard);
+    wireMoodBoardScene(index);
   }
 
   // ============================================================
@@ -936,9 +1150,13 @@
    */
   function renderVizSection(index) {
     const host = document.getElementById('vizSection-' + index);
-    if (!host) return;
-    host.innerHTML = visualizationSectionHtml(index);
-    wireVizSection(index);
+    if (host) {
+      host.innerHTML = visualizationSectionHtml(index);
+      wireVizSection(index);
+    }
+    // The mood board panel shows the same scene, so it follows the same
+    // state. No-ops unless the panel is open on this combination.
+    renderMoodBoardScene(index);
   }
 
   async function generateBathroomScene(index) {
