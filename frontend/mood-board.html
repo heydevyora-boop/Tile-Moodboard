@@ -465,13 +465,16 @@
     // Checked walls under Custom. Held apart from `feature` so switching
     // to another option and back does not lose what was ticked.
     customWalls: [],
-    customWallsOpen: false,
+    // Open from the start: choosing Custom is a request to name the
+    // walls, so the list is the point of the option, not a second step
+    // behind a caret.
+    customWallsOpen: true,
     size: SIZES[1],
     // 'preset' | 'custom' | 'auto'. One mode at a time, which is what
     // makes the three mutually exclusive: picking any chip sets it.
     sizeMode: 'preset',
     customSize: '',
-    customSizeOpen: false,
+    customSizeOpen: true,
     // Filled from GET /tiles/sizes the first time Custom is opened.
     catalogSizes: null,
     catalogSizesError: '',
@@ -801,7 +804,11 @@
         return '<button class="option-row' + (sel ? ' selected' : '') + '" data-feature="' + f.label + '"><span class="option-dot"></span><span style="flex:1;min-width:0"><span class="ol mono">' + f.label.toUpperCase() + '</span><span class="od">' + f.desc + '</span></span></button>' +
           (sel && f.label === 'Custom' ? customWallsHtml() : '');
       }).join('') + '</div>';
-      body.querySelectorAll('[data-feature]').forEach((btn) => btn.addEventListener('click', () => { state.feature = btn.dataset.feature; render(); }));
+      body.querySelectorAll('[data-feature]').forEach((btn) => btn.addEventListener('click', () => {
+        state.feature = btn.dataset.feature;
+        if (state.feature === 'Custom') state.customWallsOpen = true;
+        render();
+      }));
       wireCustomWalls(body);
       return;
     }
@@ -830,7 +837,7 @@
       }));
       body.querySelectorAll('[data-size-mode]').forEach((btn) => btn.addEventListener('click', () => {
         state.sizeMode = btn.dataset.sizeMode;
-        if (state.sizeMode === 'custom') loadCatalogSizes();
+        if (state.sizeMode === 'custom') { state.customSizeOpen = true; loadCatalogSizes(); }
         render();
       }));
       wireCustomSize(body);
