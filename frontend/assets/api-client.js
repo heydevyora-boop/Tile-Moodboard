@@ -2806,6 +2806,23 @@ const ai = {
   // GENERATE IMAGE URL
   // ========================================================
 
+  async recentGenerations(
+    limit
+  ) {
+    const query =
+      limit
+        ? `?limit=${limit}`
+        : '';
+
+    return apiFetch(
+      `/ai/visualizations/recent${query}`
+    ).then(
+      (r) =>
+        r.data
+          .generations
+    );
+  },
+
   async generateImageUrl(
     payload
   ) {
