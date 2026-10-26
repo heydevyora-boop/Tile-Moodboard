@@ -187,6 +187,7 @@ from app.backend_sync import (
     preflight_internal_sync,
     sync_master_product_to_backend,
 )
+from app.tile_image_screen import screen_tile_file
 
 
 # ============================================================
@@ -4860,6 +4861,10 @@ def process_pdf(
     # reached Drive and then failed to be recorded, and the summary
     # should not make an operator guess which happened.
     drive_failed_count = 0
+    # Reached Drive and MASTER, then failed the last look -- kept as a
+    # record, withheld from mood boards. Counted apart from every
+    # failure above because nothing went wrong here.
+    screened_out_count = 0
 
     persisted = 0
 
@@ -4897,6 +4902,7 @@ def process_pdf(
         nonlocal uploaded_count, drive_uploaded_count, master_row_count
         nonlocal skipped_count, sheet_failed_count, sync_failed_count
         nonlocal drive_failed_count
+        nonlocal screened_out_count
         nonlocal persisted
 
         persisted += 1
@@ -5096,6 +5102,26 @@ def process_pdf(
         # when mood board candidates are ranked. backend_sync drops any of
         # these that is blank, so a product whose size text or name could
         # not be read syncs exactly as it does today.
+        # LAST LOOK BEFORE IT CAN REACH A MOOD BOARD.
+        #
+        # Extraction has decided this region is a product and the image
+        # is already in Drive and on the MASTER row, where it stays
+        # either way. This only decides whether it may also become a
+        # combination candidate, which is the one place a wrong picture
+        # reaches a client and the image generator. A refusal here costs
+        # nothing that was already saved; see tile_image_screen for what
+        # it refuses, and for the three heuristics that were measured
+        # and thrown away for overlapping with real stock.
+        fit_for_a_board, screen_reason = screen_tile_file(image["path"])
+
+        if not fit_for_a_board:
+            emit(f"      Tile {position} \u2192 kept in Drive, but not "
+                 f"offered to mood boards -- {screen_reason}")
+            print(f"[SCREEN] not a combination candidate  {product_id}: "
+                  f"{screen_reason}")
+            screened_out_count += 1
+            return
+
         synced = sync_master_product_to_backend(
             product_code=product_id,
             brand=brand,
@@ -5257,6 +5283,10 @@ def process_pdf(
     )
 
     print(
+        f"Held from mood boards: {screened_out_count}"
+    )
+
+    print(
         f"Tile rows created    : {uploaded_count}"
     )
 
@@ -5306,6 +5336,7 @@ def process_pdf(
         "images": len(images),
         "uploaded": uploaded_count,
         "drive_uploaded": drive_uploaded_count,
+        "screened_out": screened_out_count,
         "master_rows": master_row_count,
         "skipped": skipped_count,
         "sheet_failed": sheet_failed_count,
