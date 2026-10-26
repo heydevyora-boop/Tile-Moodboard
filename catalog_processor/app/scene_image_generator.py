@@ -231,7 +231,21 @@ def build_room_scene_prompt(
     # the tile itself goes on the floor, the tile decides the floor.
     size = text(requirements.get("size"))
     finish = text(requirements.get("finish"))
-    if (size or finish) and not tile_goes_on_floor(surface):
+    # The client may hand the module back rather than name one. That is
+    # a different thing from saying nothing, and the flag is explicit so
+    # the two cannot be confused: an absent size means the client was
+    # never asked, size_auto means they were and chose to leave it.
+    auto_size = requirements.get("size_auto") is True
+
+    if auto_size and not tile_goes_on_floor(surface):
+        module = (
+            "a floor module of your own choosing -- pick the tile size "
+            "that suits this room's proportions"
+        )
+        if finish:
+            module += f", in a {finish} finish"
+        selections.append(f"- Floor: {module}.")
+    elif (size or finish) and not tile_goes_on_floor(surface):
         if size and finish:
             module = f"{size} tiles in a {finish} finish"
         elif size:

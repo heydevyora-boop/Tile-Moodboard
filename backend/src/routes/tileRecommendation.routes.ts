@@ -14,6 +14,9 @@ router.use(authenticate);
 router.get('/recommendations', requirePermission('tiles:read'), validate(tileRecommendationsQuerySchema, 'query'), tileRecommendationController.getRecommendations);
 
 // Plain paginated/searchable tile browse for the Catalog page's Surface Archive.
+// Before '/', or ':id'-shaped routes would swallow it.
+router.get('/sizes', requirePermission('tiles:read'), tileRecommendationController.listTileSizes);
+
 router.get('/', requirePermission('tiles:read'), validate(listTilesQuerySchema, 'query'), tileRecommendationController.listTiles);
 
 export default router;
