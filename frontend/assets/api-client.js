@@ -68,6 +68,51 @@
     }
   }
 
+  // ============================================================
+  // IS THE TOKEN WE ALREADY HOLD STILL GOOD?
+  //
+  // Every page called /auth/refresh before it would render anything,
+  // even though the access token and the user were already in
+  // localStorage from the page before. On a serverless backend that is
+  // a cold start per navigation -- the deployment's own logs show
+  // roughly 2.7s between the function waking and "Database connected"
+  // -- and the whole site sat behind it.
+  //
+  // A JWT carries its own expiry, so whether the token is still usable
+  // is a question the browser can answer by itself, with no round
+  // trip. Only when it cannot is the network involved.
+  // ============================================================
+
+  // Refresh this long before the token actually expires, so a request
+  // started just under the wire does not land just over it.
+  const TOKEN_EARLY_REFRESH_MS = 60 * 1000;
+
+  function tokenExpiryMs(token) {
+    try {
+      const [, payload] = String(token || '').split('.');
+      if (!payload) return 0;
+
+      const json = atob(
+        payload.replace(/-/g, '+').replace(/_/g, '/')
+      );
+      const exp = JSON.parse(json).exp;
+
+      return typeof exp === 'number' ? exp * 1000 : 0;
+    } catch {
+      // Unreadable means not trusted, which sends us to the network --
+      // never to treating it as valid.
+      return 0;
+    }
+  }
+
+  function haveUsableSession() {
+    const token = getAccessToken();
+    if (!token || !getCachedUser()) return false;
+
+    const expiry = tokenExpiryMs(token);
+    return expiry > Date.now() + TOKEN_EARLY_REFRESH_MS;
+  }
+
   function redirectToLogin() {
     clearSession();
 
@@ -384,6 +429,13 @@
     },
 
     async ensureSession() {
+      // The token we already hold, while it is still good. This is what
+      // takes the network off the path between clicking a nav item and
+      // seeing the page.
+      if (haveUsableSession()) {
+        return getCachedUser();
+      }
+
       try {
         const data =
           await doRefresh();
