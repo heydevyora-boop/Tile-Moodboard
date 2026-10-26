@@ -58,6 +58,42 @@ FEATURE_PLACEMENTS = {
     "shower nook": "the shower niche and its shelf return",
 }
 
+# The walls the wizard's Custom option lets a client name, each written
+# as a noun phrase that reads after "Feature wall: ". They share one
+# trailing clause, added once below, rather than each repeating it.
+NAMED_WALLS = {
+    "left wall": "the left-hand wall",
+    "right wall": "the right-hand wall",
+    "front wall": "the wall facing you",
+    "back wall": "the wall behind you",
+}
+
+# How the client says "I have not decided -- you decide".
+STUDIO_DECIDES = "left to the studio"
+
+
+def _named_walls(key: str) -> Optional[str]:
+    """The placement a Custom selection names, or None if it names none.
+
+    Matched on "<side> wall" rather than on the whole sentence, so the
+    wording the wizard builds can change without this losing the
+    selection. "left to the studio" cannot collide with "left wall".
+    """
+    chosen = [phrase for wall, phrase in NAMED_WALLS.items() if wall in key]
+    if not chosen:
+        return None
+
+    if len(chosen) == 1:
+        walls, treat = chosen[0], "Treat that as the statement surface"
+    else:
+        walls = ", ".join(chosen[:-1]) + " and " + chosen[-1]
+        treat = "Treat those together as one statement surface"
+
+    return (
+        f"{walls}, taking the doorway as the point of view. {treat} "
+        "and leave every other wall in the plain base finish"
+    )
+
 
 def describe_feature(
     feature: Any,
@@ -71,8 +107,23 @@ def describe_feature(
     build a shower the room selection excludes. Both stages ask, so only
     the caller that passes log=True reports it -- once per request.
     """
-    placement = FEATURE_PLACEMENTS.get(_key(feature))
-    if placement and _key(feature) == "shower nook" and "powder" in _key(room):
+    key = _key(feature)
+
+    # The wizard's Custom option, which names walls itself or hands the
+    # choice back. Checked before the fixed table: those two entries
+    # name a fitting, these name a wall, and neither can match the other.
+    if STUDIO_DECIDES in key:
+        return (
+            "one wall of your choosing -- pick the wall the room's "
+            "layout already makes the focus, and use only that one"
+        )
+
+    named = _named_walls(key)
+    if named:
+        return named
+
+    placement = FEATURE_PLACEMENTS.get(key)
+    if placement and key == "shower nook" and "powder" in _key(room):
         if log:
             print(
                 "  [visualization] feature 'Shower nook' ignored: a powder "
