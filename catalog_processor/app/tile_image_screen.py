@@ -80,10 +80,21 @@ these two through. They need more examples before a rule can be fitted.
 
 from __future__ import annotations
 
-from typing import Tuple
+from typing import Any, Tuple
 
-import cv2
-import numpy as np
+# cv2 and numpy are imported INSIDE the functions, never here.
+#
+# main_step6_complete.py holds that line for its whole module -- every
+# cv2/numpy import in it sits inside a function -- because the Vercel
+# Python function does not carry opencv, and a module-level import
+# brings the entire FastAPI app down on startup with
+# ModuleNotFoundError: No module named 'cv2'. That is exactly what a
+# module-level import here did: the visualization endpoint answered
+# HTTP 500 on every call because the app could not be imported at all.
+#
+# Extraction runs where opencv is installed, so the screen still runs
+# there. Everywhere else this module imports for free and the functions
+# below keep the tile rather than dropping it.
 
 
 # The chroma spread at which a frame stops reading as one tile surface.
@@ -113,14 +124,25 @@ SPLIT_MIN_SIDE_SHARE = 0.07
 CHROMA_GRID = 8
 
 
-def scene_chroma_spread(image_bgr: np.ndarray) -> float:
+def _vision():
+    """(cv2, numpy), or (None, None) where opencv is not installed."""
+    try:
+        import cv2
+        import numpy as np
+    except ImportError:
+        return None, None
+    return cv2, np
+
+
+def scene_chroma_spread(image_bgr: Any) -> float:
     """How far the frame's colour wanders, independent of brightness.
 
     Dividing each cell by its own luma is what makes this a question
     about materials rather than about lighting or how dark the tile is --
     which is exactly the trap a brightness measure falls into.
     """
-    if image_bgr is None or getattr(image_bgr, "size", 0) == 0:
+    cv2, np = _vision()
+    if cv2 is None or image_bgr is None or getattr(image_bgr, "size", 0) == 0:
         return 0.0
 
     side = CHROMA_GRID * 8
@@ -138,14 +160,15 @@ def scene_chroma_spread(image_bgr: np.ndarray) -> float:
     return float(chroma.reshape(-1, 3).std(axis=0).mean())
 
 
-def split_material_distance(image_bgr: np.ndarray) -> float:
+def split_material_distance(image_bgr: Any) -> float:
     """The worst straight cut: how unlike its two halves are.
 
     Colour and grain are weighed equally. Colour alone misses a split
     between two materials of similar tone; grain alone misses a split
     between two equally smooth ones.
     """
-    if image_bgr is None or getattr(image_bgr, "size", 0) == 0:
+    cv2, np = _vision()
+    if cv2 is None or image_bgr is None or getattr(image_bgr, "size", 0) == 0:
         return 0.0
 
     small = cv2.resize(
@@ -189,13 +212,17 @@ def split_material_distance(image_bgr: np.ndarray) -> float:
     return worst
 
 
-def screen_tile_image(image_bgr: np.ndarray) -> Tuple[bool, str]:
+def screen_tile_image(image_bgr: Any) -> Tuple[bool, str]:
     """(keep, reason). `keep` is False only when the measurement says so.
 
     A frame that cannot be read at all is kept: this is a last look, not
     a second extraction, and it must never drop a product because it
     could not measure it.
     """
+    cv2, _ = _vision()
+    if cv2 is None:
+        return True, "opencv is not installed here -- kept unmeasured"
+
     if image_bgr is None or getattr(image_bgr, "size", 0) == 0:
         return True, "nothing to measure -- kept"
 
@@ -225,6 +252,10 @@ def screen_tile_image(image_bgr: np.ndarray) -> Tuple[bool, str]:
 
 def screen_tile_file(path) -> Tuple[bool, str]:
     """The same check, reading the crop from disk."""
+    cv2, _ = _vision()
+    if cv2 is None:
+        return True, "opencv is not installed here -- kept unmeasured"
+
     image = cv2.imread(str(path), cv2.IMREAD_COLOR)
     if image is None:
         return True, "could not be read -- kept"
