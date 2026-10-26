@@ -15,8 +15,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.tile_image_screen import (  # noqa: E402
     SCENE_CHROMA_SPREAD,
+    SPLIT_MATERIAL_DISTANCE,
     scene_chroma_spread,
     screen_tile_image,
+    split_material_distance,
 )
 
 PASS = []
@@ -70,6 +72,16 @@ def several_materials(seed):
     return img
 
 
+def split_frame(flat=(70, 55, 140), seed=21):
+    """The defect the catalog owner found: a flat colour on one side of a
+    straight diagonal, a real tile material on the other."""
+    rng = np.random.default_rng(seed)
+    img = one_material(seed, base=(170, 180, 195), grain=34)
+    rows, cols = np.mgrid[0:320, 0:320]
+    img[(cols + rows) < 320] = flat
+    return img
+
+
 def main():
     # --- the bar sits where the measurements put it -------------------
     check("the bar is between the worst real tile and the nearest reject",
@@ -113,6 +125,33 @@ def main():
     check("...and the decor sits with the tiles, not the scenes",
           scene_chroma_spread(decor) < scene_spread,
           f"decor={scene_chroma_spread(decor):.4f}")
+
+    # --- two materials in one frame ------------------------------------
+    check("the split bar is between the worst real tile and the defect",
+          0.350 < SPLIT_MATERIAL_DISTANCE < 0.684,
+          f"bar={SPLIT_MATERIAL_DISTANCE}")
+    check("...with at least a 1.35x margin on the real-tile side",
+          SPLIT_MATERIAL_DISTANCE / 0.350 >= 1.35,
+          f"{SPLIT_MATERIAL_DISTANCE / 0.350:.2f}x")
+    check("...and at least a 1.35x margin on the defect side",
+          0.684 / SPLIT_MATERIAL_DISTANCE >= 1.35,
+          f"{0.684 / SPLIT_MATERIAL_DISTANCE:.2f}x")
+
+    for flat, name in [((70, 55, 140), "a flat navy half"),
+                       ((42, 70, 120), "a flat brown half"),
+                       ((238, 236, 232), "a flat pale half")]:
+        keep, reason = screen_tile_image(split_frame(flat=flat))
+        check(f"{name} beside a real material is refused", not keep, reason)
+        check("...and the reason says half of it is another product",
+              "another product" in reason or "colour spread" in reason)
+
+    check("a whole tile is nowhere near the split bar",
+          max(split_material_distance(one_material(s)) for s in range(1, 6))
+          < SPLIT_MATERIAL_DISTANCE * 0.6,
+          f"{max(split_material_distance(one_material(s)) for s in range(1, 6)):.3f}")
+    check("a dark-ground decor is not read as a split either",
+          split_material_distance(dark_ground_decor()) < SPLIT_MATERIAL_DISTANCE,
+          f"{split_material_distance(dark_ground_decor()):.3f}")
 
     # --- it must never drop a product it could not measure -------------
     keep, reason = screen_tile_image(None)

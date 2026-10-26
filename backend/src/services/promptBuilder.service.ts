@@ -183,6 +183,11 @@ Rules for the "tiles" array:
 - Each role in a combination must use a DIFFERENT tile. Never give the same tileId two roles — a board whose base and highlight are the same product is not a combination.
 - "name" should match the tile's listed name, for readability.
 
+Rules about which tile may take which role:
+- "base" is the plain field of the room. It must be a tile listed as type=BASE or type=LARGE_FORMAT_BASE — a quiet surface, plain or softly veined.
+- "highlight", "accent" and "border" are the decorated roles. A highlight is a DESIGNER tile: it must be a tile listed as type=HIGHLIGHTER, type=ACCENT or type=BORDER. Never nominate a plain type=BASE tile as the highlight, and never put a decorated tile in the base role — a board whose highlight is plainer than its base is the wrong way round.
+- If no decorated tile is listed at all, return the base alone and say so in reason_for_selection. Do not promote a base tile into a decorated role to fill the shape.
+
 Rules about the tile list itself:
 - A tile marked batch=LATEST came from the most recent catalog extraction. Those products have not been classified yet, which is why their finish, colour and room are missing from the list — that means "not recorded", never "unsuitable". Judge them on their name, brand, size and type, exactly as seriously as the older products whose attributes are filled in.
 - At least one of the combinations you return must use a batch=LATEST product, whenever any appear in the list. Do not return a set of combinations built entirely from the older products while new stock is sitting in the list unused.
@@ -259,7 +264,31 @@ const VALID_ROLES = new Set(['base', 'highlight', 'border', 'accent']);
  * silently trusting the response would let a hallucinated product reach
  * a customer-facing mood board.
  */
-export function validateCombinations(raw: unknown, consideredTileIds: Set<string>): { combinations: GeneratedCombination[]; warnings: string[] } {
+// Which Tile.type values may carry which role.
+//
+// The catalog owner's complaint, exactly: a board came back with a plain
+// tile nominated as the highlight and the decorated one sitting in the
+// base slot. The prompt now says not to, but a prompt is a request --
+// the pool already records what each product IS, so the swap is provable
+// here rather than hoped against.
+const DECORATED_ROLES = new Set(['highlight', 'accent', 'border']);
+const DECORATED_TYPES = new Set(['HIGHLIGHTER', 'ACCENT', 'BORDER']);
+const BASE_TYPES = new Set(['BASE', 'LARGE_FORMAT_BASE']);
+
+export function validateCombinations(
+  raw: unknown,
+  consideredTileIds: Set<string>,
+  // Optional so every existing caller and test keeps working; when it is
+  // supplied the role check below runs, and when it is not the behaviour
+  // is exactly what it was.
+  typeByTileId?: Map<string, string>,
+): { combinations: GeneratedCombination[]; warnings: string[] } {
+  // Only worth enforcing when the pool actually offered an alternative.
+  // A catalog with nothing decorated in it must still produce a board,
+  // so the rule holds the model to what was available, not to an ideal.
+  const poolHasDecorated = typeByTileId
+    ? [...typeByTileId.values()].some((type) => DECORATED_TYPES.has(type))
+    : false;
   const warnings: string[] = [];
 
   if (!Array.isArray(raw)) {
@@ -303,6 +332,15 @@ export function validateCombinations(raw: unknown, consideredTileIds: Set<string
       }
       if (usedTileIds.has(tileId)) {
         warnings.push(`Combination ${index}: dropped the "${role}" role — tileId "${tileId}" is already used by another role in this combination`);
+        continue;
+      }
+      const tileType = typeByTileId?.get(tileId);
+      if (tileType && poolHasDecorated && DECORATED_ROLES.has(role) && BASE_TYPES.has(tileType)) {
+        warnings.push(`Combination ${index}: dropped the "${role}" role — tileId "${tileId}" is a plain ${tileType} tile, and a decorated product was available. A highlight has to be a designer tile.`);
+        continue;
+      }
+      if (tileType && role === 'base' && DECORATED_TYPES.has(tileType)) {
+        warnings.push(`Combination ${index}: dropped the "base" role — tileId "${tileId}" is a decorated ${tileType} tile, which belongs in the highlight, not under it.`);
         continue;
       }
       usedTileIds.add(tileId);
@@ -355,7 +393,8 @@ export async function generateCombinations(input: GenerateBriefInput, actorId: s
   const raw = await geminiClient.generateJSON<unknown>(prompt.userPrompt, { systemInstruction: prompt.systemInstruction });
 
   const consideredIds = new Set(tiles.map((t) => t.id));
-  const { combinations, warnings } = validateCombinations(raw, consideredIds);
+  const typeByTileId = new Map(tiles.map((t) => [t.id, t.type]));
+  const { combinations, warnings } = validateCombinations(raw, consideredIds, typeByTileId);
 
   if (tiles.length < rulesSettings.defaultMinTiles) {
     warnings.push(`Only ${tiles.length} tile(s) matched this brief — fewer than the configured minimum of ${rulesSettings.defaultMinTiles} (Settings > Default Rules).`);
