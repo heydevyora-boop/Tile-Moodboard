@@ -373,16 +373,61 @@
     { label: 'Textured Grip', spec: 'R11 · OUTDOOR RATED', img: 'img/tex-terrazzo.png' },
   ];
 
-  // Per sq ft, supply only, in rupees. Converted from the dollar bands
-  // this started with -- $2/$4/$8/$16 at about Rs 87.5 -- and rounded to
-  // the nearest 25 so the bands stay readable and keep the exact
-  // doubling they always had. This string is shown to the client AND
-  // sent to the model as part of the brief, so the two cannot drift.
+  // THE ROOM EVERY BUDGET IS QUOTED AGAINST.
+  //
+  // A budget means nothing without the area it has to cover, so one
+  // reference bathroom is fixed here and shown on the step. 7ft is the
+  // height bathroom walls are normally tiled to; one standard door
+  // opening is deducted because nobody tiles a doorway.
+  const REFERENCE_BATHROOM = {
+    lengthFt: 10,
+    widthFt: 10,
+    wallHeightFt: 7,
+    doorWidthFt: 3,
+    doorHeightFt: 7,
+    // Cuts and breakage. 10% is the usual allowance on a tile order.
+    wastage: 0.10,
+  };
+
+  function referenceAreas() {
+    const r = REFERENCE_BATHROOM;
+    const floor = r.lengthFt * r.widthFt;
+    const perimeter = 2 * (r.lengthFt + r.widthFt);
+    const walls = perimeter * r.wallHeightFt - r.doorWidthFt * r.doorHeightFt;
+    return { floor: floor, walls: walls, total: floor + walls };
+  }
+
+  // THE BUDGET BANDS.
+  //
+  // These are TOTAL tile cost for the reference bathroom above -- floor
+  // and wall tiles only, no sanitaryware, no fittings, no labour.
+  //
+  // They replace the three per-sq-ft bands that were here, and the two
+  // cannot be reconciled: against this room's 359 sq ft the old bands
+  // came to Rs 62,825-125,650, Rs 125,650-251,300 and Rs 251,300-502,600.
+  // The totals asked for here are roughly a third of even the cheapest
+  // of those, so keeping both would have meant showing a client two
+  // numbers that contradict each other. The latest figures are the ones
+  // kept, and each card states the rate it implies so the arithmetic is
+  // visible rather than buried.
   const BUDGETS = [
-    { tier: 'ESSENTIAL', range: '₹175 – ₹350', desc: 'Porcelain bodies and matte neutrals held in bulk stock.' },
-    { tier: 'MID-RANGE', range: '₹350 – ₹700', desc: 'Vein-cut travertine, fluted accents and polished marfil.' },
-    { tier: 'SIGNATURE', range: '₹700 – ₹1,400', desc: 'Bookmatched slabs, mosaic sheets and brass-trimmed niches.' },
+    { tier: 'ESSENTIAL', total: [20000, 25000], desc: 'Porcelain bodies and matte neutrals held in bulk stock.' },
+    { tier: 'PREMIUM', total: [40000, 60000], desc: 'Vein-cut travertine, fluted accents and polished marfil.' },
   ];
+
+  function rupees(value) {
+    return '\u20B9' + Math.round(value).toLocaleString('en-IN');
+  }
+
+  function budgetRangeText(band) {
+    return rupees(band.total[0]) + ' \u2013 ' + rupees(band.total[1]);
+  }
+
+  /** The per-sq-ft rate a total band works out to over the tiled area. */
+  function budgetRateText(band) {
+    const area = referenceAreas().total;
+    return rupees(band.total[0] / area) + ' \u2013 ' + rupees(band.total[1] / area);
+  }
 
   const PALETTES = [
     { label: 'Warm Neutral', spec: 'BEIGE · SAND · TRAVERTINE', sw: ['#E7DCC6', '#D9C7A6', '#B79A6E', '#8A7A62'] },
@@ -431,7 +476,10 @@
     catalogSizes: null,
     catalogSizesError: '',
     finish: FINISHES[0].label,
-    budget: BUDGETS[1],
+    // Several bands at once, so one brief can ask for alternatives to
+    // compare. Held as an array; the rest of the wizard reads it
+    // through budgetText().
+    budgets: [BUDGETS[0]],
     palette: PALETTES[0].label,
     grout: GROUTS[0],
     view: VIEWS[0].label,
@@ -489,6 +537,7 @@
     if (step === 2 && state.feature === 'Custom') return state.customWalls.length > 0;
     // Custom is only a choice once a catalog size is picked.
     if (step === 3 && state.sizeMode === 'custom') return !!state.customSize;
+    if (step === 4) return state.budgets.length > 0;
     return true;
   }
 
@@ -681,6 +730,56 @@
     return state.size;
   }
 
+  // ============================================================
+  // WHAT THE BUDGET HAS TO BUY
+  //
+  // Quantity is arithmetic on the real coverage and the module the
+  // client picked, so it is worked out here and shown. Cost is NOT:
+  // no product in this catalog carries a price -- there is no price
+  // column on Tile and none in the MASTER sheet -- so the rate each
+  // band implies is given instead, which is derived from the client's
+  // own figures rather than invented.
+  // ============================================================
+
+  const SQ_FT_PER_SQ_M = 10.7639;
+
+  /** Tiles needed for a given area, or null when the module is unknown. */
+  function tilesFor(areaSqFt) {
+    const parsed = parseTileSize(sizeText());
+    if (!parsed) return null;
+
+    const tileSqFt = (parsed.w / 1000) * (parsed.h / 1000) * SQ_FT_PER_SQ_M;
+    if (!(tileSqFt > 0)) return null;
+
+    return Math.ceil((areaSqFt / tileSqFt) * (1 + REFERENCE_BATHROOM.wastage));
+  }
+
+  function budgetText() {
+    const bands = state.budgets.length ? state.budgets : [];
+    if (bands.length === 0) return '';
+    return bands
+      .map((b) => b.tier + ' ' + budgetRangeText(b))
+      .join(' or ');
+  }
+
+  /** The whole envelope, in the words the model and the client both see. */
+  function budgetBrief() {
+    const area = referenceAreas();
+    const r = REFERENCE_BATHROOM;
+    const bands = state.budgets.map((b) =>
+      b.tier + ' ' + budgetRangeText(b) + ' total (about ' + budgetRateText(b) + ' per sq ft)');
+
+    return 'Budget for floor and wall tiles only, for a '
+      + r.lengthFt + 'ft x ' + r.widthFt + 'ft bathroom tiled to '
+      + r.wallHeightFt + 'ft: ' + Math.round(area.floor) + ' sq ft of floor and '
+      + Math.round(area.walls) + ' sq ft of wall, ' + Math.round(area.total)
+      + ' sq ft in all. Excludes sanitaryware, basins, WC, fittings and installation. '
+      + (bands.length > 1
+        ? 'Propose one combination for each of these bands so they can be compared: '
+        : 'Stay within: ')
+      + bands.join('; ') + '.';
+  }
+
   function renderStepBody() {
     const body = document.getElementById('stepBody');
 
@@ -740,17 +839,36 @@
     }
 
     if (state.step === 4) {
-      body.innerHTML = '<div class="budget-grid">' + BUDGETS.map((b) => {
-        const sel = state.budget.tier === b.tier;
-        return '<button class="budget-card' + (sel ? ' selected' : '') + '" data-budget="' + b.tier + '">' +
-          '<span class="budget-top"><span class="budget-tier mono">' + b.tier + '</span>' + (sel ? '<span class="budget-check">✓</span>' : '') + '</span>' +
-          '<span class="budget-range serif">' + b.range + '</span>' +
-          '<span class="budget-note mono">PER SQ FT · SUPPLY ONLY</span>' +
-          '<span class="budget-desc">' + b.desc + '</span>' +
-          '</button>';
-      }).join('') + '</div>';
+      const area = referenceAreas();
+      const r = REFERENCE_BATHROOM;
+
+      body.innerHTML =
+        '<p class="step-sub" style="margin-top:clamp(14px,1.6vw,20px)">' +
+        'Quoted against a ' + r.lengthFt + '\u00D7' + r.widthFt + ' ft bathroom tiled to ' +
+        r.wallHeightFt + ' ft \u2014 ' + Math.round(area.floor) + ' sq ft of floor and ' +
+        Math.round(area.walls) + ' sq ft of wall, ' + Math.round(area.total) +
+        ' sq ft in all. Tiles only: no sanitaryware, fittings or labour. ' +
+        'Pick more than one band to compare.</p>' +
+        '<div class="budget-grid">' + BUDGETS.map((b) => {
+          const sel = state.budgets.some((x) => x.tier === b.tier);
+          const tiles = tilesFor(area.total);
+          return '<button class="budget-card' + (sel ? ' selected' : '') + '" data-budget="' + b.tier + '" role="checkbox" aria-checked="' + sel + '">' +
+            '<span class="budget-top"><span class="budget-tier mono">' + b.tier + '</span>' + (sel ? '<span class="budget-check">\u2713</span>' : '') + '</span>' +
+            '<span class="budget-range serif">' + budgetRangeText(b) + '</span>' +
+            '<span class="budget-note mono">TOTAL \u00B7 FLOOR + WALL TILES \u00B7 ABOUT ' + budgetRateText(b) + ' / SQ FT</span>' +
+            '<span class="budget-desc">' + b.desc + '</span>' +
+            (tiles ? '<span class="budget-note mono">\u2248 ' + tiles + ' \u00D7 ' + escapeHtml(sizeText()) + ' TILES, CUTS INCLUDED</span>' : '') +
+            '</button>';
+        }).join('') + '</div>';
+
       body.querySelectorAll('[data-budget]').forEach((btn) => btn.addEventListener('click', () => {
-        state.budget = BUDGETS.find((b) => b.tier === btn.dataset.budget);
+        const band = BUDGETS.find((b) => b.tier === btn.dataset.budget);
+        const already = state.budgets.some((x) => x.tier === band.tier);
+        // Kept in the order they are offered, so the brief reads the
+        // same way however they were clicked.
+        const chosen = state.budgets.filter((x) => x.tier !== band.tier);
+        if (!already) chosen.push(band);
+        state.budgets = BUDGETS.filter((b) => chosen.some((x) => x.tier === b.tier));
         render();
       }));
       return;
@@ -775,7 +893,7 @@
     if (state.step === 6) {
       const summary = [
         ['ROOM', state.room || '—'], ['FEATURE WALL', featureText()], ['FLOOR MODULE', sizeText()],
-        ['FINISH', state.finish], ['BUDGET BAND', state.budget.tier + ' (' + state.budget.range + ')'],
+        ['FINISH', state.finish], ['BUDGET', budgetText()],
         ['PALETTE', state.palette], ['GROUT', state.grout], ['CAMERA', state.view],
       ];
       body.innerHTML = '<div class="summary-card" style="margin-top:clamp(18px,2vw,26px)">' +
@@ -804,7 +922,7 @@
       (state.sizeMode === 'auto'
         ? 'Choose the floor tile module yourself, from what the catalog stocks, in a ' + state.finish + ' finish.'
         : 'Use ' + sizeText() + ' floor tiles in a ' + state.finish + ' finish.'),
-      'Budget band: ' + state.budget.tier + ' (' + state.budget.range + ' per sq ft, supply only).',
+      budgetBrief(),
       'Palette: ' + state.palette + ', with ' + state.grout + ' grout.',
       'Client view requested for the handout: ' + state.view + '.',
     ].join(' ');
@@ -819,7 +937,7 @@
         text: buildBriefText(),
         room: state.room,
         style: state.palette,
-        budget: state.budget.tier + ' (' + state.budget.range + '/sqft)',
+        budget: budgetBrief(),
         combinationCount: COMBINATION_COUNT,
       };
       const result = await CasaApi.moodBoards.generate(payload);
@@ -962,7 +1080,7 @@
     const main = document.getElementById('mainContent');
     const specLine = state.viewOnly
       ? state.room + ' · ' + state.palette + (state.loadedBoard && state.loadedBoard.clientBrief ? ' — ' + state.loadedBoard.clientBrief : '')
-      : state.room + ' · ' + state.palette + ' · ' + state.budget.tier + ' · ' + sizeText() + ' · ' + featureText() + ' · ' + state.view;
+      : state.room + ' · ' + state.palette + ' · ' + budgetText() + ' · ' + sizeText() + ' · ' + featureText() + ' · ' + state.view;
 
     const iterateBoxHtml = state.viewOnly
       ? '<div class="iterate-box"><h3 class="serif" style="margin:0; font-size:clamp(20px,2vw,26px)">Saved project</h3><p style="margin:8px 0 0; font-size:14px; color:var(--text2); line-height:1.55">Viewing a previously saved mood board.</p><div class="iterate-actions"><button class="btn-dashed mono" id="backToProjectsBtn">← BACK TO PROJECTS</button></div></div>'
