@@ -402,17 +402,26 @@
   // These are TOTAL tile cost for the reference bathroom above -- floor
   // and wall tiles only, no sanitaryware, no fittings, no labour.
   //
-  // They replace the three per-sq-ft bands that were here, and the two
-  // cannot be reconciled: against this room's 359 sq ft the old bands
-  // came to Rs 62,825-125,650, Rs 125,650-251,300 and Rs 251,300-502,600.
-  // The totals asked for here are roughly a third of even the cheapest
-  // of those, so keeping both would have meant showing a client two
-  // numbers that contradict each other. The latest figures are the ones
-  // kept, and each card states the rate it implies so the arithmetic is
-  // visible rather than buried.
+  // The ladder is the five bands the project asked for. Two further
+  // figures were discussed later, Rs 20,000-25,000 and Rs 40,000-60,000;
+  // both sit inside bands already here (CORE covers 20-40k, SIGNATURE
+  // covers 40-90k), so they are honoured by the ladder rather than added
+  // as overlapping cards -- two cards whose ranges overlap cannot be
+  // compared against each other, which is what this step is for.
+  //
+  // The three per-sq-ft bands that preceded all of this are gone: over
+  // this room's 359 sq ft they came to Rs 62,825-125,650,
+  // Rs 125,650-251,300 and Rs 251,300-502,600, which contradicts the
+  // totals above. Each card states the rate it implies instead, so the
+  // arithmetic is visible rather than buried.
+  //
+  // `total` is [floor, ceiling]; a null ceiling means open-ended.
   const BUDGETS = [
-    { tier: 'ESSENTIAL', total: [20000, 25000], desc: 'Porcelain bodies and matte neutrals held in bulk stock.' },
-    { tier: 'PREMIUM', total: [40000, 60000], desc: 'Vein-cut travertine, fluted accents and polished marfil.' },
+    { tier: 'ESSENTIAL', total: [10000, 20000], desc: 'Plain porcelain bodies in bulk stock, one module throughout.' },
+    { tier: 'MID-RANGE', total: [20000, 40000], desc: 'Matte neutrals with a modest decorated return.' },
+    { tier: 'SIGNATURE', total: [40000, 90000], desc: 'Vein-cut travertine, fluted accents and polished marfil.' },
+    { tier: 'PREMIUM', total: [90000, 150000], desc: 'Large-format bodies, book-matched panels, worked surfaces.' },
+    { tier: 'LUXURY', total: [150000, null], desc: 'Statement marble, bespoke inlay and full-height feature walls.' },
   ];
 
   function rupees(value) {
@@ -420,12 +429,14 @@
   }
 
   function budgetRangeText(band) {
+    if (band.total[1] === null) return rupees(band.total[0]) + ' and above';
     return rupees(band.total[0]) + ' \u2013 ' + rupees(band.total[1]);
   }
 
   /** The per-sq-ft rate a total band works out to over the tiled area. */
   function budgetRateText(band) {
     const area = referenceAreas().total;
+    if (band.total[1] === null) return rupees(band.total[0] / area) + ' and above';
     return rupees(band.total[0] / area) + ' \u2013 ' + rupees(band.total[1] / area);
   }
 
@@ -447,7 +458,7 @@
     1: { key: 'ROOM TYPOLOGY', eyebrow: 'ARCHITECTURAL FOUNDATION', title: 'What are you designing?', sub: 'Select your space to automatically calibrate ambient lighting, scale proportions, and surface drainage parameters.' },
     2: { key: 'FEATURE PLACEMENT', eyebrow: 'STATEMENT SURFACE', title: 'Where should the feature wall sit?', sub: 'The accent surface anchors the composition.' },
     3: { key: 'DIMENSION & FINISH', eyebrow: 'MODULE GEOMETRY', title: 'Pick the floor module', sub: 'Larger modules mean fewer grout lines. Finish drives slip rating and reflectivity.' },
-    4: { key: 'BUDGET BAND', eyebrow: 'COMMERCIAL ENVELOPE', title: 'What is the surface budget?', sub: 'Only in-stock surfaces inside this band are matched, so every concept stays quotable.' },
+    4: { key: 'BUDGET BAND', eyebrow: 'COMMERCIAL ENVELOPE', title: 'What is the surface budget?', sub: 'Each band is carried into the brief with the room and its coverage, so the concepts answer the amount you set.' },
     5: { key: 'PALETTE & GROUT', eyebrow: 'TONAL DIRECTION', title: 'Set the palette temperature', sub: 'Grout tone is specified alongside the palette — it changes the perceived scale of the whole wall.' },
     6: { key: 'REVIEW SPEC', eyebrow: 'DESIGN DNA', title: 'Review the design DNA', sub: 'This is what gets sent to generate your combinations.' },
     7: { key: 'CAMERA', eyebrow: 'RENDER PIPELINE', title: 'Choose the client view', sub: 'Included as context for the design brief.' },
@@ -565,7 +576,7 @@
       '<div id="stepBody"></div>' +
       '<div class="step-actions">' +
       '<button class="btn-back mono" id="prevBtn">← ' + (state.step === 1 ? 'DASHBOARD' : 'BACK') + '</button>' +
-      '<button class="btn-next mono" id="nextBtn"' + (stepValid(state.step) ? '' : ' disabled') + '><span style="width:6px;height:6px;border-radius:50%;background:#E3C58E"></span><span style="flex:1;text-align:left">' + (state.step === 7 ? 'GENERATE ' + COMBINATION_COUNT + ' MOOD BOARDS' : 'CONTINUE TO STEP ' + (state.step + 1)) + '</span><span>→</span></button>' +
+      '<button class="btn-next mono" id="nextBtn"' + (stepValid(state.step) ? '' : ' disabled') + '><span style="width:6px;height:6px;border-radius:50%;background:#E3C58E"></span><span style="flex:1;text-align:left">' + (state.step === 7 ? 'GENERATE ' + boardCount() + ' MOOD BOARDS' : 'CONTINUE TO STEP ' + (state.step + 1)) + '</span><span>→</span></button>' +
       '</div>' +
       '</div>';
 
@@ -765,6 +776,27 @@
       .join(' or ');
   }
 
+  /**
+   * Tiles the order comes to: floor and wall rounded up separately,
+   * which is how tile is actually bought, and never as one pooled area.
+   */
+  function orderTiles() {
+    const area = referenceAreas();
+    const floor = tilesFor(area.floor);
+    const walls = tilesFor(area.walls);
+    if (floor === null || walls === null) return null;
+    return { floor: floor, walls: walls, total: floor + walls };
+  }
+
+  /** What the bands actually have to buy, at the module that was chosen. */
+  function quantityText() {
+    const q = orderTiles();
+    if (!q) return '';
+
+    return ' At ' + sizeText() + ' that is about ' + q.floor + ' floor tiles and '
+      + q.walls + ' wall tiles, ' + q.total + ' in all, cuts included.';
+  }
+
   /** The whole envelope, in the words the model and the client both see. */
   function budgetBrief() {
     const area = referenceAreas();
@@ -776,11 +808,20 @@
       + r.lengthFt + 'ft x ' + r.widthFt + 'ft bathroom tiled to '
       + r.wallHeightFt + 'ft: ' + Math.round(area.floor) + ' sq ft of floor and '
       + Math.round(area.walls) + ' sq ft of wall, ' + Math.round(area.total)
-      + ' sq ft in all. Excludes sanitaryware, basins, WC, fittings and installation. '
+      + ' sq ft in all. Excludes sanitaryware, basins, WC, fittings and installation.'
+      + quantityText() + ' '
       + (bands.length > 1
         ? 'Propose one combination for each of these bands so they can be compared: '
         : 'Stay within: ')
       + bands.join('; ') + '.';
+  }
+
+  /**
+   * One board per band when several are being compared, otherwise the
+   * house default of two variations on the single band.
+   */
+  function boardCount() {
+    return state.budgets.length > 1 ? state.budgets.length : COMBINATION_COUNT;
   }
 
   function renderStepBody() {
@@ -858,13 +899,13 @@
         'Pick more than one band to compare.</p>' +
         '<div class="budget-grid">' + BUDGETS.map((b) => {
           const sel = state.budgets.some((x) => x.tier === b.tier);
-          const tiles = tilesFor(area.total);
+          const tiles = orderTiles();
           return '<button class="budget-card' + (sel ? ' selected' : '') + '" data-budget="' + b.tier + '" role="checkbox" aria-checked="' + sel + '">' +
             '<span class="budget-top"><span class="budget-tier mono">' + b.tier + '</span>' + (sel ? '<span class="budget-check">\u2713</span>' : '') + '</span>' +
             '<span class="budget-range serif">' + budgetRangeText(b) + '</span>' +
-            '<span class="budget-note mono">TOTAL \u00B7 FLOOR + WALL TILES \u00B7 ABOUT ' + budgetRateText(b) + ' / SQ FT</span>' +
+            '<span class="budget-note mono">TOTAL \u00B7 FLOOR + WALL TILES \u00B7 ABOUT ' + budgetRateText(b).toUpperCase() + ' / SQ FT</span>' +
             '<span class="budget-desc">' + b.desc + '</span>' +
-            (tiles ? '<span class="budget-note mono">\u2248 ' + tiles + ' \u00D7 ' + escapeHtml(sizeText()) + ' TILES, CUTS INCLUDED</span>' : '') +
+            (tiles ? '<span class="budget-note mono">\u2248 ' + tiles.total + ' \u00D7 ' + escapeHtml(sizeText()) + ' TILES, CUTS INCLUDED</span>' : '') +
             '</button>';
         }).join('') + '</div>';
 
@@ -945,7 +986,7 @@
         room: state.room,
         style: state.palette,
         budget: budgetBrief(),
-        combinationCount: COMBINATION_COUNT,
+        combinationCount: boardCount(),
       };
       const result = await CasaApi.moodBoards.generate(payload);
       state.combinations = result.combinations || [];
@@ -1091,7 +1132,7 @@
 
     const iterateBoxHtml = state.viewOnly
       ? '<div class="iterate-box"><h3 class="serif" style="margin:0; font-size:clamp(20px,2vw,26px)">Saved project</h3><p style="margin:8px 0 0; font-size:14px; color:var(--text2); line-height:1.55">Viewing a previously saved mood board.</p><div class="iterate-actions"><button class="btn-dashed mono" id="backToProjectsBtn">← BACK TO PROJECTS</button></div></div>'
-      : '<div class="iterate-box"><h3 class="serif" style="margin:0; font-size:clamp(20px,2vw,26px)">Iterate the design</h3><p style="margin:8px 0 0; font-size:14px; color:var(--text2); line-height:1.55">Keeps the same room, feature and budget while generating a fresh set.</p><div class="iterate-actions"><button class="btn-amber mono" id="regenBtn">↻ TRY ' + COMBINATION_COUNT + ' MORE VARIATIONS</button></div></div>';
+      : '<div class="iterate-box"><h3 class="serif" style="margin:0; font-size:clamp(20px,2vw,26px)">Iterate the design</h3><p style="margin:8px 0 0; font-size:14px; color:var(--text2); line-height:1.55">Keeps the same room, feature and budget while generating a fresh set.</p><div class="iterate-actions"><button class="btn-amber mono" id="regenBtn">↻ TRY ' + boardCount() + ' MORE VARIATIONS</button></div></div>';
 
     main.innerHTML =
       '<div class="stage">' +

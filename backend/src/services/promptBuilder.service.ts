@@ -186,6 +186,7 @@ Rules for the "tiles" array:
 Rules about the budget:
 - The budget line above is a TOTAL for floor and wall tiles in the stated room, not a rate per tile. It already states the area it has to cover.
 - None of the products listed below carries a price. So do not state, estimate or imply a cost, a total or a saving — you have no basis for one, and an invented figure is worse than none. Judge the budget by what the band plainly signals: a lower band means plain, bulk-stocked bodies and few decorated pieces; a higher band allows a decorated highlight and a more worked surface.
+- Never claim a combination is within budget, fits the budget, comes in under it or is good value. Without a price per product you cannot know that, and a client reads such a claim as a quote. Describe what the band buys; do not certify the sum.
 - Say in "reason_for_selection" how the combination sits against the band in those terms, and say plainly when the listed stock gives you nothing that suits it rather than offering something that does not.
 - When the budget line names more than one band, return one combination per band, in the order they are named, and say which band each one answers.
 
