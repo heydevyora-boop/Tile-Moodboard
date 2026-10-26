@@ -167,6 +167,49 @@ def main():
           abs(scene_chroma_spread(big) - scene_chroma_spread(small)) < 0.01,
           f"{scene_chroma_spread(small):.4f} vs {scene_chroma_spread(big):.4f}")
 
+    # --- the deployed function has no opencv ---------------------------
+    #
+    # This is not hypothetical. A module-level "import cv2" here took the
+    # whole FastAPI app down on Vercel -- every visualization answered
+    # HTTP 500 with ModuleNotFoundError: No module named 'cv2', because
+    # main_step6_complete imports this module and the function bundle
+    # does not carry opencv. The rest of that file keeps every cv2 and
+    # numpy import inside a function for exactly this reason.
+    import builtins
+    import importlib
+    import subprocess
+
+    probe = (
+        "import builtins, sys;"
+        "real = builtins.__import__;"
+        "blocked = {'cv2', 'numpy'};"
+        "builtins.__import__ = lambda n, *a, **k: "
+        "(_ for _ in ()).throw(ImportError(n)) if n.split('.')[0] in blocked "
+        "else real(n, *a, **k);"
+        "sys.path.insert(0, %r);"
+        "import app.tile_image_screen as s;"
+        "keep, why = s.screen_tile_file('/nope.png');"
+        "assert keep is True, why;"
+        "assert s.scene_chroma_spread(object()) == 0.0;"
+        "assert s.split_material_distance(object()) == 0.0;"
+        "print('ok')"
+    ) % str(Path(__file__).resolve().parents[1])
+
+    result = subprocess.run(
+        [sys.executable, "-I", "-c", probe],
+        capture_output=True, text=True,
+    )
+    check("the module imports with no opencv installed at all",
+          result.returncode == 0 and "ok" in result.stdout,
+          (result.stderr or result.stdout).strip()[-200:])
+
+    check("...and nothing in it imports cv2 or numpy at module scope",
+          not any(
+              line.startswith(("import cv2", "import numpy", "from cv2", "from numpy"))
+              for line in Path(__file__).with_name("tile_image_screen.py")
+              .read_text(encoding="utf-8").splitlines()
+          ))
+
     failures = [p for p in PASS if not p[1]]
     for label, ok, detail in PASS:
         print(("  PASS  " if ok else "  FAIL  ") + label

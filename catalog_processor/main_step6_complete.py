@@ -187,8 +187,6 @@ from app.backend_sync import (
     preflight_internal_sync,
     sync_master_product_to_backend,
 )
-from app.tile_image_screen import screen_tile_file
-
 
 # ============================================================
 # FASTAPI APPLICATION
@@ -5112,6 +5110,12 @@ def process_pdf(
         # nothing that was already saved; see tile_image_screen for what
         # it refuses, and for the three heuristics that were measured
         # and thrown away for overlapping with real stock.
+        # Imported here, not at module scope, for the reason the whole
+        # file keeps cv2 out of its import list: the Vercel function has
+        # no opencv, and a module-level import stops the FastAPI app
+        # from starting at all.
+        from app.tile_image_screen import screen_tile_file
+
         fit_for_a_board, screen_reason = screen_tile_file(image["path"])
 
         if not fit_for_a_board:
