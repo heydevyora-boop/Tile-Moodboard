@@ -84,6 +84,15 @@
   .option-row.selected .option-dot { border-color:var(--ink); background:var(--ink); box-shadow:inset 0 0 0 3px #FBF6EC; }
   .option-row .ol { display:block; font-size:10.5px; letter-spacing:.14em; }
   .option-row .od { display:block; font-size:13px; color:var(--text2); margin-top:6px; line-height:1.5; }
+  .walls { display:flex; flex-direction:column; gap:10px; margin-left:32px; }
+  .walls-toggle { display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:48px; padding:0 16px; background:var(--card); border:1px solid var(--line); border-radius:13px; cursor:pointer; font-size:10.5px; letter-spacing:.12em; color:#4A4038; text-align:left; }
+  .walls-toggle:hover { background:#F1EADD; }
+  .walls-toggle .caret { flex:0 0 auto; color:var(--muted); }
+  .walls-list { display:flex; flex-direction:column; gap:1px; background:var(--line); border:1px solid var(--line); border-radius:13px; overflow:hidden; }
+  .wall-row { display:flex; align-items:center; gap:12px; padding:13px 16px; background:var(--card); cursor:pointer; text-align:left; border:none; width:100%; font-size:12.5px; color:var(--ink); }
+  .wall-row:hover { background:#F7F2E8; }
+  .wall-box { width:17px; height:17px; flex:0 0 auto; border:1px solid #C7BCAA; border-radius:5px; }
+  .wall-row.checked .wall-box { border-color:var(--ink); background:var(--ink); box-shadow:inset 0 0 0 3px #FBF6EC; }
 
   .chip { display:flex; align-items:center; justify-content:center; gap:8px; min-height:48px; padding:0 16px; border-radius:12px; cursor:pointer; font-size:10px; letter-spacing:.12em; background:var(--card); color:#3A322A; border:1px solid var(--line); }
   .chip.selected { background:var(--ink); color:#FBF6EC; border-color:var(--ink); }
@@ -339,7 +348,14 @@
     { label: 'No feature wall', desc: 'Uniform surface across all four walls — quietest option.' },
     { label: 'Basin wall', desc: 'Statement surface behind the vanity, mirrored in the render.' },
     { label: 'Shower nook', desc: 'Accent restricted to the wet niche and shelf return.' },
+    { label: 'Custom', desc: 'Name the walls yourself, or leave the choice to the studio.' },
   ];
+
+  // The five things the Custom dropdown offers. Checkboxes only -- there
+  // is no free-text path into this field, so nothing unvalidated can
+  // reach the brief or the generator.
+  const CUSTOM_WALLS = ['Left wall', 'Right wall', 'Front wall', 'Back wall'];
+  const LET_STUDIO_DECIDE = 'Let De\u2019vyora decide';
 
   const SIZES = ['600×600 mm', '600×1200 mm', '800×800 mm'];
 
@@ -393,6 +409,10 @@
     step: 1,
     room: null,
     feature: FEATURES[0].label,
+    // Checked walls under Custom. Held apart from `feature` so switching
+    // to another option and back does not lose what was ticked.
+    customWalls: [],
+    customWallsOpen: false,
     size: SIZES[1],
     finish: FINISHES[0].label,
     budget: BUDGETS[1],
@@ -447,6 +467,10 @@
 
   function stepValid(step) {
     if (step === 1) return !!state.room;
+    // Custom is only a choice once something under it is ticked --
+    // the same shape as step 1's rule, so Continue stays disabled
+    // rather than sending a brief that says "Custom" and nothing else.
+    if (step === 2 && state.feature === 'Custom') return state.customWalls.length > 0;
     return true;
   }
 
@@ -491,6 +515,85 @@
     });
   }
 
+  // ============================================================
+  // CUSTOM FEATURE WALLS
+  //
+  // A disclosure, not a <select>: the options are checkboxes and several
+  // may be ticked, which a native select cannot show without turning
+  // into a list box. The summary line on the toggle is what a closed
+  // dropdown would have shown.
+  // ============================================================
+
+  function customWallsSummary() {
+    if (state.customWalls.includes(LET_STUDIO_DECIDE)) return LET_STUDIO_DECIDE;
+    if (state.customWalls.length === 0) return 'CHOOSE WALLS';
+    return state.customWalls.join(', ');
+  }
+
+  function customWallsHtml() {
+    const rows = [...CUSTOM_WALLS, LET_STUDIO_DECIDE].map((wall) => {
+      const checked = state.customWalls.includes(wall);
+      return '<button class="wall-row' + (checked ? ' checked' : '') + '" data-wall="' + escapeHtml(wall) + '" role="checkbox" aria-checked="' + checked + '">' +
+        '<span class="wall-box"></span><span>' + escapeHtml(wall) + '</span></button>';
+    }).join('');
+
+    return '<div class="walls">' +
+      '<button class="walls-toggle mono" id="wallsToggle" aria-expanded="' + state.customWallsOpen + '">' +
+      '<span>' + escapeHtml(customWallsSummary().toUpperCase()) + '</span><span class="caret">' + (state.customWallsOpen ? '▲' : '▼') + '</span>' +
+      '</button>' +
+      (state.customWallsOpen ? '<div class="walls-list">' + rows + '</div>' : '') +
+      '</div>';
+  }
+
+  /**
+   * "Let De'vyora decide" and the four walls cannot both be true.
+   *
+   * Naming a wall means the client made the call, so the studio's
+   * standing offer drops away; choosing the offer means they did not,
+   * so the named walls drop away. Anything else would send a brief that
+   * contradicts itself.
+   */
+  function toggleWall(wall) {
+    const checked = state.customWalls.includes(wall);
+
+    if (wall === LET_STUDIO_DECIDE) {
+      state.customWalls = checked ? [] : [LET_STUDIO_DECIDE];
+      return;
+    }
+
+    const walls = state.customWalls.filter((w) => w !== LET_STUDIO_DECIDE && w !== wall);
+    if (!checked) walls.push(wall);
+    // Kept in the order they are offered, not the order they were
+    // clicked, so the summary reads the same way every time.
+    state.customWalls = CUSTOM_WALLS.filter((w) => walls.includes(w));
+  }
+
+  function wireCustomWalls(body) {
+    const toggle = body.querySelector('#wallsToggle');
+    if (toggle) {
+      toggle.addEventListener('click', () => {
+        state.customWallsOpen = !state.customWallsOpen;
+        render();
+      });
+    }
+    body.querySelectorAll('[data-wall]').forEach((row) => {
+      row.addEventListener('click', () => {
+        toggleWall(row.dataset.wall);
+        render();
+      });
+    });
+  }
+
+  /** What the rest of the wizard calls the feature choice. */
+  function featureText() {
+    if (state.feature !== 'Custom') return state.feature;
+    if (state.customWalls.includes(LET_STUDIO_DECIDE)) {
+      return 'Feature wall placement left to the studio';
+    }
+    if (state.customWalls.length === 0) return 'Custom';
+    return 'Feature wall on the ' + state.customWalls.map((w) => w.toLowerCase()).join(', the ');
+  }
+
   function renderStepBody() {
     const body = document.getElementById('stepBody');
 
@@ -509,9 +612,11 @@
     if (state.step === 2) {
       body.innerHTML = '<div style="display:flex; flex-direction:column; gap:12px; margin-top:clamp(18px,2vw,26px); max-width:520px">' + FEATURES.map((f) => {
         const sel = state.feature === f.label;
-        return '<button class="option-row' + (sel ? ' selected' : '') + '" data-feature="' + f.label + '"><span class="option-dot"></span><span style="flex:1;min-width:0"><span class="ol mono">' + f.label.toUpperCase() + '</span><span class="od">' + f.desc + '</span></span></button>';
+        return '<button class="option-row' + (sel ? ' selected' : '') + '" data-feature="' + f.label + '"><span class="option-dot"></span><span style="flex:1;min-width:0"><span class="ol mono">' + f.label.toUpperCase() + '</span><span class="od">' + f.desc + '</span></span></button>' +
+          (sel && f.label === 'Custom' ? customWallsHtml() : '');
       }).join('') + '</div>';
       body.querySelectorAll('[data-feature]').forEach((btn) => btn.addEventListener('click', () => { state.feature = btn.dataset.feature; render(); }));
+      wireCustomWalls(body);
       return;
     }
 
@@ -566,7 +671,7 @@
 
     if (state.step === 6) {
       const summary = [
-        ['ROOM', state.room || '—'], ['FEATURE WALL', state.feature], ['FLOOR MODULE', state.size],
+        ['ROOM', state.room || '—'], ['FEATURE WALL', featureText()], ['FLOOR MODULE', state.size],
         ['FINISH', state.finish], ['BUDGET BAND', state.budget.tier + ' (' + state.budget.range + ')'],
         ['PALETTE', state.palette], ['GROUT', state.grout], ['CAMERA', state.view],
       ];
@@ -592,7 +697,7 @@
 
   function buildBriefText() {
     return [
-      'Design a ' + state.room + ' with ' + state.feature.toLowerCase() + '.',
+      'Design a ' + state.room + ' with ' + featureText().toLowerCase() + '.',
       'Use ' + state.size + ' floor tiles in a ' + state.finish + ' finish.',
       'Budget band: ' + state.budget.tier + ' (' + state.budget.range + ' per sq ft, supply only).',
       'Palette: ' + state.palette + ', with ' + state.grout + ' grout.',
@@ -752,7 +857,7 @@
     const main = document.getElementById('mainContent');
     const specLine = state.viewOnly
       ? state.room + ' · ' + state.palette + (state.loadedBoard && state.loadedBoard.clientBrief ? ' — ' + state.loadedBoard.clientBrief : '')
-      : state.room + ' · ' + state.palette + ' · ' + state.budget.tier + ' · ' + state.size + ' · ' + state.feature + ' · ' + state.view;
+      : state.room + ' · ' + state.palette + ' · ' + state.budget.tier + ' · ' + state.size + ' · ' + featureText() + ' · ' + state.view;
 
     const iterateBoxHtml = state.viewOnly
       ? '<div class="iterate-box"><h3 class="serif" style="margin:0; font-size:clamp(20px,2vw,26px)">Saved project</h3><p style="margin:8px 0 0; font-size:14px; color:var(--text2); line-height:1.55">Viewing a previously saved mood board.</p><div class="iterate-actions"><button class="btn-dashed mono" id="backToProjectsBtn">← BACK TO PROJECTS</button></div></div>'
@@ -1219,7 +1324,7 @@
     };
     if (!state.viewOnly) {
       Object.assign(requirements, {
-        feature: state.feature,
+        feature: featureText(),
         size: state.size,
         finish: state.finish,
         grout: state.grout,
