@@ -333,6 +333,58 @@ def the_chain_forwards_it():
     ]
 
 
+def the_custom_walls_reach_the_render():
+    """The wizard's Custom option names walls; both stages must hear it.
+
+    Before this, describe_feature knew two placements and returned None
+    for anything else -- so a client who asked for the left and back
+    walls got a room prompt that said nothing at all about a feature
+    wall, and a render that placed one wherever it liked.
+    """
+    from app.client_selections import describe_feature, wants_no_feature_wall
+
+    one = describe_feature("Feature wall on the right wall", "Bathroom")
+    two = describe_feature("Feature wall on the left wall, the back wall", "Bathroom")
+    studio = describe_feature("Feature wall placement left to the studio", "Bathroom")
+    room = room_prompt_through_the_api(
+        {"room": "Bathroom", "feature": "Feature wall on the left wall, the back wall"},
+    )
+
+    return [
+        check("a single named wall becomes a placement",
+              one is not None and "the right-hand wall" in one, one),
+        check("...phrased for one surface", one is not None and "Treat that as" in one, one),
+        check("several named walls are all carried",
+              two is not None and "the left-hand wall" in two and "the wall behind you" in two, two),
+        check("...phrased for more than one", two is not None and "Treat those together" in two, two),
+        check("...and every other wall is held to the base finish",
+              two is not None and "leave every other wall in the plain base finish" in two, two),
+        check("the doorway is given as the point of view, so left means one thing",
+              two is not None and "taking the doorway as the point of view" in two, two),
+        check("handing the choice back still asks for a feature wall",
+              studio is not None and "one wall of your choosing" in studio, studio),
+        check("...and holds it to one wall", studio is not None and "only that one" in studio, studio),
+        check("the room prompt now carries it", "- Feature wall: the left-hand wall" in room,
+              room[:160]),
+
+        # The two it already knew, unchanged.
+        check("Basin wall is untouched",
+              describe_feature("Basin wall", "Bathroom") == "the wall behind the vanity and basin"),
+        check("Shower nook is untouched",
+              describe_feature("Shower nook", "Bathroom") == "the shower niche and its shelf return"),
+        check("...including its powder-room guard",
+              describe_feature("Shower nook", "Powder Room") is None),
+        check("No feature wall is still recognised as that, not as a placement",
+              describe_feature("No feature wall", "Bathroom") is None
+              and wants_no_feature_wall("No feature wall")),
+
+        # "left to the studio" contains the word "left". It must not be
+        # read as the left wall.
+        check("handing the choice back is not mistaken for the left wall",
+              studio is not None and "left-hand wall" not in studio, studio),
+    ]
+
+
 def main():
     groups = [
         ("stage 1: the room", stage_one()),
@@ -340,6 +392,7 @@ def main():
         ("camera regeneration", camera_regeneration()),
         ("the shower-nook note", the_nook_note_is_logged_once()),
         ("the chain forwards the selections", the_chain_forwards_it()),
+        ("a custom feature wall reaches the render", the_custom_walls_reach_the_render()),
     ]
 
     failures = 0
