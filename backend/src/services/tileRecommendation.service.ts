@@ -460,6 +460,35 @@ export async function getRecommendedTiles(prisma: PrismaTileClient, filter: Reco
 // list rather than a call into rankTiles() above.
 // ─────────────────────────────────────────────────────────────────────────
 
+/**
+ * The floor-module sizes this catalog actually holds.
+ *
+ * The wizard's Custom size dropdown is built from this and nothing
+ * else: a size the stock does not come in is not a size the client can
+ * be offered, however plausible it sounds. Counts ride along so the
+ * caller can lead with the sizes the catalog is deepest in.
+ *
+ * Only in-stock, still-sourced tiles count -- the same two conditions
+ * getRecommendedTiles applies, so the dropdown cannot offer a size that
+ * no selectable tile comes in.
+ */
+export async function listCatalogTileSizes() {
+  const rows = await prisma.tile.groupBy({
+    by: ['size'],
+    where: {
+      inStock: true,
+      size: { not: null },
+      OR: [{ sheetRowRef: { not: null } }, { catalogId: { not: null } }],
+    },
+    _count: { size: true },
+  });
+
+  return rows
+    .map((row) => ({ size: (row.size ?? '').trim(), tiles: row._count.size }))
+    .filter((row) => row.size.length > 0)
+    .sort((a, b) => b.tiles - a.tiles || a.size.localeCompare(b.size));
+}
+
 export async function listAllTiles(query: ListTilesQuery) {
   const { page, limit, skip, take } = getPagination(query);
   const where = {

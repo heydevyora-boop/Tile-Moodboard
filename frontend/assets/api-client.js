@@ -1313,6 +1313,16 @@
   // ============================================================
 
   const tiles = {
+    /** The floor-module sizes the catalog actually stocks. */
+    sizes() {
+      return apiFetch(
+        '/tiles/sizes'
+      ).then(
+        (r) =>
+          r.data.sizes
+      );
+    },
+
     list(params) {
       return apiFetch(
         `/tiles${qs(

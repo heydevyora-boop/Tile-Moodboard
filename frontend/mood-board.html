@@ -357,7 +357,15 @@
   const CUSTOM_WALLS = ['Left wall', 'Right wall', 'Front wall', 'Back wall'];
   const LET_STUDIO_DECIDE = 'Let De\u2019vyora decide';
 
-  const SIZES = ['600×600 mm', '600×1200 mm', '800×800 mm'];
+  // The two presets the catalog genuinely stocks. 800x800 was here and
+  // is gone: no tile in the catalog comes in it, so offering it put a
+  // dimension into the brief that no product could satisfy. Any other
+  // size has to be chosen from CUSTOM_SIZE, which is read from the
+  // catalog itself -- nothing is invented here.
+  const SIZES = ['600×600 mm', '600×1200 mm'];
+
+  const CUSTOM_SIZE = 'Custom';
+  const AUTO_SIZE = 'Let the viewer decide';
 
   const FINISHES = [
     { label: 'Honed Matte', spec: 'R10 · ANTI-SKID · WET ZONE', img: 'img/tex-travertine.png' },
@@ -414,6 +422,14 @@
     customWalls: [],
     customWallsOpen: false,
     size: SIZES[1],
+    // 'preset' | 'custom' | 'auto'. One mode at a time, which is what
+    // makes the three mutually exclusive: picking any chip sets it.
+    sizeMode: 'preset',
+    customSize: '',
+    customSizeOpen: false,
+    // Filled from GET /tiles/sizes the first time Custom is opened.
+    catalogSizes: null,
+    catalogSizesError: '',
     finish: FINISHES[0].label,
     budget: BUDGETS[1],
     palette: PALETTES[0].label,
@@ -471,6 +487,8 @@
     // the same shape as step 1's rule, so Continue stays disabled
     // rather than sending a brief that says "Custom" and nothing else.
     if (step === 2 && state.feature === 'Custom') return state.customWalls.length > 0;
+    // Custom is only a choice once a catalog size is picked.
+    if (step === 3 && state.sizeMode === 'custom') return !!state.customSize;
     return true;
   }
 
@@ -594,6 +612,75 @@
     return 'Feature wall on the ' + state.customWalls.map((w) => w.toLowerCase()).join(', the ');
   }
 
+  // ============================================================
+  // CUSTOM FLOOR MODULE
+  //
+  // The options are read from the catalog, never written here. A size
+  // the stock does not come in is not a size the client can be offered,
+  // however plausible it sounds -- which is why 800x800 is gone and why
+  // this is a dropdown rather than a text field.
+  // ============================================================
+
+  async function loadCatalogSizes() {
+    if (state.catalogSizes !== null) return;
+    try {
+      const sizes = await CasaApi.tiles.sizes();
+      state.catalogSizes = sizes;
+      state.catalogSizesError = '';
+    } catch (err) {
+      state.catalogSizes = [];
+      state.catalogSizesError = (err && err.message) || 'Could not read the catalog.';
+    }
+    render();
+  }
+
+  function customSizeHtml() {
+    if (state.catalogSizes === null) {
+      return '<div class="walls"><button class="walls-toggle mono" disabled>READING THE CATALOG…</button></div>';
+    }
+    if (state.catalogSizes.length === 0) {
+      return '<div class="walls"><button class="walls-toggle mono" disabled>' +
+        escapeHtml((state.catalogSizesError || 'No sizes recorded in the catalog').toUpperCase()) +
+        '</button></div>';
+    }
+
+    const rows = state.catalogSizes.map((entry) => {
+      const chosen = state.customSize === entry.size;
+      return '<button class="wall-row' + (chosen ? ' checked' : '') + '" data-custom-size="' + escapeHtml(entry.size) + '" role="radio" aria-checked="' + chosen + '">' +
+        '<span class="wall-box"></span><span style="flex:1">' + escapeHtml(entry.size) + '</span>' +
+        '<span class="mono" style="font-size:9px; color:var(--muted)">' + entry.tiles + ' TILE' + (entry.tiles === 1 ? '' : 'S') + '</span></button>';
+    }).join('');
+
+    return '<div class="walls">' +
+      '<button class="walls-toggle mono" id="customSizeToggle" aria-expanded="' + state.customSizeOpen + '">' +
+      '<span>' + escapeHtml((state.customSize || 'Choose a size the catalog stocks').toUpperCase()) + '</span>' +
+      '<span class="caret">' + (state.customSizeOpen ? '▲' : '▼') + '</span></button>' +
+      (state.customSizeOpen ? '<div class="walls-list">' + rows + '</div>' : '') +
+      '</div>';
+  }
+
+  function wireCustomSize(body) {
+    const toggle = body.querySelector('#customSizeToggle');
+    if (toggle) {
+      toggle.addEventListener('click', () => { state.customSizeOpen = !state.customSizeOpen; render(); });
+    }
+    body.querySelectorAll('[data-custom-size]').forEach((row) => {
+      row.addEventListener('click', () => {
+        // One size, not several -- a floor has one module.
+        state.customSize = row.dataset.customSize;
+        state.customSizeOpen = false;
+        render();
+      });
+    });
+  }
+
+  /** What the rest of the wizard calls the floor module. */
+  function sizeText() {
+    if (state.sizeMode === 'auto') return AUTO_SIZE;
+    if (state.sizeMode === 'custom') return state.customSize || CUSTOM_SIZE;
+    return state.size;
+  }
+
   function renderStepBody() {
     const body = document.getElementById('stepBody');
 
@@ -624,14 +711,30 @@
       body.innerHTML =
         '<div style="margin-top:clamp(18px,2vw,26px)">' +
         '<div class="section-lbl mono" style="margin-top:0">FLOOR TILE DIMENSION</div>' +
-        '<div class="chip-row">' + SIZES.map((s) => '<button class="chip mono' + (state.size === s ? ' selected' : '') + '" data-size="' + s + '">' + s + '</button>').join('') + '</div>' +
+        '<div class="chip-row">' +
+        SIZES.map((s) => '<button class="chip mono' + (state.sizeMode === 'preset' && state.size === s ? ' selected' : '') + '" data-size="' + s + '">' + s + '</button>').join('') +
+        '<button class="chip mono' + (state.sizeMode === 'custom' ? ' selected' : '') + '" data-size-mode="custom">' + CUSTOM_SIZE.toUpperCase() + '</button>' +
+        '<button class="chip mono' + (state.sizeMode === 'auto' ? ' selected' : '') + '" data-size-mode="auto">' + AUTO_SIZE.toUpperCase() + '</button>' +
+        '</div>' +
+        (state.sizeMode === 'custom' ? customSizeHtml() : '') +
+        (state.sizeMode === 'auto' ? '<p class="step-sub" style="margin-top:12px; font-size:13px">De\u2019vyora picks the module from the room, the palette and what the catalog actually stocks.</p>' : '') +
         '<div class="section-lbl mono">SURFACE FINISH</div>' +
         '<div class="finish-grid">' + FINISHES.map((f) => {
           const sel = state.finish === f.label;
           return '<button class="finish-card' + (sel ? ' selected' : '') + '" data-finish="' + f.label + '"><img src="' + f.img + '" alt=""><span style="flex:1;min-width:0"><span class="fl">' + f.label + '</span><span class="fs mono">' + f.spec + '</span></span></button>';
         }).join('') + '</div>' +
         '</div>';
-      body.querySelectorAll('[data-size]').forEach((btn) => btn.addEventListener('click', () => { state.size = btn.dataset.size; render(); }));
+      body.querySelectorAll('[data-size]').forEach((btn) => btn.addEventListener('click', () => {
+        state.sizeMode = 'preset';
+        state.size = btn.dataset.size;
+        render();
+      }));
+      body.querySelectorAll('[data-size-mode]').forEach((btn) => btn.addEventListener('click', () => {
+        state.sizeMode = btn.dataset.sizeMode;
+        if (state.sizeMode === 'custom') loadCatalogSizes();
+        render();
+      }));
+      wireCustomSize(body);
       body.querySelectorAll('[data-finish]').forEach((btn) => btn.addEventListener('click', () => { state.finish = btn.dataset.finish; render(); }));
       return;
     }
@@ -671,7 +774,7 @@
 
     if (state.step === 6) {
       const summary = [
-        ['ROOM', state.room || '—'], ['FEATURE WALL', featureText()], ['FLOOR MODULE', state.size],
+        ['ROOM', state.room || '—'], ['FEATURE WALL', featureText()], ['FLOOR MODULE', sizeText()],
         ['FINISH', state.finish], ['BUDGET BAND', state.budget.tier + ' (' + state.budget.range + ')'],
         ['PALETTE', state.palette], ['GROUT', state.grout], ['CAMERA', state.view],
       ];
@@ -698,7 +801,9 @@
   function buildBriefText() {
     return [
       'Design a ' + state.room + ' with ' + featureText().toLowerCase() + '.',
-      'Use ' + state.size + ' floor tiles in a ' + state.finish + ' finish.',
+      (state.sizeMode === 'auto'
+        ? 'Choose the floor tile module yourself, from what the catalog stocks, in a ' + state.finish + ' finish.'
+        : 'Use ' + sizeText() + ' floor tiles in a ' + state.finish + ' finish.'),
       'Budget band: ' + state.budget.tier + ' (' + state.budget.range + ' per sq ft, supply only).',
       'Palette: ' + state.palette + ', with ' + state.grout + ' grout.',
       'Client view requested for the handout: ' + state.view + '.',
@@ -857,7 +962,7 @@
     const main = document.getElementById('mainContent');
     const specLine = state.viewOnly
       ? state.room + ' · ' + state.palette + (state.loadedBoard && state.loadedBoard.clientBrief ? ' — ' + state.loadedBoard.clientBrief : '')
-      : state.room + ' · ' + state.palette + ' · ' + state.budget.tier + ' · ' + state.size + ' · ' + featureText() + ' · ' + state.view;
+      : state.room + ' · ' + state.palette + ' · ' + state.budget.tier + ' · ' + sizeText() + ' · ' + featureText() + ' · ' + state.view;
 
     const iterateBoxHtml = state.viewOnly
       ? '<div class="iterate-box"><h3 class="serif" style="margin:0; font-size:clamp(20px,2vw,26px)">Saved project</h3><p style="margin:8px 0 0; font-size:14px; color:var(--text2); line-height:1.55">Viewing a previously saved mood board.</p><div class="iterate-actions"><button class="btn-dashed mono" id="backToProjectsBtn">← BACK TO PROJECTS</button></div></div>'
@@ -1325,7 +1430,12 @@
     if (!state.viewOnly) {
       Object.assign(requirements, {
         feature: featureText(),
-        size: state.size,
+        // An explicit flag, not an empty string: the generator has to be
+        // able to tell "pick one" apart from "the client said nothing".
+        // The size itself is omitted so no default can stand in for it.
+        ...(state.sizeMode === 'auto'
+          ? { size_auto: true }
+          : { size: sizeText() }),
         finish: state.finish,
         grout: state.grout,
         view: state.view,
