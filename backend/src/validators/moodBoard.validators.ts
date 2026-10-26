@@ -5,7 +5,12 @@ export const generateBriefSchema = z.object({
   text: z.string().trim().min(3, 'Describe the client brief in at least a few words').max(2000),
   style: z.string().trim().toUpperCase().max(40).optional(),
   room: z.string().trim().toUpperCase().max(40).optional(),
-  budget: z.string().trim().max(40).optional(),
+  // The wizard sends the whole commercial envelope here, not a label:
+  // the reference room, its floor and wall coverage, what is excluded,
+  // the quantities and every selected band. 40 characters rejected that
+  // outright. 800 holds the envelope with all five bands named and room
+  // to spare; the measured worst case is under 700.
+  budget: z.string().trim().max(800).optional(),
   brandId: z.string().optional(),
   combinationCount: z.coerce.number().int().min(1).max(6).optional(),
 });
