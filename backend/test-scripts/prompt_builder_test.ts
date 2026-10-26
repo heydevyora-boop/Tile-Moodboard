@@ -194,6 +194,73 @@ function main() {
     // With nothing newly extracted the marker must not appear at all --
     // otherwise the rule above points at a set that does not exist.
     const { userPrompt } = buildPrompt('rules', sampleTiles, sampleBrief, 4);
+  {
+    // The catalog owner's complaint: a board came back with the plain
+    // tile as the highlight and the decorated one underneath it.
+    const types = new Map([['tile-1', 'BASE'], ['tile-2', 'HIGHLIGHTER'], ['tile-new', 'BASE']]);
+    const ids = new Set(['tile-1', 'tile-2', 'tile-new']);
+
+    const swapped = [{
+      board_name: 'Wrong Way Round',
+      tiles: [
+        { role: 'base', tileId: 'tile-2', name: 'Bronze Highlighter Strip' },
+        { role: 'highlight', tileId: 'tile-1', name: 'Calacatta Grey' },
+      ],
+      grout_recommendation: 'Ivory', rooms_suitable: ['BATHROOM'], reason_for_selection: 'x',
+    }];
+    const { combinations, warnings } = validateCombinations(swapped, ids, types);
+    check('23a. A plain BASE tile is refused the highlight role',
+      !combinations[0] || !combinations[0].tiles.some((t) => t.role === 'highlight'), combinations[0]);
+    check('23b. ...and a decorated tile is refused the base role',
+      !combinations[0] || !combinations[0].tiles.some((t) => t.role === 'base'), combinations[0]);
+    check('23c. The warning says a highlight has to be a designer tile',
+      warnings.some((w) => w.includes('designer tile')), warnings);
+    check('23d. ...and says the decorated one belongs in the highlight',
+      warnings.some((w) => w.includes('belongs in the highlight')), warnings);
+
+    const right = [{
+      board_name: 'Right Way Round',
+      tiles: [
+        { role: 'base', tileId: 'tile-1', name: 'Calacatta Grey' },
+        { role: 'highlight', tileId: 'tile-2', name: 'Bronze Highlighter Strip' },
+      ],
+      grout_recommendation: 'Ivory', rooms_suitable: ['BATHROOM'], reason_for_selection: 'x',
+    }];
+    const ok = validateCombinations(right, ids, types);
+    check('24a. The right way round passes untouched', ok.combinations[0].tiles.length === 2, ok.combinations[0]);
+    check('24b. ...with no warnings', ok.warnings.length === 0, ok.warnings);
+
+    // A catalog with nothing decorated in it must still produce a board.
+    const plainOnly = new Map([['tile-1', 'BASE'], ['tile-new', 'BASE']]);
+    const fallback = validateCombinations([{
+      board_name: 'Plain Catalog',
+      tiles: [
+        { role: 'base', tileId: 'tile-1', name: 'Calacatta Grey' },
+        { role: 'highlight', tileId: 'tile-new', name: 'BR-CEREAMICS' },
+      ],
+      grout_recommendation: 'Ivory', rooms_suitable: ['BATHROOM'], reason_for_selection: 'x',
+    }], new Set(['tile-1', 'tile-new']), plainOnly);
+    check('25. With no decorated tile in the pool at all, the board still stands',
+      fallback.combinations.length === 1 && fallback.combinations[0].tiles.length === 2, fallback);
+
+    // Without the map, behaviour is exactly what it was.
+    const legacy = validateCombinations(swapped, ids);
+    check('26. Omitting the type map leaves the old behaviour untouched',
+      legacy.combinations[0].tiles.length === 2, legacy.combinations[0]);
+  }
+
+  {
+    const { userPrompt } = buildPrompt('rules', sampleTiles, sampleBrief, 4);
+    check('27a. The prompt says a highlight must be a designer tile',
+      userPrompt.includes('A highlight is a DESIGNER tile'), userPrompt.slice(-1200));
+    check('27b. ...and names the types that may take it',
+      userPrompt.includes('type=HIGHLIGHTER, type=ACCENT or type=BORDER'));
+    check('27c. ...and forbids the swap outright',
+      userPrompt.includes('a board whose highlight is plainer than its base is the wrong way round'));
+    check('27d. ...and says what to do when nothing decorated is listed',
+      userPrompt.includes('Do not promote a base tile into a decorated role'));
+  }
+
     check('22. No tile is marked when nothing came from a recent extraction', !userPrompt.split('Rules about the tile list')[0].includes('batch=LATEST'), userPrompt.slice(0, 600));
   }
 

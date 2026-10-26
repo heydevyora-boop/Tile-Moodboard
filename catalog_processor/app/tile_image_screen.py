@@ -12,7 +12,8 @@ changes how a region is found or cut.
 
 WHAT IT REFUSES, AND WHY ONLY THAT
 
-One rule, because one rule is what the measurements supported.
+Two rules, each one the survivor of a set of candidates measured against
+real stock.
 
 A tile surface -- however busy, dark or colourful its pattern -- is one
 material photographed flat, so the CHROMA of the frame barely moves from
@@ -31,6 +32,27 @@ rejected examples:
 
 The bar sits 1.51x above the worst real tile and 1.50x below the nearest
 rejection, with nothing in between.
+
+SECOND: TWO MATERIALS IN ONE FRAME
+
+The crop the catalog owner found as a "highlight" was split corner to
+corner -- flat brown on one side of a straight diagonal, marble on the
+other. One tile, plain or busy, looks like the same material on both
+sides of any line drawn through it. So every straight cut through the
+frame is scored by how unlike its two halves are, in colour and in
+grain, and the worst cut is the answer.
+
+Measured over the same 47 real tiles against that defect:
+
+    worst real tile          0.350   (59.webp; next worst is 0.144)
+    ---------------- bar at 0.49 ----------------
+    flat navy beside marble  0.684
+    flat brown beside marble 0.895
+
+1.40x clear on each side. An earlier attempt scored the largest flat
+colour block instead and was thrown away: a plain tile is one flat block
+with a straight edge, so it scored 0.849 where the defects scored 0.641
+and 0.469 -- inverted.
 
 WHAT IT DELIBERATELY DOES NOT REFUSE
 
@@ -69,6 +91,22 @@ import numpy as np
 # real tile seen, 1.50x below the nearest rejection.
 SCENE_CHROMA_SPREAD = 0.047
 
+# The point at which the two sides of some straight cut stop looking
+# like the same material. 1.40x above the worst real tile measured,
+# 1.40x below the nearest split crop.
+SPLIT_MATERIAL_DISTANCE = 0.49
+
+# Cuts are tried every this many degrees through the frame's centre.
+SPLIT_ANGLE_STEP = 10
+
+# The frame is read at this size: small enough that grain averages out,
+# large enough that a real boundary survives.
+SPLIT_GRID = 128
+
+# A cut that leaves either side smaller than this is not a split, it is
+# a corner being shaved off.
+SPLIT_MIN_SIDE_SHARE = 0.07
+
 # The frame is reduced to this grid before measuring, so the number means
 # the same thing for a 200px swatch and a 2000px slab, and so a single
 # speck of grout cannot move it.
@@ -100,6 +138,57 @@ def scene_chroma_spread(image_bgr: np.ndarray) -> float:
     return float(chroma.reshape(-1, 3).std(axis=0).mean())
 
 
+def split_material_distance(image_bgr: np.ndarray) -> float:
+    """The worst straight cut: how unlike its two halves are.
+
+    Colour and grain are weighed equally. Colour alone misses a split
+    between two materials of similar tone; grain alone misses a split
+    between two equally smooth ones.
+    """
+    if image_bgr is None or getattr(image_bgr, "size", 0) == 0:
+        return 0.0
+
+    small = cv2.resize(
+        image_bgr, (SPLIT_GRID, SPLIT_GRID), interpolation=cv2.INTER_AREA,
+    ).astype(np.float32)
+
+    grey = cv2.cvtColor(
+        small.astype(np.uint8), cv2.COLOR_BGR2GRAY,
+    ).astype(np.float32)
+    grain = cv2.blur(np.abs(grey - cv2.blur(grey, (7, 7))), (7, 7))
+
+    rows, cols = np.mgrid[0:SPLIT_GRID, 0:SPLIT_GRID].astype(np.float32)
+    centre = (SPLIT_GRID - 1) / 2.0
+    floor = SPLIT_MIN_SIDE_SHARE * SPLIT_GRID * SPLIT_GRID
+
+    worst = 0.0
+    for degrees in range(0, 180, SPLIT_ANGLE_STEP):
+        angle = np.deg2rad(degrees)
+        near = (
+            (cols - centre) * np.cos(angle)
+            + (rows - centre) * np.sin(angle)
+        ) > 0
+        far = ~near
+
+        if near.sum() < floor or far.sum() < floor:
+            continue
+
+        colour = float(np.linalg.norm(
+            small[near].mean(axis=0) - small[far].mean(axis=0),
+        )) / 255.0
+
+        near_grain = float(grain[near].mean())
+        far_grain = float(grain[far].mean())
+        texture = (
+            abs(near_grain - far_grain)
+            / (max(near_grain, far_grain) + 1e-6)
+        )
+
+        worst = max(worst, 0.5 * colour + 0.5 * texture)
+
+    return worst
+
+
 def screen_tile_image(image_bgr: np.ndarray) -> Tuple[bool, str]:
     """(keep, reason). `keep` is False only when the measurement says so.
 
@@ -119,7 +208,19 @@ def screen_tile_image(image_bgr: np.ndarray) -> Tuple[bool, str]:
             f"bar {SCENE_CHROMA_SPREAD})"
         )
 
-    return True, f"one tile surface (colour spread {spread:.4f})"
+    split = split_material_distance(image_bgr)
+
+    if split >= SPLIT_MATERIAL_DISTANCE:
+        return False, (
+            f"two different materials meet along a straight line in this "
+            f"frame -- half of it is another product (split distance "
+            f"{split:.3f}, bar {SPLIT_MATERIAL_DISTANCE})"
+        )
+
+    return True, (
+        f"one tile surface (colour spread {spread:.4f}, "
+        f"split distance {split:.3f})"
+    )
 
 
 def screen_tile_file(path) -> Tuple[bool, str]:
