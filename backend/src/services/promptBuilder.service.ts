@@ -183,6 +183,12 @@ Rules for the "tiles" array:
 - Each role in a combination must use a DIFFERENT tile. Never give the same tileId two roles — a board whose base and highlight are the same product is not a combination.
 - "name" should match the tile's listed name, for readability.
 
+Rules about the budget:
+- The budget line above is a TOTAL for floor and wall tiles in the stated room, not a rate per tile. It already states the area it has to cover.
+- None of the products listed below carries a price. So do not state, estimate or imply a cost, a total or a saving — you have no basis for one, and an invented figure is worse than none. Judge the budget by what the band plainly signals: a lower band means plain, bulk-stocked bodies and few decorated pieces; a higher band allows a decorated highlight and a more worked surface.
+- Say in "reason_for_selection" how the combination sits against the band in those terms, and say plainly when the listed stock gives you nothing that suits it rather than offering something that does not.
+- When the budget line names more than one band, return one combination per band, in the order they are named, and say which band each one answers.
+
 Rules about which tile may take which role:
 - "base" is the plain field of the room. It must be a tile listed as type=BASE or type=LARGE_FORMAT_BASE — a quiet surface, plain or softly veined.
 - "highlight", "accent" and "border" are the decorated roles. A highlight is a DESIGNER tile: it must be a tile listed as type=HIGHLIGHTER, type=ACCENT or type=BORDER. Never nominate a plain type=BASE tile as the highlight, and never put a decorated tile in the base role — a board whose highlight is plainer than its base is the wrong way round.
