@@ -13,10 +13,12 @@ router.use(authenticate);
 // as the primary/most-specific use of this router.
 router.get('/recommendations', requirePermission('tiles:read'), validate(tileRecommendationsQuerySchema, 'query'), tileRecommendationController.getRecommendations);
 
-// Plain paginated/searchable tile browse for the Catalog page's Surface Archive.
-// Before '/', or ':id'-shaped routes would swallow it.
+// The floor-module sizes the catalog stocks, for the wizard's Custom
+// size dropdown. Static path, so it is kept above '/' with the other
+// named routes.
 router.get('/sizes', requirePermission('tiles:read'), tileRecommendationController.listTileSizes);
 
+// Plain paginated/searchable tile browse for the Catalog page's Surface Archive.
 router.get('/', requirePermission('tiles:read'), validate(listTilesQuerySchema, 'query'), tileRecommendationController.listTiles);
 
 export default router;
