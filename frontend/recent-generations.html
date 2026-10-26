@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Recent Generations · Casa de Aurum</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500&family=DM+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root { --ink:#1A1512; --paper:#F7F3EC; --card:#fff; --line:#E7DFD1; --sand:#F4EEE3; --gold:#8A6A3B; --gold-light:#E3C58E; --muted:#8B8177; --text2:#5B5147; --err:#A8552A; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--paper); color:var(--ink); font-family:'DM Sans',sans-serif; -webkit-font-smoothing:antialiased; }
+  a { color:var(--gold); text-decoration:none; }
+  .mono { font-family:'JetBrains Mono',monospace; }
+  .serif { font-family:'Playfair Display',serif; }
+  button { font-family:inherit; }
+  img { max-width:100%; }
+  ::-webkit-scrollbar { width:10px; height:10px; }
+  ::-webkit-scrollbar-thumb { background:#DED3C0; border-radius:8px; border:3px solid var(--paper); }
+  @keyframes fadeIn { from{opacity:0} to{opacity:1} }
+  @keyframes rise { from{opacity:0; transform:translateY(14px)} to{opacity:1; transform:none} }
+  @keyframes shimmer { from{background-position:180% 0} to{background-position:-180% 0} }
+
+  .layout { display:flex; height:100vh; overflow:hidden; }
+  .sidebar { flex:0 0 auto; width:266px; height:100%; display:flex; flex-direction:column; background:#FCFAF6; border-right:1px solid var(--line); overflow-y:auto; }
+  .brand { padding:26px 22px 20px; border-bottom:1px solid #EFE7DA; }
+  .brand .name { font-size:19px; letter-spacing:.14em; line-height:1.1; }
+  .brand .tag { font-size:9px; letter-spacing:.22em; color:var(--muted); margin-top:6px; }
+  .nav { padding:20px 14px 8px; }
+  .nav-label { font-size:9.5px; letter-spacing:.2em; color:#A0968A; padding:0 8px 10px; }
+  .nav-items { display:flex; flex-direction:column; gap:3px; }
+  .nav-item { display:flex; align-items:center; gap:12px; width:100%; min-height:48px; padding:0 12px; border:none; border-radius:12px; cursor:pointer; font-size:14px; text-align:left; background:transparent; color:#4A4038; }
+  .nav-item.active { background:var(--ink); color:#FBF6EC; font-weight:500; }
+  .nav-item:not(.active):hover { background:#F1EADD; }
+  .nav-item .lbl { flex:1; }
+  .nav-item .badge { font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:.08em; padding:3px 7px; border-radius:100px; background:#F1EADD; color:var(--muted); }
+  .nav-item.active .badge { background:rgba(227,197,142,.2); color:var(--gold-light); }
+  .profile-wrap { margin-top:auto; padding:18px 16px; }
+  .profile { display:flex; align-items:center; gap:11px; padding:12px; background:var(--sand); border:1px solid var(--line); border-radius:14px; }
+  .avatar-circle { width:36px; height:36px; flex:0 0 auto; border-radius:50%; background:linear-gradient(150deg,#C09A5E,var(--gold)); display:grid; place-items:center; font-size:13px; color:#FFF8EC; }
+  .profile .name { font-size:13px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .profile .role { font-size:9px; letter-spacing:.14em; color:var(--muted); }
+  .logout-btn { margin-top:10px; width:100%; padding:8px; background:transparent; border:1px solid var(--line); border-radius:10px; cursor:pointer; font-size:10px; letter-spacing:.1em; color:var(--muted); }
+  .logout-btn:hover { color:var(--ink); border-color:#C7B393; }
+
+  .main { flex:1; min-width:0; overflow-y:auto; padding:clamp(22px,3vw,44px); }
+  .stage { animation:fadeIn .35s ease both; max-width:1100px; }
+
+  .eyebrow { display:flex; align-items:center; gap:9px; font-size:10px; letter-spacing:.2em; color:var(--gold); }
+  .dot { width:6px; height:6px; border-radius:50%; background:var(--gold); flex:0 0 auto; }
+  h1.page-h1 { font-weight:600; font-size:clamp(28px,3.8vw,44px); line-height:1.08; margin:12px 0 0; }
+  .page-sub { max-width:660px; margin:12px 0 0; font-size:clamp(14px,1.1vw,16px); line-height:1.55; color:var(--text2); }
+
+  .search-box { display:flex; align-items:center; gap:9px; padding:0 14px; height:46px; max-width:420px; background:#fff; border:1px solid var(--line); border-radius:12px; margin-top:20px; }
+  .search-box input { flex:1; min-width:0; border:none; outline:none; background:transparent; font-size:12px; letter-spacing:.02em; color:var(--ink); }
+
+  .chip-row { display:flex; gap:8px; flex-wrap:wrap; margin-top:16px; }
+  .chip { padding:9px 14px; border-radius:100px; cursor:pointer; font-size:10px; letter-spacing:.1em; background:var(--card); color:#4A4038; border:1px solid var(--line); }
+  .chip.selected { background:var(--ink); color:#FBF6EC; border-color:var(--ink); }
+
+  .skeleton-grid { display:flex; flex-direction:column; gap:10px; margin-top:20px; }
+  .skeleton { height:74px; border-radius:16px; background:linear-gradient(90deg,#F1EADD 20%,#F8F3E9 50%,#F1EADD 80%); background-size:200% 100%; animation:shimmer 1.4s linear infinite; }
+
+  .empty-state { padding:clamp(28px,4vw,48px) clamp(20px,3vw,32px); background:#fff; border:1px dashed #D8C9AE; border-radius:20px; text-align:center; margin-top:20px; }
+  .empty-icon { width:58px; height:58px; margin:0 auto; border-radius:16px; background:var(--sand); display:grid; place-items:center; }
+  .empty-title { font-weight:600; font-size:clamp(20px,2.2vw,26px); margin:18px 0 0; }
+  .empty-desc { max-width:380px; margin:10px auto 0; font-size:14px; line-height:1.55; color:var(--text2); }
+  .btn-primary { min-height:52px; padding:0 22px; margin-top:20px; background:var(--ink); color:#FBF6EC; border:none; border-radius:13px; cursor:pointer; font-size:10.5px; letter-spacing:.14em; }
+  .btn-primary:hover { background:#33291F; }
+
+  .sessions-list { display:flex; flex-direction:column; gap:8px; margin-top:20px; }
+  .session-row { display:flex; align-items:center; gap:14px; flex-wrap:wrap; width:100%; text-align:left; padding:14px 16px; background:var(--sand); border:1px solid transparent; border-radius:16px; cursor:pointer; animation:rise .4s ease both; }
+  .session-row:hover { background:#EFE7DA; border-color:#E1D5BF; }
+  .session-icon { width:44px; height:44px; flex:0 0 auto; border-radius:12px; background:#E3D8C4; display:grid; place-items:center; }
+  .session-main { flex:1; min-width:180px; display:flex; flex-direction:column; gap:4px; }
+  .session-main .client { font-size:16.5px; }
+  .session-main .meta { font-size:10px; letter-spacing:.1em; color:var(--muted); }
+  .session-spec { font-size:10px; color:#4A4038; min-width:140px; }
+  .status-pill { font-size:9px; letter-spacing:.1em; white-space:nowrap; padding:7px 10px; border-radius:100px; }
+  .status-pill.approved { background:#F7DFBB; color:#6E5228; }
+  .status-pill.neutral { background:#EDE8DF; color:#5B5147; }
+  .status-pill.rejected { background:#F6E6DC; color:var(--err); }
+
+  .load-more-row { display:flex; justify-content:center; margin-top:22px; }
+  .btn-secondary { min-height:48px; padding:0 22px; background:#fff; color:var(--ink); border:1px solid var(--line); border-radius:13px; cursor:pointer; font-size:10.5px; letter-spacing:.14em; }
+  .btn-secondary:hover:not(:disabled) { background:#F1EADD; }
+  .btn-secondary:disabled { opacity:.5; cursor:not-allowed; }
+
+  /* ---- detail ---- */
+  .detail-back { display:flex; align-items:center; gap:10px; min-height:44px; padding:0 4px; background:transparent; border:none; cursor:pointer; font-size:10px; letter-spacing:.18em; color:var(--muted); }
+  .detail-back:hover { color:var(--ink); }
+  .detail-head { display:flex; align-items:flex-start; justify-content:space-between; gap:14px; flex-wrap:wrap; margin-top:6px; }
+  .detail-head h1 { font-weight:600; font-size:clamp(26px,3.4vw,40px); line-height:1.14; margin:0; }
+  .detail-head .sub { font-size:10px; letter-spacing:.14em; color:var(--muted); margin-top:8px; }
+  .detail-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr)); gap:clamp(14px,1.8vw,22px); margin-top:clamp(18px,2.2vw,26px); }
+  .thumb-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; border-radius:16px; overflow:hidden; }
+  .thumb { width:100%; height:100px; background:var(--sand); overflow:hidden; }
+  .thumb img { width:100%; height:100%; object-fit:cover; display:block; }
+  .facts-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(132px,100%),1fr)); gap:1px; background:var(--line); border:1px solid var(--line); border-radius:14px; overflow:hidden; }
+  .fact-cell { background:var(--sand); padding:14px 16px; }
+  .fact-cell .k { font-size:8.5px; letter-spacing:.16em; color:var(--muted); }
+  .fact-cell .v { font-size:18px; margin-top:7px; line-height:1.2; }
+  .formula-lbl { font-size:9.5px; letter-spacing:.18em; color:var(--muted); margin-top:4px; }
+  .formula-list { display:flex; flex-direction:column; gap:1px; background:var(--line); border:1px solid var(--line); border-radius:14px; overflow:hidden; }
+  .formula-row { display:flex; gap:12px; align-items:center; background:#fff; padding:13px 15px; }
+  .formula-row img { width:32px; height:32px; flex:0 0 auto; border-radius:9px; object-fit:cover; background:var(--sand); }
+  .formula-role { width:58px; flex:0 0 auto; font-size:9px; letter-spacing:.14em; color:var(--muted); text-transform:uppercase; }
+  .formula-val { flex:1; min-width:0; font-size:10.5px; color:#3A322A; }
+  .products-list { display:flex; flex-direction:column; gap:10px; }
+  .product-row { display:flex; gap:14px; align-items:center; padding:12px; background:#fff; border:1px solid var(--line); border-radius:14px; }
+  .product-row img { width:48px; height:48px; flex:0 0 auto; border-radius:12px; object-fit:cover; background:var(--sand); }
+  .product-row .pn { display:block; font-size:14px; font-weight:500; }
+  .product-row .ps { display:block; font-size:9.5px; letter-spacing:.08em; color:var(--muted); margin-top:6px; }
+  .stock-badge { font-size:8.5px; letter-spacing:.08em; }
+  .stock-yes { color:#6E5228; }
+  .stock-no { color:var(--err); }
+  .detail-actions { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(186px,100%),1fr)); gap:10px; margin-top:auto; padding-top:8px; }
+  .btn-detail-primary { display:flex; align-items:center; justify-content:center; gap:10px; min-height:54px; padding:0 16px; background:var(--ink); color:#FBF6EC; border:none; border-radius:13px; cursor:pointer; font-size:10.5px; letter-spacing:.14em; }
+  .btn-detail-primary:hover { background:#33291F; }
+  .btn-detail-secondary { display:flex; align-items:center; justify-content:center; gap:10px; min-height:54px; padding:0 16px; background:#fff; color:var(--ink); border:1px solid var(--line); border-radius:13px; cursor:pointer; font-size:10.5px; letter-spacing:.14em; }
+  .btn-detail-secondary:hover { background:#F1EADD; }
+  .btn-detail-dashed { display:flex; align-items:center; justify-content:center; gap:10px; min-height:54px; padding:0 16px; background:transparent; color:#4A4038; border:1px dashed #D8C9AE; border-radius:13px; cursor:pointer; font-size:10.5px; letter-spacing:.14em; }
+  .btn-detail-dashed:hover { background:#EFE7DA; }
+
+  .modal-overlay { position:fixed; inset:0; z-index:80; display:flex; align-items:center; justify-content:center; padding:20px; background:rgba(26,21,18,.55); }
+  .modal-box { width:min(480px,100%); background:var(--card); border:1px solid var(--line); border-radius:20px; padding:24px; }
+  .modal-box h3 { font-weight:600; font-size:20px; margin:0 0 6px; }
+  .modal-box p { margin:0 0 16px; font-size:13.5px; color:var(--text2); line-height:1.5; }
+  .link-row { display:flex; gap:8px; align-items:center; padding:0 14px; height:48px; background:var(--sand); border:1px solid var(--line); border-radius:12px; }
+  .link-row input { flex:1; min-width:0; border:none; outline:none; background:transparent; font-size:11.5px; color:var(--ink); }
+  .modal-actions { display:flex; gap:10px; margin-top:16px; }
+
+  @media (max-width: 860px) {
+    .sidebar { display:none; }
+    .main { padding:18px; }
+  }
+
+  /* ---- page heading, the mood board's own rules ---- */
+  h1.step-h1 { font-weight:600; font-size:clamp(28px,3.8vw,44px); line-height:1.08; margin:14px 0 0; }
+  .step-sub { max-width:660px; margin:12px 0 0; font-size:clamp(14px,1.1vw,16px); line-height:1.55; color:var(--text2); }
+
+  /* ---- recent generations ---- */
+  .gen-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(280px,100%),1fr)); gap:clamp(14px,1.6vw,20px); margin-top:clamp(20px,2.4vw,30px); }
+  .gen-card { background:var(--card); border:1px solid var(--line); border-radius:18px; overflow:hidden; display:flex; flex-direction:column; animation:rise .4s ease both; }
+  .gen-shot { background:var(--sand); border-bottom:1px solid var(--line); cursor:zoom-in; aspect-ratio:4/3; }
+  .gen-shot img { width:100%; height:100%; object-fit:cover; display:block; }
+  .gen-missing { display:flex; align-items:center; justify-content:center; height:100%; padding:20px; text-align:center; font-size:10px; letter-spacing:.1em; line-height:1.6; color:var(--muted); }
+  .gen-body { padding:16px 18px 18px; display:flex; flex-direction:column; gap:8px; }
+  .gen-name { font-size:15px; font-weight:500; line-height:1.3; }
+  .gen-meta { font-size:9.5px; letter-spacing:.1em; color:var(--muted); line-height:1.7; }
+  .gen-empty { margin-top:clamp(20px,2.4vw,30px); background:var(--sand); border:1px solid var(--line); border-radius:20px; padding:clamp(22px,2.4vw,30px); }
+  .gen-empty h3 { margin:0; font-size:clamp(19px,2vw,24px); }
+  .gen-empty p { margin:10px 0 0; font-size:14px; line-height:1.6; color:var(--text2); max-width:62ch; }
+  .gen-lightbox { position:fixed; inset:0; background:rgba(26,21,18,.88); display:flex; align-items:center; justify-content:center; padding:clamp(16px,4vw,48px); z-index:100; cursor:zoom-out; animation:fadeIn .18s ease both; }
+  .gen-lightbox img { max-width:100%; max-height:100%; display:block; border-radius:14px; box-shadow:0 24px 70px rgba(0,0,0,.45); }
+</style>
+<body>
+
+<div class="layout">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand name serif">CASA DE AURUM</div>
+      <div class="brand tag mono">STUDIO &amp; SHOWROOM</div>
+    </div>
+    <div class="nav">
+      <div class="nav-label mono">WORKSPACE</div>
+      <nav class="nav-items" id="navItems"></nav>
+    </div>
+    <div class="profile-wrap">
+      <div class="profile">
+        <div class="avatar-circle serif" id="profileInitials">··</div>
+        <div style="min-width:0; display:flex; flex-direction:column; gap:2px">
+          <span class="name" id="profileName">—</span>
+          <span class="role mono" id="profileRole">—</span>
+        </div>
+      </div>
+      <button class="logout-btn mono" id="logoutBtn">SIGN OUT</button>
+    </div>
+  </aside>
+
+  <main class="main" id="mainContent"></main>
+</div>
+
+<div id="modalHost"></div>
+
+<script src="assets/api-client.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  const NAV_ITEMS = [
+    { id: 'dashboard', label: 'Dashboard', href: 'dashboard.html', ready: true },
+    { id: 'moodboard', label: 'Mood Board', href: 'mood-board.html', ready: true },
+    { id: 'generations', label: 'Recent Generations', href: 'recent-generations.html', ready: true },
+    { id: 'projects', label: 'Projects', href: 'projects.html', ready: true },
+    { id: 'catalog', label: 'Catalog', href: 'catalog.html', ready: true },
+  ];
+
+  function notReady() {
+    alert('This section of the new design is still being rebuilt — coming soon.');
+  }
+
+  function renderNav() {
+    const nav = document.getElementById('navItems');
+    nav.innerHTML = '';
+    NAV_ITEMS.forEach((item) => {
+      const btn = document.createElement('button');
+      btn.className = 'nav-item' + (item.id === 'generations' ? ' active' : '');
+      btn.innerHTML = '<span class="lbl">' + item.label + '</span>' + (item.ready ? '' : '<span class="badge mono">SOON</span>');
+      btn.addEventListener('click', () => {
+        if (item.href) location.href = item.href;
+        else notReady();
+      });
+      nav.appendChild(btn);
+    });
+  }
+
+  function escapeHtml(s) {
+    return String(s === null || s === undefined ? '' : s).replace(/[&<>"']/g, (c) => (
+      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+    ));
+  }
+
+  function whenText(value) {
+    const when = new Date(value);
+    if (Number.isNaN(when.getTime())) return '';
+    return when.toLocaleString(undefined, {
+      day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+    });
+  }
+
+  function openLightbox(src) {
+    if (!src || document.querySelector('.gen-lightbox')) return;
+    const overlay = document.createElement('div');
+    overlay.className = 'gen-lightbox';
+    overlay.innerHTML = '<img src="' + src + '" alt="Generated bathroom scene">';
+    function close() { overlay.remove(); document.removeEventListener('keydown', onKey); }
+    function onKey(e) { if (e.key === 'Escape') close(); }
+    overlay.addEventListener('click', close);
+    document.addEventListener('keydown', onKey);
+    document.body.appendChild(overlay);
+  }
+
+  // A scene whose image could not be kept still gets a card. Hiding it
+  // would quietly under-report what was generated, which is the one
+  // thing a history must not do.
+  function cardHtml(gen) {
+    const title = gen.combinationName || gen.productName || 'Bathroom scene';
+    const bits = [gen.room, gen.style, gen.by].filter(Boolean).join(' · ');
+    const shot = gen.imageUrl
+      ? '<div class="gen-shot" data-src="' + escapeHtml(gen.imageUrl) + '"><img src="' + escapeHtml(gen.imageUrl) + '" alt="' + escapeHtml(title) + '"></div>'
+      : '<div class="gen-shot" style="cursor:default"><span class="gen-missing mono">IMAGE NOT KEPT<br>' + escapeHtml(gen.imageSource || 'unknown') + '</span></div>';
+
+    return '<article class="gen-card">' + shot +
+      '<div class="gen-body">' +
+      '<span class="gen-name">' + escapeHtml(title) + '</span>' +
+      '<span class="gen-meta mono">' + escapeHtml(whenText(gen.createdAt)) + (bits ? ' — ' + escapeHtml(bits) : '') + '</span>' +
+      '</div></article>';
+  }
+
+  function render(generations) {
+    const main = document.getElementById('mainContent');
+    main.innerHTML =
+      '<div class="stage">' +
+      '<div class="mono" style="font-size:10px; letter-spacing:.18em; color:var(--muted)">AI RENDERS</div>' +
+      '<h1 class="step-h1 serif">Recent Generations</h1>' +
+      '<p class="step-sub">Every bathroom scene generated from a mood board, newest first.</p>' +
+      (generations.length
+        ? '<div class="gen-grid" id="genGrid"></div>'
+        : '<div class="gen-empty"><h3 class="serif">Nothing generated yet</h3>' +
+          '<p>Scenes appear here as soon as they are generated. Open a mood board and press GENERATE BATHROOM SCENE — the render is kept here from that moment on. Scenes generated before this page existed were never recorded anywhere, so they cannot be shown.</p></div>') +
+      '</div>';
+
+    if (!generations.length) return;
+
+    const grid = document.getElementById('genGrid');
+    grid.innerHTML = generations.map(cardHtml).join('');
+    grid.querySelectorAll('.gen-shot[data-src]').forEach((shot) => {
+      shot.addEventListener('click', () => openLightbox(shot.dataset.src));
+    });
+  }
+
+  function renderError(message) {
+    document.getElementById('mainContent').innerHTML =
+      '<div class="stage"><div class="gen-empty"><h3 class="serif">Could not load the history</h3>' +
+      '<p>' + escapeHtml(message || 'Unknown error.') + '</p></div></div>';
+  }
+
+  async function init() {
+    const user = await CasaApi.requireAuth();
+
+    document.getElementById('profileInitials').textContent = CasaApi.initials(user.name);
+    document.getElementById('profileName').textContent = user.name || user.email;
+    document.getElementById('profileRole').textContent = (user.role || '').toUpperCase();
+
+    renderNav();
+    document.getElementById('logoutBtn').addEventListener('click', async () => {
+      await CasaApi.auth.logout();
+      location.href = 'login.html';
+    });
+
+    try {
+      render(await CasaApi.ai.recentGenerations());
+    } catch (err) {
+      renderError((err && err.message) || '');
+    }
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>

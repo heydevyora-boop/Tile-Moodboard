@@ -5,6 +5,7 @@ import {
 } from 'express';
 
 import { prisma } from '@db/connection';
+import { logActivity } from '@services/activityLog.service';
 
 import { authenticate, requirePermission } from '@middlewares/auth';
 
@@ -340,6 +341,26 @@ router.post(
       // SUCCESS
       // ========================================================
 
+      // ========================================================
+      // RECORD IT, SO IT CAN BE FOUND AGAIN
+      // ========================================================
+      // Until now a generated scene existed only in the browser tab
+      // that asked for it: the page holds it in memory, a reload or a
+      // regeneration loses it, and nothing anywhere kept a copy. There
+      // is no table for visualizations and no migration runs on this
+      // deployment, so the record goes in activity_logs -- the one
+      // place that already exists, already has a Json column and is
+      // already written to from a dozen other places.
+      //
+      // WHICH URL IS KEPT. A Drive link is durable and tiny, so it
+      // wins. Failing that, the data: URL Python embedded is the only
+      // copy that survives at all -- Node and Python have no shared
+      // disk here, so /generated-visualizations/<file> names a file in
+      // another container that will be gone by the next request. A
+      // data URL is megabytes, so one that is implausibly large is
+      // recorded without its image rather than bloating the table.
+      await recordGeneration(req, result);
+
       return res.status(200).json({
         success: true,
 
@@ -365,6 +386,105 @@ router.post(
         },
       });
     }
+  },
+);
+
+// ============================================================
+// RECENT GENERATIONS
+// ============================================================
+
+const GENERATION_ACTION = 'visualization.generated';
+
+// A data: URL beyond this is not worth a database row. Measured
+// against what Python returns: a 1024px PNG lands around 1.5-2.5 MB
+// base64, so this leaves real headroom without letting one row grow
+// without limit.
+const MAX_STORED_IMAGE_CHARS = 6 * 1024 * 1024;
+
+type VisualizationResult = {
+  visualization_id?: string;
+  image?: { url?: string; data_url?: string };
+  drive?: { image?: { url?: string; webContentLink?: string; webViewLink?: string } };
+  visualization?: { product_name?: string; surface?: string };
+};
+
+function durableImageUrl(result: VisualizationResult): { url: string; source: string } {
+  const drive = result.drive?.image;
+  const driveUrl = drive?.url || drive?.webContentLink || drive?.webViewLink;
+  if (driveUrl) return { url: driveUrl, source: 'drive' };
+
+  const inline = result.image?.data_url
+    || (result.image?.url?.startsWith('data:') ? result.image.url : '');
+  if (inline && inline.length <= MAX_STORED_IMAGE_CHARS) {
+    return { url: inline, source: 'inline' };
+  }
+  if (inline) return { url: '', source: 'too-large' };
+
+  // A /generated-visualizations/<file> path is deliberately NOT kept:
+  // it points into Python's own container and 404s from here.
+  return { url: '', source: 'not-kept' };
+}
+
+async function recordGeneration(req: Request, result: VisualizationResult): Promise<void> {
+  const { url, source } = durableImageUrl(result);
+  const body = req.body as Record<string, unknown>;
+  const requirements = (body.requirements ?? {}) as Record<string, unknown>;
+
+  await logActivity({
+    userId: req.user?.id,
+    action: GENERATION_ACTION,
+    entityType: 'Visualization',
+    entityId: result.visualization_id,
+    metadata: {
+      imageUrl: url,
+      imageSource: source,
+      productName: result.visualization?.product_name ?? '',
+      surface: result.visualization?.surface ?? '',
+      room: String(requirements.room ?? ''),
+      style: String(requirements.style ?? ''),
+      combinationName: String(requirements.combination_name ?? ''),
+    },
+    req,
+  });
+}
+
+// ============================================================
+// GET /visualizations/recent
+// ============================================================
+
+router.get(
+  '/visualizations/recent',
+  requirePermission('visualizations:write'),
+  async (req: Request, res: Response) => {
+    const asked = Number.parseInt(String(req.query.limit ?? ''), 10);
+    const limit = Number.isFinite(asked) ? Math.min(Math.max(asked, 1), 60) : 30;
+
+    const rows = await prisma.activityLog.findMany({
+      where: { action: GENERATION_ACTION },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      select: { id: true, createdAt: true, metadata: true, user: { select: { name: true } } },
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        generations: rows.map((row) => {
+          const meta = (row.metadata ?? {}) as Record<string, unknown>;
+          return {
+            id: row.id,
+            createdAt: row.createdAt,
+            by: row.user?.name ?? '',
+            imageUrl: String(meta.imageUrl ?? ''),
+            imageSource: String(meta.imageSource ?? ''),
+            productName: String(meta.productName ?? ''),
+            room: String(meta.room ?? ''),
+            style: String(meta.style ?? ''),
+            combinationName: String(meta.combinationName ?? ''),
+          };
+        }),
+      },
+    });
   },
 );
 

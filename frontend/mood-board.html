@@ -168,12 +168,6 @@
   .board-thumbs { display:flex; gap:6px; }
   .board-thumb { width:44px; height:44px; border-radius:8px; overflow:hidden; background:var(--sand); flex:0 0 auto; cursor:zoom-in; }
   .board-thumb img { width:100%; height:100%; object-fit:cover; display:block; }
-  .formula-lbl { font-size:9.5px; letter-spacing:.18em; color:var(--muted); margin-top:2px; }
-  .formula-list { display:flex; flex-direction:column; gap:1px; background:var(--line); border:1px solid var(--line); border-radius:12px; overflow:hidden; }
-  .formula-row { display:flex; gap:10px; align-items:center; background:var(--sand); padding:10px 13px; }
-  .formula-row img { width:26px; height:26px; flex:0 0 auto; border-radius:7px; object-fit:cover; background:#EFE7DA; }
-  .formula-role { width:64px; flex:0 0 auto; font-size:9px; letter-spacing:.1em; color:var(--muted); text-transform:uppercase; }
-  .formula-val { flex:1; min-width:0; font-size:10.5px; color:#3A322A; }
   .btn-view-products { display:flex; align-items:center; justify-content:center; gap:10px; min-height:48px; background:#fff; border:1px solid var(--line); border-radius:13px; cursor:pointer; font-size:10.5px; letter-spacing:.14em; color:#4A4038; }
   .btn-view-products:hover { background:#F1EADD; }
 
@@ -303,6 +297,7 @@
   const NAV_ITEMS = [
     { id: 'dashboard', label: 'Dashboard', href: 'dashboard.html', ready: true },
     { id: 'moodboard', label: 'Mood Board', href: 'mood-board.html', ready: true },
+    { id: 'generations', label: 'Recent Generations', href: 'recent-generations.html', ready: true },
     { id: 'projects', label: 'Projects', href: 'projects.html', ready: true },
     { id: 'catalog', label: 'Catalog', href: 'catalog.html', ready: true },
   ];
@@ -637,7 +632,7 @@
         state.tilesById = {};
         tiles.forEach((t) => { state.tilesById[t.id] = t; });
       } catch (err) {
-        state.tilesById = {}; // non-fatal -- formula still renders with names, just no images/stock
+        state.tilesById = {}; // non-fatal -- the cards still render, just without images or stock
       }
 
       state.stage = 'results';
@@ -753,15 +748,6 @@
   // RESULTS
   // ============================================================
 
-  function formulaRowsHtml(tiles) {
-    return '<div class="formula-list">' + tiles.map((t) => {
-      const detail = state.tilesById[t.tileId];
-      const img = detail && detail.imageUrl ? '<img src="' + CasaApi.resolveBackendImageUrl(detail.imageUrl) + '" alt="">' : '<span style="width:26px;height:26px;flex:0 0 auto;border-radius:7px;background:#EFE7DA"></span>';
-      const label = detail ? detail.name : (t.name || 'Tile unavailable');
-      return '<div class="formula-row">' + img + '<span class="formula-role mono">' + t.role + '</span><span class="formula-val mono">' + escapeHtml(label) + '</span></div>';
-    }).join('') + '</div>';
-  }
-
   function renderResults() {
     const main = document.getElementById('mainContent');
     const specLine = state.viewOnly
@@ -806,8 +792,12 @@
         // The card's own secondary button style, the same one PRODUCTS
         // USED wears at the bottom.
         '<button class="btn-view-products mono" data-mood-board="' + i + '">◇ VIEW MOOD BOARD ↗</button>' +
-        '<div class="formula-lbl mono">SPECIFIED TILES (' + combo.tiles.length + ')</div>' +
-        formulaRowsHtml(combo.tiles) +
+        // SPECIFIED TILES used to be listed here as well. PRODUCTS USED
+        // opens the same three products in the same card, in more
+        // detail, so the card said everything twice and the scene --
+        // the thing being chosen between -- had a spec sheet under it.
+        // The grout line stays: it is the one spec PRODUCTS USED does
+        // not carry.
         (combo.grout_recommendation ? '<div class="mono" style="font-size:10px;color:var(--muted)">GROUT: ' + escapeHtml(combo.grout_recommendation) + '</div>' : '') +
         '<div class="products-section" id="productsSection-' + i + '">' + productsSectionHtml(combo, i) + '</div>' +
         '</div>';
