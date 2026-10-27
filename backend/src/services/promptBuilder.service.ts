@@ -4,6 +4,7 @@ import { AppError } from '@utils/AppError';
 import { logActivity } from './activityLog.service';
 import { geminiClient } from './gemini.service';
 import { getRecommendedTiles } from './tileRecommendation.service';
+import { screenSlate } from './tileImageScreen.service';
 import { GenerateBriefInput } from '@validators/moodBoard.validators';
 import { getSettings } from './settings.service';
 
@@ -69,7 +70,15 @@ export async function getAvailableTiles(filter: { brandId?: string; room?: strin
     limit: MAX_TILES_IN_PROMPT,
   });
 
-  return ranked.map((t) => ({
+  // A capture holding two materials -- a tile with its neighbour caught
+  // in the corner -- is a real row with a real picture, so nothing here
+  // had any reason to pass it over, and boards came back built from
+  // them. They are taken out of the slate before the model sees it.
+  // screenSlate refuses to empty the slate, so a catalog whose every
+  // capture is odd still produces a board.
+  const { kept } = await screenSlate(ranked);
+
+  return kept.map((t) => ({
     id: t.id,
     name: t.name,
     brandName: t.brandName ?? '',
