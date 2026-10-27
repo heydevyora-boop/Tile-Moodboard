@@ -88,8 +88,11 @@
   .walls-toggle { display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:48px; padding:0 16px; background:var(--card); border:1px solid var(--line); border-radius:13px; cursor:pointer; font-size:10.5px; letter-spacing:.12em; color:#4A4038; text-align:left; }
   .walls-toggle:hover { background:#F1EADD; }
   .walls-toggle .caret { flex:0 0 auto; color:var(--muted); }
-  .walls-list { display:flex; flex-direction:column; gap:1px; background:var(--line); border:1px solid var(--line); border-radius:13px; overflow:hidden; }
-  .wall-row { display:flex; align-items:center; gap:12px; padding:13px 16px; background:var(--card); cursor:pointer; text-align:left; border:none; width:100%; font-size:12.5px; color:var(--ink); }
+  /* Columns, not one long stack: a catalog with a dozen sizes has to be
+     readable without scrolling the step. auto-fill keeps one column on a
+     phone and as many as fit on a desktop. */
+  .walls-list { display:grid; grid-template-columns:repeat(auto-fill,minmax(168px,1fr)); gap:1px; background:var(--line); border:1px solid var(--line); border-radius:13px; overflow:hidden; }
+  .wall-row { display:flex; align-items:center; gap:10px; padding:12px 14px; background:var(--card); cursor:pointer; text-align:left; border:none; width:100%; font-size:12.5px; color:var(--ink); }
   .wall-row:hover { background:#F7F2E8; }
   .wall-box { width:17px; height:17px; flex:0 0 auto; border:1px solid #C7BCAA; border-radius:5px; }
   .wall-row.checked .wall-box { border-color:var(--ink); background:var(--ink); box-shadow:inset 0 0 0 3px #FBF6EC; }
@@ -480,6 +483,10 @@
     // walls, so the list is the point of the option, not a second step
     // behind a caret.
     customWallsOpen: true,
+    // Set when a dropdown has just been opened, cleared once it has been
+    // brought into view. One-shot, because the list can arrive a render
+    // later than the click that asked for it.
+    revealList: false,
     size: SIZES[1],
     // 'preset' | 'custom' | 'auto'. One mode at a time, which is what
     // makes the three mutually exclusive: picking any chip sets it.
@@ -605,6 +612,20 @@
   // dropdown would have shown.
   // ============================================================
 
+  /**
+   * Bring a just-opened dropdown into view inside the scrolling panel,
+   * so the options are on screen without the client hunting for them.
+   * 'nearest' moves the minimum needed, so a list already in view does
+   * not jump.
+   */
+  function revealOpenList(body) {
+    if (!state.revealList) return;
+    const list = body.querySelector('.walls-list');
+    if (!list) return;
+    state.revealList = false;
+    list.scrollIntoView({ block: 'nearest' });
+  }
+
   function customWallsSummary() {
     if (state.customWalls.includes(LET_STUDIO_DECIDE)) return LET_STUDIO_DECIDE;
     if (state.customWalls.length === 0) return 'CHOOSE WALLS';
@@ -654,9 +675,11 @@
     if (toggle) {
       toggle.addEventListener('click', () => {
         state.customWallsOpen = !state.customWallsOpen;
+        state.revealList = state.customWallsOpen;
         render();
       });
     }
+    revealOpenList(body);
     body.querySelectorAll('[data-wall]').forEach((row) => {
       row.addEventListener('click', () => {
         toggleWall(row.dataset.wall);
@@ -725,8 +748,13 @@
   function wireCustomSize(body) {
     const toggle = body.querySelector('#customSizeToggle');
     if (toggle) {
-      toggle.addEventListener('click', () => { state.customSizeOpen = !state.customSizeOpen; render(); });
+      toggle.addEventListener('click', () => {
+        state.customSizeOpen = !state.customSizeOpen;
+        state.revealList = state.customSizeOpen;
+        render();
+      });
     }
+    revealOpenList(body);
     body.querySelectorAll('[data-custom-size]').forEach((row) => {
       row.addEventListener('click', () => {
         // One size, not several -- a floor has one module.
@@ -847,7 +875,7 @@
       }).join('') + '</div>';
       body.querySelectorAll('[data-feature]').forEach((btn) => btn.addEventListener('click', () => {
         state.feature = btn.dataset.feature;
-        if (state.feature === 'Custom') state.customWallsOpen = true;
+        if (state.feature === 'Custom') { state.customWallsOpen = true; state.revealList = true; }
         render();
       }));
       wireCustomWalls(body);
@@ -878,7 +906,7 @@
       }));
       body.querySelectorAll('[data-size-mode]').forEach((btn) => btn.addEventListener('click', () => {
         state.sizeMode = btn.dataset.sizeMode;
-        if (state.sizeMode === 'custom') { state.customSizeOpen = true; loadCatalogSizes(); }
+        if (state.sizeMode === 'custom') { state.customSizeOpen = true; state.revealList = true; loadCatalogSizes(); }
         render();
       }));
       wireCustomSize(body);
