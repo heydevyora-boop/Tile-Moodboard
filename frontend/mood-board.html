@@ -131,7 +131,11 @@
      the same height whatever its content, so the grid stays even. */
   .palette-card { display:flex; flex-direction:column; padding:0; overflow:hidden; background:var(--card); border-radius:14px; cursor:pointer; border:1px solid var(--line); text-align:left; }
   .palette-card.selected { border-color:var(--ink); box-shadow:0 0 0 1px var(--ink) inset; }
-  .palette-art { display:block; width:100%; aspect-ratio:16/9; object-fit:cover; background:var(--sand); border-bottom:1px solid var(--line); }
+  /* 16:9, but capped: on a 230px card that ratio alone gives a 129px
+     picture, which reads as the subject of the card rather than a
+     preview of it. The cap keeps every card's picture identical in
+     height whatever the column width. */
+  .palette-art { display:block; width:100%; aspect-ratio:16/9; max-height:92px; object-fit:cover; background:var(--sand); border-bottom:1px solid var(--line); }
   .palette-body { display:flex; flex-direction:column; flex:1; gap:9px; padding:12px 14px 14px; }
   .palette-card .pl { display:block; font-size:14px; font-weight:500; }
   .palette-card .ps { display:block; font-size:9px; letter-spacing:.1em; color:var(--muted); margin-top:4px; }
@@ -376,12 +380,12 @@
   // ============================================================
 
   const ROOMS = [
-    { name: 'Bathroom', badge: 'WET SPACE', desc: 'Wet zone and walk-in shower automatically calibrated.', img: 'img/room-bathroom.png' },
-    { name: 'Powder Room', badge: 'COMPACT VANITY', desc: 'Compact vanity & accent wall statement focus.', img: 'img/room-powder.png' },
-    { name: 'Living Room', badge: 'OPEN FLOOR', desc: 'Large format open floor plan & fireplace wraps.', img: 'img/room-living.png' },
-    { name: 'Bedroom', badge: 'AMBIENT SLEEP', desc: 'Warm textured ambient surfaces and quiet tones.', img: 'img/room-bedroom.png' },
-    { name: 'Kitchen & Dining', badge: 'HIGH TRAFFIC', desc: 'Splashback focal point & stain-resistant porcelain.', img: 'img/room-kitchen.png' },
-    { name: 'Balcony & Patio', badge: 'OUTDOOR R11', desc: 'Anti-skid outdoor porcelain & weather resistance.', img: 'img/room-terrace.png' },
+    { name: 'Bathroom', badge: 'WET SPACE', desc: 'Wet zone and walk-in shower automatically calibrated.', img: 'img/room-bathroom.webp' },
+    { name: 'Powder Room', badge: 'COMPACT VANITY', desc: 'Compact vanity & accent wall statement focus.', img: 'img/room-powder.webp' },
+    { name: 'Living Room', badge: 'OPEN FLOOR', desc: 'Large format open floor plan & fireplace wraps.', img: 'img/room-living.webp' },
+    { name: 'Bedroom', badge: 'AMBIENT SLEEP', desc: 'Warm textured ambient surfaces and quiet tones.', img: 'img/room-bedroom.webp' },
+    { name: 'Kitchen & Dining', badge: 'HIGH TRAFFIC', desc: 'Splashback focal point & stain-resistant porcelain.', img: 'img/room-kitchen.webp' },
+    { name: 'Balcony & Patio', badge: 'OUTDOOR R11', desc: 'Anti-skid outdoor porcelain & weather resistance.', img: 'img/room-terrace.webp' },
   ];
 
   const FEATURES = [
@@ -408,9 +412,9 @@
   const AUTO_SIZE = 'Let De\u2019vyora decide';
 
   const FINISHES = [
-    { label: 'Honed Matte', spec: 'R10 · ANTI-SKID · WET ZONE', img: 'img/tex-travertine.png' },
-    { label: 'Polished Gloss', spec: 'REFLECTIVE · DRY ZONE ONLY', img: 'img/tex-calacatta.png' },
-    { label: 'Textured Grip', spec: 'R11 · OUTDOOR RATED', img: 'img/tex-terrazzo.png' },
+    { label: 'Honed Matte', spec: 'R10 · ANTI-SKID · WET ZONE', img: 'img/tex-travertine.webp' },
+    { label: 'Polished Gloss', spec: 'REFLECTIVE · DRY ZONE ONLY', img: 'img/tex-calacatta.webp' },
+    { label: 'Textured Grip', spec: 'R11 · OUTDOOR RATED', img: 'img/tex-terrazzo.webp' },
   ];
 
   // THE ROOM EVERY BUDGET IS QUOTED AGAINST.
@@ -1047,7 +1051,7 @@
       body.innerHTML = '<div class="grid-rooms">' + ROOMS.map((r) => {
         const sel = state.room === r.name;
         return '<button class="room-card' + (sel ? ' selected' : '') + '" data-room="' + r.name + '">' +
-          '<span class="room-img"><img src="' + r.img + '" alt="' + r.name + '"><span class="room-badge mono">' + r.badge + '</span>' + (sel ? '<span class="room-check">✓</span>' : '') + '</span>' +
+          '<span class="room-img"><img src="' + r.img + '" alt="' + r.name + '" loading="lazy" decoding="async" width="640" height="437"><span class="room-badge mono">' + r.badge + '</span>' + (sel ? '<span class="room-check">✓</span>' : '') + '</span>' +
           '<span class="room-body"><span class="rn serif">' + r.name + '</span><span class="rd">' + r.desc + '</span></span>' +
           '</button>';
       }).join('') + '</div>';
@@ -1071,6 +1075,13 @@
     }
 
     if (state.step === 3) {
+      // Warm the catalog sizes while the client is still reading this
+      // step. loadCatalogSizes returns immediately once they are held,
+      // so this costs one request per visit at most -- and the Custom
+      // dropdown then opens on data already in hand instead of showing
+      // "READING THE CATALOG..." and waiting for a round trip.
+      loadCatalogSizes();
+
       body.innerHTML =
         '<div style="margin-top:clamp(18px,2vw,26px)">' +
         '<div class="section-lbl mono" style="margin-top:0">FLOOR TILE DIMENSION</div>' +
@@ -1084,7 +1095,7 @@
         '<div class="section-lbl mono">SURFACE FINISH</div>' +
         '<div class="finish-grid">' + FINISHES.map((f) => {
           const sel = state.finish === f.label;
-          return '<button class="finish-card' + (sel ? ' selected' : '') + '" data-finish="' + f.label + '"><img src="' + f.img + '" alt=""><span style="flex:1;min-width:0"><span class="fl">' + f.label + '</span><span class="fs mono">' + f.spec + '</span></span></button>';
+          return '<button class="finish-card' + (sel ? ' selected' : '') + '" data-finish="' + f.label + '"><img src="' + f.img + '" alt="" loading="lazy" decoding="async" width="128" height="128"><span style="flex:1;min-width:0"><span class="fl">' + f.label + '</span><span class="fs mono">' + f.spec + '</span></span></button>';
         }).join('') + '</div>' +
         '</div>';
       body.querySelectorAll('[data-size]').forEach((btn) => btn.addEventListener('click', () => {
