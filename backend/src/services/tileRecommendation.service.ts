@@ -187,6 +187,9 @@ export interface TileForRanking {
   // rankTiles stays callable without it and the shape signal simply says
   // nothing.
   imageBbox?: unknown;
+  // Carried so the slate can be screened on what the picture actually
+  // shows; see tileImageScreen.service.ts. Nothing in ranking reads it.
+  imageUrl?: string | null;
 }
 
 export interface RankingCriteria {
@@ -569,6 +572,7 @@ export async function getRecommendedTiles(prisma: PrismaTileClient, filter: Reco
     createdAt: t.createdAt,
     updatedAt: t.updatedAt,
     imageBbox: t.imageBbox,
+    imageUrl: normalizeDriveImageUrl(t.imageUrl),
   }));
 
   // Ranking decides the order, on room, theme and colour fit alone.
