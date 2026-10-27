@@ -11,27 +11,43 @@
  * This looks at the pixels and says whether the picture is one material
  * or two. It runs on the candidate slate, before the model ever sees it.
  *
- * WHAT IT MEASURES, and why each part is needed. The measurements below
- * were calibrated against the four swatches from the boards the catalog
- * owner reported -- two bad, two good -- plus a patterned decor tile and
- * a border tile, which must survive:
+ * WHAT IT MEASURES, and why each part is needed. Calibrated against the
+ * captures from the boards the catalog owner reported -- including a
+ * chevron of stone on a black ground, which the first version of this
+ * let through -- plus the decor tiles that must survive:
  *
- *                        gap    minority  apart   band
- *   plain colourbody     0.007   0.267    0.065   -      keep
- *   plain black decor    0.442   0.002    0.000   -      keep
- *   SPLIT brown/floral   0.547   0.444    0.302   no     reject
- *   SPLIT grey/terracotta 0.206  0.119    0.357   no     reject
- *   scattered floral     0.486   0.296    0.032   -      keep
- *   scattered terrazzo   0.544   0.296    0.032   -      keep
- *   border band          0.349   0.167    0.354   yes    keep
+ *                         gap   minority  edge   touches band
+ *   plain colourbody      0.007  0.267   0.698    -       -    keep
+ *   plain black decor     0.442  0.002   1.000    -       -    keep
+ *   floral decor          0.165  0.219   0.728    -       -    keep
+ *   plain modulo base     0.210  0.005   1.000    -       -    keep
+ *   SPLIT brown/floral    0.547  0.444   0.244   yes     no   REJECT
+ *   SPLIT grey/terracotta 0.206  0.119   0.411   yes     no   REJECT
+ *   CHEVRON on black      0.298  0.360   0.188   yes     no   REJECT
+ *   scattered floral      0.486  0.296   0.654    -       -    keep
+ *   scattered terrazzo    0.544  0.296   0.653    -       -    keep
+ *   border band           0.349  0.167   0.281    -      yes   keep
+ *   centred medallion     0.556  0.210   0.140    no      -    keep
  *
- * `apart` is what carries the decision: two materials sit in two PLACES,
- * while a pattern puts both colours everywhere, so a pattern's two
- * populations share a centre and a split's do not. `gap` and `minority`
- * stop a near-uniform tile tripping it on noise. And `band` is the
- * exemption a border tile needs: its stripe sits as far off centre as a
- * split does, but it runs the full length of one edge and no further,
- * where a bad crop's second material reaches part way along two.
+ * `edge` is what carries the decision: how much of the smaller material
+ * touches the other one. A scattered pattern is nearly all edge, because
+ * every speck has the field around it. Two materials meeting are a few
+ * big pieces, so only their outline touches.
+ *
+ * It replaced an earlier measure of how far the two materials' CENTRES
+ * sat apart, which the chevron defeated: the black wraps the stone
+ * symmetrically, so both centres land in the middle and that measure saw
+ * nothing. `apart` is still reported, because it is useful when reading a
+ * verdict, but it no longer decides anything.
+ *
+ * `gap` and `minority` stop a near-uniform tile tripping on its own
+ * noise. And two exemptions keep real decor out of the net:
+ *
+ *   band     a border's stripe is clumped, but runs the full length of
+ *            ONE edge and no further
+ *   touches  a medallion is clumped too, but sits enclosed in its tile
+ *            and never reaches the frame, where two materials in a bad
+ *            crop both run off it
  *
  * It fails OPEN. A picture that cannot be fetched, decoded or measured is
  * kept, because "we could not look" is not evidence of anything, and a
@@ -40,8 +56,8 @@
 
 const SAMPLE = 48;
 
-/** How far the two populations' centres may sit apart before this is two materials. */
-const APART_LIMIT = 0.18;
+/** How much of the smaller material may touch the other before this is two materials, not a pattern. */
+const EDGE_LIMIT = 0.55;
 
 /** The smaller population has to be a real share of the picture, not speckle. */
 const MINORITY_FLOOR = 0.08;
@@ -61,11 +77,18 @@ export interface ScreenVerdict {
   reason: string;
   gap: number;
   minority: number;
+  /** Reported for reading a verdict; it does not decide. */
   apart: number;
+  /** The share of the smaller material that touches the other one. */
+  edge: number;
+  /** Whether the smaller material reaches the frame. */
+  touches: boolean;
   band: boolean;
 }
 
-const KEPT = (reason: string): ScreenVerdict => ({ ok: true, reason, gap: 0, minority: 0, apart: 0, band: false });
+const KEPT = (reason: string): ScreenVerdict => ({
+  ok: true, reason, gap: 0, minority: 0, apart: 0, edge: 1, touches: false, band: false,
+});
 
 /** Everything this decides from, given the raw pixels of a square sample. */
 export function measureSplit(data: Uint8ClampedArray, w: number, h: number): ScreenVerdict {
@@ -124,31 +147,51 @@ export function measureSplit(data: Uint8ClampedArray, w: number, h: number): Scr
     (sum[0][3] / nA - sum[1][3] / nB) ** 2 + (sum[0][4] / nA - sum[1][4] / nB) ** 2,
   ) / Math.sqrt(w * w + h * h);
 
-  // How far the smaller material reaches, per row and per column. A row
-  // counts only if a tenth of it belongs to that material, so a scatter
-  // of stray pixels is not a reach.
+  // The shape of the smaller material: how much of it touches the other
+  // one, whether it reaches the frame, and how far it runs per row and
+  // per column. A row counts toward the reach only if a tenth of it
+  // belongs to that material, so a scatter of stray pixels is not a run.
   const smaller = nA <= nB ? 0 : 1;
   const rows = new Array(h).fill(0);
   const cols = new Array(w).fill(0);
+  let smallCount = 0;
+  let onEdge = 0;
+  let touches = false;
   for (let i = 0; i < n; i += 1) {
     if (side(i) !== smaller) continue;
-    rows[Math.floor(i / w)] += 1;
-    cols[i % w] += 1;
+    smallCount += 1;
+    const x = i % w;
+    const y = Math.floor(i / w);
+    rows[y] += 1;
+    cols[x] += 1;
+    if (x === 0 || y === 0 || x === w - 1 || y === h - 1) touches = true;
+    if (
+      x === 0 || y === 0 || x === w - 1 || y === h - 1
+      || side(i - 1) !== smaller || side(i + 1) !== smaller
+      || side(i - w) !== smaller || side(i + w) !== smaller
+    ) onEdge += 1;
   }
+  const edge = smallCount ? onEdge / smallCount : 1;
   const rowReach = rows.filter((c) => c / w >= 0.1).length / h;
   const colReach = cols.filter((c) => c / h >= 0.1).length / w;
   const band = Math.min(rowReach, colReach) <= BAND_REACH && Math.max(rowReach, colReach) >= BAND_SPAN;
 
-  const split = apart >= APART_LIMIT && minority >= MINORITY_FLOOR && gap >= GAP_FLOOR && !band;
+  const split = minority >= MINORITY_FLOOR
+    && gap >= GAP_FLOOR
+    && edge <= EDGE_LIMIT
+    && touches
+    && !band;
 
   return {
     ok: !split,
     reason: split
-      ? `two materials in one capture (apart ${apart.toFixed(2)}, minority ${minority.toFixed(2)}, gap ${gap.toFixed(2)})`
+      ? `two materials in one capture (edge ${edge.toFixed(2)}, minority ${minority.toFixed(2)}, gap ${gap.toFixed(2)})`
       : 'one material',
     gap,
     minority,
     apart,
+    edge,
+    touches,
     band,
   };
 }

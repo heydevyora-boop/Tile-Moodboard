@@ -98,14 +98,15 @@ async function main() {
   check('4. The plain colourbody is kept', goodBody.ok, goodBody);
   check('5. The plain black decor is kept', goodDecore.ok, goodDecore);
 
-  // ── the margin, stated rather than assumed ─────────────────────────
-  const rejectedApart = Math.min(badDecore.apart, badBody.apart);
-  const keptApart = Math.max(goodBody.apart, goodDecore.apart);
-  check('6. The two groups do not overlap on the deciding measure',
-    rejectedApart > keptApart, { rejectedApart, keptApart });
-  check('7. ...with room on both sides of the threshold (0.18)',
-    rejectedApart - 0.18 > 0.05 && 0.18 - keptApart > 0.05,
-    { rejected: rejectedApart, kept: keptApart, margin: [rejectedApart - 0.18, 0.18 - keptApart] });
+  // ── the capture that defeated the first version ────────────────────
+  //
+  // A chevron of stone on a black ground. The black wraps the stone
+  // symmetrically, so the two materials' CENTRES both land in the middle
+  // and the measure this screen used to decide on saw nothing at all.
+  const chevron = await verdictOf(path.join(FIXTURES, 'bad-chevron.png'));
+  check('6. The chevron capture is refused', !chevron.ok, chevron);
+  check('7. ...and the old measure really would have missed it',
+    chevron.apart < 0.18, { apart: chevron.apart });
 
   // ── what must survive ──────────────────────────────────────────────
   const floral = await verdictOf(scattered('#F6F3EC', '#8A6A62', path.join(tmp, 'floral.png')));
@@ -116,6 +117,31 @@ async function main() {
     floral.gap > 0.3 && terrazzo.gap > 0.3, [floral.gap, terrazzo.gap]);
   check('11. ...because a pattern puts both colours everywhere',
     floral.apart < 0.1 && terrazzo.apart < 0.1, [floral.apart, terrazzo.apart]);
+
+  // ── the margin, on the measure that now decides ────────────────────
+  const rejectedEdge = Math.max(badDecore.edge, badBody.edge, chevron.edge);
+  const keptEdge = Math.min(floral.edge, terrazzo.edge);
+  check('11b. Scattered decor and split captures do not overlap on edge',
+    keptEdge > rejectedEdge, { rejectedEdge, keptEdge });
+  check('11c. ...with room on both sides of the threshold (0.55)',
+    0.55 - rejectedEdge > 0.1 && keptEdge - 0.55 > 0.1,
+    { rejected: rejectedEdge, kept: keptEdge, margin: [0.55 - rejectedEdge, keptEdge - 0.55] });
+
+  // ── a motif in the middle of its own tile is not two materials ─────
+  const medallionFile = (() => {
+    const c = createCanvas(240, 240);
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#F2EADA'; ctx.fillRect(0, 0, 240, 240);
+    ctx.fillStyle = '#2B5FA8';
+    ctx.beginPath(); ctx.arc(120, 120, 62, 0, Math.PI * 2); ctx.fill();
+    const file = path.join(tmp, 'medallion.png');
+    fs.writeFileSync(file, c.toBuffer('image/png'));
+    return file;
+  })();
+  const medallion = await verdictOf(medallionFile);
+  check('11d. A centred medallion survives', medallion.ok, medallion);
+  check('11e. ...and is kept because it never reaches the frame, being as clumped as a split',
+    !medallion.touches && medallion.edge <= 0.55, medallion);
 
   const border = await verdictOf(band(path.join(tmp, 'band.png')));
   check('12. A border tile survives its stripe', border.ok, border);
