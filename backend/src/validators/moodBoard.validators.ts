@@ -18,6 +18,46 @@ export const generateBriefSchema = z.object({
 export type GenerateBriefInput = z.infer<typeof generateBriefSchema>;
 
 // ─────────────────────────────────────────────────────────────────────────
+// Mood board PDF export
+//
+// The nine board sizes the wizard offers, in feet. A closed set, not a
+// range: the client picks a physical panel size, and an arbitrary number
+// here would reach the renderer as a page nobody can print.
+// ─────────────────────────────────────────────────────────────────────────
+
+export const BOARD_SIZES_FT: ReadonlyArray<readonly [number, number]> = [
+  [2, 2], [2, 4], [4, 2], [4, 4], [4, 6], [6, 4], [8, 4], [9, 4], [10, 4],
+];
+
+export const exportMoodBoardPdfSchema = z
+  .object({
+    boardName: z.string().trim().min(1).max(200),
+    brief: z.string().trim().max(600).optional(),
+    grout: z.string().trim().max(120).optional(),
+    widthFt: z.coerce.number().positive(),
+    heightFt: z.coerce.number().positive(),
+    sceneImageUrl: z.string().trim().url().max(2000).optional(),
+    tiles: z
+      .array(
+        z.object({
+          role: z.string().trim().max(40),
+          name: z.string().trim().min(1).max(200),
+          brandName: z.string().trim().max(120).optional(),
+          size: z.string().trim().max(60).optional(),
+          colorTone: z.string().trim().max(60).optional(),
+          imageUrl: z.string().trim().url().max(2000).optional(),
+        }),
+      )
+      .max(8),
+  })
+  .refine(
+    (value) => BOARD_SIZES_FT.some(([w, h]) => w === value.widthFt && h === value.heightFt),
+    { message: 'Pick one of the offered board sizes', path: ['widthFt'] },
+  );
+
+export type ExportMoodBoardPdfInput = z.infer<typeof exportMoodBoardPdfSchema>;
+
+// ─────────────────────────────────────────────────────────────────────────
 // Save / update / approve — the persistence layer on top of /generate
 // ─────────────────────────────────────────────────────────────────────────
 

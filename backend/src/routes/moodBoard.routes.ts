@@ -11,6 +11,7 @@ import {
   listMoodBoardsQuerySchema,
   moodBoardTileLookupQuerySchema,
   respondToSharedMoodBoardSchema,
+  exportMoodBoardPdfSchema,
 } from '@validators/moodBoard.validators';
 
 const router = Router();
@@ -39,6 +40,10 @@ router.post('/', requirePermission('mood_boards:write'), validate(saveMoodBoardS
 // references inside a /generate response so the wizard can render them
 // (image/size/finish/stock) before a board is ever saved.
 router.get('/tiles', requirePermission('tiles:read'), validate(moodBoardTileLookupQuerySchema, 'query'), moodBoardController.getTiles);
+
+// Static path, so it must stay above the "/:id" catch-all. Stateless:
+// it draws the board in the request body and streams back a PDF.
+router.post('/export-pdf', requirePermission('mood_boards:read'), validate(exportMoodBoardPdfSchema), moodBoardController.exportPdf);
 
 router.get('/:id', requirePermission('mood_boards:read'), moodBoardController.getOne);
 router.patch('/:id', requirePermission('mood_boards:write'), validate(updateMoodBoardSchema), moodBoardController.update);
