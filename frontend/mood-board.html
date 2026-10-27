@@ -28,6 +28,8 @@
   .sidebar { flex:0 0 auto; width:266px; height:100%; display:flex; flex-direction:column; background:#FCFAF6; border-right:1px solid var(--line); overflow-y:auto; }
   .brand { padding:26px 22px 20px; border-bottom:1px solid #EFE7DA; }
   .brand .name { font-size:19px; letter-spacing:.14em; line-height:1.1; }
+  .brand-row { display:flex; align-items:center; gap:10px; }
+  .brand-mark { flex:0 0 auto; width:30px; height:30px; border-radius:7px; display:block; }
   .brand .tag { font-size:9px; letter-spacing:.22em; color:var(--muted); margin-top:6px; }
   .nav { padding:20px 14px 8px; }
   .nav-label { font-size:9.5px; letter-spacing:.2em; color:#A0968A; padding:0 8px 10px; }
@@ -308,7 +310,7 @@
 <div class="layout">
   <aside class="sidebar">
     <div class="brand">
-      <div class="brand name serif">DE’VYORA</div>
+      <div class="brand-row"><img class="brand-mark" src="img/devyora-mark.webp" alt="" width="30" height="30" decoding="async"><div class="brand name serif">DE’VYORA</div></div>
       <div class="brand tag mono">STUDIO &amp; SHOWROOM</div>
     </div>
     <div class="nav">
