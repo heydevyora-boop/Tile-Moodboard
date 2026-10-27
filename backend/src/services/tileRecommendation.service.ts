@@ -41,9 +41,32 @@ const STYLE_PROFILES: Record<string, StyleProfile> = {
   // "IVORY / CHARCOAL / BRASS". The finish vocabulary is the one the Tile
   // rows actually store, which is what scoreStyle compares against -- not
   // the wizard's separate finish step, which goes into the brief text.
+  // Kept although the wizard no longer offers them: boards saved while
+  // these were the options still carry one of these three in `style`,
+  // and reopening such a board must rank the same way it did when it
+  // was made.
   'WARM NEUTRAL': { finishes: ['matte', 'textured'], colorFamilies: ['warm-neutral', 'earth'], types: ['BASE'] },
   'COOL GREY': { finishes: ['matte', 'polished'], colorFamilies: ['cool-neutral'], types: ['BASE'] },
   'HIGH CONTRAST': { finishes: ['glossy', 'polished'], colorFamilies: ['cool-neutral', 'dark', 'gold'], types: ['HIGHLIGHTER', 'ACCENT'] },
+
+  // THE DESIGN THEMES the wizard now sends, read off each theme's own
+  // swatches and spec line in frontend/mood-board.html rather than
+  // invented here. Without an entry a theme looks up to nothing and
+  // scores zero for every tile, which is how the three palettes above
+  // silently decided nothing for months -- so every theme offered in the
+  // UI has a row here.
+  //
+  // "Let De'vyora Decide" deliberately has none. It is the absence of a
+  // theme, so the scorer stays neutral and the model chooses.
+  BRITISH: { finishes: ['matte', 'polished'], colorFamilies: ['green', 'dark', 'warm-neutral'], types: ['BASE', 'BORDER'] },
+  'ROMAN TOUCH': { finishes: ['matte', 'textured'], colorFamilies: ['warm-neutral', 'earth'], types: ['BASE', 'LARGE_FORMAT_BASE'] },
+  FLORAL: { finishes: ['glossy', 'matte'], colorFamilies: ['rose', 'green', 'warm-neutral'], types: ['HIGHLIGHTER', 'ACCENT'] },
+  TROPICAL: { finishes: ['glossy', 'textured'], colorFamilies: ['green', 'blue', 'earth'], types: ['ACCENT', 'HIGHLIGHTER'] },
+  GEOMETRICAL: { finishes: ['matte', 'glossy'], colorFamilies: ['cool-neutral', 'dark'], types: ['HIGHLIGHTER', 'BORDER'] },
+  METALLIC: { finishes: ['glossy', 'polished'], colorFamilies: ['gold', 'dark', 'cool-neutral'], types: ['HIGHLIGHTER', 'ACCENT'] },
+  RUSTIC: { finishes: ['matte', 'textured'], colorFamilies: ['earth', 'warm-neutral'], types: ['BASE', 'BORDER'] },
+  MOROCCAN: { finishes: ['glossy', 'textured'], colorFamilies: ['blue', 'green', 'gold'], types: ['HIGHLIGHTER', 'ACCENT', 'BORDER'] },
+  'BLACK & WHITE': { finishes: ['polished', 'matte'], colorFamilies: ['cool-neutral', 'dark'], types: ['BASE', 'HIGHLIGHTER'] },
 };
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -86,7 +109,7 @@ export interface TileForRanking {
   // the Tile row's own timestamps -- never inferred from array order,
   // product code or anything else that only looks like an ordering.
   // Optional so rankTiles stays callable without them, in which case
-  // the recency signal below contributes nothing at all.
+  // no tile is labelled as being from the latest extraction.
   createdAt?: Date | string | null;
   updatedAt?: Date | string | null;
 }
@@ -100,9 +123,10 @@ export interface RankingCriteria {
 export interface RankedTile extends TileForRanking {
   score: number;
   matchReasons: string[];
-  // True for the tiles scoreRecency credited -- the newest extraction in
-  // this pool. Carried out of the scorer because the prompt has to be
-  // able to point at them; see formatTileForPrompt in promptBuilder.
+  // True for the tiles from the newest extraction in this pool. It adds
+  // nothing to the score -- it is carried out of the scorer purely so the
+  // prompt can explain their blank attributes; see formatTileForPrompt
+  // in promptBuilder.
   fromLatestExtraction: boolean;
   // Only populated by getRecommendedTiles() (rankTiles() alone has no
   // notion of catalogs) -- see sourceGroupKey() below.
@@ -110,37 +134,29 @@ export interface RankedTile extends TileForRanking {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// Extraction recency
+// Extraction recency — a label, not a preference
 //
-// A newly extracted catalog was losing every board to the tiles already
-// in the database, and not because of a filter or a cache: measured
-// against the real scorer, a freshly synced tile scores 10 where an
-// established one scores 72. The gap is metadata. masterTileSync writes
-// what the extraction pipeline sends -- a product code, an image, a
-// collection -- and nothing else, so every new tile arrives with no
-// bestRoom, no colorTone, no finish and no size. scoreRoom gives it the
-// +8 "versatile" credit instead of the +40 exact-room match, scoreColor
-// and scoreStyle give it nothing, and it sorts below everything.
+// Recency used to add RECENCY_BONUS points to a tile's score, so a
+// freshly extracted product won near-ties against older stock. That was
+// put there to fix the opposite complaint: a new catalog was losing
+// every board. It over-corrected. A bonus for having been written to
+// the database recently is not a design argument, and it let a newer
+// tile outrank an older one that suited the theme better.
 //
-// So recency is now a signal, which it deliberately was not before. The
-// note further down explaining why it was excluded described a DIFFERENT
-// mechanism -- collapsing duplicate rows to one "current" copy BEFORE
-// scoring, which removed real candidates from the pool. That is still
-// gone and is not what this is: nothing is removed here, a bounded bonus
-// is added, and every older tile stays exactly as selectable as it was.
+// So recency scores nothing now. What remains is the LABEL: which tiles
+// came from the newest extraction, carried through to the prompt so it
+// can explain why their finish, colour and room are blank. masterTileSync
+// writes what the extraction pipeline sends -- a product code, an image,
+// a collection -- and nothing else, so a new tile arrives unclassified.
+// Blank means "not recorded", never "unsuitable", and the prompt says so.
 //
-// Bounded on purpose. At +18 a tile from the newest extraction wins a
-// near-tie and loses a real mismatch: it cannot overturn an exact room
-// match (+40) or an exact colour match (+30), so "prefer the latest when
-// it is a suitable match" holds without becoming "always replace the old
-// with the new". It is also honestly not enough to close the 62-point
-// metadata gap above on its own -- an untagged tile still loses to a
-// well-tagged one, as it should, until the extraction supplies the tags.
-const RECENCY_BONUS = 18;
+// Old and new are therefore ranked on the same terms: room fit, theme
+// fit, colour fit. Neither cohort is given points the other cannot earn.
+// ─────────────────────────────────────────────────────────────────────────
 
 // How wide "the latest extraction" is. One sync run writes its rows over
 // seconds to minutes, so a window keeps a batch together instead of
-// privileging whichever row of it happened to be written last.
+// labelling only whichever row of it happened to be written last.
 const RECENCY_WINDOW_MS = 6 * 60 * 60 * 1000;
 
 /** The moment this tile was last written, or null when unknown. */
@@ -152,17 +168,14 @@ export function extractionTime(tile: TileForRanking): number | null {
   return stamps.length > 0 ? Math.max(...stamps) : null;
 }
 
-function scoreRecency(tile: TileForRanking, newest: number | null): { points: number; reasons: string[] } {
-  if (newest === null) return { points: 0, reasons: [] };
+/** Whether this tile belongs to the newest extraction in its pool. Scores nothing. */
+function isFromLatestExtraction(tile: TileForRanking, newest: number | null): boolean {
+  if (newest === null) return false;
 
   const when = extractionTime(tile);
-  if (when === null) return { points: 0, reasons: [] };
+  if (when === null) return false;
 
-  if (newest - when <= RECENCY_WINDOW_MS) {
-    return { points: RECENCY_BONUS, reasons: ['From the latest extraction'] };
-  }
-
-  return { points: 0, reasons: [] };
+  return newest - when <= RECENCY_WINDOW_MS;
 }
 
 function scoreRoom(tile: TileForRanking, room: string | undefined): { points: number; reasons: string[] } {
@@ -229,14 +242,14 @@ export function rankTiles(tiles: TileForRanking[], criteria: RankingCriteria): R
     const room = scoreRoom(tile, criteria.room);
     const style = scoreStyle(tile, criteria.style);
     const color = scoreColor(tile, criteria.colorTone);
-    const recency = scoreRecency(tile, newest);
+    const latest = isFromLatestExtraction(tile, newest);
     const baseTieBreak = tile.type === 'BASE' ? 2 : 0;
 
     return {
       ...tile,
-      score: room.points + style.points + color.points + recency.points + baseTieBreak,
-      matchReasons: [...room.reasons, ...style.reasons, ...color.reasons, ...recency.reasons],
-      fromLatestExtraction: recency.points > 0,
+      score: room.points + style.points + color.points + baseTieBreak,
+      matchReasons: [...room.reasons, ...style.reasons, ...color.reasons],
+      fromLatestExtraction: latest,
     };
   });
 
@@ -323,11 +336,6 @@ function interleaveBySource(
   ranked: RankedTile[],
   sourceOf: (tileId: string) => string,
   limit: number,
-  // Visit order for the groups. Supplied by getRecommendedTiles so the
-  // most recently extracted catalog is served first; omitted, groups
-  // keep their previous order (the one their best-ranked tile appeared
-  // in) and this behaves exactly as it did.
-  recencyOf?: (tileId: string) => number | null,
 ): RankedTile[] {
   if (ranked.length <= limit) return ranked;
 
@@ -344,27 +352,18 @@ function interleaveBySource(
   // WHY THE ORDER MATTERS, AND ONLY HERE.
   //
   // Every group contributes its best tile at depth 0, so with a handful
-  // of catalogs each is represented whatever the order. Once the
-  // catalogs outnumber the pool limit, depth 0 alone fills it and the
-  // groups visited last are cut entirely -- and a freshly extracted
-  // catalog is exactly the one that sorts last, because its tiles carry
-  // no metadata to score on. That is the newest products being dropped
-  // before the model ever sees them.
+  // of catalogs each is represented whatever the order. Only once the
+  // catalogs outnumber the pool limit does depth 0 alone fill it, and
+  // the groups visited last are then cut entirely.
   //
-  // Serving the most recent source first fixes that truncation without
-  // taking a slot from anyone: the same number of tiles comes back, and
-  // with few catalogs loaded the membership is identical -- only the
-  // order changes.
-  if (recencyOf) {
-    const groupRecency = new Map<RankedTile[], number>();
-    for (const group of groups) {
-      const stamps = group
-        .map((tile) => recencyOf(tile.id))
-        .filter((value): value is number => value !== null);
-      groupRecency.set(group, stamps.length > 0 ? Math.max(...stamps) : 0);
-    }
-    groups.sort((a, b) => (groupRecency.get(b) ?? 0) - (groupRecency.get(a) ?? 0));
-  }
+  // So the order has to be the one that cuts the right catalogs. It is
+  // merit: the score of each group's best tile. The catalogs dropped are
+  // the ones with the weakest best candidate, which is a design answer.
+  // It used to be recency -- newest catalog first -- which cut by age
+  // rather than by fit, and in a crowded pool pushed older catalogs out
+  // however well their stock suited the brief.
+  groups.sort((a, b) => (b[0]?.score ?? 0) - (a[0]?.score ?? 0));
+
   const selected: RankedTile[] = [];
 
   for (let depth = 0; selected.length < limit; depth += 1) {
@@ -433,21 +432,16 @@ export async function getRecommendedTiles(prisma: PrismaTileClient, filter: Reco
     updatedAt: t.updatedAt,
   }));
 
-  // Ranking decides the order. Extraction recency is one of the signals
-  // it weighs (see RECENCY_BONUS) -- bounded, so the newest catalog wins
-  // a near-tie and never overturns a genuinely better match, and every
-  // older tile stays exactly as selectable as it was.
+  // Ranking decides the order, on room, theme and colour fit alone.
+  // When a tile was extracted is not one of the signals: old and new
+  // stock compete on the same terms.
   const ranked = rankTiles(forRanking, { room: filter.room, style: filter.style, colorTone: filter.colorTone });
 
   const sourceByTileId = new Map<string, string>(tiles.map((t) => [t.id, sourceGroupKey(t)]));
-  const recencyByTileId = new Map<string, number | null>(
-    forRanking.map((t) => [t.id, extractionTime(t)]),
-  );
   const selected = interleaveBySource(
     ranked,
     (id) => sourceByTileId.get(id) ?? `tile:${id}`,
     filter.limit ?? 20,
-    (id) => recencyByTileId.get(id) ?? null,
   );
 
   return selected.map((t) => ({ ...t, catalogGroup: sourceByTileId.get(t.id) ?? `tile:${t.id}` }));

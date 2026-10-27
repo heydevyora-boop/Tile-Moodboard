@@ -184,8 +184,8 @@ function main() {
     BRIEF,
   );
   check(
-    'tiles with no timestamps rank by merit alone, with no recency credit',
-    noStamps.every((t) => !t.matchReasons.includes('From the latest extraction')),
+    'tiles with no timestamps rank by merit alone and carry no label',
+    noStamps.every((t) => !t.fromLatestExtraction),
   );
 
   check(
@@ -207,11 +207,25 @@ function main() {
     BRIEF,
   );
   check(
-    'a whole extraction batch is treated as "latest", not just its last row',
+    'a whole extraction batch is labelled "latest", not just its last row',
     batch
       .filter((t) => t.id.startsWith('NEW-'))
-      .every((t) => t.matchReasons.includes('From the latest extraction')),
+      .every((t) => t.fromLatestExtraction),
+    batch.map((t) => `${t.id}:${t.fromLatestExtraction}`).join(', '),
+  );
+
+  // The label is the whole of it. Being new earns no points, so an old
+  // tile that matches the brief equally well scores exactly the same.
+  check(
+    'the label adds nothing to the score -- old and new tie on equal merit',
+    new Set(batch.map((t) => t.score)).size === 1,
     batch.map((t) => `${t.id}:${t.score}`).join(', '),
+  );
+
+  check(
+    'and recency contributes no match reason',
+    batch.every((t) => !t.matchReasons.some((r) => /latest extraction/i.test(r))),
+    JSON.stringify(batch.map((t) => t.matchReasons)),
   );
 
   let failures = 0;

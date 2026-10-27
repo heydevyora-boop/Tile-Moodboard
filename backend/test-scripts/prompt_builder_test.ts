@@ -186,7 +186,11 @@ function main() {
     check('21c. The unclassified tile still shows what it does have', freshLine.includes('brand="BR Ceramics"') && freshLine.includes('size=1200x1800'), freshLine);
     check('21d. ...and does not invent the fields it lacks', !freshLine.includes('finish=') && !freshLine.includes('color=') && !freshLine.includes('room='), freshLine);
     check('21e. The prompt says a missing attribute means unrecorded, not unsuitable', userPrompt.includes('"not recorded", never "unsuitable"'), userPrompt.slice(-900));
-    check('21f. The prompt requires at least one board to use the new stock', userPrompt.includes('must use a batch=LATEST product'), userPrompt.slice(-900));
+    // What 21f used to assert -- that at least one board MUST use new
+    // stock -- is gone on purpose. The marker explains blank fields; it
+    // does not ask for the product to be picked. See 28a-28f.
+    check('21f. The marker does not ask for the new tile to be chosen',
+      !userPrompt.includes('must use a batch=LATEST product'), userPrompt.slice(-900));
     check('21g. The prompt forbids returning the same series over and over', userPrompt.includes('do not keep reusing one product series'), userPrompt.slice(-900));
   }
 
@@ -259,6 +263,44 @@ function main() {
       userPrompt.includes('a board whose highlight is plainer than its base is the wrong way round'));
     check('27d. ...and says what to do when nothing decorated is listed',
       userPrompt.includes('Do not promote a base tile into a decorated role'));
+
+    // ── OLD AND NEW STOCK WEIGHED THE SAME ──────────────────────────
+    //
+    // The prompt used to order the model to spend at least one
+    // combination on a batch=LATEST product whenever any were listed.
+    // That is a preference for recency, not for fit, and it is what
+    // made boards come back built from the newest extraction.
+    check('28a. The prompt no longer mandates a combination built from new stock',
+      !/At least one of the combinations you return must use a batch=LATEST/.test(userPrompt));
+    check('28b. ...nor forbids a board made entirely of older products',
+      !/built entirely from the older products/.test(userPrompt));
+    check('28c. It still explains why a new tile\u2019s attributes are blank',
+      userPrompt.includes('that means "not recorded", never "unsuitable"'));
+    check('28d. ...and says the label is not a recommendation',
+      userPrompt.includes('batch=LATEST is a note about missing data, NOT a recommendation'));
+    check('28e. ...forbidding a preference in EITHER direction',
+      userPrompt.includes('do not prefer one because it has been in the catalog longer'));
+    check('28f. ...and blesses a board of entirely old or entirely new products',
+      userPrompt.includes('A board of entirely older products is right when they are the better fit'));
+
+    // ── THE THEME ───────────────────────────────────────────────────
+    check('29a. The prompt treats the theme as a design language',
+      userPrompt.includes('Read it as a design language, not as a colour filter'));
+    check('29b. ...and names every theme the wizard offers',
+      ['British', 'Roman Touch', 'Floral', 'Tropical', 'Geometrical', 'Metallic', 'Rustic', 'Moroccan', 'Black & White']
+        .every((t) => userPrompt.includes(t)));
+    check('29c. ...requires floor, wall and decorated piece to share it',
+      userPrompt.includes('all have to belong to the same one'));
+    check('29d. ...lets an unclassified product be read from its name',
+      userPrompt.includes('A product whose attributes are blank can still be read from its name'));
+    check('29e. ...asks the reason to say what makes it read as that theme',
+      userPrompt.includes('what makes the combination read as that theme'));
+    check('29f. ...and says to speak up when the stock cannot carry it',
+      userPrompt.includes('cannot carry the theme, say that plainly'));
+    check('29g. When no theme is given, the model must choose one and name it',
+      userPrompt.includes('choose the theme yourself') && userPrompt.includes('name the theme you chose'));
+    check('29h. ...and must not answer every combination with the same theme',
+      userPrompt.includes('do not default to the same theme for every combination'));
   }
 
     check('22. No tile is marked when nothing came from a recent extraction', !userPrompt.split('Rules about the tile list')[0].includes('batch=LATEST'), userPrompt.slice(0, 600));
