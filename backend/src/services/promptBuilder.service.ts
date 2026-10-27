@@ -4,7 +4,7 @@ import { AppError } from '@utils/AppError';
 import { logActivity } from './activityLog.service';
 import { geminiClient } from './gemini.service';
 import { getRecommendedTiles } from './tileRecommendation.service';
-import { screenSlate } from './tileImageScreen.service';
+import { screenSlate, lookalikeRoles } from './tileImageScreen.service';
 import { GenerateBriefInput } from '@validators/moodBoard.validators';
 import { getSettings } from './settings.service';
 
@@ -44,6 +44,12 @@ export interface TileSummary {
   // Whether this tile came from the newest extraction in the pool.
   // rankTiles decides it; the prompt below says it out loud.
   fromLatestExtraction: boolean;
+  // Never written into the prompt -- the model cannot see pictures. It is
+  // here so two products showing ONE surface can be told apart from two
+  // products showing two; see lookalikeRoles below. Optional, so a
+  // caller that has no pictures to offer still type-checks and simply
+  // gets no surface comparison.
+  imageUrl?: string | null;
 }
 
 const MAX_TILES_IN_PROMPT = 80;
@@ -87,6 +93,7 @@ export async function getAvailableTiles(filter: { brandId?: string; room?: strin
     type: t.type,
     colorTone: t.colorTone ?? null,
     bestRoom: t.bestRoom ?? null,
+    imageUrl: t.imageUrl ?? null,
     productCode: t.productCode ?? null,
     catalogGroup: t.catalogGroup ?? `tile:${t.id}`,
     fromLatestExtraction: t.fromLatestExtraction === true,
@@ -417,6 +424,28 @@ export async function generateCombinations(input: GenerateBriefInput, actorId: s
   const consideredIds = new Set(tiles.map((t) => t.id));
   const typeByTileId = new Map(tiles.map((t) => [t.id, t.type]));
   const { combinations, warnings } = validateCombinations(raw, consideredIds, typeByTileId);
+
+  // ONE SURFACE, ONE ROLE.
+  //
+  // validateCombinations refuses the same tileId twice, which is not the
+  // same question: a board came back with the same plain grey as its base
+  // AND its border -- two rows, two product codes, two sizes, one
+  // surface. Nothing in the ids could tell. So the pictures are compared,
+  // and a role showing a surface an earlier role already showed is
+  // dropped, exactly as a repeated id is. The first use keeps its place,
+  // so the base stays the base.
+  const imageByTileId = new Map(tiles.map((t) => [t.id, t.imageUrl]));
+  for (const combo of combinations) {
+    const duplicates = await lookalikeRoles(combo.tiles, (id) => imageByTileId.get(id));
+    for (const { tile, of } of duplicates) {
+      warnings.push(
+        `Dropped the "${tile.role}" role — "${tile.name || tile.tileId}" shows the same surface as the "${of.role}" tile already in this board.`,
+      );
+    }
+    if (duplicates.length > 0) {
+      combo.tiles = combo.tiles.filter((t) => !duplicates.some((d) => d.tile === t));
+    }
+  }
 
   if (tiles.length < rulesSettings.defaultMinTiles) {
     warnings.push(`Only ${tiles.length} tile(s) matched this brief — fewer than the configured minimum of ${rulesSettings.defaultMinTiles} (Settings > Default Rules).`);
