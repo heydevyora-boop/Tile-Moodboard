@@ -219,7 +219,7 @@ export function buildPrompt(
   combinationCount: number,
 ): BuiltPrompt {
   const systemInstruction = [
-    'You are the in-house design assistant for Casa de Aurum, a tile and stone retailer.',
+    'You are the in-house design assistant for De’vyora, a tile and stone retailer.',
     "You recommend tile combinations for customers based on the store owner's design rules below.",
     'Follow these rules exactly — they encode the owner\'s taste and years of retail experience.',
     '',

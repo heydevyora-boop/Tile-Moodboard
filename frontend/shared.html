@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Client Proof · Casa de Aurum</title>
+<title>Client Proof · De’vyora</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500&family=DM+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -145,7 +145,7 @@
     content.innerHTML =
       '<div class="brand-block">' +
       '<div class="brand-eyebrow mono">● STUDIO &amp; SHOWROOM ●</div>' +
-      '<div class="brand-name serif">CASA DE AURUM</div>' +
+      '<div class="brand-name serif">DE’VYORA</div>' +
       '<div class="rule"></div>' +
       '</div>' +
       '<h1 class="proof-title serif">' + escapeHtml(title) + '</h1>' +
@@ -165,7 +165,7 @@
           '</div>'
         : '') +
       (board.clientResponse ? renderResponded(board) : renderPending()) +
-      '<div class="footer-note mono">CASA DE AURUM · MILAN · LISBON · NEW DELHI<br>SURFACES SHOWN ARE MATCHED TO PHYSICAL VAULT STOCK</div>';
+      '<div class="footer-note mono">DE’VYORA · MILAN · LISBON · NEW DELHI<br>SURFACES SHOWN ARE MATCHED TO PHYSICAL VAULT STOCK</div>';
 
     if (!board.clientResponse) {
       document.getElementById('approveBtn').addEventListener('click', () => respond('APPROVED'));

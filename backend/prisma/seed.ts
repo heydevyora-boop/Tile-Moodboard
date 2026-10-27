@@ -237,7 +237,7 @@ async function seedDesignRules(ownerId: string) {
 
   // Full-document snapshot for version 1, matching design_rules.txt
   const fullContent = [
-    '# CASA DE AURUM — INTERNAL DESIGN RULES',
+    '# DE’VYORA — INTERNAL DESIGN RULES',
     '# Written by store owner. Loaded into AI system prompt automatically.',
     '# Edit this file any time to update how mood boards are generated.',
     '',
@@ -309,7 +309,7 @@ async function seedSettings(ownerId: string) {
 }
 
 async function main() {
-  console.log('🌱 Seeding Casa de Aurum database...\n');
+  console.log('🌱 Seeding De’vyora database...\n');
 
   const roleIds = await seedRoles();
   const userIds = await seedUsers(roleIds);

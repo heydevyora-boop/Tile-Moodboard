@@ -38,7 +38,7 @@ function loadPage(casaApiStub) {
 }
 
 const DEFAULT_SETTINGS = {
-  company: { name: 'Casa de Aurum', address: '', phone: '', email: '', taxId: '', website: '' },
+  company: { name: 'De’vyora', address: '', phone: '', email: '', taxId: '', website: '' },
   print: { defaultDpi: 300, defaultFormat: 'CASSETTE_PANEL', defaultFileFormat: 'PDF', defaultUnit: 'FT' },
   rules: { defaultMinTiles: 3, defaultMaxCombinations: 4, defaultRoomType: '', defaultStyleTag: '' },
   general: { timezone: 'Asia/Kolkata', currency: 'INR', dateFormat: 'DD/MM/YYYY', sessionTimeoutMinutes: 60 },
@@ -60,7 +60,7 @@ async function main() {
   const dom = loadPage(stub);
   await new Promise((r) => setTimeout(r, 60));
 
-  check('1. Company name field is populated with the real fetched default', dom.window.document.getElementById('companyName').value === 'Casa de Aurum');
+  check('1. Company name field is populated with the real fetched default', dom.window.document.getElementById('companyName').value === 'De’vyora');
   check('2. Print DPI field is populated from real settings data', dom.window.document.getElementById('printDpi').value === '300');
   check('3. Default Rules min-tiles field is populated from real settings data', dom.window.document.getElementById('rulesMinTiles').value === '3');
   check('4. General currency field is populated from real settings data', dom.window.document.getElementById('generalCurrency').value === 'INR');
@@ -82,7 +82,7 @@ async function main() {
   await new Promise((r) => setTimeout(r, 60));
 
   check('6a. Non-owner sees the restricted banner', staffDom.window.document.getElementById('restrictedBanner').style.display === 'block');
-  check('6b. Non-owner still sees the real loaded values (read-only)', staffDom.window.document.getElementById('companyName').value === 'Casa de Aurum');
+  check('6b. Non-owner still sees the real loaded values (read-only)', staffDom.window.document.getElementById('companyName').value === 'De’vyora');
   check('6c. Save buttons are disabled for non-owners', staffDom.window.document.getElementById('saveCompanyBtn').disabled === true);
   check('6d. Input fields are disabled for non-owners', staffDom.window.document.getElementById('printDpi').disabled === true);
 

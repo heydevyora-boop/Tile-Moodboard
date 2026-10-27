@@ -142,8 +142,8 @@ export async function renderMoodBoardPdf(input: MoodBoardPdfInput): Promise<Uint
   const heightPt = toPoints(input.heightFt, 'FT');
 
   const doc = await PDFDocument.create();
-  doc.setTitle(`${input.boardName} — Casa de Aurum`);
-  doc.setProducer('Casa de Aurum');
+  doc.setTitle(`${input.boardName} — De’vyora`);
+  doc.setProducer('De’vyora');
 
   const page = doc.addPage([widthPt, heightPt]);
   const regular = await doc.embedFont(StandardFonts.Helvetica);
@@ -163,7 +163,7 @@ export async function renderMoodBoardPdf(input: MoodBoardPdfInput): Promise<Uint
   const metaSize = Math.max(6, unit * 0.019);
   let cursorY = heightPt - margin - titleSize;
 
-  page.drawText('CASA DE AURUM', { x: margin, y: cursorY, size: metaSize, font: bold, color: GOLD });
+  page.drawText('DE’VYORA', { x: margin, y: cursorY, size: metaSize, font: bold, color: GOLD });
   cursorY -= titleSize * 1.15;
   drawClipped(page, input.boardName, margin, cursorY, contentW, bold, titleSize);
   cursorY -= metaSize * 1.9;

@@ -31,7 +31,7 @@ export function compileRulesText(rules: CompilableRule[]): string {
   })).filter((group) => group.rules.length > 0);
 
   const lines = [
-    '# CASA DE AURUM — INTERNAL DESIGN RULES',
+    '# DE’VYORA — INTERNAL DESIGN RULES',
     '# Written by store owner. Loaded into AI system prompt automatically.',
     '# Edit this file any time to update how mood boards are generated.',
     '',

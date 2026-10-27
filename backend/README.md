@@ -1,4 +1,4 @@
-# Casa de Aurum — Internal Tool Backend
+# De’vyora — Internal Tool Backend
 
 Backend API for the internal catalog & design operations tool described in
 `CasaDeAurum_InternalTool_BuildGuide.docx`. Built module by module.

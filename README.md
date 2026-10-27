@@ -1,4 +1,4 @@
-# Casa de Aurum — Internal Tool
+# De’vyora — Internal Tool
 
 Backend + frontend in one place. See `backend/README.md` and
 `frontend/README.md` for the full details on each half — this file is

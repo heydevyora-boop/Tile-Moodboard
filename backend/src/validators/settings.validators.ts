@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 export const companySettingsSchema = z.object({
-  name: z.string().trim().min(1).max(200).default('Casa de Aurum'),
+  name: z.string().trim().min(1).max(200).default('De’vyora'),
   address: z.string().trim().max(500).optional().default(''),
   phone: z.string().trim().max(50).optional().default(''),
   email: z.string().trim().email().optional().or(z.literal('')).default(''),

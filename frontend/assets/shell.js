@@ -1,5 +1,5 @@
 /**
- * Casa de Aurum v2 — shared app shell.
+ * De’vyora v2 — shared app shell.
  * Renders the role-aware sidebar + wires sign-out, using the real
  * authenticated user from CasaApi (backend role, not a hardcoded demo).
  *

@@ -13,10 +13,10 @@ import { adminPaths, settingsPaths } from './paths/admin';
 export const openApiDocument = {
   openapi: '3.0.3',
   info: {
-    title: 'Casa de Aurum Internal Tool API',
+    title: 'De’vyora Internal Tool API',
     version: '1.0.0',
     description: `
-Internal operations API for Casa de Aurum's tile store — catalog extraction, AI-driven mood board generation, print board export, customer management, and store administration.
+Internal operations API for De’vyora's tile store — catalog extraction, AI-driven mood board generation, print board export, customer management, and store administration.
 
 ## Authentication
 
@@ -42,7 +42,7 @@ Validation failures (\`422\`) additionally include an \`errors\` array of \`{ pa
 
 List endpoints that paginate return a top-level \`meta: { page, limit, total, totalPages }\` alongside \`data\`, not nested inside it.
     `.trim(),
-    contact: { name: 'Casa de Aurum Internal Tools' },
+    contact: { name: 'De’vyora Internal Tools' },
   },
   servers: [
     { url: 'http://localhost:5000/api/v1', description: 'Local development' },
