@@ -30,6 +30,13 @@
   .brand .name { font-size:19px; letter-spacing:.14em; line-height:1.1; }
   .brand-row { display:flex; align-items:center; gap:10px; }
   .brand-mark { flex:0 0 auto; width:30px; height:30px; border-radius:7px; display:block; }
+  /* The name div carries BOTH .brand and .name, so .brand's own
+     22px padding was landing on it a second time and pushing the
+     wordmark 22px clear of the mark, and .brand's border-bottom was
+     drawing a second rule under it. Inside the row it is a wordmark,
+     not a block: it shrink-wraps, carries neither, and the only space
+     between the two is the gap above. */
+  .brand-row .name { padding:0; border-bottom:none; flex:0 0 auto; }
   .brand .tag { font-size:9px; letter-spacing:.22em; color:var(--muted); margin-top:6px; }
   .nav { padding:20px 14px 8px; }
   .nav-label { font-size:9.5px; letter-spacing:.2em; color:#A0968A; padding:0 8px 10px; }
