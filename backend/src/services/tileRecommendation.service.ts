@@ -96,6 +96,75 @@ function familiesFor(colorTone: string | null | undefined): string[] {
     .map(([family]) => family);
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// Crop shape
+//
+// A catalog page yields good captures and bad ones -- half a tile, a
+// furniture shot, a sliver of a page. The bad ones are not marked as bad
+// anywhere, so they sat in the pool with exactly the standing of a clean
+// swatch, and a model choosing between products it cannot see picked
+// them as readily as anything else.
+//
+// The one thing the row already knows is the SHAPE of the crop it came
+// from -- imageBbox, written by the extraction pipeline -- and the shape
+// the product claims to be, in `size`. A 600x1200 tile whose capture is
+// square is not a picture of that tile. That disagreement is the signal.
+//
+// Deliberately bounded, and deliberately silent when it cannot measure:
+// a listello really is 75x300, so its 1:4 crop agrees with its own size
+// and costs it nothing, and a tile with no size or no bbox is not
+// punished for data nobody recorded. It is a penalty, never a filter --
+// a catalog whose every crop is odd must still produce a board.
+// ─────────────────────────────────────────────────────────────────────────
+
+const CROP_SHAPE_PENALTY = 30;
+
+/** How far a crop may differ from its product's declared shape before it counts against it. */
+const CROP_SHAPE_TOLERANCE = 0.4;
+
+/** "600x1200", "600 X 1200 mm", "600×1200" -> 2. Null when it does not parse. */
+export function declaredAspect(size: string | null | undefined): number | null {
+  if (!size) return null;
+  const m = String(size).match(/(\d{2,5})\s*[x\u00D7*]\s*(\d{2,5})/i);
+  if (!m) return null;
+  const w = Number(m[1]);
+  const h = Number(m[2]);
+  if (!(w > 0 && h > 0)) return null;
+  return Math.max(w, h) / Math.min(w, h);
+}
+
+/** The aspect of the region this image was cut from. Null when unknown. */
+export function cropAspect(bbox: unknown): number | null {
+  if (!Array.isArray(bbox) || bbox.length !== 4) return null;
+  const nums = bbox.map(Number);
+  if (nums.some((n) => !Number.isFinite(n))) return null;
+  const w = Math.abs(nums[2] - nums[0]);
+  const h = Math.abs(nums[3] - nums[1]);
+  if (!(w > 0 && h > 0)) return null;
+  return Math.max(w, h) / Math.min(w, h);
+}
+
+/**
+ * Does this capture look like the product it claims to be?
+ *
+ * Both numbers have to be known for this to say anything at all.
+ */
+export function scoreCropShape(tile: TileForRanking): { points: number; reasons: string[] } {
+  const declared = declaredAspect(tile.size);
+  const crop = cropAspect(tile.imageBbox);
+  if (declared === null || crop === null) return { points: 0, reasons: [] };
+
+  const drift = Math.abs(crop - declared) / declared;
+  if (drift <= CROP_SHAPE_TOLERANCE) {
+    return { points: 0, reasons: ['Capture matches the product\u2019s own proportions'] };
+  }
+
+  return {
+    points: -CROP_SHAPE_PENALTY,
+    reasons: [`Capture is ${crop.toFixed(1)}:1 where the product is ${declared.toFixed(1)}:1`],
+  };
+}
+
 export interface TileForRanking {
   id: string;
   name: string;
@@ -113,6 +182,11 @@ export interface TileForRanking {
   // no tile is labelled as being from the latest extraction.
   createdAt?: Date | string | null;
   updatedAt?: Date | string | null;
+  // [x0, y0, x1, y1] of the region this image was cut from the catalog
+  // page. Supplied by getRecommendedTiles from the Tile row; optional, so
+  // rankTiles stays callable without it and the shape signal simply says
+  // nothing.
+  imageBbox?: unknown;
 }
 
 export interface RankingCriteria {
@@ -244,12 +318,13 @@ export function rankTiles(tiles: TileForRanking[], criteria: RankingCriteria): R
     const style = scoreStyle(tile, criteria.style);
     const color = scoreColor(tile, criteria.colorTone);
     const latest = isFromLatestExtraction(tile, newest);
+    const crop = scoreCropShape(tile);
     const baseTieBreak = tile.type === 'BASE' ? 2 : 0;
 
     return {
       ...tile,
-      score: room.points + style.points + color.points + baseTieBreak,
-      matchReasons: [...room.reasons, ...style.reasons, ...color.reasons],
+      score: room.points + style.points + color.points + crop.points + baseTieBreak,
+      matchReasons: [...room.reasons, ...style.reasons, ...color.reasons, ...crop.reasons],
       fromLatestExtraction: latest,
     };
   });
@@ -333,6 +408,68 @@ function sourceGroupKey(tile: TileSource): string {
  * A single source degenerates to exactly the slice this replaces, and the
  * pool size never changes — only which tiles fill it.
  */
+// ─────────────────────────────────────────────────────────────────────────
+// Role coverage
+//
+// A board is one base plus at least one decorated piece. The pool was
+// chosen purely on score, which does not know that -- so when the best
+// twenty products happened all to be plain, the model was asked for a
+// highlight from a list that contained nothing decorated.
+//
+// It cannot answer that honestly. Either it nominates a plain tile as
+// the highlight (the base and the highlight end up the same kind of
+// thing, which is what the catalog owner sees), or it returns a board
+// with no highlight at all. And validateCombinations cannot catch the
+// first case: its guard only runs when the pool HELD a decorated
+// product, precisely so a catalog with none can still produce a board.
+//
+// So the slate is required to carry both kinds, whenever the catalog has
+// both. Nothing is invented and nothing jumps the queue on merit: the
+// best decorated products take the places of the weakest plain ones,
+// and only as many as the shape of a board actually needs.
+// ─────────────────────────────────────────────────────────────────────────
+
+const DECORATED_TYPES = new Set(['HIGHLIGHTER', 'ACCENT', 'BORDER']);
+
+/** How many decorated products a slate must carry, when the catalog has them. */
+const MIN_DECORATED_IN_POOL = 4;
+
+/** ...and how many plain ones, so the base role is never starved either. */
+const MIN_BASE_IN_POOL = 4;
+
+export function ensureRoleCoverage(selected: RankedTile[], ranked: RankedTile[]): RankedTile[] {
+  const isDecorated = (t: RankedTile) => DECORATED_TYPES.has(t.type);
+  const out = [...selected];
+
+  for (const [wanted, matches] of [
+    [MIN_DECORATED_IN_POOL, isDecorated] as const,
+    [MIN_BASE_IN_POOL, (t: RankedTile) => !isDecorated(t)] as const,
+  ]) {
+    const have = out.filter(matches).length;
+    if (have >= wanted) continue;
+
+    const present = new Set(out.map((t) => t.id));
+    const candidates = ranked.filter((t) => matches(t) && !present.has(t.id));
+    const room = Math.min(wanted - have, candidates.length);
+
+    // The weakest members of the OTHER kind make way -- never the kind we
+    // are short of, and never so many that the other kind drops below its
+    // own floor.
+    const spare = Math.max(0, out.filter((t) => !matches(t)).length - Math.min(wanted, MIN_BASE_IN_POOL));
+    const victims: number[] = [];
+    for (let j = out.length - 1; j >= 0 && victims.length < Math.min(room, spare); j -= 1) {
+      if (!matches(out[j])) victims.push(j);
+    }
+
+    // Filled in slate order with candidates already in merit order, so
+    // the best of them reads first rather than last.
+    victims.sort((a, b) => a - b);
+    victims.forEach((at, i) => { out[at] = candidates[i]; });
+  }
+
+  return out;
+}
+
 function interleaveBySource(
   ranked: RankedTile[],
   sourceOf: (tileId: string) => string,
@@ -431,6 +568,7 @@ export async function getRecommendedTiles(prisma: PrismaTileClient, filter: Reco
     // decided from below -- not array order, not product code order.
     createdAt: t.createdAt,
     updatedAt: t.updatedAt,
+    imageBbox: t.imageBbox,
   }));
 
   // Ranking decides the order, on room, theme and colour fit alone.
@@ -439,10 +577,9 @@ export async function getRecommendedTiles(prisma: PrismaTileClient, filter: Reco
   const ranked = rankTiles(forRanking, { room: filter.room, style: filter.style, colorTone: filter.colorTone });
 
   const sourceByTileId = new Map<string, string>(tiles.map((t) => [t.id, sourceGroupKey(t)]));
-  const selected = interleaveBySource(
+  const selected = ensureRoleCoverage(
+    interleaveBySource(ranked, (id) => sourceByTileId.get(id) ?? `tile:${id}`, filter.limit ?? 20),
     ranked,
-    (id) => sourceByTileId.get(id) ?? `tile:${id}`,
-    filter.limit ?? 20,
   );
 
   return selected.map((t) => ({ ...t, catalogGroup: sourceByTileId.get(t.id) ?? `tile:${t.id}` }));
