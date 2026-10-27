@@ -62,7 +62,8 @@ const STYLE_PROFILES: Record<string, StyleProfile> = {
   'ROMAN TOUCH': { finishes: ['matte', 'textured'], colorFamilies: ['warm-neutral', 'earth'], types: ['BASE', 'LARGE_FORMAT_BASE'] },
   FLORAL: { finishes: ['glossy', 'matte'], colorFamilies: ['rose', 'green', 'warm-neutral'], types: ['HIGHLIGHTER', 'ACCENT'] },
   TROPICAL: { finishes: ['glossy', 'textured'], colorFamilies: ['green', 'blue', 'earth'], types: ['ACCENT', 'HIGHLIGHTER'] },
-  GEOMETRICAL: { finishes: ['matte', 'glossy'], colorFamilies: ['cool-neutral', 'dark'], types: ['HIGHLIGHTER', 'BORDER'] },
+  // The terracotta accent in this theme's palette is why 'earth' is here.
+  GEOMETRICAL: { finishes: ['matte', 'glossy'], colorFamilies: ['cool-neutral', 'dark', 'earth'], types: ['HIGHLIGHTER', 'BORDER'] },
   METALLIC: { finishes: ['glossy', 'polished'], colorFamilies: ['gold', 'dark', 'cool-neutral'], types: ['HIGHLIGHTER', 'ACCENT'] },
   RUSTIC: { finishes: ['matte', 'textured'], colorFamilies: ['earth', 'warm-neutral'], types: ['BASE', 'BORDER'] },
   MOROCCAN: { finishes: ['glossy', 'textured'], colorFamilies: ['blue', 'green', 'gold'], types: ['HIGHLIGHTER', 'ACCENT', 'BORDER'] },

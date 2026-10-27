@@ -122,13 +122,23 @@
   .budget-note { display:block; font-size:9.5px; letter-spacing:.12em; color:var(--muted); margin-top:6px; }
   .budget-desc { display:block; font-size:13.5px; color:var(--text2); margin-top:12px; line-height:1.55; }
 
-  .palette-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(230px,100%),1fr)); gap:12px; margin-top:12px; }
-  .palette-card { padding:14px; background:var(--card); border-radius:14px; cursor:pointer; border:1px solid var(--line); text-align:left; }
-  .palette-card.selected { border-color:var(--ink); }
-  .swatch-row { display:flex; gap:5px; width:100%; }
-  .swatch { flex:1; height:34px; border-radius:8px; border:1px solid rgba(26,21,18,.08); }
-  .palette-card .pl { display:block; font-size:14px; font-weight:500; margin-top:14px; }
-  .palette-card .ps { display:block; font-size:9.5px; letter-spacing:.1em; color:var(--muted); margin-top:6px; }
+  /* grid-auto-rows:1fr so every row is as tall as the tallest card --
+     without it a theme whose spec line wraps makes its whole row 10px
+     taller than the rest of the grid. */
+  .palette-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(230px,100%),1fr)); grid-auto-rows:1fr; gap:12px; margin-top:12px; }
+  /* The hybrid theme card: a static 16:9 preview, the name, the
+     materials the theme is built from, then its colours. Every card is
+     the same height whatever its content, so the grid stays even. */
+  .palette-card { display:flex; flex-direction:column; padding:0; overflow:hidden; background:var(--card); border-radius:14px; cursor:pointer; border:1px solid var(--line); text-align:left; }
+  .palette-card.selected { border-color:var(--ink); box-shadow:0 0 0 1px var(--ink) inset; }
+  .palette-art { display:block; width:100%; aspect-ratio:16/9; object-fit:cover; background:var(--sand); border-bottom:1px solid var(--line); }
+  .palette-body { display:flex; flex-direction:column; flex:1; gap:9px; padding:12px 14px 14px; }
+  .palette-card .pl { display:block; font-size:14px; font-weight:500; }
+  .palette-card .ps { display:block; font-size:9px; letter-spacing:.1em; color:var(--muted); margin-top:4px; }
+  .material-row { display:flex; gap:5px; width:100%; }
+  .material { flex:1; height:14px; border-radius:4px; border:1px solid rgba(26,21,18,.1); background-size:cover; }
+  .swatch-row { display:flex; gap:5px; width:100%; margin-top:auto; }
+  .swatch { flex:1; height:20px; border-radius:6px; border:1px solid rgba(26,21,18,.08); }
 
   .summary-card { background:var(--card); border:1px solid var(--line); border-radius:18px; overflow:hidden; }
   .summary-row { display:flex; gap:12px; align-items:baseline; background:#fff; padding:14px 18px; border-bottom:1px solid var(--line); }
@@ -483,19 +493,117 @@
   // theme was specified", so the scorer stays neutral and the model
   // picks the theme itself from the room, the budget and the stock.
   const LET_STUDIO_THEME = 'Let De’vyora Decide';
+  //
+  // `art` is a static 16:9 preview in img/themes/ -- an abstract material
+  // collage in the theme's own palette, drawn once and committed, never
+  // generated at page load and never an AI request. They are inspiration
+  // only: no preview is, or stands for, a catalogue product.
+  //
+  // `materials` is the strip under the name: the surfaces the theme is
+  // built from, as CSS so it costs no extra asset.
   const THEMES = [
-    { label: 'British', spec: 'HERITAGE GREEN · OXBLOOD · BRASS', sw: ['#EFE8D8', '#2F4A3C', '#7A2E2E', '#B08D4E'] },
-    { label: 'Roman Touch', spec: 'TRAVERTINE · STONE · TERRACOTTA', sw: ['#EDE2CD', '#D9C7A6', '#B2876A', '#8A7A62'] },
-    { label: 'Floral', spec: 'BLUSH · SAGE · IVORY', sw: ['#F6EDE6', '#E3C3C0', '#A8B79C', '#8A6A62'] },
-    { label: 'Tropical', spec: 'PALM · TEAL · SAND', sw: ['#EFE7D2', '#C2A878', '#2E7D6B', '#1F4F45'] },
-    { label: 'Geometrical', spec: 'GRAPHIC · MONOCHROME · ACCENT', sw: ['#F3F0EA', '#BFBAB1', '#4A4A4A', '#1E1C1A'] },
-    { label: 'Metallic', spec: 'SILVER · GUNMETAL · GOLD', sw: ['#E8E6E1', '#B9B6AF', '#6E6A63', '#C09A5E'] },
-    { label: 'Rustic', spec: 'CLAY · TIMBER · OCHRE', sw: ['#E8DCC6', '#C2A271', '#9A6B43', '#6B4A2F'] },
-    { label: 'Moroccan', spec: 'ZELLIGE · COBALT · SAFFRON', sw: ['#F2EADA', '#2B5FA8', '#1B8A7A', '#D9A52E'] },
-    { label: 'Black & White', spec: 'IVORY · ASH · CHARCOAL', sw: ['#F6F3EC', '#CFCBC3', '#5A5651', '#1A1917'] },
-    { label: LET_STUDIO_THEME, spec: 'THE STUDIO PICKS THE THEME', sw: [] },
+    {
+      label: 'British', spec: 'HERITAGE GREEN · OXBLOOD · BRASS',
+      art: 'img/themes/british.svg',
+      materials: [
+        { name: 'Panelled timber', css: 'repeating-linear-gradient(90deg,#2F4A3C 0 6px,#26402F 6px 8px)' },
+        { name: 'Encaustic', css: 'repeating-conic-gradient(#7A2E2E 0% 25%,#EFE8D8 0% 50%) 0/10px 10px' },
+        { name: 'Brass', css: 'linear-gradient(135deg,#D8B775,#B08D4E 60%,#8E6E36)' },
+      ],
+      sw: ['#EFE8D8', '#2F4A3C', '#7A2E2E', '#B08D4E'],
+    },
+    {
+      label: 'Roman Touch', spec: 'TRAVERTINE · STONE · TERRACOTTA',
+      art: 'img/themes/roman-touch.svg',
+      materials: [
+        { name: 'Travertine', css: 'repeating-linear-gradient(0deg,#EDE2CD 0 3px,#D9C7A6 3px 5px)' },
+        { name: 'Limestone', css: 'linear-gradient(135deg,#E4D7BC,#C2AE8A)' },
+        { name: 'Terracotta', css: 'linear-gradient(135deg,#C09277,#B2876A 60%,#9C7257)' },
+      ],
+      sw: ['#EDE2CD', '#D9C7A6', '#B2876A', '#8A7A62'],
+    },
+    {
+      label: 'Floral', spec: 'BLUSH · SAGE · IVORY',
+      art: 'img/themes/floral.svg',
+      materials: [
+        { name: 'Glazed ceramic', css: 'linear-gradient(135deg,#F6EDE6,#E3C3C0)' },
+        { name: 'Sage matte', css: 'linear-gradient(135deg,#BCC9B2,#A8B79C)' },
+        { name: 'Ivory biscuit', css: 'repeating-linear-gradient(45deg,#F6EDE6 0 4px,#EDE0D6 4px 8px)' },
+      ],
+      sw: ['#F6EDE6', '#E3C3C0', '#A8B79C', '#8A6A62'],
+    },
+    {
+      label: 'Tropical', spec: 'PALM · TEAL · SAND',
+      art: 'img/themes/tropical.svg',
+      materials: [
+        { name: 'Palm green', css: 'linear-gradient(135deg,#2E7D6B,#1F4F45)' },
+        { name: 'Teal glaze', css: 'linear-gradient(135deg,#3FA392,#2E7D6B)' },
+        { name: 'Sand', css: 'repeating-linear-gradient(0deg,#EFE7D2 0 3px,#C2A878 3px 5px)' },
+      ],
+      sw: ['#EFE7D2', '#C2A878', '#2E7D6B', '#1F4F45'],
+    },
+    {
+      label: 'Geometrical', spec: 'IVORY · GRAPHITE · TERRACOTTA',
+      art: 'img/themes/geometrical.svg',
+      materials: [
+        { name: 'Ivory porcelain', css: 'linear-gradient(135deg,#F7F5EF,#F4F1E9)' },
+        { name: 'Graphite', css: 'repeating-linear-gradient(135deg,#5C5F63 0 5px,#4C4F53 5px 10px)' },
+        { name: 'Charcoal', css: 'linear-gradient(135deg,#2A2A2A,#1C1C1C)' },
+      ],
+      sw: ['#F4F1E9', '#5C5F63', '#1C1C1C', '#B5705A'],
+    },
+    {
+      label: 'Metallic', spec: 'PEARL · GUNMETAL · CHAMPAGNE',
+      art: 'img/themes/metallic.svg',
+      materials: [
+        { name: 'Brushed silver', css: 'repeating-linear-gradient(90deg,#DCDCE0 0 2px,#CFCFD4 2px 4px)' },
+        { name: 'Gunmetal', css: 'linear-gradient(135deg,#5C6268,#4A4F55)' },
+        { name: 'Champagne gold', css: 'linear-gradient(135deg,#E2CFA2,#C9A96A 60%,#A98A4F)' },
+      ],
+      sw: ['#F2EADA', '#CFCFD4', '#4A4F55', '#C9A96A'],
+    },
+    {
+      label: 'Rustic', spec: 'NATURAL CLAY · TERRACOTTA · OCHRE',
+      art: 'img/themes/rustic.svg',
+      materials: [
+        { name: 'Natural clay', css: 'linear-gradient(135deg,#E8D0B8,#E0C3A8)' },
+        { name: 'Sandstone', css: 'repeating-linear-gradient(0deg,#D6B68E 0 3px,#C9A77C 3px 6px)' },
+        { name: 'Muted ochre', css: 'linear-gradient(135deg,#D79B45,#C98A33)' },
+      ],
+      sw: ['#E0C3A8', '#C9A77C', '#A4573A', '#C98A33'],
+    },
+    {
+      label: 'Moroccan', spec: 'ZELLIGE · COBALT · SAFFRON',
+      art: 'img/themes/moroccan.svg',
+      materials: [
+        { name: 'Zellige', css: 'repeating-linear-gradient(45deg,#F2EADA 0 5px,#E6DBC6 5px 10px)' },
+        { name: 'Cobalt glaze', css: 'linear-gradient(135deg,#3B72BC,#2B5FA8)' },
+        { name: 'Saffron', css: 'linear-gradient(135deg,#E8B948,#D9A52E)' },
+      ],
+      sw: ['#F2EADA', '#2B5FA8', '#1B8A7A', '#D9A52E'],
+    },
+    {
+      label: 'Black & White', spec: 'IVORY · ASH · CHARCOAL',
+      art: 'img/themes/black-white.svg',
+      materials: [
+        { name: 'Veined marble', css: 'linear-gradient(115deg,#F6F3EC 0 46%,#CFCBC3 48%,#F6F3EC 52%)' },
+        { name: 'Checker', css: 'repeating-conic-gradient(#1A1917 0% 25%,#F6F3EC 0% 50%) 0/12px 12px' },
+        { name: 'Charcoal', css: 'linear-gradient(135deg,#2B2A28,#1A1917)' },
+      ],
+      sw: ['#F6F3EC', '#CFCBC3', '#5A5651', '#1A1917'],
+    },
+    {
+      label: LET_STUDIO_THEME, spec: 'THE STUDIO PICKS THE THEME',
+      art: 'img/themes/studio-decides.svg',
+      materials: [
+        { name: 'Stone', css: 'repeating-linear-gradient(0deg,#EDE2CD 0 3px,#D9C7A6 3px 5px)' },
+        { name: 'Marble', css: 'linear-gradient(115deg,#F6F3EC 0 46%,#C6C2BA 48%,#F6F3EC 52%)' },
+        { name: 'Timber', css: 'repeating-linear-gradient(0deg,#C2A271 0 4px,#A98A5C 4px 6px)' },
+        { name: 'Metal', css: 'repeating-linear-gradient(90deg,#C4C2BC 0 2px,#B9B6AF 2px 4px)' },
+      ],
+      sw: [],
+    },
   ];
-
   const GROUTS = ['Ivory Matte', 'Sand Tone', 'Charcoal'];
 
   // THE MOOD BOARD SIZES, in feet.
@@ -1038,10 +1146,21 @@
           const sel = state.theme === p.label;
           // The studio-decides card carries no swatches: naming colours
           // for it would promise a palette that has not been chosen yet.
+          // Its materials strip carries the idea instead.
           const swatches = p.sw.length
             ? '<span class="swatch-row">' + p.sw.map((c) => '<span class="swatch" style="background:' + c + '"></span>').join('') + '</span>'
             : '';
-          return '<button class="palette-card' + (sel ? ' selected' : '') + '" data-palette="' + escapeHtml(p.label) + '">' + swatches + '<span class="pl">' + escapeHtml(p.label) + '</span><span class="ps mono">' + p.spec + '</span></button>';
+          const materials = '<span class="material-row">' + p.materials.map((m) =>
+            '<span class="material" style="background:' + m.css + '" title="' + escapeHtml(m.name) + '"></span>').join('') + '</span>';
+          // loading="lazy" because ten previews sit below the fold of
+          // every earlier step; decoding="async" keeps them off the
+          // paint path.
+          return '<button class="palette-card' + (sel ? ' selected' : '') + '" data-palette="' + escapeHtml(p.label) + '">' +
+            '<img class="palette-art" src="' + p.art + '" alt="" loading="lazy" decoding="async">' +
+            '<span class="palette-body">' +
+            '<span><span class="pl">' + escapeHtml(p.label) + '</span><span class="ps mono">' + p.spec + '</span></span>' +
+            materials + swatches +
+            '</span></button>';
         }).join('') + '</div>' +
         '<div class="section-lbl mono">GROUT TONE</div>' +
         '<div class="chip-row">' + GROUTS.map((g) => '<button class="chip mono' + (state.grout === g ? ' selected' : '') + '" data-grout="' + g + '">' + g + '</button>').join('') + '</div>' +
