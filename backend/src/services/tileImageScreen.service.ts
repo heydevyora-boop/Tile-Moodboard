@@ -153,9 +153,11 @@ export function measureSplit(data: Uint8ClampedArray, w: number, h: number): Scr
   };
 }
 
-// Per-process, because the same twenty products are screened on every
+// Per-process, because the same twenty products are looked at on every
 // generation and their pictures do not change between them.
 const verdicts = new Map<string, ScreenVerdict>();
+const samples = new Map<string, { data: Uint8ClampedArray; w: number; h: number } | null>();
+const signatures = new Map<string, TileSignature | null>();
 
 async function decode(url: string): Promise<{ data: Uint8ClampedArray; w: number; h: number } | null> {
   const controller = new AbortController();
@@ -179,6 +181,115 @@ async function decode(url: string): Promise<{ data: Uint8ClampedArray; w: number
   }
 }
 
+/** The decoded sample, fetched at most once per picture per process. */
+async function sampleOf(url: string): Promise<{ data: Uint8ClampedArray; w: number; h: number } | null> {
+  if (samples.has(url)) return samples.get(url)!;
+  const decoded = await decode(url);
+  samples.set(url, decoded);
+  return decoded;
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Two products, one surface
+//
+// A board came back with the same plain grey tile as its base AND as its
+// border -- different rows, different product codes, different sizes, the
+// same surface. Nothing caught it: validateCombinations refuses a repeated
+// tileId, and these were two ids.
+//
+// So the comparison has to be of the pictures. A coarse 8x8 brightness
+// hash says whether the two have the same STRUCTURE, and the mean colour
+// says whether they are the same COLOUR. Both have to agree before two
+// products are called one surface, because either alone is far too eager:
+// every plain tile in the catalog shares a flat structure, and ivory and
+// cream share a colour.
+// ─────────────────────────────────────────────────────────────────────────
+
+export interface TileSignature {
+  /** 64 bits of "is this cell brighter than the average", as a string. */
+  hash: string;
+  /** Mean colour, 0..1 per channel. */
+  mean: [number, number, number];
+}
+
+/** How many of the 64 cells may disagree and still be the same surface. */
+const HASH_SLACK = 6;
+
+/** ...and how far apart their colours may be, 0..1. */
+const COLOUR_SLACK = 0.05;
+
+export function signatureOf(data: Uint8ClampedArray, w: number, h: number): TileSignature {
+  const cells = new Array(64).fill(0);
+  const counts = new Array(64).fill(0);
+  let mean: [number, number, number] = [0, 0, 0];
+
+  for (let i = 0; i < w * h; i += 1) {
+    const x = Math.min(7, Math.floor(((i % w) / w) * 8));
+    const y = Math.min(7, Math.floor((Math.floor(i / w) / h) * 8));
+    const lum = (data[i * 4] * 0.299 + data[i * 4 + 1] * 0.587 + data[i * 4 + 2] * 0.114);
+    cells[y * 8 + x] += lum;
+    counts[y * 8 + x] += 1;
+    mean[0] += data[i * 4]; mean[1] += data[i * 4 + 1]; mean[2] += data[i * 4 + 2];
+  }
+
+  const n = w * h;
+  mean = [mean[0] / n / 255, mean[1] / n / 255, mean[2] / n / 255];
+
+  const averages = cells.map((sum, i) => (counts[i] ? sum / counts[i] : 0));
+  const overall = averages.reduce((a, b) => a + b, 0) / 64;
+  return { hash: averages.map((v) => (v >= overall ? '1' : '0')).join(''), mean };
+}
+
+/** Do these two pictures show the same surface? */
+export function sameSurface(a: TileSignature, b: TileSignature): boolean {
+  let different = 0;
+  for (let i = 0; i < a.hash.length; i += 1) if (a.hash[i] !== b.hash[i]) different += 1;
+  if (different > HASH_SLACK) return false;
+
+  const colour = Math.sqrt(
+    (a.mean[0] - b.mean[0]) ** 2 + (a.mean[1] - b.mean[1]) ** 2 + (a.mean[2] - b.mean[2]) ** 2,
+  ) / Math.sqrt(3);
+  return colour <= COLOUR_SLACK;
+}
+
+/** One picture's fingerprint, or null when there is nothing to look at. */
+export async function tileSignature(url: string | null | undefined): Promise<TileSignature | null> {
+  if (!url || !/^https?:\/\//i.test(url)) return null;
+  if (signatures.has(url)) return signatures.get(url)!;
+
+  const sample = await sampleOf(url);
+  const signature = sample ? signatureOf(sample.data, sample.w, sample.h) : null;
+  signatures.set(url, signature);
+  return signature;
+}
+
+/**
+ * Finds the roles in one combination that show a surface an earlier role
+ * already showed. The first use of a surface keeps its place -- so a base
+ * stays the base -- and the later one is named for the caller to drop.
+ *
+ * A product with no readable picture is never called a duplicate: two
+ * unknowns are not evidence of sameness.
+ */
+export async function lookalikeRoles<T extends { role: string; tileId: string }>(
+  tiles: T[],
+  imageUrlOf: (tileId: string) => string | null | undefined,
+): Promise<Array<{ tile: T; of: T }>> {
+  const signed = await Promise.all(tiles.map((t) => tileSignature(imageUrlOf(t.tileId))));
+  const duplicates: Array<{ tile: T; of: T }> = [];
+  const seen: Array<{ tile: T; signature: TileSignature }> = [];
+
+  tiles.forEach((tile, i) => {
+    const signature = signed[i];
+    if (!signature) return;
+    const match = seen.find((s) => sameSurface(s.signature, signature));
+    if (match) duplicates.push({ tile, of: match.tile });
+    else seen.push({ tile, signature });
+  });
+
+  return duplicates;
+}
+
 /** One picture's verdict. Anything unreadable is kept. */
 export async function screenTileImage(url: string | null | undefined): Promise<ScreenVerdict> {
   if (!url || !/^https?:\/\//i.test(url)) return KEPT('no image to look at');
@@ -186,7 +297,7 @@ export async function screenTileImage(url: string | null | undefined): Promise<S
   const cached = verdicts.get(url);
   if (cached) return cached;
 
-  const decoded = await decode(url);
+  const decoded = await sampleOf(url);
   const verdict = decoded ? measureSplit(decoded.data, decoded.w, decoded.h) : KEPT('could not read the image');
   verdicts.set(url, verdict);
   return verdict;
@@ -222,4 +333,6 @@ export async function screenSlate<T extends { id: string; imageUrl?: string | nu
 /** Test seam: the cache would otherwise carry a verdict between cases. */
 export function clearScreenCache(): void {
   verdicts.clear();
+  samples.clear();
+  signatures.clear();
 }

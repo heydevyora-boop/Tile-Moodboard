@@ -19,6 +19,9 @@ import {
   screenTileImage,
   screenSlate,
   clearScreenCache,
+  signatureOf,
+  sameSurface,
+  lookalikeRoles,
 } from '@services/tileImageScreen.service';
 
 let pass = 0;
@@ -184,6 +187,91 @@ async function main() {
   await screenSlate(slate, 0);
   check('24. Each picture is fetched once, then remembered',
     hits - before === firstPass, { firstPass, total: hits - before });
+
+  // ── TWO PRODUCTS, ONE SURFACE ──────────────────────────────────────
+  //
+  // The reported board used the same plain grey as its base AND its
+  // border: two rows, two product codes, two sizes, one surface. These
+  // three are that board's own thumbnails.
+  const sig = async (file: string) => {
+    const image = await loadImage(path.join(FIXTURES, file));
+    const canvas = createCanvas(SAMPLE, SAMPLE);
+    canvas.getContext('2d').drawImage(image, 0, 0, SAMPLE, SAMPLE);
+    return signatureOf(canvas.getContext('2d').getImageData(0, 0, SAMPLE, SAMPLE).data as unknown as Uint8ClampedArray, SAMPLE, SAMPLE);
+  };
+  const base15 = await sig('twin-base-0015.png');
+  const border18 = await sig('twin-border-0018.png');
+  const decor05 = await sig('decor-0005.png');
+
+  check('25. The base and the border are seen as one surface', sameSurface(base15, border18), { base15, border18 });
+  check('26. The decor is not the same surface as the base', !sameSurface(base15, decor05));
+  check('27. ...nor as the border', !sameSurface(border18, decor05));
+
+  // Different products that really are different must stay different.
+  const flat = (hex: string, file: string) => {
+    const c = createCanvas(240, 240);
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = hex; ctx.fillRect(0, 0, 240, 240);
+    fs.writeFileSync(file, c.toBuffer('image/png'));
+    return file;
+  };
+  const sigOfFile = async (file: string) => {
+    const image = await loadImage(file);
+    const canvas = createCanvas(SAMPLE, SAMPLE);
+    canvas.getContext('2d').drawImage(image, 0, 0, SAMPLE, SAMPLE);
+    return signatureOf(canvas.getContext('2d').getImageData(0, 0, SAMPLE, SAMPLE).data as unknown as Uint8ClampedArray, SAMPLE, SAMPLE);
+  };
+  const ivory = await sigOfFile(flat('#F6F3EC', path.join(tmp, 'ivory.png')));
+  const charcoal = await sigOfFile(flat('#3A3733', path.join(tmp, 'charcoal.png')));
+  const sand = await sigOfFile(flat('#D9C7A6', path.join(tmp, 'sand.png')));
+  check('28. Ivory and charcoal are not one surface', !sameSurface(ivory, charcoal));
+  check('29. Ivory and sand are not one surface', !sameSurface(ivory, sand));
+  check('30. A picture is the same surface as itself', sameSurface(ivory, ivory));
+  check('31. The floral decor is not the same as a flat ivory', !sameSurface(decor05, ivory));
+
+  // ── over a combination, which is where it has to act ───────────────
+  const served2: Record<string, Buffer> = {
+    '/base15.png': fs.readFileSync(path.join(FIXTURES, 'twin-base-0015.png')),
+    '/border18.png': fs.readFileSync(path.join(FIXTURES, 'twin-border-0018.png')),
+    '/decor05.png': fs.readFileSync(path.join(FIXTURES, 'decor-0005.png')),
+  };
+  Object.assign(served, served2);
+  clearScreenCache();
+
+  const urls: Record<string, string | null> = {
+    't-base': `${base}/base15.png`,
+    't-highlight': `${base}/decor05.png`,
+    't-border': `${base}/border18.png`,
+    't-noimage': null,
+  };
+  const combo = [
+    { role: 'base', tileId: 't-base' },
+    { role: 'highlight', tileId: 't-highlight' },
+    { role: 'border', tileId: 't-border' },
+  ];
+  const dupes = await lookalikeRoles(combo, (id) => urls[id]);
+  check('32. The repeated surface is found', dupes.length === 1, dupes.map((d) => [d.tile.role, d.of.role]));
+  check('33. ...and it is the LATER role that is named, not the base',
+    dupes[0] && dupes[0].tile.role === 'border' && dupes[0].of.role === 'base', dupes[0]);
+
+  const kept = combo.filter((t) => !dupes.some((d) => d.tile === t));
+  check('34. The board keeps its base and its highlight',
+    kept.map((t) => t.role).join(',') === 'base,highlight', kept.map((t) => t.role));
+
+  clearScreenCache();
+  const noDupes = await lookalikeRoles([
+    { role: 'base', tileId: 't-base' },
+    { role: 'highlight', tileId: 't-highlight' },
+  ], (id) => urls[id]);
+  check('35. A board of two real surfaces loses nothing', noDupes.length === 0, noDupes);
+
+  clearScreenCache();
+  const blind = await lookalikeRoles([
+    { role: 'base', tileId: 't-noimage' },
+    { role: 'border', tileId: 't-noimage2' },
+  ], () => null);
+  check('36. Two products with no picture are never called the same',
+    blind.length === 0, blind);
 
   server.close();
   fs.rmSync(tmp, { recursive: true, force: true });
