@@ -28,6 +28,7 @@
     "test:print-board": "ts-node -r tsconfig-paths/register test-scripts/print_board_test.ts",
     "test:mood-board-pdf": "ts-node -r tsconfig-paths/register test-scripts/mood_board_pdf_test.ts",
     "test:tile-recommendation": "ts-node -r tsconfig-paths/register test-scripts/tile_recommendation_test.ts",
+    "test:combination-quality": "ts-node -r tsconfig-paths/register test-scripts/combination_quality_test.ts",
     "test:tile-candidate-pool": "ts-node -r tsconfig-paths/register test-scripts/tile_candidate_pool_test.ts",
     "test:print-board-png": "ts-node -r tsconfig-paths/register test-scripts/print_board_png_test.ts",
     "test:google-drive": "ts-node -r tsconfig-paths/register test-scripts/google_drive_test.ts",
