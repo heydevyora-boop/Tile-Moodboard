@@ -91,8 +91,11 @@
   /* Columns, not one long stack: a catalog with a dozen sizes has to be
      readable without scrolling the step. auto-fill keeps one column on a
      phone and as many as fit on a desktop. */
-  .walls-list { display:grid; grid-template-columns:repeat(auto-fill,minmax(168px,1fr)); gap:1px; background:var(--line); border:1px solid var(--line); border-radius:13px; overflow:hidden; }
-  .wall-row { display:flex; align-items:center; gap:10px; padding:12px 14px; background:var(--card); cursor:pointer; text-align:left; border:none; width:100%; font-size:12.5px; color:var(--ink); }
+  .walls-list { display:grid; grid-template-columns:repeat(auto-fill,minmax(168px,1fr)); gap:1px; background:var(--card); border:1px solid var(--line); border-radius:13px; overflow:hidden; }
+  /* The hairlines are drawn by each cell rather than by the gaps
+     showing a darker background through, so the tail of the last row
+     -- which has no cells -- reads as empty card instead of a block. */
+  .wall-row { display:flex; align-items:center; gap:10px; padding:12px 14px; background:var(--card); box-shadow:0 0 0 1px var(--line); cursor:pointer; text-align:left; border:none; width:100%; font-size:12.5px; color:var(--ink); }
   .wall-row:hover { background:#F7F2E8; }
   .wall-box { width:17px; height:17px; flex:0 0 auto; border:1px solid #C7BCAA; border-radius:5px; }
   .wall-row.checked .wall-box { border-color:var(--ink); background:var(--ink); box-shadow:inset 0 0 0 3px #FBF6EC; }
