@@ -107,7 +107,7 @@ export async function renderPrintBoardPng(input: RenderInput): Promise<Buffer> {
 
   ctx.fillStyle = 'rgb(28, 25, 20)';
   ctx.font = `bold ${16 * scale}px sans-serif`;
-  ctx.fillText('CASA DE AURUM', margin, cursorY + 16 * scale);
+  ctx.fillText('DE’VYORA', margin, cursorY + 16 * scale);
   ctx.fillStyle = 'rgb(120, 112, 95)';
   ctx.font = `${12 * scale}px sans-serif`;
   ctx.fillText(input.boardName, margin, cursorY + 34 * scale);
@@ -159,7 +159,7 @@ export async function renderPrintBoardPng(input: RenderInput): Promise<Buffer> {
   ctx.font = `${8 * scale}px sans-serif`;
   footerCursor = drawWrappedText(ctx, `Brief: ${input.clientBrief}`, margin, footerCursor, contentWidth, 11 * scale);
 
-  const specs = `${input.format} \u00b7 ${input.widthValue}${input.unit.toLowerCase()} x ${input.heightValue}${input.unit.toLowerCase()} \u00b7 ${input.dpi} DPI \u00b7 Casa de Aurum Internal Tool`;
+  const specs = `${input.format} \u00b7 ${input.widthValue}${input.unit.toLowerCase()} x ${input.heightValue}${input.unit.toLowerCase()} \u00b7 ${input.dpi} DPI \u00b7 De’vyora Internal Tool`;
   ctx.fillStyle = 'rgb(153, 145, 128)';
   ctx.font = `${7 * scale}px sans-serif`;
   ctx.fillText(specs, margin, heightPx - margin);

@@ -88,7 +88,7 @@ const envSchema = z.object({
   APP_NAME: z
     .string()
     .default(
-      'Casa de Aurum Internal Tool',
+      'De’vyora Internal Tool',
     ),
 
   API_PREFIX: z

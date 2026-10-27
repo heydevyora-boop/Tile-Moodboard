@@ -83,8 +83,8 @@ export async function renderPrintBoardPdf(input: RenderInput): Promise<Uint8Arra
   const heightPt = toPoints(input.heightValue, input.unit);
 
   const doc = await PDFDocument.create();
-  doc.setTitle(`${input.boardName} \u2014 Casa de Aurum`);
-  doc.setProducer('Casa de Aurum Internal Tool');
+  doc.setTitle(`${input.boardName} \u2014 De’vyora`);
+  doc.setProducer('De’vyora Internal Tool');
 
   const page = doc.addPage([widthPt, heightPt]);
   const regularFont = await doc.embedFont(StandardFonts.Helvetica);
@@ -94,7 +94,7 @@ export async function renderPrintBoardPdf(input: RenderInput): Promise<Uint8Arra
   const contentWidth = widthPt - margin * 2;
   let cursorY = heightPt - margin;
 
-  page.drawText('CASA DE AURUM', { x: margin, y: cursorY - 14, size: 16, font: boldFont, color: rgb(0.11, 0.1, 0.08) });
+  page.drawText('DE’VYORA', { x: margin, y: cursorY - 14, size: 16, font: boldFont, color: rgb(0.11, 0.1, 0.08) });
   page.drawText(input.boardName, { x: margin, y: cursorY - 32, size: 12, font: regularFont, color: rgb(0.47, 0.44, 0.36) });
   cursorY -= 52;
 
@@ -134,7 +134,7 @@ export async function renderPrintBoardPdf(input: RenderInput): Promise<Uint8Arra
   drawWrappedText(page, `Grout: ${input.groutRecommendation || 'Not specified'}`, margin, footerY, contentWidth, regularFont, 9);
   drawWrappedText(page, `Brief: ${input.clientBrief}`, margin, footerY - 16, contentWidth, regularFont, 8, rgb(0.47, 0.44, 0.36));
 
-  const specs = `${input.format} \u00b7 ${input.widthValue}${input.unit.toLowerCase()} x ${input.heightValue}${input.unit.toLowerCase()} \u00b7 ${input.dpi} DPI \u00b7 Casa de Aurum Internal Tool`;
+  const specs = `${input.format} \u00b7 ${input.widthValue}${input.unit.toLowerCase()} x ${input.heightValue}${input.unit.toLowerCase()} \u00b7 ${input.dpi} DPI \u00b7 De’vyora Internal Tool`;
   page.drawText(specs, { x: margin, y: margin, size: 7, font: regularFont, color: rgb(0.6, 0.57, 0.5) });
 
   return doc.save();

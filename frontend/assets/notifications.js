@@ -1,4 +1,4 @@
-/* Casa de Aurum — shared notification system (Module 20)
+/* De’vyora — shared notification system (Module 20)
    Include after api-client.js. Provides window.CasaNotify with:
      CasaNotify.success(message)
      CasaNotify.error(message)

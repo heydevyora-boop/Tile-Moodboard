@@ -1,5 +1,5 @@
 /**
- * Casa de Aurum — shared frontend API client.
+ * De’vyora — shared frontend API client.
  *
  * Include this on every page that needs to talk to the backend:
  *
@@ -2158,7 +2158,7 @@ function resolveBackendImageUrl(imagePath) {
   /*
    * Python can return something like:
    *
-   * C:/Casa De Aurum/catalog_processor/output/...
+   * C:/De’vyora/catalog_processor/output/...
    *
    * Never expose the Windows filesystem path directly
    * to the browser.
