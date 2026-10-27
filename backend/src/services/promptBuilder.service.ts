@@ -190,6 +190,12 @@ Rules about the budget:
 - Say in "reason_for_selection" how the combination sits against the band in those terms, and say plainly when the listed stock gives you nothing that suits it rather than offering something that does not.
 - When the budget line names more than one band, return one combination per band, in the order they are named, and say which band each one answers.
 
+Rules about the theme:
+- The brief names a design theme. Read it as a design language, not as a colour filter: British, Roman Touch, Floral, Tropical, Geometrical, Metallic, Rustic, Moroccan and Black & White each carry their own surfaces, patterns and contrast, and the floor, the wall and the decorated piece all have to belong to the same one.
+- Choose on the theme's visual characteristics, using whatever each listed product gives you — its name and collection as much as its recorded finish, colour and size. A product whose attributes are blank can still be read from its name.
+- Say in "reason_for_selection" what makes the combination read as that theme, naming the pieces. If the listed stock cannot carry the theme, say that plainly instead of assembling something that does not.
+- When the brief says the theme is not specified, choose the theme yourself from the room, the budget and what is actually listed, and name the theme you chose in "board_name" or the first sentence of "reason_for_selection". Do not leave it unstated, and do not default to the same theme for every combination you return.
+
 Rules about which tile may take which role:
 - "base" is the plain field of the room. It must be a tile listed as type=BASE or type=LARGE_FORMAT_BASE — a quiet surface, plain or softly veined.
 - "highlight", "accent" and "border" are the decorated roles. A highlight is a DESIGNER tile: it must be a tile listed as type=HIGHLIGHTER, type=ACCENT or type=BORDER. Never nominate a plain type=BASE tile as the highlight, and never put a decorated tile in the base role — a board whose highlight is plainer than its base is the wrong way round.
@@ -197,7 +203,7 @@ Rules about which tile may take which role:
 
 Rules about the tile list itself:
 - A tile marked batch=LATEST came from the most recent catalog extraction. Those products have not been classified yet, which is why their finish, colour and room are missing from the list — that means "not recorded", never "unsuitable". Judge them on their name, brand, size and type, exactly as seriously as the older products whose attributes are filled in.
-- At least one of the combinations you return must use a batch=LATEST product, whenever any appear in the list. Do not return a set of combinations built entirely from the older products while new stock is sitting in the list unused.
+- batch=LATEST is a note about missing data, NOT a recommendation. Do not prefer a product because it was extracted recently, and do not prefer one because it has been in the catalog longer. Weigh the whole list on one question — which products make the best combination for this theme, room and budget — and let the answer fall where it falls. A board of entirely older products is right when they are the better fit, and so is a board of entirely new ones.
 - Across all the combinations together, do not keep reusing one product series. Two boards whose base tiles differ only by a trailing index are the same board twice.
 `.trim();
 

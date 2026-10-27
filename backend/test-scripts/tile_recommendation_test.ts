@@ -107,6 +107,55 @@ function main() {
     // The palettes must discriminate, not hand every tile the same bonus.
     const spread = new Set(warm.map((t) => t.score));
     check('17d. A palette separates the pool rather than scoring it flat', spread.size > 1, [...spread]);
+
+    // ── THE DESIGN THEMES the wizard sends now ──────────────────────
+    //
+    // A theme with no row in STYLE_PROFILES looks up to nothing and
+    // scores zero for every tile -- which is exactly how the three
+    // palettes above decided nothing at all before they were added. So
+    // every theme offered in the UI is checked here, by the same label
+    // the wizard sends.
+    const THEMES = [
+      'British', 'Roman Touch', 'Floral', 'Tropical', 'Geometrical',
+      'Metallic', 'Rustic', 'Moroccan', 'Black & White',
+    ];
+    const recognised = THEMES.filter((style) =>
+      rankTiles(tiles, { style }).some((t) => t.matchReasons.length > 0));
+    check('17e. Every one of the nine themes is recognised by the scorer',
+      recognised.length === THEMES.length,
+      THEMES.filter((t) => !recognised.includes(t)));
+
+    const flat = THEMES.filter((style) =>
+      new Set(rankTiles(tiles, { style }).map((t) => t.score)).size === 1);
+    check('17f. Each theme separates the pool rather than scoring it flat',
+      flat.length === 0, flat);
+
+    // Two themes must not produce the same ordering, or the client's
+    // choice is decorative.
+    const order = (style: string) => rankTiles(tiles, { style }).map((t) => t.id).join('>');
+    check('17g. Different themes rank the same stock differently',
+      order('Rustic') !== order('Metallic'),
+      { rustic: order('Rustic'), metallic: order('Metallic') });
+
+    const metallic = rankTiles(tiles, { style: 'Metallic' });
+    const mGold = metallic.find((t) => t.id === 't-gold-accent')!;
+    const mIvory = metallic.find((t) => t.id === 't-bath-ivory')!;
+    check('17h. Metallic rates a champagne accent above a matte ivory base',
+      mGold.score > mIvory.score, { mGold, mIvory });
+
+    const rustic = rankTiles(tiles, { style: 'Rustic' });
+    const rIvory = rustic.find((t) => t.id === 't-bath-ivory')!;
+    const rGold = rustic.find((t) => t.id === 't-gold-accent')!;
+    check('17i. Rustic reverses that -- the matte base leads the gloss accent',
+      rIvory.score > rGold.score, { rIvory, rGold });
+
+    // "Let De'vyora Decide" is the ABSENCE of a theme. It must score
+    // like no theme at all, so the model is left to choose.
+    const decide = rankTiles(tiles, { style: 'Let De\u2019vyora Decide' });
+    const none = rankTiles(tiles, {});
+    check('17j. Let De\u2019vyora Decide scores exactly like no theme at all',
+      decide.map((t) => `${t.id}:${t.score}`).join('|') === none.map((t) => `${t.id}:${t.score}`).join('|'),
+      decide.map((t) => `${t.id}:${t.score}`));
   }
 
   {
@@ -120,7 +169,13 @@ function main() {
 
     check('18a. The newest extraction is flagged, so the prompt can point at it', ranked.find((t) => t.id === 't-fresh')!.fromLatestExtraction === true);
     check('18b. An older tile is not flagged', ranked.find((t) => t.id === 't-old')!.fromLatestExtraction === false);
-    check('18c. The flag tracks the recency credit, not the ranking order', ranked.find((t) => t.id === 't-fresh')!.matchReasons.includes('From the latest extraction'));
+    // The flag is a note for the prompt, not a thumb on the scale: an
+    // unclassified new tile still loses to a classified old one that
+    // matches the room, which is the whole point of ranking on fit.
+    check('18c. Being newest earns no points and no match reason',
+      ranked.find((t) => t.id === 't-fresh')!.matchReasons.every((r) => !/latest extraction/i.test(r)));
+    check('18d. The better-matched older tile still leads',
+      ranked[0].id === 't-old', ranked.map((t) => `${t.id}:${t.score}`));
 
     // With no timestamps at all nothing is "latest", so nothing is marked.
     const undated = rankTiles(tiles, { room: 'Bathroom' });

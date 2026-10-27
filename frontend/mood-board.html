@@ -446,10 +446,30 @@
     return rupees(band.total[0] / area) + ' \u2013 ' + rupees(band.total[1] / area);
   }
 
-  const PALETTES = [
-    { label: 'Warm Neutral', spec: 'BEIGE · SAND · TRAVERTINE', sw: ['#E7DCC6', '#D9C7A6', '#B79A6E', '#8A7A62'] },
-    { label: 'Cool Grey', spec: 'ASH · SILK · SLATE', sw: ['#E3E0DA', '#B9B6AF', '#8C8C8C', '#4A4A4A'] },
-    { label: 'High Contrast', spec: 'IVORY · CHARCOAL · BRASS', sw: ['#F3EEE2', '#C09A5E', '#5A5651', '#241F1B'] },
+  // THE DESIGN THEMES.
+  //
+  // These replace the three tonal palettes that stood here. A theme is a
+  // design language rather than a temperature, so each carries the
+  // colours it is actually built from: the swatches are how the client
+  // reads it, and the label is what reaches STYLE_PROFILES in
+  // tileRecommendation.service.ts, where each theme maps onto the finish,
+  // colour family and role a Tile row really stores.
+  //
+  // LET_STUDIO_THEME is deliberately NOT in that table. It means "no
+  // theme was specified", so the scorer stays neutral and the model
+  // picks the theme itself from the room, the budget and the stock.
+  const LET_STUDIO_THEME = 'Let De’vyora Decide';
+  const THEMES = [
+    { label: 'British', spec: 'HERITAGE GREEN · OXBLOOD · BRASS', sw: ['#EFE8D8', '#2F4A3C', '#7A2E2E', '#B08D4E'] },
+    { label: 'Roman Touch', spec: 'TRAVERTINE · STONE · TERRACOTTA', sw: ['#EDE2CD', '#D9C7A6', '#B2876A', '#8A7A62'] },
+    { label: 'Floral', spec: 'BLUSH · SAGE · IVORY', sw: ['#F6EDE6', '#E3C3C0', '#A8B79C', '#8A6A62'] },
+    { label: 'Tropical', spec: 'PALM · TEAL · SAND', sw: ['#EFE7D2', '#C2A878', '#2E7D6B', '#1F4F45'] },
+    { label: 'Geometrical', spec: 'GRAPHIC · MONOCHROME · ACCENT', sw: ['#F3F0EA', '#BFBAB1', '#4A4A4A', '#1E1C1A'] },
+    { label: 'Metallic', spec: 'SILVER · GUNMETAL · GOLD', sw: ['#E8E6E1', '#B9B6AF', '#6E6A63', '#C09A5E'] },
+    { label: 'Rustic', spec: 'CLAY · TIMBER · OCHRE', sw: ['#E8DCC6', '#C2A271', '#9A6B43', '#6B4A2F'] },
+    { label: 'Moroccan', spec: 'ZELLIGE · COBALT · SAFFRON', sw: ['#F2EADA', '#2B5FA8', '#1B8A7A', '#D9A52E'] },
+    { label: 'Black & White', spec: 'IVORY · ASH · CHARCOAL', sw: ['#F6F3EC', '#CFCBC3', '#5A5651', '#1A1917'] },
+    { label: LET_STUDIO_THEME, spec: 'THE STUDIO PICKS THE THEME', sw: [] },
   ];
 
   const GROUTS = ['Ivory Matte', 'Sand Tone', 'Charcoal'];
@@ -465,7 +485,7 @@
     2: { key: 'FEATURE PLACEMENT', eyebrow: 'STATEMENT SURFACE', title: 'Where should the feature wall sit?', sub: 'The accent surface anchors the composition.' },
     3: { key: 'DIMENSION & FINISH', eyebrow: 'MODULE GEOMETRY', title: 'Pick the floor module', sub: 'Larger modules mean fewer grout lines. Finish drives slip rating and reflectivity.' },
     4: { key: 'BUDGET BAND', eyebrow: 'COMMERCIAL ENVELOPE', title: 'What is the surface budget?', sub: 'Each band is carried into the brief with the room and its coverage, so the concepts answer the amount you set.' },
-    5: { key: 'PALETTE & GROUT', eyebrow: 'TONAL DIRECTION', title: 'Set the palette temperature', sub: 'Grout tone is specified alongside the palette — it changes the perceived scale of the whole wall.' },
+    5: { key: 'THEME & GROUT', eyebrow: 'DESIGN DIRECTION', title: 'Pick the design theme', sub: 'The theme drives which surfaces are combined. Grout tone is specified alongside it — it changes the perceived scale of the whole wall.' },
     6: { key: 'REVIEW SPEC', eyebrow: 'DESIGN DNA', title: 'Review the design DNA', sub: 'This is what gets sent to generate your combinations.' },
     7: { key: 'CAMERA', eyebrow: 'RENDER PIPELINE', title: 'Choose the client view', sub: 'Included as context for the design brief.' },
   };
@@ -504,7 +524,7 @@
     // compare. Held as an array; the rest of the wizard reads it
     // through budgetText().
     budgets: [BUDGETS[0]],
-    palette: PALETTES[0].label,
+    theme: THEMES[0].label,
     grout: GROUTS[0],
     view: VIEWS[0].label,
     combinations: [],
@@ -848,6 +868,19 @@
   }
 
   /**
+   * How the theme reaches the brief. "Let De'vyora Decide" is not a
+   * theme the model can look up, so it is spelled out as the absence of
+   * one rather than passed through as if it were a style name.
+   */
+  function themeBrief() {
+    if (state.theme === LET_STUDIO_THEME) {
+      return 'Theme: not specified \u2014 choose the one the room, the budget and the listed stock support best, and name it. Grout: '
+        + state.grout + '.';
+    }
+    return 'Theme: ' + state.theme + ', with ' + state.grout + ' grout.';
+  }
+
+  /**
    * One board per band when several are being compared, otherwise the
    * house default of two variations on the single band.
    */
@@ -895,7 +928,7 @@
         '<button class="chip mono' + (state.sizeMode === 'auto' ? ' selected' : '') + '" data-size-mode="auto">' + AUTO_SIZE.toUpperCase() + '</button>' +
         '</div>' +
         (state.sizeMode === 'custom' ? customSizeHtml() : '') +
-        (state.sizeMode === 'auto' ? '<p class="step-sub" style="margin-top:12px; font-size:13px">De\u2019vyora picks the module from the room, the palette and what the catalog actually stocks.</p>' : '') +
+        (state.sizeMode === 'auto' ? '<p class="step-sub" style="margin-top:12px; font-size:13px">De\u2019vyora picks the module from the room, the theme and what the catalog actually stocks.</p>' : '') +
         '<div class="section-lbl mono">SURFACE FINISH</div>' +
         '<div class="finish-grid">' + FINISHES.map((f) => {
           const sel = state.finish === f.label;
@@ -956,15 +989,20 @@
     if (state.step === 5) {
       body.innerHTML =
         '<div style="margin-top:clamp(18px,2vw,26px)">' +
-        '<div class="section-lbl mono" style="margin-top:0">PALETTE TEMPERATURE</div>' +
-        '<div class="palette-grid">' + PALETTES.map((p) => {
-          const sel = state.palette === p.label;
-          return '<button class="palette-card' + (sel ? ' selected' : '') + '" data-palette="' + p.label + '"><span class="swatch-row">' + p.sw.map((c) => '<span class="swatch" style="background:' + c + '"></span>').join('') + '</span><span class="pl">' + p.label + '</span><span class="ps mono">' + p.spec + '</span></button>';
+        '<div class="section-lbl mono" style="margin-top:0">DESIGN THEME</div>' +
+        '<div class="palette-grid">' + THEMES.map((p) => {
+          const sel = state.theme === p.label;
+          // The studio-decides card carries no swatches: naming colours
+          // for it would promise a palette that has not been chosen yet.
+          const swatches = p.sw.length
+            ? '<span class="swatch-row">' + p.sw.map((c) => '<span class="swatch" style="background:' + c + '"></span>').join('') + '</span>'
+            : '';
+          return '<button class="palette-card' + (sel ? ' selected' : '') + '" data-palette="' + escapeHtml(p.label) + '">' + swatches + '<span class="pl">' + escapeHtml(p.label) + '</span><span class="ps mono">' + p.spec + '</span></button>';
         }).join('') + '</div>' +
         '<div class="section-lbl mono">GROUT TONE</div>' +
         '<div class="chip-row">' + GROUTS.map((g) => '<button class="chip mono' + (state.grout === g ? ' selected' : '') + '" data-grout="' + g + '">' + g + '</button>').join('') + '</div>' +
         '</div>';
-      body.querySelectorAll('[data-palette]').forEach((btn) => btn.addEventListener('click', () => { state.palette = btn.dataset.palette; render(); }));
+      body.querySelectorAll('[data-palette]').forEach((btn) => btn.addEventListener('click', () => { state.theme = btn.dataset.palette; render(); }));
       body.querySelectorAll('[data-grout]').forEach((btn) => btn.addEventListener('click', () => { state.grout = btn.dataset.grout; render(); }));
       return;
     }
@@ -973,7 +1011,7 @@
       const summary = [
         ['ROOM', state.room || '—'], ['FEATURE WALL', featureText()], ['FLOOR MODULE', sizeText()],
         ['FINISH', state.finish], ['BUDGET', budgetText()],
-        ['PALETTE', state.palette], ['GROUT', state.grout], ['CAMERA', state.view],
+        ['THEME', state.theme], ['GROUT', state.grout], ['CAMERA', state.view],
       ];
       body.innerHTML = '<div class="summary-card" style="margin-top:clamp(18px,2vw,26px)">' +
         summary.map(([k, v]) => '<div class="summary-row"><span class="k mono">' + k + '</span><span class="v">' + v + '</span></div>').join('') +
@@ -1002,7 +1040,7 @@
         ? 'Choose the floor tile module yourself, from what the catalog stocks, in a ' + state.finish + ' finish.'
         : 'Use ' + sizeText() + ' floor tiles in a ' + state.finish + ' finish.'),
       budgetBrief(),
-      'Palette: ' + state.palette + ', with ' + state.grout + ' grout.',
+      themeBrief(),
       'Client view requested for the handout: ' + state.view + '.',
     ].join(' ');
   }
@@ -1015,7 +1053,7 @@
       const payload = {
         text: buildBriefText(),
         room: state.room,
-        style: state.palette,
+        style: state.theme,
         budget: budgetBrief(),
         combinationCount: boardCount(),
       };
@@ -1070,7 +1108,7 @@
       state.visualizations = {};
       state.expandedProducts = {};
       state.room = board.room;
-      state.palette = board.style;
+      state.theme = board.style;
 
       if (state.combinations.length === 0) {
         state.errorMessage = 'This saved project has no combinations.';
@@ -1158,8 +1196,8 @@
   function renderResults() {
     const main = document.getElementById('mainContent');
     const specLine = state.viewOnly
-      ? state.room + ' · ' + state.palette + (state.loadedBoard && state.loadedBoard.clientBrief ? ' — ' + state.loadedBoard.clientBrief : '')
-      : state.room + ' · ' + state.palette + ' · ' + budgetText() + ' · ' + sizeText() + ' · ' + featureText() + ' · ' + state.view;
+      ? state.room + ' · ' + state.theme + (state.loadedBoard && state.loadedBoard.clientBrief ? ' — ' + state.loadedBoard.clientBrief : '')
+      : state.room + ' · ' + state.theme + ' · ' + budgetText() + ' · ' + sizeText() + ' · ' + featureText() + ' · ' + state.view;
 
     const iterateBoxHtml = state.viewOnly
       ? '<div class="iterate-box"><h3 class="serif" style="margin:0; font-size:clamp(20px,2vw,26px)">Saved project</h3><p style="margin:8px 0 0; font-size:14px; color:var(--text2); line-height:1.55">Viewing a previously saved mood board.</p><div class="iterate-actions"><button class="btn-dashed mono" id="backToProjectsBtn">← BACK TO PROJECTS</button></div></div>'
@@ -1617,11 +1655,11 @@
 
     // The client's choices, so the scene is built from them rather than a
     // generic "luxury bathroom". A reopened board only has its room and
-    // palette saved -- every other wizard field would be its default, not
+    // theme saved -- every other wizard field would be its default, not
     // the client's pick -- so those are sent only for a board built here.
     const requirements = {
       room: state.room,
-      style: state.palette,
+      style: state.theme,
       combination_name: combo.board_name,
     };
     if (!state.viewOnly) {
