@@ -251,6 +251,30 @@
   .mb-name { display:block; font-size:13px; font-weight:500; line-height:1.35; word-break:break-word; }
   .mb-size { display:block; margin-top:5px; font-size:9.5px; letter-spacing:.1em; color:var(--muted); }
   .mb-grout { padding-top:14px; border-top:1px solid var(--line); text-align:center; font-size:10px; letter-spacing:.12em; color:var(--muted); }
+  /* Board size + export. The preview below is a true-to-ratio frame, so
+     what the client sees is the shape the PDF comes out at. */
+  .mb-sizes { display:flex; flex-wrap:wrap; gap:8px; }
+  .mb-size-chip { padding:8px 12px; border-radius:100px; border:1px solid var(--line); background:var(--card); cursor:pointer; font-size:10px; letter-spacing:.1em; color:#4A4038; }
+  .mb-size-chip:hover { background:#F1EADD; }
+  .mb-size-chip.selected { background:var(--ink); color:#FBF6EC; border-color:var(--ink); }
+  .mb-export-row { display:flex; flex-wrap:wrap; align-items:center; gap:12px; }
+  .mb-export-note { font-size:10px; letter-spacing:.1em; color:var(--muted); }
+  .mb-export-error { flex:1 1 100%; font-size:10px; letter-spacing:.08em; color:#8A3A2E; }
+  .mb-board { width:100%; background:#FBF6EC; border:1px solid var(--line); border-radius:14px; padding:clamp(10px,1.4vw,18px); display:flex; flex-direction:column; gap:clamp(8px,1vw,14px); overflow:hidden; }
+  .mb-board-head { display:flex; justify-content:space-between; gap:10px; font-size:9px; letter-spacing:.16em; color:var(--muted); }
+  .mb-board-scene { flex:1 1 auto; min-height:0; border-radius:10px; overflow:hidden; background:#EFE7DA; display:flex; align-items:center; justify-content:center; }
+  .mb-board-scene img { width:100%; height:100%; object-fit:contain; }
+  .mb-board-scene p { margin:0; padding:10px; font-size:11px; color:var(--muted); text-align:center; }
+  /* A fixed share of the board, so a wide 10x4 strip cannot let square
+     product shots eat the height the bathroom scene needs. The shots
+     fill whatever cell they get and contain their image, so nothing is
+     stretched at any ratio. Mirrors the 56/44 split the PDF uses. */
+  .mb-board-tiles { flex:0 0 40%; min-height:0; display:grid; gap:clamp(6px,0.8vw,12px); }
+  .mb-board-tile { min-width:0; min-height:0; display:flex; flex-direction:column; gap:4px; }
+  .mb-board-shot { flex:1 1 auto; min-height:0; border-radius:8px; overflow:hidden; background:#fff; border:1px solid var(--line); }
+  .mb-board-shot img { width:100%; height:100%; object-fit:contain; }
+  .mb-board-cap { min-width:0; font-size:8.5px; line-height:1.3; color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .mb-board-cap b { display:block; font-weight:500; letter-spacing:.14em; font-size:7.5px; color:#B08D4E; }
   .viz-lightbox-close { position:absolute; top:16px; right:20px; background:transparent; border:none; color:#FBF6EC; font-size:26px; line-height:1; cursor:pointer; }
 
   /* ---- shared ---- */
@@ -474,6 +498,20 @@
 
   const GROUTS = ['Ivory Matte', 'Sand Tone', 'Charcoal'];
 
+  // THE MOOD BOARD SIZES, in feet.
+  //
+  // A closed set, matching BOARD_SIZES_FT in the backend validator: the
+  // client picks a physical panel, and the PDF is produced at exactly
+  // that size (1 ft = 12 in = 864 pt). No free-text size, because a
+  // number nobody prints is not an option worth offering.
+  const BOARD_SIZES = [
+    { w: 2, h: 2 }, { w: 2, h: 4 }, { w: 4, h: 2 }, { w: 4, h: 4 }, { w: 4, h: 6 },
+    { w: 6, h: 4 }, { w: 8, h: 4 }, { w: 9, h: 4 }, { w: 10, h: 4 },
+  ];
+
+  function boardSizeKey(size) { return size.w + 'x' + size.h; }
+  function boardSizeLabel(size) { return size.w + ' ft \u00D7 ' + size.h + ' ft'; }
+
   const VIEWS = [
     { label: 'Front Elevation', desc: 'Straight-on wall for like-for-like comparison.' },
     { label: 'Vanity Close-Up', desc: 'Tight crop on the basin and feature return.' },
@@ -525,6 +563,12 @@
     // through budgetText().
     budgets: [BUDGETS[0]],
     theme: THEMES[0].label,
+    // The mood board panel's physical size. Held on the wizard's state,
+    // not on the panel, so closing and reopening the panel -- or moving
+    // between combinations -- keeps what was chosen.
+    boardSize: BOARD_SIZES[3],
+    exporting: false,
+    exportError: '',
     grout: GROUTS[0],
     view: VIEWS[0].label,
     combinations: [],
@@ -1408,6 +1452,70 @@
       '</figure>';
   }
 
+  /**
+   * How many products sit side by side on the board. Mirrors
+   * tileColumns() in moodBoardPdf.service.ts exactly -- the preview has
+   * to be the shape the PDF comes out at, so the rule lives in one form
+   * on each side and nowhere else.
+   */
+  function boardColumns(size, tileCount) {
+    if (tileCount <= 1) return 1;
+    return Math.max(1, Math.min(tileCount, Math.round((size.w / size.h) * 2)));
+  }
+
+  /**
+   * The board at true proportions: the generated scene on top, the
+   * products it was built from below. aspect-ratio does the work, so
+   * nothing inside is stretched -- every image is object-fit:contain.
+   */
+  function moodBoardPreviewHtml(index) {
+    const combo = state.combinations[index];
+    if (!combo) return '';
+
+    const size = state.boardSize;
+    const viz = vizStateFor(index);
+    const cols = boardColumns(size, combo.tiles.length);
+
+    const scene = viz.status === 'success' && viz.imageUrl
+      ? '<img src="' + viz.imageUrl + '" alt="Generated bathroom scene">'
+      : '<p>The generated bathroom scene sits here. Render it above and it appears on the board and in the PDF.</p>';
+
+    const tiles = combo.tiles.map((tileRef) => {
+      const detail = state.tilesById[tileRef.tileId];
+      const name = (detail && detail.name) || tileRef.name || 'Tile unavailable';
+      const sizeText = formatTileSize(detail && detail.size);
+      const shot = detail && detail.imageUrl
+        ? '<img src="' + CasaApi.resolveBackendImageUrl(detail.imageUrl) + '" alt="">'
+        : '';
+      return '<div class="mb-board-tile">' +
+        '<div class="mb-board-shot">' + shot + '</div>' +
+        '<div class="mb-board-cap"><b>' + escapeHtml(String(tileRef.role || '').toUpperCase()) + '</b>' +
+        escapeHtml(name) + (sizeText ? ' \u00B7 ' + escapeHtml(sizeText) : '') + '</div>' +
+        '</div>';
+    }).join('');
+
+    return '<div class="mb-board" id="moodBoardPreview" style="aspect-ratio:' + size.w + '/' + size.h + '">' +
+      '<div class="mb-board-head mono"><span>' + escapeHtml(combo.board_name) + '</span><span>' + boardSizeLabel(size) + '</span></div>' +
+      '<div class="mb-board-scene">' + scene + '</div>' +
+      '<div class="mb-board-tiles" style="grid-template-columns:repeat(' + cols + ',minmax(0,1fr))">' + tiles + '</div>' +
+      '</div>';
+  }
+
+  function moodBoardSizesHtml() {
+    return '<div class="mb-sizes">' + BOARD_SIZES.map((size) =>
+      '<button class="mb-size-chip mono' + (boardSizeKey(size) === boardSizeKey(state.boardSize) ? ' selected' : '') +
+      '" data-board-size="' + boardSizeKey(size) + '">' + boardSizeLabel(size) + '</button>').join('') + '</div>';
+  }
+
+  function moodBoardExportHtml() {
+    return '<div class="mb-export-row">' +
+      '<button class="btn-amber mono" id="moodBoardExport"' + (state.exporting ? ' disabled' : '') + '>' +
+      (state.exporting ? 'BUILDING PDF\u2026' : '\u21E9 EXPORT PDF') + '</button>' +
+      '<span class="mb-export-note mono">' + boardSizeLabel(state.boardSize).toUpperCase() + ' PAGE</span>' +
+      (state.exportError ? '<span class="mb-export-error mono">' + escapeHtml(state.exportError) + '</span>' : '') +
+      '</div>';
+  }
+
   function moodBoardSceneHtml(index) {
     const v = vizStateFor(index);
 
@@ -1441,6 +1549,127 @@
     if (!host) return;
     host.innerHTML = moodBoardSceneHtml(index);
     wireMoodBoardScene(index);
+    // The board carries the same scene, so it repaints with it.
+    renderMoodBoardBoard(index);
+  }
+
+  /**
+   * Repaints the size row, the preview and the export button. Changing
+   * the size only redraws these -- it never touches the scene or the
+   * chosen products, so no image is regenerated and no combination
+   * changes.
+   */
+  function renderMoodBoardBoard(index) {
+    if (state.moodBoardIndex !== index) return;
+    const sizes = document.getElementById('moodBoardSizes');
+    const preview = document.getElementById('moodBoardPreviewHost');
+    const exportHost = document.getElementById('moodBoardExportHost');
+    if (!sizes || !preview || !exportHost) return;
+
+    sizes.innerHTML = moodBoardSizesHtml();
+    preview.innerHTML = moodBoardPreviewHtml(index);
+    exportHost.innerHTML = moodBoardExportHtml();
+    wireMoodBoardBoard(index);
+  }
+
+  function wireMoodBoardBoard(index) {
+    document.querySelectorAll('[data-board-size]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const picked = BOARD_SIZES.find((size) => boardSizeKey(size) === btn.dataset.boardSize);
+        if (!picked) return;
+        state.boardSize = picked;
+        state.exportError = '';
+        renderMoodBoardBoard(index);
+      });
+    });
+
+    const exportBtn = document.getElementById('moodBoardExport');
+    if (exportBtn) exportBtn.addEventListener('click', () => exportMoodBoardPdf(index));
+  }
+
+  /**
+   * Builds the PDF on the server, where the catalog's images can be
+   * fetched without the browser's cross-origin rules tainting a canvas,
+   * and at the exact page size in points.
+   *
+   * state.exporting gates the button, so a second click while one
+   * export is in flight cannot start another.
+   */
+  async function exportMoodBoardPdf(index) {
+    if (state.exporting) return;
+
+    const combo = state.combinations[index];
+    if (!combo) return;
+
+    state.exporting = true;
+    state.exportError = '';
+    renderMoodBoardBoard(index);
+
+    try {
+      const viz = vizStateFor(index);
+      const payload = {
+        boardName: combo.board_name || 'Mood board',
+        widthFt: state.boardSize.w,
+        heightFt: state.boardSize.h,
+        tiles: combo.tiles.map((tileRef) => {
+          const detail = state.tilesById[tileRef.tileId] || {};
+          const tile = { role: String(tileRef.role || ''), name: detail.name || tileRef.name || 'Tile' };
+          if (detail.brandName) tile.brandName = detail.brandName;
+          if (detail.size) tile.size = detail.size;
+          if (detail.colorTone) tile.colorTone = detail.colorTone;
+          const image = absoluteUrl(CasaApi.resolveBackendImageUrl(detail.imageUrl));
+          if (image) tile.imageUrl = image;
+          return tile;
+        }),
+      };
+      if (combo.reason_for_selection) payload.brief = combo.reason_for_selection.slice(0, 600);
+      if (combo.grout_recommendation) payload.grout = combo.grout_recommendation;
+      const scene = viz.status === 'success' ? absoluteUrl(viz.imageUrl) : '';
+      if (scene) payload.sceneImageUrl = scene;
+
+      const blob = await CasaApi.moodBoards.exportPdf(payload);
+      downloadBlob(blob, slugify(payload.boardName) + '-' + state.boardSize.w + 'x' + state.boardSize.h + 'ft.pdf');
+    } catch (err) {
+      state.exportError = (err && err.message) || 'Could not build the PDF.';
+    } finally {
+      state.exporting = false;
+      renderMoodBoardBoard(index);
+    }
+  }
+
+  /**
+   * An address the SERVER can fetch.
+   *
+   * A page-relative path is no use to it, so this absolutises against
+   * the current page. Anything that is not http(s) after that -- a
+   * data: or blob: image, which only means something inside this tab --
+   * is dropped rather than posted, and the renderer draws its labelled
+   * swatch instead.
+   */
+  function absoluteUrl(url) {
+    if (!url) return '';
+    try {
+      const resolved = new URL(url, location.href).href;
+      return /^https?:/i.test(resolved) ? resolved : '';
+    } catch (err) {
+      return '';
+    }
+  }
+
+  function slugify(value) {
+    return String(value).replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'mood-board';
+  }
+
+  function downloadBlob(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    // Revoked on the next tick so the click has taken the URL first.
+    setTimeout(() => URL.revokeObjectURL(url), 0);
   }
 
   function wireMoodBoardScene(index) {
@@ -1489,6 +1718,10 @@
       '<div id="moodBoardScene">' + moodBoardSceneHtml(index) + '</div>' +
       '<div class="mb-lbl mono">SPECIFIED TILES (' + combo.tiles.length + ')</div>' +
       '<div class="mb-grid">' + combo.tiles.map(moodBoardTileHtml).join('') + '</div>' +
+      '<div class="mb-lbl mono">MOOD BOARD SIZE</div>' +
+      '<div id="moodBoardSizes">' + moodBoardSizesHtml() + '</div>' +
+      '<div id="moodBoardPreviewHost">' + moodBoardPreviewHtml(index) + '</div>' +
+      '<div id="moodBoardExportHost">' + moodBoardExportHtml() + '</div>' +
       (combo.grout_recommendation ? '<div class="mb-grout mono">GROUT: ' + escapeHtml(combo.grout_recommendation) + '</div>' : '') +
       '</div>' +
       '</section>';
@@ -1500,6 +1733,7 @@
 
     document.getElementById('moodBoardClose').addEventListener('click', closeMoodBoard);
     wireMoodBoardScene(index);
+    wireMoodBoardBoard(index);
 
     // Each plate opens its own tile full size. A plate showing only a
     // product code has no image to open, so it stays inert rather than

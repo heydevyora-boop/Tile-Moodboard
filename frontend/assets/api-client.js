@@ -1208,6 +1208,50 @@
   // ============================================================
 
   const moodBoards = {
+    /**
+     * The mood board as a PDF, at the chosen physical size.
+     *
+     * Not routed through apiFetch because that parses JSON; this
+     * response is the file itself. The session handling is the same --
+     * ensureSession first, so the Authorization header carries a token
+     * that is actually current.
+     */
+    async exportPdf(payload) {
+      await auth.ensureSession();
+
+      const res = await fetch(
+        `${API_BASE}/mood-boards/export-pdf`,
+        {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(getAccessToken()
+              ? { Authorization: `Bearer ${getAccessToken()}` }
+              : {})
+          },
+          body: JSON.stringify(payload)
+        }
+      );
+
+      if (!res.ok) {
+        // An error here is JSON, whatever the success case returns.
+        const problem =
+          await res
+            .json()
+            .catch(() => ({}));
+
+        throw new ApiError(
+          (problem &&
+            problem.message) ||
+            `Could not build the PDF (${res.status})`,
+          res.status
+        );
+      }
+
+      return res.blob();
+    },
+
     generate(payload) {
       return apiFetch(
         '/mood-boards/generate',

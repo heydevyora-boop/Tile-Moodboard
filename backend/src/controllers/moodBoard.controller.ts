@@ -12,12 +12,44 @@ import {
   ListMoodBoardsQuery,
   MoodBoardTileLookupQuery,
   RespondToSharedMoodBoardInput,
+  ExportMoodBoardPdfInput,
 } from '@validators/moodBoard.validators';
+import { renderMoodBoardPdf } from '@services/moodBoardPdf.service';
 
 function requireActorId(req: Request): string {
   if (!req.user) throw AppError.unauthorized('Authentication required');
   return req.user.id;
 }
+
+/**
+ * The open mood board as a PDF at the chosen physical size.
+ *
+ * Takes the board in the request rather than an id because the results
+ * page shows combinations that have not been saved yet -- /generate is
+ * stateless, so there is frequently no row to export from. Nothing is
+ * written here either: it reads the posted board, draws it, and streams
+ * the bytes back.
+ */
+export const exportPdf = catchAsync(async (req: Request, res: Response) => {
+  const input = req.body as ExportMoodBoardPdfInput;
+  const pdf = await renderMoodBoardPdf({
+    boardName: input.boardName,
+    brief: input.brief,
+    grout: input.grout,
+    widthFt: input.widthFt,
+    heightFt: input.heightFt,
+    sceneImageUrl: input.sceneImageUrl,
+    tiles: input.tiles,
+  });
+
+  const filename = input.boardName.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'mood-board';
+
+  res.status(200);
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}-${input.widthFt}x${input.heightFt}ft.pdf"`);
+  res.setHeader('Content-Length', String(pdf.byteLength));
+  res.end(Buffer.from(pdf));
+});
 
 export const generate = catchAsync(async (req: Request, res: Response) => {
   const input = req.body as GenerateBriefInput;
