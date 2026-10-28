@@ -37,6 +37,21 @@ export const exportMoodBoardPdfSchema = z
     widthFt: z.coerce.number().positive(),
     heightFt: z.coerce.number().positive(),
     sceneImageUrl: z.string().trim().url().max(2000).optional(),
+    /*
+     * The generated scene's own bytes, for the usual case where it has
+     * no address this server could fetch -- Python embeds it as a data:
+     * URL and that is all the browser ever holds.
+     *
+     * The cap is the same 6 MB of characters the visualization route
+     * already allows for one of these, and sits under the 10 MB request
+     * body limit in app.ts with the board's own payload to spare.
+     */
+    sceneImage: z
+      .string()
+      .trim()
+      .max(6 * 1024 * 1024)
+      .regex(/^data:image\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/\r\n]+={0,2}$/i, 'sceneImage must be a base64 image data URL')
+      .optional(),
     tiles: z
       .array(
         z.object({

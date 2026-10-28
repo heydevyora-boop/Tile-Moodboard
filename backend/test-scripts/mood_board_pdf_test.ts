@@ -196,6 +196,69 @@ async function main() {
   await renderMoodBoardPdf(input);
   check('26. One export fetches each image once (4 URLs, 1 of them 404)', requests - before === 4, requests - before);
 
+  // ── 27. the scene the generator actually hands back ───────────────
+  //
+  // Not a URL. Node and Python run as separate functions with no shared
+  // disk, so Python embeds the image it just wrote as a data: URL, and
+  // that -- not an address -- is what the browser holds. The board came
+  // back saying no scene had been rendered for a combination whose scene
+  // was on screen, because a data: URL cannot be fetched from here.
+  const PLACEHOLDER = 'No bathroom scene has been rendered';
+
+  const pngScene = `data:image/png;base64,${imageBytes(1024, 576, 'image/png').toString('base64')}`;
+  const inlineBefore = requests;
+  const inline = Buffer.from(await renderMoodBoardPdf({
+    ...input, sceneImageUrl: undefined, sceneImage: pngScene,
+  }));
+  const inlineRaw = inline.toString('latin1');
+  const inlineWidths = [...inlineRaw.matchAll(/\/Width (\d+)/g)].map((m) => Number(m[1]));
+  const inlineHeights = [...inlineRaw.matchAll(/\/Height (\d+)/g)].map((m) => Number(m[1]));
+  const inlineDrawn = visibleText(inline);
+
+  check('27. An inline scene is embedded at its own 1024x576 pixels',
+    inlineWidths.includes(1024) && inlineHeights.includes(576), { inlineWidths, inlineHeights });
+  check('28. ...and the "no scene" placeholder is NOT drawn over it',
+    !inlineDrawn.includes(PLACEHOLDER), inlineDrawn.slice(0, 300));
+  check('29. ...and nothing was fetched to do it', requests - inlineBefore === 3, requests - inlineBefore);
+
+  // The placeholder must still appear when there genuinely is no scene,
+  // or check 28 would pass for the wrong reason.
+  check('30. The placeholder still appears when no scene was generated',
+    visibleText(Buffer.from(await renderMoodBoardPdf({ ...input, sceneImageUrl: undefined }))).includes(PLACEHOLDER));
+
+  const jpegScene = `data:image/jpeg;base64,${imageBytes(900, 900, 'image/jpeg').toString('base64')}`;
+  const inlineJpeg = Buffer.from(await renderMoodBoardPdf({ ...input, sceneImageUrl: undefined, sceneImage: jpegScene }));
+  check('31. An inline JPEG scene keeps its own encoding',
+    inlineJpeg.toString('latin1').includes('DCTDecode')
+    && !visibleText(inlineJpeg).includes(PLACEHOLDER));
+
+  const webpScene = `data:image/webp;base64,${imageBytes(700, 700, 'image/webp').toString('base64')}`;
+  const inlineWebp = Buffer.from(await renderMoodBoardPdf({ ...input, sceneImageUrl: undefined, sceneImage: webpScene }));
+  check('32. An inline WebP scene is re-encoded rather than dropped',
+    inlineWebp.toString('latin1').includes('/Width 700') && !visibleText(inlineWebp).includes(PLACEHOLDER));
+
+  check('33. Mangled inline bytes cost the scene, not the board',
+    visibleText(Buffer.from(await renderMoodBoardPdf({
+      ...input, sceneImageUrl: undefined, sceneImage: 'data:image/png;base64,bm90YW5pbWFnZQ==',
+    }))).includes(PLACEHOLDER));
+
+  // A real URL must keep working: Drive gives one when it is connected.
+  check('34. A fetchable scene URL still wins when there is no inline copy',
+    !visibleText(Buffer.from(await renderMoodBoardPdf({ ...input, sceneImage: undefined }))).includes(PLACEHOLDER));
+
+  // ── 35. what the route will accept ────────────────────────────────
+  check('35. The validator accepts a base64 image data URL',
+    exportMoodBoardPdfSchema.safeParse({ ...body, sceneImage: pngScene }).success,
+    exportMoodBoardPdfSchema.safeParse({ ...body, sceneImage: pngScene }).error?.issues);
+  check('36. ...and refuses one that is not an image',
+    !exportMoodBoardPdfSchema.safeParse({ ...body, sceneImage: 'data:text/html;base64,PHNjcmlwdD4=' }).success);
+  check('37. ...and refuses a plain string',
+    !exportMoodBoardPdfSchema.safeParse({ ...body, sceneImage: 'http://example.com/a.png' }).success);
+  check('38. ...and refuses one past the 6 MB cap',
+    !exportMoodBoardPdfSchema.safeParse({ ...body, sceneImage: `data:image/png;base64,${'A'.repeat(6 * 1024 * 1024 + 8)}` }).success);
+  check('39. A board with no inline scene is still valid',
+    exportMoodBoardPdfSchema.safeParse(body).success);
+
   server.close();
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
