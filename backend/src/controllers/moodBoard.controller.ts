@@ -39,6 +39,7 @@ export const exportPdf = catchAsync(async (req: Request, res: Response) => {
     widthFt: input.widthFt,
     heightFt: input.heightFt,
     sceneImageUrl: input.sceneImageUrl,
+    sceneImage: input.sceneImage,
     tiles: input.tiles,
   });
 

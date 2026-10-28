@@ -35,6 +35,21 @@ export interface MoodBoardPdfInput {
   widthFt: number;
   heightFt: number;
   sceneImageUrl?: string | null;
+  /**
+   * The generated scene's own bytes, as a data: URL.
+   *
+   * Needed because the generator does not hand back an address this
+   * server can fetch. On Vercel, Node and Python run as separate
+   * functions with no shared disk, so Python embeds the image it just
+   * wrote as a data: URL and that is what reaches the browser (see
+   * python-ai.service.ts). A data: URL means something only inside the
+   * tab holding it -- fetching it from here is not possible -- so the
+   * browser posts the bytes instead, and they are embedded directly.
+   *
+   * sceneImageUrl still covers the case where the scene DOES have a
+   * fetchable address, which is what Drive gives when it is connected.
+   */
+  sceneImage?: string | null;
   tiles: MoodBoardPdfTile[];
 }
 
@@ -70,28 +85,48 @@ async function toEmbeddablePng(bytes: Uint8Array): Promise<Uint8Array> {
   return new Uint8Array(canvas.toBuffer('image/png'));
 }
 
+/** The bytes behind a data: URL, or null when it is not one this can read. */
+function inlineBytes(source: string): Uint8Array | null {
+  const comma = source.indexOf(',');
+  if (comma < 0) return null;
+  const header = source.slice(0, comma);
+  if (!/^data:image\/[a-z0-9.+-]+;base64$/i.test(header)) return null;
+
+  const bytes = new Uint8Array(Buffer.from(source.slice(comma + 1), 'base64'));
+  if (bytes.length === 0 || bytes.length > MAX_IMAGE_BYTES) return null;
+  return bytes;
+}
+
+/** The bytes behind an http(s) URL, or null when it cannot be read. */
+async function fetchedBytes(url: string): Promise<Uint8Array | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    if (!response.ok) return null;
+    const buffer = await response.arrayBuffer();
+    if (buffer.byteLength === 0 || buffer.byteLength > MAX_IMAGE_BYTES) return null;
+    return new Uint8Array(buffer);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /**
- * Reads one image URL. Returns null rather than throwing: a single
- * unreachable thumbnail must not cost the client their whole board, and
- * the caller falls back to a labelled swatch for it.
+ * Reads one image -- either an http(s) address to fetch, or a data: URL
+ * whose bytes are already here. Returns null rather than throwing: a
+ * single unreachable thumbnail must not cost the client their whole
+ * board, and the caller falls back to a labelled swatch for it.
  */
-async function embedImage(doc: PDFDocument, url: string | null | undefined): Promise<PDFImage | null> {
-  if (!url || !/^https?:\/\//i.test(url)) return null;
+async function embedImage(doc: PDFDocument, source: string | null | undefined): Promise<PDFImage | null> {
+  if (!source) return null;
 
   try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-
-    let bytes: Uint8Array;
-    try {
-      const response = await fetch(url, { signal: controller.signal });
-      if (!response.ok) return null;
-      const buffer = await response.arrayBuffer();
-      if (buffer.byteLength === 0 || buffer.byteLength > MAX_IMAGE_BYTES) return null;
-      bytes = new Uint8Array(buffer);
-    } finally {
-      clearTimeout(timer);
-    }
+    let bytes: Uint8Array | null;
+    if (/^data:/i.test(source)) bytes = inlineBytes(source);
+    else if (/^https?:\/\//i.test(source)) bytes = await fetchedBytes(source);
+    else return null;
+    if (!bytes) return null;
 
     const kind = imageKind(bytes);
     if (kind === 'jpg') return await doc.embedJpg(bytes);
@@ -183,7 +218,7 @@ export async function renderMoodBoardPdf(input: MoodBoardPdfInput): Promise<Uint
   const artworkH = artworkTop - artworkBottom;
 
   // ── the generated bathroom scene, on top ──────────────────────────
-  const scene = await embedImage(doc, input.sceneImageUrl);
+  const scene = await embedImage(doc, input.sceneImage || input.sceneImageUrl);
   const tiles = input.tiles.slice(0, 8);
   const sceneShare = tiles.length > 0 ? 0.56 : 0.98;
   const sceneH = artworkH * sceneShare;

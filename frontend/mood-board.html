@@ -630,6 +630,13 @@
     { w: 6, h: 4 }, { w: 8, h: 4 }, { w: 9, h: 4 }, { w: 10, h: 4 },
   ];
 
+  /*
+   * How much of a generated scene may be posted with an export, matching
+   * the cap the backend's exportMoodBoardPdfSchema accepts. A 1024px
+   * scene lands around 1.5-2.5 MB as base64, so this leaves headroom.
+   */
+  const MAX_INLINE_SCENE_CHARS = 6 * 1024 * 1024;
+
   function boardSizeKey(size) { return size.w + 'x' + size.h; }
   function boardSizeLabel(size) { return size.w + ' ft \u00D7 ' + size.h + ' ft'; }
 
@@ -1763,8 +1770,25 @@
       };
       if (combo.reason_for_selection) payload.brief = combo.reason_for_selection.slice(0, 600);
       if (combo.grout_recommendation) payload.grout = combo.grout_recommendation;
-      const scene = viz.status === 'success' ? absoluteUrl(viz.imageUrl) : '';
-      if (scene) payload.sceneImageUrl = scene;
+      /*
+       * The generated scene almost never has an address the server could
+       * fetch. Node and Python run as separate functions with no shared
+       * disk, so Python embeds the image it just wrote as a data: URL and
+       * that is what arrives here -- meaningful only inside this tab.
+       * Posting it as a URL therefore drew the renderer's "no bathroom
+       * scene" placeholder over a scene that had in fact been generated.
+       *
+       * So the bytes go up themselves, and the renderer embeds them. A
+       * fetchable address, which is what Drive gives when it is
+       * connected, still travels as a URL.
+       */
+      const sceneSource = viz.status === 'success' ? String(viz.imageUrl || '') : '';
+      if (/^data:image\//i.test(sceneSource)) {
+        if (sceneSource.length <= MAX_INLINE_SCENE_CHARS) payload.sceneImage = sceneSource;
+      } else {
+        const scene = absoluteUrl(sceneSource);
+        if (scene) payload.sceneImageUrl = scene;
+      }
 
       const blob = await CasaApi.moodBoards.exportPdf(payload);
       downloadBlob(blob, slugify(payload.boardName) + '-' + state.boardSize.w + 'x' + state.boardSize.h + 'ft.pdf');
