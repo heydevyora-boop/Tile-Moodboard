@@ -276,11 +276,13 @@
   .mb-grout { padding-top:14px; border-top:1px solid var(--line); text-align:center; font-size:10px; letter-spacing:.12em; color:var(--muted); }
   /* Board size + export. The preview below is a true-to-ratio frame, so
      what the client sees is the shape the PDF comes out at. */
-  .mb-sizes { display:flex; flex-wrap:wrap; gap:9px; }
-  /* 10px was too small to read at a glance against the rest of the
-     panel. 12px with a little more padding and slightly tighter
-     tracking reads clearly and keeps the chip the same shape. */
-  .mb-size-chip { padding:9px 15px; border-radius:100px; border:1px solid var(--line); background:var(--card); cursor:pointer; font-size:12px; letter-spacing:.08em; color:#4A4038; }
+  .mb-sizes { display:flex; flex-wrap:wrap; gap:10px; }
+  /* These started at 10px and 12px was still too small to read
+     comfortably. 15px is an ordinary control size, and the mono face
+     needs the tracking pulled right back at it -- letter-spacing is
+     what made the smaller sizes look thin and cramped rather than
+     simply small. The weight carries the label the tracking used to. */
+  .mb-size-chip { padding:11px 19px; border-radius:100px; border:1px solid var(--line); background:var(--card); cursor:pointer; font-size:15px; font-weight:500; letter-spacing:.02em; color:#4A4038; }
   .mb-size-chip:hover { background:#F1EADD; }
   .mb-size-chip.selected { background:var(--ink); color:#FBF6EC; border-color:var(--ink); }
   .mb-export-row { display:flex; flex-wrap:wrap; align-items:center; gap:12px; }
