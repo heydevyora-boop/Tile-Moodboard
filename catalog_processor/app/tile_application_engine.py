@@ -487,6 +487,12 @@ def build_tile_application_prompt(
     space = describe_space(room)
     selection_lines = []
 
+    # What to call the room in the prompts below. They said "bathroom"
+    # throughout, which contradicts IMAGE 1 whenever the client chose
+    # anything else -- an invitation to "correct" a kitchen back into a
+    # bathroom, on top of the room generator having drawn one already.
+    room_noun = space["noun"] if space else "bathroom"
+
     if space:
         selection_lines.append(f"- Space: {space['description']}.")
 
@@ -610,7 +616,7 @@ only the supplied material(s), on the surfaces assigned to them.
 
 TASK:
 {len(materials) + 1} images are supplied, in this order:
-  IMAGE 1 = the bathroom/interior scene.
+  IMAGE 1 = the {room_noun} scene.
 {material_block}
 
 Install ALL {len(materials)} supplied materials into IMAGE 1 together, each
@@ -637,7 +643,7 @@ highlight panel into pieces.
 {camera_section}
 REFERENCE PRIORITY:
 
-1. IMAGE 1 (the bathroom) is the source of truth for: architecture,
+1. IMAGE 1 (the {room_noun}) is the source of truth for: architecture,
    layout, fixtures, camera and lighting. Its EXISTING tiles are NOT
    any of the materials to use and must be replaced.
 
@@ -645,13 +651,10 @@ REFERENCE PRIORITY:
 
 DO NOT:
 - change room
+- change the room's purpose: IMAGE 1 is a {room_noun} and the result
+  must still be a {room_noun}
 - change layout
-- change fixtures
-- change sanitaryware
-- change vanity
-- change faucets
-- change shower
-- change mirrors
+- change fixtures, fittings or built-in furniture
 - change lighting
 {camera_do_not_line}- change room proportions
 - add furniture
@@ -678,10 +681,10 @@ TILE APPLICATION RULES:
 
 OUTPUT:
 
-Produce one photorealistic finished bathroom visualization showing all
+Produce one photorealistic finished {room_noun} visualization showing all
 {len(materials)} materials installed together.
 
-The result must look like a professionally photographed bathroom with
+The result must look like a professionally photographed {room_noun} with
 the selected tiles physically installed, not like a pasted image or
 flat texture.
 
@@ -710,7 +713,7 @@ only the supplied material(s), on the surfaces assigned to them.
 
 TASK:
 Two images are supplied, in this order:
-  IMAGE 1 = the bathroom/interior scene.
+  IMAGE 1 = the {room_noun} scene.
   IMAGE 2 = the EXACT selected catalog tile.
 
 Apply the EXACT tile shown in IMAGE 2 to the {surface_description}
@@ -721,14 +724,12 @@ of IMAGE 1.
 {camera_section}
 REFERENCE PRIORITY:
 
-1. IMAGE 1 (the bathroom) is the source of truth for:
+1. IMAGE 1 (the {room_noun}) is the source of truth for:
    - architecture
    - room dimensions
    - doors
    - windows
-   - sanitary fixtures
-   - vanity
-   - mirrors
+   - fixtures, fittings and built-in furniture
    - lighting
    - existing objects
 
@@ -750,14 +751,11 @@ REFERENCE PRIORITY:
 DO NOT redesign the room.
 
 DO NOT:
+- change the room's purpose: IMAGE 1 is a {room_noun} and the result
+  must still be a {room_noun}
 - move doors
 - move windows
-- move fixtures
-- move vanity
-- change basin
-- change faucets
-- change shower
-- change mirrors
+- move or change fixtures, fittings or built-in furniture
 - change lighting
 {camera_do_not_line}- change room proportions
 - add furniture
@@ -781,10 +779,10 @@ TILE APPLICATION RULES:
 
 OUTPUT:
 
-Produce one photorealistic finished bathroom visualization.
+Produce one photorealistic finished {room_noun} visualization.
 
 The result must look like a professionally photographed
-bathroom with the selected tile physically installed,
+{room_noun} with the selected tile physically installed,
 not like a pasted image or flat texture.
 
 It must read as an actual photograph of a real, physically
