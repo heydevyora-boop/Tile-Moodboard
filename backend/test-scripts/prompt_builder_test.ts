@@ -316,6 +316,51 @@ function main() {
     check('16. Non-array response throws instead of silently returning garbage', threw);
   }
 
+  // ── 30. the theme reaches the step that PICKS the tiles ───────────
+  //
+  // The brief named the theme and nothing more -- "Theme: Moroccan,
+  // with Ivory Matte grout." -- so the model had to recall what
+  // Moroccan means in order to choose tiles for it. The ranking engine
+  // scores against the theme already; the choice between what it ranks
+  // is made here, and here the theme was a word.
+  {
+    const themed = (style: string, room?: string) =>
+      buildPrompt('rules', sampleTiles, { text: 'brief', style, room }, 2).userPrompt;
+
+    const moroccan = themed('Moroccan', 'Kitchen & Dining');
+    check('30a. The theme description is in the prompt',
+      moroccan.includes('zellige') && moroccan.includes('cobalt-blue'), moroccan.slice(0, 200));
+    check('30b. ...introduced as the specification to read first',
+      moroccan.includes('What that theme asks for — read this before choosing anything'));
+    check('30c. ...and no other theme’s wording is present',
+      !/travertine|palm-leaf|oxblood|champagne-gold/i.test(moroccan));
+
+    // The descriptions are written for a bathroom. The part a TILE can
+    // carry is the surfaces; the fittings belong to whatever room was
+    // chosen, and the prompt has to separate the two or a kitchen board
+    // gets picked for a bathroom.
+    check('30d. Only the surfaces are claimed for the products',
+      moroccan.includes('Take the SURFACES from it'));
+    check('30e. ...and the fittings are handed back to the room',
+      moroccan.includes('belong to the room (Kitchen & Dining), not to the products'));
+
+    for (const [style, word] of [
+      ['British', 'oxblood'], ['Roman Touch', 'travertine'], ['Floral', 'blush-pink'],
+      ['Tropical', 'palm-leaf'], ['Geometrical', 'hexagons'], ['Metallic', 'champagne-gold'],
+      ['Rustic', 'ochre'], ['Black & White', 'charcoal'],
+    ] as const) {
+      check(`30f. ${style} carries its own description`,
+        themed(style).toLowerCase().includes(word), word);
+    }
+
+    check('30g. Every role must answer the theme, not just the decorated one',
+      moroccan.includes('Every role has to answer the theme'));
+    check('30h. A theme nobody offers adds no description at all',
+      !themed('Brutalist').includes('What that theme asks for'));
+    check('30i. ...and a brief with no theme is unchanged',
+      !buildPrompt('rules', sampleTiles, { text: 'brief' }, 2).userPrompt.includes('What that theme asks for'));
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail > 0 ? 1 : 0);
 }
