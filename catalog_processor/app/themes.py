@@ -1,7 +1,7 @@
 """
 themes.py
 
-The design themes the mood board offers, as the generator needs them.
+The design themes, as the IMAGE generator needs them.
 
 A theme reached the generator as a bare label. "Moroccan" was dropped
 into the room prompt as an adjective -- "a photorealistic luxury
@@ -9,150 +9,119 @@ moroccan bathroom interior" -- and that was the whole of it. The model
 was left to recall what Moroccan means, so the theme showed up as a
 colour wash and a lamp rather than as zellige, arches and brasswork.
 
-Two things are added here, and nothing else about the flow changes:
+Three things reach Gemini from here, and nothing else about the flow
+changes:
 
-  description   what the theme actually asks for, in the catalog
-                owner's own words. It goes into the prompt as text.
+  specification  what the theme asks for: its palette, its visual
+                 identity, the rules it must satisfy, the deviations it
+                 forbids, and the condition it is judged against. Sent
+                 as text.
 
-  references    photographs of real bathrooms in that theme. They go to
-                Gemini as IMAGE PARTS, because a filename communicates
-                nothing -- the point of a reference is that the model
-                LOOKS at it.
+  references     photographs of real bathrooms in that theme. Sent as
+                 IMAGE PARTS, because a filename communicates nothing --
+                 the point of a reference is that the model LOOKS at it.
 
-The labels are the ones in frontend/mood-board.html (THEMES), which is
-what the wizard sends as requirements.style. They are matched case- and
-separator-insensitively, so "Roman Touch", "ROMAN_TOUCH" and
-"roman-touch" are one theme.
+  checklist      the same mandatory rules, reused by the theme check
+                 that reads the finished image back.
 
-This file holds no palette, no swatch and no card art: those already
-exist in the wizard and in tileRecommendation.service.ts, and the
-generator does not read them. It holds only what Gemini is given.
+THE SOURCE OF TRUTH IS shared/themes.json, which the Node side reads
+too (backend/src/services/themes.service.ts) so the step that PICKS the
+tiles is held to the same specification as the step that draws them.
+Node and Python are separate functions on Vercel with no shared disk and
+no shared package -- they cannot import one module, but they can read
+one file, and vercel.json bundles it into both.
+
+This file holds no palette swatch and no card art: those already exist
+in the wizard and in tileRecommendation.service.ts, and the generator
+does not read them.
 """
 
+import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-ASSETS = Path(__file__).resolve().parent.parent / "assets" / "theme_references"
+ROOT = Path(__file__).resolve().parent.parent
+ASSETS = ROOT / "assets" / "theme_references"
+CONFIG = ROOT.parent / "shared" / "themes.json"
 
 
 def _key(value: Any) -> str:
-    """The same normalisation client_selections uses for its selections."""
+    """The same normalisation themes.service.ts uses, so one label cannot mean two things."""
     return " ".join(
-        str(value or "").replace("_", " ").replace("-", " ").replace("&", " and ").lower().split()
+        str(value or "")
+        .replace("_", " ")
+        .replace("-", " ")
+        .replace("&", " and ")
+        .lower()
+        .split()
     )
 
 
-# Every theme the wizard offers. `slug` names the folder under
-# assets/theme_references/; a theme with no folder simply has no
-# references, which the caller reports rather than papers over.
-THEMES: Dict[str, Dict[str, str]] = {
-    "british": {
-        "label": "British",
-        "palette": "Heritage Green, Oxblood & Brass",
-        "slug": "british",
-        "description": (
-            "A classic British heritage bathroom: deep forest-green tiles, rich "
-            "oxblood accents, antique brass fixtures and elegant Victorian "
-            "detailing. Vintage mirrors, refined patterns, and timeless luxury "
-            "with a sophisticated country-house aesthetic."
-        ),
-    },
-    "roman touch": {
-        "label": "Roman Touch",
-        "palette": "Travertine, Stone & Terracotta",
-        "slug": "roman-touch",
-        "description": (
-            "A Roman-inspired bathroom: warm travertine stone, natural limestone "
-            "textures, arched niches and sculptural stone basins. Subtle "
-            "terracotta accents, soft warm lighting and balanced architectural "
-            "proportions, for a luxurious Mediterranean spa feel."
-        ),
-    },
-    "floral": {
-        "label": "Floral",
-        "palette": "Blush, Sage & Ivory",
-        "slug": "floral",
-        "description": (
-            "A floral-inspired bathroom: delicate flower patterns, botanical "
-            "motifs, blush-pink surfaces, sage-green accents and ivory finishes. "
-            "Floral tiles or wallpaper carry the focal point, with elegant "
-            "fixtures and a soft, romantic, garden-inspired atmosphere."
-        ),
-    },
-    "tropical": {
-        "label": "Tropical",
-        "palette": "Palm, Teal & Sand",
-        "slug": "tropical",
-        "description": (
-            "A tropical bathroom: palm-leaf patterns, lush green plants, teal "
-            "accents and sand-toned natural stone. Organic textures, natural "
-            "wood and abundant greenery, for a fresh, relaxing resort-style "
-            "environment."
-        ),
-    },
-    "geometrical": {
-        "label": "Geometrical",
-        "palette": "Ivory, Graphite & Terracotta",
-        "slug": "geometrical",
-        "description": (
-            "A contemporary bathroom with bold geometric tiles, clean lines and "
-            "structured patterns in ivory, graphite and terracotta. Hexagons, "
-            "angular motifs or repeating shapes as feature elements, with visual "
-            "balance and a modern architectural aesthetic."
-        ),
-    },
-    "metallic": {
-        "label": "Metallic",
-        "palette": "Pearl, Gunmetal & Champagne",
-        "slug": "metallic",
-        "description": (
-            "A sophisticated metallic bathroom: pearl-toned surfaces, "
-            "champagne-gold fittings, gunmetal accents and subtle reflective "
-            "finishes. Elegant stone textures, sleek fixtures and carefully "
-            "balanced metallic detail, for a premium contemporary look."
-        ),
-    },
-    "rustic": {
-        "label": "Rustic",
-        "palette": "Natural Clay, Terracotta & Ochre",
-        "slug": "rustic",
-        "description": (
-            "An earthy rustic bathroom: terracotta tiles, natural clay textures, "
-            "ochre accents and warm wooden elements. Handmade finishes, organic "
-            "stone basins and imperfect natural textures, for an authentic, warm, "
-            "handcrafted aesthetic."
-        ),
-    },
-    "moroccan": {
-        "label": "Moroccan",
-        "palette": "Zellige, Cobalt & Saffron",
-        "slug": "moroccan",
-        "description": (
-            "A Moroccan-inspired bathroom: handcrafted zellige tiles, rich "
-            "cobalt-blue surfaces, saffron-yellow accents and decorative mosaic "
-            "patterns. Arched niches, intricate tilework and brass details, for a "
-            "vibrant, exotic, artisanal atmosphere."
-        ),
-    },
-    # Offered by the wizard, and the one theme with no photographs yet.
-    # It is here so the description still reaches Gemini; references_for
-    # returns nothing and the caller says so.
-    "black and white": {
-        "label": "Black & White",
-        "palette": "Ivory, Ash & Charcoal",
-        "slug": "black-white",
-        "description": (
-            "A monochrome bathroom in ivory, ash and charcoal: high contrast "
-            "between pale fields and dark detail, graphic borders or chequer "
-            "work, and fittings in a single finish. No third colour anywhere."
-        ),
-    },
-}
+def _load() -> Dict[str, Dict[str, Any]]:
+    """
+    The themes, read once.
+
+    A missing or unreadable file is LOUD but not fatal. Raising here
+    would take every visualization down, not just the theme -- and a
+    client who asked for a kitchen would get an error instead of a
+    kitchen. So it complains to the log and returns nothing, which puts
+    every theme on the path an unrecognised theme already takes: the
+    prompt says nothing about a theme rather than inventing one, and the
+    board still generates.
+
+    It must never fail silently. A generator that quietly knows no
+    themes produces exactly the generic bathroom this file exists to
+    prevent.
+    """
+    try:
+        with CONFIG.open(encoding="utf-8") as handle:
+            document = json.load(handle)
+    except (OSError, ValueError) as error:
+        print(
+            f"  [visualization] THE THEME CONFIGURATION IS UNUSABLE at {CONFIG}: {error}. "
+            "Every board will generate WITHOUT its theme until this is fixed. "
+            "On Vercel it is bundled by the includeFiles entry in vercel.json."
+        )
+        return {}
+
+    themes = document.get("themes")
+    if not isinstance(themes, dict) or not themes:
+        print(
+            f"  [visualization] THE THEME CONFIGURATION at {CONFIG} HAS NO THEMES. "
+            "Every board will generate without its theme until this is fixed."
+        )
+        return {}
+    return themes
 
 
-def describe_theme(theme: Any) -> Optional[Dict[str, str]]:
-    """The theme a selection names, or None when it names none."""
-    return THEMES.get(_key(theme))
+THEMES: Dict[str, Dict[str, Any]] = _load()
+
+
+def _index(themes: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    """
+    Every name a theme answers to.
+
+    The key is what the wizard's label normalises to. A theme may also
+    declare aliases, for an id that normalises differently -- "Black &
+    White" becomes "black and white", while its id `black_white` becomes
+    "black white", and both have to find the same theme.
+    """
+    index: Dict[str, Dict[str, Any]] = {}
+    for key, theme in themes.items():
+        index[key] = theme
+        index[_key(theme.get("id"))] = theme
+        for alias in theme.get("aliases", []):
+            index[_key(alias)] = theme
+    index.pop("", None)
+    return index
+
+
+_BY_NAME: Dict[str, Dict[str, Any]] = _index(THEMES)
+
+
+def describe_theme(theme: Any) -> Optional[Dict[str, Any]]:
+    """The theme a selection names, by label, id or alias; None when it names none."""
+    return _BY_NAME.get(_key(theme))
 
 
 def reference_images(theme: Any) -> List[Path]:
@@ -161,7 +130,7 @@ def reference_images(theme: Any) -> List[Path]:
 
     An empty list means this theme has no references on disk. That is a
     fact the caller has to state rather than hide: the request then goes
-    out with the description alone, and the prompt says so.
+    out with the specification alone, and the prompt says so.
     """
     found = describe_theme(theme)
     if not found:
@@ -171,20 +140,48 @@ def reference_images(theme: Any) -> List[Path]:
     if not folder.is_dir():
         return []
 
-    return sorted(p for p in folder.iterdir() if p.is_file() and p.suffix.lower() in {".webp", ".jpg", ".jpeg", ".png"})
+    return sorted(
+        path for path in folder.iterdir()
+        if path.is_file() and path.suffix.lower() in {".webp", ".jpg", ".jpeg", ".png"}
+    )
 
 
-def theme_brief(theme: Any) -> str:
+def theme_specification(theme: Any) -> str:
     """
-    The theme as prompt text: its name, its palette and what it asks for.
+    The theme as prompt text: everything the owner wrote about it.
 
-    Empty when the selection names no theme the generator knows -- the
-    caller then says nothing about the theme rather than inventing one.
+    Empty when the selection names no theme this knows -- the caller then
+    says nothing about the theme rather than inventing one.
     """
     found = describe_theme(theme)
     if not found:
         return ""
 
-    return (
-        f"{found['label']} -- {found['palette']}.\n{found['description']}"
-    )
+    lines = [
+        f"{found['label']} -- {found['palette']}.",
+        "",
+        found["identity"],
+        "",
+        "MANDATORY for this theme:",
+    ]
+    lines += [f"- {rule}" for rule in found["mandatory"]]
+    lines += ["", "FORBIDDEN in this theme -- none of these may appear:"]
+    lines += [f"- {item}" for item in found["avoid"]]
+    lines += ["", f"IT IS RIGHT WHEN: {found['success']}"]
+    return "\n".join(lines)
+
+
+def theme_checklist(theme: Any) -> List[str]:
+    """The mandatory rules on their own, for the check that reads the image back."""
+    found = describe_theme(theme)
+    return list(found["mandatory"]) if found else []
+
+
+# Kept so existing callers and tests keep working; theme_specification is
+# what the prompts use now.
+def theme_brief(theme: Any) -> str:
+    """The theme's name, palette and identity, without its rule lists."""
+    found = describe_theme(theme)
+    if not found:
+        return ""
+    return f"{found['label']} -- {found['palette']}.\n{found['identity']}"

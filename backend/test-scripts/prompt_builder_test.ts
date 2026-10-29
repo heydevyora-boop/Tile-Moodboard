@@ -346,7 +346,7 @@ function main() {
 
     for (const [style, word] of [
       ['British', 'oxblood'], ['Roman Touch', 'travertine'], ['Floral', 'blush-pink'],
-      ['Tropical', 'palm-leaf'], ['Geometrical', 'hexagons'], ['Metallic', 'champagne-gold'],
+      ['Tropical', 'palm-leaf'], ['Geometrical', 'hexagonal'], ['Metallic', 'champagne-gold'],
       ['Rustic', 'ochre'], ['Black & White', 'charcoal'],
     ] as const) {
       check(`30f. ${style} carries its own description`,
