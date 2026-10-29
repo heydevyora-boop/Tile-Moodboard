@@ -12,6 +12,7 @@ from app.client_selections import (
     tile_goes_on_floor,
     wants_no_feature_wall,
 )
+from app.themes import reference_images, theme_brief
 from app.output_paths import writable_output_root
 from typing import Any, Dict, Optional
 
@@ -210,6 +211,17 @@ def build_room_scene_prompt(
     space = describe_space(room)
     tiled = describe_surface_for_room(surface)
 
+    # THE THEME, AS WHAT IT ASKS FOR.
+    #
+    # It used to arrive as a bare label dropped in as an adjective --
+    # "a photorealistic luxury moroccan bathroom interior" -- and that
+    # was all. The model was left to recall what Moroccan means, so the
+    # theme came back as a colour wash and a lamp rather than zellige,
+    # arches and brasswork. The description says what it asks for, and
+    # the photographs are attached by generate_bathroom_scene below.
+    theme = theme_brief(requirements.get("style") or style_text)
+    references = reference_images(requirements.get("style") or style_text)
+
     selections = []
 
     if space:
@@ -320,6 +332,38 @@ def build_room_scene_prompt(
         f"{SECTION_SEPARATOR}\nTHIS REQUEST\n{SECTION_SEPARATOR}\n{request}"
     )
     parts.append(photograph)
+
+    if theme:
+        parts.append(
+            f"{SECTION_SEPARATOR}\nTHE SELECTED THEME\n{SECTION_SEPARATOR}\n"
+            f"{theme}\n\n"
+            "Read this in full before drawing anything. The theme has to be "
+            "recognisable from the WHOLE room -- its surfaces, its fittings, "
+            "its light and its proportions -- not from one ornament or a "
+            "colour wash over a generic interior. Someone shown the result "
+            "without being told the theme should be able to name it."
+        )
+
+        if references:
+            parts.append(
+                f"REFERENCE PHOTOGRAPHS: {len(references)} real bathrooms "
+                "in this theme are supplied with this request as images. LOOK at "
+                "them before drawing. They are the visual authority for this "
+                "theme's design language: its colour relationships, material "
+                "finishes, tile placement, fixtures, lighting and "
+                "architectural composition. Take the DESIGN from them and "
+                "design a new room -- do not copy any one of them, and do not "
+                "reproduce their tiles, which are not the client's products."
+            )
+        else:
+            # Said out loud rather than left implied: a prompt that
+            # talks about references it was never given is the failure
+            # this whole change exists to fix.
+            parts.append(
+                "REFERENCE PHOTOGRAPHS: none are available for this theme. "
+                "Work from the written description alone."
+            )
+
     if selections:
         parts.append(
             "CLIENT SELECTIONS FOR THIS ROOM:\n" + "\n".join(selections)
@@ -370,9 +414,48 @@ def generate_bathroom_scene(
         requirements,
     )
 
+    # THE THEME'S REFERENCE PHOTOGRAPHS, AS IMAGES.
+    #
+    # This call used to be text and nothing else, so every mention of a
+    # reference in the prompt was a mention of something the model had
+    # never been shown. Each photograph goes in as its own part, named
+    # immediately before its bytes, in the order themes.reference_images
+    # returns them. One unreadable file is skipped and the rest still
+    # go: a missing reference must not cost the whole generation.
+    contents: list = [types.Part.from_text(text=scene_prompt)]
+
+    references = reference_images(requirements.get("style") or style_text)
+    attached = 0
+    for position, path in enumerate(references, start=1):
+        try:
+            data = path.read_bytes()
+            mime = get_mime_type(path)
+        except (OSError, ValueError) as error:
+            # get_mime_type raises on a format Gemini will not take.
+            print(f"  [visualization] theme reference {path.name} unusable: {error}")
+            continue
+        contents.append(
+            types.Part.from_text(
+                text=(
+                    f"THEME REFERENCE {position} of {len(references)}. "
+                    "A real bathroom in the selected theme. Read its design "
+                    "language -- colours, materials, finishes, tile placement, "
+                    "fixtures, lighting, composition. Do not copy this room and "
+                    "do not reuse its tiles."
+                )
+            )
+        )
+        contents.append(
+            types.Part.from_bytes(data=data, mime_type=mime),
+        )
+        attached += 1
+
+    if references:
+        print(f"  [visualization] theme references attached: {attached}/{len(references)}")
+
     response = client.models.generate_content(
         model=IMAGE_MODEL,
-        contents=[scene_prompt],
+        contents=contents,
         config=types.GenerateContentConfig(
             response_modalities=["IMAGE"],
             image_config=types.ImageConfig(

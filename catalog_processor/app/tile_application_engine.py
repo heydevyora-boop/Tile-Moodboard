@@ -41,6 +41,7 @@ from app.client_selections import (
     wants_no_feature_wall,
 )
 from app.devyora_system_prompt import DEVYORA_SYSTEM_PROMPT
+from app.themes import theme_brief
 from app.scene_image_resolver import resolve_scene_image
 
 
@@ -495,6 +496,22 @@ def build_tile_application_prompt(
 
     if space:
         selection_lines.append(f"- Space: {space['description']}.")
+
+    # THE THEME, SO THE FITTINGS STAY ON IT.
+    #
+    # The room is fixed by IMAGE 1 and this step only swaps materials,
+    # so the theme's REFERENCE PHOTOGRAPHS are deliberately not attached
+    # here -- they belong to the step that designs the room, and sending
+    # them now would invite a redesign of a room already approved. The
+    # description is sent, because grout, trim and the way a material is
+    # laid are decided in this step and they are part of the theme.
+    theme = theme_brief(requirements.get("style"))
+    if theme:
+        selection_lines.append(
+            "- Theme: " + theme.replace("\n", " ")
+            + " Keep the materials below true to this, in how they are laid, "
+            "cut and grouted -- without changing anything about the room."
+        )
 
     # Where the statement material goes is a statement about roles, so it
     # only exists for a combination.
