@@ -397,12 +397,52 @@
     { name: 'Balcony & Patio', badge: 'OUTDOOR R11', desc: 'Anti-skid outdoor porcelain & weather resistance.', img: 'img/room-terrace.webp' },
   ];
 
-  const FEATURES = [
-    { label: 'No feature wall', desc: 'Uniform surface across all four walls — quietest option.' },
-    { label: 'Basin wall', desc: 'Statement surface behind the vanity, mirrored in the render.' },
-    { label: 'Shower nook', desc: 'Accent restricted to the wet niche and shelf return.' },
-    { label: 'Custom', desc: 'Name the walls yourself, or leave the choice to the studio.' },
-  ];
+  /*
+   * The feature surfaces each room actually has.
+   *
+   * This was one flat list, so a kitchen and a bedroom were offered a
+   * basin wall and a shower nook -- and whatever was picked went into
+   * the brief verbatim, which is how "Design a Kitchen & Dining with
+   * shower nook." reached the generator.
+   *
+   * Every room opens on the quiet option and closes on Custom, both of
+   * which mean the same thing everywhere. Only the two between them are
+   * the room's own, keyed by the names in ROOMS.
+   */
+  const NO_FEATURE = { label: 'No feature wall', desc: 'Uniform surface across all four walls — quietest option.' };
+  const CUSTOM_FEATURE = { label: 'Custom', desc: 'Name the walls yourself, or leave the choice to the studio.' };
+
+  const ROOM_FEATURES = {
+    'Bathroom': [
+      { label: 'Basin wall', desc: 'Statement surface behind the vanity, mirrored in the render.' },
+      { label: 'Shower nook', desc: 'Accent restricted to the wet niche and shelf return.' },
+    ],
+    'Powder Room': [
+      { label: 'Basin wall', desc: 'Statement surface behind the vanity, mirrored in the render.' },
+      { label: 'Mirror wall', desc: 'Accent carried full height behind the mirror alone.' },
+    ],
+    'Living Room': [
+      { label: 'Media wall', desc: 'Statement surface behind the television and console.' },
+      { label: 'Fireplace wrap', desc: 'Accent restricted to the hearth surround and its return.' },
+    ],
+    'Bedroom': [
+      { label: 'Headboard wall', desc: 'Statement surface behind the bed, carried full width.' },
+      { label: 'Wardrobe return', desc: 'Accent restricted to the wardrobe face and its return.' },
+    ],
+    'Kitchen & Dining': [
+      { label: 'Splashback', desc: 'Statement surface between the counter and the overhead units.' },
+      { label: 'Island face', desc: 'Accent restricted to the island cladding and its return.' },
+    ],
+    'Balcony & Patio': [
+      { label: 'Boundary wall', desc: 'Statement surface on the parapet, weather-exposed.' },
+      { label: 'Planter return', desc: 'Accent restricted to the planter face and the step riser.' },
+    ],
+  };
+
+  /** What step 2 offers for the chosen room. */
+  function featuresFor(room) {
+    return [NO_FEATURE].concat(ROOM_FEATURES[room] || [], [CUSTOM_FEATURE]);
+  }
 
   // The five things the Custom dropdown offers. Checkboxes only -- there
   // is no free-text path into this field, so nothing unvalidated can
@@ -429,10 +469,17 @@
   // THE ROOM EVERY BUDGET IS QUOTED AGAINST.
   //
   // A budget means nothing without the area it has to cover, so one
-  // reference bathroom is fixed here and shown on the step. 7ft is the
-  // height bathroom walls are normally tiled to; one standard door
-  // opening is deducted because nobody tiles a doorway.
-  const REFERENCE_BATHROOM = {
+  // reference room is fixed here and shown on the step. 7ft is the
+  // height walls are normally tiled to; one standard door opening is
+  // deducted because nobody tiles a doorway.
+  //
+  // It is a YARDSTICK, and the copy says so. It used to be described as
+  // "a 10ft x 10ft bathroom", which put the word bathroom -- and
+  // sanitaryware, basins and a WC -- into the brief for a kitchen and a
+  // bedroom too. The figures are unchanged: every band in BUDGETS below
+  // was set against this room's 359 sq ft, so the area is what the
+  // amounts mean.
+  const REFERENCE_ROOM = {
     lengthFt: 10,
     widthFt: 10,
     wallHeightFt: 7,
@@ -443,7 +490,7 @@
   };
 
   function referenceAreas() {
-    const r = REFERENCE_BATHROOM;
+    const r = REFERENCE_ROOM;
     const floor = r.lengthFt * r.widthFt;
     const perimeter = 2 * (r.lengthFt + r.widthFt);
     const walls = perimeter * r.wallHeightFt - r.doorWidthFt * r.doorHeightFt;
@@ -452,7 +499,7 @@
 
   // THE BUDGET BANDS.
   //
-  // These are TOTAL tile cost for the reference bathroom above -- floor
+  // These are TOTAL tile cost for the reference room above -- floor
   // and wall tiles only, no sanitaryware, no fittings, no labour.
   //
   // The ladder is the five bands the project asked for. Two further
@@ -640,11 +687,29 @@
   function boardSizeKey(size) { return size.w + 'x' + size.h; }
   function boardSizeLabel(size) { return size.w + ' ft \u00D7 ' + size.h + ' ft'; }
 
-  const VIEWS = [
-    { label: 'Front Elevation', desc: 'Straight-on wall for like-for-like comparison.' },
-    { label: 'Vanity Close-Up', desc: 'Tight crop on the basin and feature return.' },
-    { label: 'Wide Corner', desc: 'Shows floor module and wall junction together.' },
-  ];
+  /*
+   * The client views. An elevation and a wide corner read the same in
+   * any room; the close-up does not -- "Vanity Close-Up" was being
+   * offered for a kitchen and a balcony, and it goes into the brief by
+   * name, so it is the room's own here as well.
+   */
+  const VIEW_ELEVATION = { label: 'Front Elevation', desc: 'Straight-on wall for like-for-like comparison.' };
+  const VIEW_CORNER = { label: 'Wide Corner', desc: 'Shows floor module and wall junction together.' };
+
+  const ROOM_CLOSE_UP = {
+    'Bathroom': { label: 'Vanity Close-Up', desc: 'Tight crop on the basin and feature return.' },
+    'Powder Room': { label: 'Vanity Close-Up', desc: 'Tight crop on the basin and feature return.' },
+    'Living Room': { label: 'Media Wall Close-Up', desc: 'Tight crop on the console wall and its return.' },
+    'Bedroom': { label: 'Headboard Close-Up', desc: 'Tight crop on the bed wall and its return.' },
+    'Kitchen & Dining': { label: 'Splashback Close-Up', desc: 'Tight crop on the counter run and its return.' },
+    'Balcony & Patio': { label: 'Parapet Close-Up', desc: 'Tight crop on the boundary wall and the floor junction.' },
+  };
+
+  /** What step 7 offers for the chosen room. */
+  function viewsFor(room) {
+    const closeUp = ROOM_CLOSE_UP[room];
+    return closeUp ? [VIEW_ELEVATION, closeUp, VIEW_CORNER] : [VIEW_ELEVATION, VIEW_CORNER];
+  }
 
   const STEP_META = {
     1: { key: 'ROOM TYPOLOGY', eyebrow: 'ARCHITECTURAL FOUNDATION', title: 'What are you designing?', sub: 'Select your space to automatically calibrate ambient lighting, scale proportions, and surface drainage parameters.' },
@@ -664,7 +729,7 @@
     stage: 'wizard', // wizard | generating | error | results
     step: 1,
     room: null,
-    feature: FEATURES[0].label,
+    feature: NO_FEATURE.label,
     // Checked walls under Custom. Held apart from `feature` so switching
     // to another option and back does not lose what was ticked.
     customWalls: [],
@@ -698,7 +763,7 @@
     exporting: false,
     exportError: '',
     grout: GROUTS[0],
-    view: VIEWS[0].label,
+    view: VIEW_ELEVATION.label,
     combinations: [],
     warnings: [],
     tilesById: {},
@@ -988,7 +1053,7 @@
     const tileSqFt = (parsed.w / 1000) * (parsed.h / 1000) * SQ_FT_PER_SQ_M;
     if (!(tileSqFt > 0)) return null;
 
-    return Math.ceil((areaSqFt / tileSqFt) * (1 + REFERENCE_BATHROOM.wastage));
+    return Math.ceil((areaSqFt / tileSqFt) * (1 + REFERENCE_ROOM.wastage));
   }
 
   function budgetText() {
@@ -1023,15 +1088,15 @@
   /** The whole envelope, in the words the model and the client both see. */
   function budgetBrief() {
     const area = referenceAreas();
-    const r = REFERENCE_BATHROOM;
+    const r = REFERENCE_ROOM;
     const bands = state.budgets.map((b) =>
       b.tier + ' ' + budgetRangeText(b) + ' total (about ' + budgetRateText(b) + ' per sq ft)');
 
     return 'Budget for floor and wall tiles only, for a '
-      + r.lengthFt + 'ft x ' + r.widthFt + 'ft bathroom tiled to '
+      + 'reference ' + r.lengthFt + 'ft x ' + r.widthFt + 'ft room tiled to '
       + r.wallHeightFt + 'ft: ' + Math.round(area.floor) + ' sq ft of floor and '
       + Math.round(area.walls) + ' sq ft of wall, ' + Math.round(area.total)
-      + ' sq ft in all. Excludes sanitaryware, basins, WC, fittings and installation.'
+      + ' sq ft in all. Excludes fixtures, fittings and installation.'
       + quantityText() + ' '
       + (bands.length > 1
         ? 'Propose one combination for each of these bands so they can be compared: '
@@ -1071,12 +1136,21 @@
           '<span class="room-body"><span class="rn serif">' + r.name + '</span><span class="rd">' + r.desc + '</span></span>' +
           '</button>';
       }).join('') + '</div>';
-      body.querySelectorAll('[data-room]').forEach((btn) => btn.addEventListener('click', () => { state.room = btn.dataset.room; render(); }));
+      body.querySelectorAll('[data-room]').forEach((btn) => btn.addEventListener('click', () => {
+        state.room = btn.dataset.room;
+        // A basin wall is not on offer in a kitchen. Anything the
+        // previous room had and this one does not falls back to the
+        // option every room shares, so no stranded choice can reach the
+        // brief unseen.
+        if (!featuresFor(state.room).some((f) => f.label === state.feature)) state.feature = NO_FEATURE.label;
+        if (!viewsFor(state.room).some((v) => v.label === state.view)) state.view = VIEW_ELEVATION.label;
+        render();
+      }));
       return;
     }
 
     if (state.step === 2) {
-      body.innerHTML = '<div style="display:flex; flex-direction:column; gap:12px; margin-top:clamp(18px,2vw,26px); max-width:520px">' + FEATURES.map((f) => {
+      body.innerHTML = '<div style="display:flex; flex-direction:column; gap:12px; margin-top:clamp(18px,2vw,26px); max-width:520px">' + featuresFor(state.room).map((f) => {
         const sel = state.feature === f.label;
         return '<button class="option-row' + (sel ? ' selected' : '') + '" data-feature="' + f.label + '"><span class="option-dot"></span><span style="flex:1;min-width:0"><span class="ol mono">' + f.label.toUpperCase() + '</span><span class="od">' + f.desc + '</span></span></button>' +
           (sel && f.label === 'Custom' ? customWallsHtml() : '');
@@ -1131,14 +1205,14 @@
 
     if (state.step === 4) {
       const area = referenceAreas();
-      const r = REFERENCE_BATHROOM;
+      const r = REFERENCE_ROOM;
 
       body.innerHTML =
         '<p class="step-sub" style="margin-top:clamp(14px,1.6vw,20px)">' +
-        'Quoted against a ' + r.lengthFt + '\u00D7' + r.widthFt + ' ft bathroom tiled to ' +
+        'Quoted against a reference ' + r.lengthFt + '\u00D7' + r.widthFt + ' ft room tiled to ' +
         r.wallHeightFt + ' ft \u2014 ' + Math.round(area.floor) + ' sq ft of floor and ' +
         Math.round(area.walls) + ' sq ft of wall, ' + Math.round(area.total) +
-        ' sq ft in all. Tiles only: no sanitaryware, fittings or labour. ' +
+        ' sq ft in all. Tiles only: no fixtures, fittings or labour. ' +
         'Pick more than one band to compare.</p>' +
         '<div class="budget-grid">' + BUDGETS.map((b) => {
           const sel = state.budgets.some((x) => x.tier === b.tier);
@@ -1210,7 +1284,7 @@
     }
 
     if (state.step === 7) {
-      body.innerHTML = '<div class="view-grid">' + VIEWS.map((v) => {
+      body.innerHTML = '<div class="view-grid">' + viewsFor(state.room).map((v) => {
         const sel = state.view === v.label;
         return '<button class="view-card' + (sel ? ' selected' : '') + '" data-view="' + v.label + '"><span class="vl mono">' + v.label + '</span><span class="vd">' + v.desc + '</span></button>';
       }).join('') + '</div>';
@@ -1623,8 +1697,8 @@
     const cols = boardColumns(size, combo.tiles.length);
 
     const scene = viz.status === 'success' && viz.imageUrl
-      ? '<img src="' + viz.imageUrl + '" alt="Generated bathroom scene">'
-      : '<p>The generated bathroom scene sits here. Render it above and it appears on the board and in the PDF.</p>';
+      ? '<img src="' + viz.imageUrl + '" alt="' + sceneAlt() + '">'
+      : '<p>The generated ' + sceneNounPlain() + ' sits here. Render it above and it appears on the board and in the PDF.</p>';
 
     const tiles = combo.tiles.map((tileRef) => {
       const detail = state.tilesById[tileRef.tileId];
@@ -1666,12 +1740,12 @@
     const v = vizStateFor(index);
 
     if (v.status === 'success' && v.imageUrl) {
-      return '<div class="mb-scene"><img src="' + v.imageUrl + '" alt="Generated bathroom scene"></div>';
+      return '<div class="mb-scene"><img src="' + v.imageUrl + '" alt="' + sceneAlt() + '"></div>';
     }
     if (v.status === 'loading') {
       return '<div class="mb-scene-empty">' +
         '<p>Rendering the scene for this combination. It stays on this panel when it is done.</p>' +
-        '<button class="btn-amber mono" data-generate-scene="' + index + '" disabled>GENERATING BATHROOM SCENE…</button>' +
+        '<button class="btn-amber mono" data-generate-scene="' + index + '" disabled>GENERATING ' + sceneNounCaps() + '…</button>' +
         '</div>';
     }
     if (v.status === 'error') {
@@ -1682,7 +1756,7 @@
     }
     return '<div class="mb-scene-empty">' +
       '<p>No scene has been rendered for this combination yet.</p>' +
-      '<button class="btn-amber mono" data-generate-scene="' + index + '">GENERATE BATHROOM SCENE →</button>' +
+      '<button class="btn-amber mono" data-generate-scene="' + index + '">GENERATE ' + sceneNounCaps() + ' →</button>' +
       '</div>';
   }
 
@@ -1877,7 +1951,7 @@
       '<button class="mb-close" id="moodBoardClose" aria-label="Close">×</button>' +
       '</header>' +
       '<div class="mb-body">' +
-      '<div class="mb-lbl mono">BATHROOM SCENE</div>' +
+      '<div class="mb-lbl mono">' + sceneNounCaps() + '</div>' +
       '<div id="moodBoardScene">' + moodBoardSceneHtml(index) + '</div>' +
       '<div class="mb-lbl mono">SPECIFIED TILES (' + combo.tiles.length + ')</div>' +
       '<div class="mb-grid">' + combo.tiles.map(moodBoardTileHtml).join('') + '</div>' +
@@ -1920,7 +1994,7 @@
     overlay.className = 'viz-lightbox' + (options && options.tile ? ' is-tile' : '');
     overlay.innerHTML =
       '<button class="viz-lightbox-close mono" aria-label="Close">×</button>' +
-      '<img src="' + src + '" alt="Generated bathroom scene">';
+      '<img src="' + src + '" alt="' + sceneAlt() + '">';
 
     function close() {
       overlay.remove();
@@ -1936,7 +2010,7 @@
   }
 
   // ============================================================
-  // BATHROOM SCENE VISUALIZATION — reuses the existing
+  // THE SCENE VISUALIZATION — reuses the existing
   // POST /ai/visualizations pipeline (CasaApi.ai.generateImageUrl),
   // scoped to the BASE tile of ONE combination. No new backend, no new
   // API-client method.
@@ -1947,6 +2021,19 @@
   // the one picture that tells them which board they want.
   // ============================================================
 
+  /*
+   * What the render is called on screen.
+   *
+   * It was "bathroom scene" everywhere, so a kitchen board offered to
+   * generate a bathroom. The generator itself was never wrong -- it is
+   * sent requirements.room, the client's real room -- only the wording
+   * around it was.
+   */
+  function sceneNoun() { return (state.room || 'Room') + ' scene'; }
+  function sceneNounCaps() { return escapeHtml(sceneNoun().toUpperCase()); }
+  function sceneNounPlain() { return escapeHtml(sceneNoun().toLowerCase()); }
+  function sceneAlt() { return escapeHtml('Generated ' + sceneNoun().toLowerCase()); }
+
   const IDLE_VISUALIZATION = { status: 'idle', imageUrl: null, error: null };
 
   function vizStateFor(index) {
@@ -1955,14 +2042,14 @@
 
   function visualizationSectionHtml(index) {
     const v = vizStateFor(index);
-    const label = '<div class="mono" style="font-size:9.5px; letter-spacing:.18em; color:var(--muted)">BATHROOM SCENE VISUALIZATION</div>';
+    const label = '<div class="mono" style="font-size:9.5px; letter-spacing:.18em; color:var(--muted)">' + sceneNounCaps() + ' VISUALIZATION</div>';
     // Two cards are on screen at once, so the button is found by a data
     // attribute scoped to this card -- an id would be duplicated and
     // getElementById would wire only the first one.
     const button = (cls, text, extra) => '<button class="' + cls + ' mono" data-generate-scene="' + index + '"' + (extra || '') + '>' + text + '</button>';
 
     if (v.status === 'loading') {
-      return label + button('btn-amber', 'GENERATING BATHROOM SCENE…', ' disabled');
+      return label + button('btn-amber', 'GENERATING ' + sceneNounCaps() + '…', ' disabled');
     }
     if (v.status === 'error') {
       return label +
@@ -1971,10 +2058,10 @@
     }
     if (v.status === 'success' && v.imageUrl) {
       return label +
-        '<div class="viz-image-frame"><img src="' + v.imageUrl + '" alt="Generated bathroom scene"></div>' +
+        '<div class="viz-image-frame"><img src="' + v.imageUrl + '" alt="' + sceneAlt() + '"></div>' +
         button('btn-dashed', '↻ GENERATE AGAIN');
     }
-    return label + button('btn-amber', 'GENERATE BATHROOM SCENE →');
+    return label + button('btn-amber', 'GENERATE ' + sceneNounCaps() + ' →');
   }
 
   function wireVizSection(index) {
@@ -2088,7 +2175,7 @@
       });
       state.visualizations[index] = { status: 'success', imageUrl, error: null };
     } catch (err) {
-      state.visualizations[index] = { status: 'error', imageUrl: null, error: (err && err.message) || 'Something went wrong generating the bathroom scene.' };
+      state.visualizations[index] = { status: 'error', imageUrl: null, error: (err && err.message) || ('Something went wrong generating the ' + sceneNoun().toLowerCase() + '.') };
     }
     renderVizSection(index);
   }
