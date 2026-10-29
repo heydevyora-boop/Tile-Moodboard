@@ -260,7 +260,17 @@ def build_room_scene_prompt(
     if framing:
         selections.append(f"- Camera: {framing}.")
 
-    room_rules = _doctrine_section("8A")
+    # Section 8A opens "applies only when the selected space is a
+    # Bathroom". It was being pasted into every room's prompt and then
+    # named as the section that GOVERNS the design, so a kitchen was
+    # handed a page of bathroom completeness rules. With no room named
+    # at all the generator still draws its default bathroom, so the
+    # section still belongs there.
+    room_rules = (
+        _doctrine_section("8A")
+        if space is None or space.get("doctrine_8a")
+        else ""
+    )
 
     request = (
         "No tile is supplied in this step. The room you generate is the "
@@ -274,14 +284,28 @@ def build_room_scene_prompt(
             f"next step's tile surface -- the {tiled}."
         )
 
+    # The room the client chose, and the things that have to be in the
+    # frame for the photograph to read as that room. Both were fixed to
+    # a bathroom: the noun fell back to one whenever describe_space
+    # returned None, which it did for every room but the two wet ones,
+    # and the fixtures asked for "a real vanity, basin, mirror" outright
+    # -- which is what a kitchen board came back showing.
+    noun = space["noun"] if space else "bathroom"
+    fixtures = (
+        space["fixtures"] if space
+        else "a real vanity, basin, mirror and fittings"
+    )
+
     photograph = (
         "Generate a single photorealistic photograph of a real, physically "
-        f"built {style_text.lower()} {space['noun'] if space else 'bathroom'} "
-        f"interior, styled as \"{theme_text}\". "
+        f"built {style_text.lower()} {noun} "
+        f"{space.get('kind', 'interior') if space else 'interior'}, "
+        f"styled as \"{theme_text}\". "
+        f"It must read unmistakably as a {noun} and as nothing else. "
         "Shoot it like a professional real-estate or architectural photograph: "
         "natural and fixture lighting, true-to-life material textures, correct "
-        "perspective and shadows, a real vanity, basin, mirror and "
-        "fixtures. Include a clear, unobstructed wall area and floor area "
+        f"perspective and shadows, {fixtures}"
+        ". Include a clear, unobstructed wall area and floor area "
         "suitable for a tile to be applied to later. "
         "The room must contain NO toilet, WC, commode, bidet, cistern or "
         "flush plate anywhere -- not in the frame, not cropped at an edge, "

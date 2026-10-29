@@ -29,33 +29,119 @@ def _key(value: Any) -> str:
     )
 
 
-def describe_space(room: Any) -> Optional[Dict[str, str]]:
-    """The bathroom subcategory the room selection names, if any.
+# EVERY ROOM THE WIZARD OFFERS.
+#
+# This held only the two wet ones, and every other selection fell
+# through to None -- which the room generator read as "no room was
+# named" and drew its default bathroom. A client who chose Kitchen &
+# Dining, on a board whose own button said GENERATE KITCHEN & DINING
+# SCENE, got a vanity, a basin and a mirror.
+#
+# `noun` is what the room is called in the prompts, `fixtures` is what
+# has to be in the photograph for it to read as that room, and
+# `features` is where its statement tile may go -- the same pairs the
+# wizard offers, so a stale selection from another room cannot be
+# passed off as this one's.
+#
+# `kind` is how the space is referred to -- an interior, unless it is
+# open to the sky.
+#
+# `doctrine_8a` marks the rooms Section 8A of the system prompt applies
+# to. It says so itself ("applies only when the selected space is a
+# Bathroom"), and it was being handed to every room regardless.
+#
+# Ordered, and matched on a substring, because the first match wins:
+# "powder" has to be tried before "bath", and "Kitchen & Dining" must
+# not be read as a dining room of its own.
+SPACES = (
+    ("powder", {
+        "noun": "powder washroom",
+        "description": (
+            "a compact powder washroom -- vanity, basin and "
+            "mirror, with no shower and no bathtub"
+        ),
+        "fixtures": "a real vanity, basin and mirror",
+        "features": ("basin wall", "mirror wall"),
+        "doctrine_8a": True,
+    }),
+    ("bath", {
+        "noun": "bathroom",
+        "description": "a full bathroom with a walk-in shower zone",
+        "fixtures": "a real vanity, basin, mirror and shower fittings",
+        "features": ("basin wall", "shower nook"),
+        "doctrine_8a": True,
+    }),
+    ("kitchen", {
+        "noun": "kitchen",
+        "description": (
+            "a kitchen with a run of counter, cabinets above and "
+            "below it, and the splashback between them"
+        ),
+        "fixtures": (
+            "real cabinets, a worktop, a sink, a hob and the "
+            "splashback wall behind them"
+        ),
+        "features": ("splashback", "island face"),
+    }),
+    ("bedroom", {
+        "noun": "bedroom",
+        "description": "a bedroom with the bed against its feature wall",
+        "fixtures": "a real bed, side tables and a wardrobe",
+        "features": ("headboard wall", "wardrobe return"),
+    }),
+    ("living", {
+        "noun": "living room",
+        "description": "a living room with seating facing a media wall",
+        "fixtures": "real seating, a media unit and side tables",
+        "features": ("media wall", "fireplace wrap"),
+    }),
+    ("balcony", {
+        "noun": "balcony",
+        "description": (
+            "an open balcony or patio in daylight, with a parapet "
+            "and an outdoor floor"
+        ),
+        "fixtures": "a real parapet, railing and outdoor seating",
+        "features": ("boundary wall", "planter return"),
+        "kind": "outdoor space",
+    }),
+    ("patio", {
+        "noun": "patio",
+        "description": (
+            "an open patio in daylight, with a boundary wall and an "
+            "outdoor floor"
+        ),
+        "fixtures": "a real boundary wall, railing and outdoor seating",
+        "features": ("boundary wall", "planter return"),
+        "kind": "outdoor space",
+    }),
+)
 
-    Only bathroom subcategories are returned: the generator draws a
-    bathroom scene, so a kitchen or bedroom selection has no bathroom
-    subcategory to express.
-    """
+
+def describe_space(room: Any) -> Optional[Dict[str, Any]]:
+    """The room the selection names, or None when it names none."""
     key = _key(room)
-    if "powder" in key:
-        return {
-            "noun": "powder washroom",
-            "description": (
-                "a compact powder washroom -- vanity, basin and "
-                "mirror, with no shower and no bathtub"
-            ),
-        }
-    if "bath" in key:
-        return {
-            "noun": "bathroom",
-            "description": "a full bathroom with a walk-in shower zone",
-        }
+    for marker, space in SPACES:
+        if marker in key:
+            return space
     return None
 
 
+# Where each room's statement tile goes. The wizard offers two per room
+# (frontend/mood-board.html, ROOM_FEATURES); both are here, plus the
+# walls the Custom option names, which belong to any room.
 FEATURE_PLACEMENTS = {
     "basin wall": "the wall behind the vanity and basin",
     "shower nook": "the shower niche and its shelf return",
+    "mirror wall": "the wall behind the mirror, carried full height",
+    "media wall": "the wall behind the television and console",
+    "fireplace wrap": "the hearth surround and its return",
+    "headboard wall": "the wall behind the bed, across its full width",
+    "wardrobe return": "the wardrobe face and its return",
+    "splashback": "the wall between the counter and the overhead units",
+    "island face": "the island cladding and its return",
+    "boundary wall": "the parapet, on its weather-exposed face",
+    "planter return": "the planter face and the step riser",
 }
 
 # The walls the wizard's Custom option lets a client name, each written
@@ -102,10 +188,12 @@ def describe_feature(
 ) -> Optional[str]:
     """Where the statement tile goes, or None when no placement was chosen.
 
-    A shower nook cannot exist in a powder washroom, which has no
-    shower; that pairing returns None instead of asking the model to
-    build a shower the room selection excludes. Both stages ask, so only
-    the caller that passes log=True reports it -- once per request.
+    A placement belonging to another room returns None instead of asking
+    the model to build something this room does not have -- a shower
+    nook in a powder washroom, which has no shower, or a basin wall in a
+    kitchen. The wizard only offers each room its own two, so this
+    catches a selection saved before that was true. Both stages ask, so
+    only the caller that passes log=True reports it -- once per request.
     """
     key = _key(feature)
 
@@ -123,11 +211,12 @@ def describe_feature(
         return named
 
     placement = FEATURE_PLACEMENTS.get(key)
-    if placement and key == "shower nook" and "powder" in _key(room):
+    space = describe_space(room)
+    if placement and space and key not in space["features"]:
         if log:
             print(
-                "  [visualization] feature 'Shower nook' ignored: a powder "
-                "washroom has no shower"
+                f"  [visualization] feature '{text(feature)}' ignored: a "
+                f"{space['noun']} does not have one"
             )
         return None
     return placement
@@ -144,6 +233,18 @@ VIEW_FRAMINGS = {
     ),
     "vanity close up": (
         "a close crop on the vanity and basin with the wall behind them"
+    ),
+    "media wall close up": (
+        "a close crop on the console wall and its return"
+    ),
+    "headboard close up": (
+        "a close crop on the bed wall and its return"
+    ),
+    "splashback close up": (
+        "a close crop on the counter run and the wall behind it"
+    ),
+    "parapet close up": (
+        "a close crop on the boundary wall and the floor junction"
     ),
     "wide corner": (
         "a wide corner view showing the floor and the wall junction "
