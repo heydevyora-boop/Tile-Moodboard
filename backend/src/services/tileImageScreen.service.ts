@@ -56,6 +56,29 @@
 
 const SAMPLE = 48;
 
+/**
+ * The wordmark screen reads at a higher resolution than the split
+ * screen: letterforms are strokes, and a stroke is gone at 48px.
+ */
+const FINE = 128;
+
+/**
+ * A WORDMARK is three or more marks of similar height sitting on one
+ * baseline, drawn with ONE stroke weight. That last part is what a
+ * typeface is, and it is what separates a printed word from a repeating
+ * motif -- a pattern's shapes are solid, a letter's are strokes.
+ *
+ * These are set WELL inside the gap rather than at it, for the reason
+ * given in the header: the nearest decor measured 0.152 / 0.142, so a
+ * rule drawn at the midpoint would be a coin toss on the next catalog.
+ * Drawn here it catches the plate the owner reported with room to spare
+ * and cannot reach their floral or tropical tiles. It will also miss a
+ * fainter wordmark; that is the trade, and it is the right way round.
+ */
+const WORD_GLYPHS = 3;
+const WORD_STROKE = 0.13;
+const WORD_STROKE_EVENNESS = 0.13;
+
 /** How much of the smaller material may touch the other before this is two materials, not a pattern. */
 const EDGE_LIMIT = 0.55;
 
@@ -84,10 +107,17 @@ export interface ScreenVerdict {
   /** Whether the smaller material reaches the frame. */
   touches: boolean;
   band: boolean;
+  /** Marks on the longest shared baseline. */
+  word: number;
+  /** Their stroke width, as a share of their height. */
+  stroke: number;
+  /** How evenly that stroke width is shared, 0 = one weight throughout. */
+  evenness: number;
 }
 
 const KEPT = (reason: string): ScreenVerdict => ({
   ok: true, reason, gap: 0, minority: 0, apart: 0, edge: 1, touches: false, band: false,
+  word: 0, stroke: 1, evenness: 1,
 });
 
 /** Everything this decides from, given the raw pixels of a square sample. */
@@ -193,16 +223,196 @@ export function measureSplit(data: Uint8ClampedArray, w: number, h: number): Scr
     edge,
     touches,
     band,
+    // Filled in by screen() below, which asks the wordmark question of
+    // the same picture. measureSplit answers only its own.
+    word: 0,
+    stroke: 1,
+    evenness: 1,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// A word printed on the capture
+//
+// The owner's catalog yielded a brand plate as a product: a stone ground
+// with "urvi (TM)" set across it in orange. It is not a tile, and it was
+// reaching boards.
+//
+// Two measures were tried and thrown away before this one, both recorded
+// here so neither gets tried again:
+//
+//   saturated ink on a grey ground -- rejected Moroccan blue and a cobalt
+//   border outright. It keyed on COLOUR, and colour is exactly what a
+//   decor tile is entitled to have.
+//
+//   marks on a shared baseline -- a repeating pattern puts its motifs on
+//   shared baselines too, so terrazzo, floral and tropical all read as
+//   words.
+//
+// What a typeface has and a pattern does not is ONE STROKE WEIGHT across
+// a row of differently-shaped marks. Measured over the fixtures:
+//
+//                        glyphs  stroke  evenness   verdict
+//   urvi brand plate        7     0.042    0.115    REJECT
+//   "MOZART" plate          6     0.117    0.069    REJECT
+//   "onery" wordmark        3     0.138    0.176    kept (missed)
+//   floral decor            7     0.152    0.142    keep
+//   tropical leaves        13     0.183    0.196    keep
+//   moroccan blue          16     0.276    0.051    keep
+//   terrazzo                8      --       --      keep (no baseline)
+//   cobalt border           0      --       --      keep
+//   every plain body        0      --       --      keep
+//
+// There is no clean gap between 0.138 and 0.152, so the thresholds are
+// set well below the nearest decor rather than between them. That misses
+// the fainter "onery" plate on purpose: a screen that takes a catalog's
+// floral and tropical tiles away is a worse failure than one that lets a
+// second brand plate through, and the owner sees the plate while they
+// would never see the quietly missing decor.
+// ─────────────────────────────────────────────────────────────────────────
+
+interface Blob {
+  x0: number; x1: number; y0: number; y1: number; area: number; perimeter: number;
+}
+
+/** Marks that stand clear of the grain, grouped into connected blobs. */
+function inkBlobs(data: Uint8ClampedArray, w: number, h: number): Blob[] {
+  const n = w * h;
+  const lum = new Float32Array(n);
+  for (let i = 0; i < n; i += 1) {
+    lum[i] = data[i * 4] * 0.299 + data[i * 4 + 1] * 0.587 + data[i * 4 + 2] * 0.114;
+  }
+
+  // Each pixel against its own surroundings, not against the whole
+  // picture: a dark letter on light stone and a light letter on dark
+  // stone are the same thing, and a vignette is neither.
+  const r = Math.round(w / 12);
+  const background = new Float32Array(n);
+  for (let y = 0; y < h; y += 1) {
+    for (let x = 0; x < w; x += 1) {
+      let sum = 0;
+      let count = 0;
+      for (let dy = -r; dy <= r; dy += 2) {
+        for (let dx = -r; dx <= r; dx += 2) {
+          const yy = y + dy;
+          const xx = x + dx;
+          if (yy < 0 || xx < 0 || yy >= h || xx >= w) continue;
+          sum += lum[yy * w + xx];
+          count += 1;
+        }
+      }
+      background[y * w + x] = sum / count;
+    }
+  }
+
+  const apart = new Float32Array(n);
+  for (let i = 0; i < n; i += 1) apart[i] = Math.abs(lum[i] - background[i]);
+  const ranked = Array.from(apart).sort((a, b) => a - b);
+  const cut = Math.max(26, ranked[Math.floor(n * 0.9)]);
+
+  const ink = new Uint8Array(n);
+  for (let i = 0; i < n; i += 1) ink[i] = apart[i] >= cut ? 1 : 0;
+
+  const seen = new Int32Array(n).fill(-1);
+  const blobs: Blob[] = [];
+  const stack: number[] = [];
+  for (let start = 0; start < n; start += 1) {
+    if (!ink[start] || seen[start] >= 0) continue;
+    const id = blobs.length;
+    let x0 = w; let x1 = 0; let y0 = h; let y1 = 0; let area = 0; let perimeter = 0;
+    stack.length = 0;
+    stack.push(start);
+    seen[start] = id;
+    while (stack.length) {
+      const p = stack.pop()!;
+      const x = p % w;
+      const y = Math.floor(p / w);
+      area += 1;
+      if (x < x0) x0 = x;
+      if (x > x1) x1 = x;
+      if (y < y0) y0 = y;
+      if (y > y1) y1 = y;
+      const neighbours = [x > 0 ? p - 1 : -1, x < w - 1 ? p + 1 : -1, y > 0 ? p - w : -1, y < h - 1 ? p + w : -1];
+      for (const q of neighbours) {
+        if (q < 0 || !ink[q]) { perimeter += 1; continue; }
+        if (seen[q] < 0) { seen[q] = id; stack.push(q); }
+      }
+    }
+    blobs.push({ x0, x1, y0, y1, area, perimeter });
+  }
+  return blobs;
+}
+
+/** Is there a word printed across this capture? */
+export function measureWordmark(data: Uint8ClampedArray, w: number, h: number): {
+  word: number; stroke: number; evenness: number; printed: boolean;
+} {
+  const n = w * h;
+  const glyphs = inkBlobs(data, w, h)
+    .map((b) => {
+      const bw = b.x1 - b.x0 + 1;
+      const bh = b.y1 - b.y0 + 1;
+      // Stroke width from area and outline: a letter is a thin ribbon,
+      // a motif is a solid shape, and this says which at any scale.
+      return { ...b, bw, bh, fill: b.area / (bw * bh), stroke: b.perimeter ? (2 * b.area / b.perimeter) / bh : 1 };
+    })
+    .filter((g) => (
+      g.bh >= h * 0.06 && g.bh <= h * 0.55
+      && g.bw >= w * 0.015 && g.bw <= w * 0.45
+      && g.bw / g.bh >= 0.08 && g.bw / g.bh <= 2.2
+      && g.fill >= 0.12 && g.fill <= 0.85
+      && g.area >= n * 0.0008
+    ));
+
+  let word = 0;
+  let stroke = 1;
+  let evenness = 1;
+  for (const anchor of glyphs) {
+    const anchorHeight = anchor.bh;
+    const row = glyphs.filter((g) => (
+      Math.abs(g.y1 - anchor.y1) <= anchorHeight * 0.45
+      && g.bh >= anchorHeight * 0.45 && g.bh <= anchorHeight * 1.8
+    ));
+    if (row.length < WORD_GLYPHS) continue;
+
+    const widths = row.map((g) => g.stroke);
+    const mean = widths.reduce((a, b) => a + b, 0) / widths.length;
+    const spread = Math.sqrt(widths.reduce((a, v) => a + (v - mean) ** 2, 0) / widths.length) / mean;
+    // The most even row wins: that is the one most likely to be type.
+    if (row.length > word || (row.length === word && spread < evenness)) {
+      word = row.length;
+      stroke = mean;
+      evenness = spread;
+    }
+  }
+
+  return {
+    word,
+    stroke,
+    evenness,
+    printed: word >= WORD_GLYPHS && stroke <= WORD_STROKE && evenness <= WORD_STROKE_EVENNESS,
   };
 }
 
 // Per-process, because the same twenty products are looked at on every
 // generation and their pictures do not change between them.
 const verdicts = new Map<string, ScreenVerdict>();
-const samples = new Map<string, { data: Uint8ClampedArray; w: number; h: number } | null>();
+const samples = new Map<string, Sample | null>();
 const signatures = new Map<string, TileSignature | null>();
 
-async function decode(url: string): Promise<{ data: Uint8ClampedArray; w: number; h: number } | null> {
+/**
+ * One fetch, two sizes. The split screen and the fingerprint read the
+ * coarse one; the wordmark screen needs the fine one, because a
+ * letter's stroke is gone at 48px.
+ */
+interface Sample {
+  data: Uint8ClampedArray;
+  w: number;
+  h: number;
+  fine: { data: Uint8ClampedArray; w: number; h: number };
+}
+
+async function decode(url: string): Promise<Sample | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
@@ -213,10 +423,16 @@ async function decode(url: string): Promise<{ data: Uint8ClampedArray; w: number
 
     const { createCanvas, loadImage } = await import('@napi-rs/canvas');
     const image = await loadImage(Buffer.from(buffer));
-    const canvas = createCanvas(SAMPLE, SAMPLE);
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(image, 0, 0, SAMPLE, SAMPLE);
-    return { data: ctx.getImageData(0, 0, SAMPLE, SAMPLE).data as unknown as Uint8ClampedArray, w: SAMPLE, h: SAMPLE };
+
+    const draw = (size: number) => {
+      const canvas = createCanvas(size, size);
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(image, 0, 0, size, size);
+      return { data: ctx.getImageData(0, 0, size, size).data as unknown as Uint8ClampedArray, w: size, h: size };
+    };
+
+    const coarse = draw(SAMPLE);
+    return { ...coarse, fine: draw(FINE) };
   } catch {
     return null;
   } finally {
@@ -225,7 +441,7 @@ async function decode(url: string): Promise<{ data: Uint8ClampedArray; w: number
 }
 
 /** The decoded sample, fetched at most once per picture per process. */
-async function sampleOf(url: string): Promise<{ data: Uint8ClampedArray; w: number; h: number } | null> {
+async function sampleOf(url: string): Promise<Sample | null> {
   if (samples.has(url)) return samples.get(url)!;
   const decoded = await decode(url);
   samples.set(url, decoded);
@@ -317,20 +533,37 @@ export async function tileSignature(url: string | null | undefined): Promise<Til
 export async function lookalikeRoles<T extends { role: string; tileId: string }>(
   tiles: T[],
   imageUrlOf: (tileId: string) => string | null | undefined,
-): Promise<Array<{ tile: T; of: T }>> {
+): Promise<{ duplicates: Array<{ tile: T; of: T }>; unread: T[] }> {
   const signed = await Promise.all(tiles.map((t) => tileSignature(imageUrlOf(t.tileId))));
   const duplicates: Array<{ tile: T; of: T }> = [];
+  const unread: T[] = [];
   const seen: Array<{ tile: T; signature: TileSignature }> = [];
 
   tiles.forEach((tile, i) => {
     const signature = signed[i];
-    if (!signature) return;
+    if (!signature) { unread.push(tile); return; }
     const match = seen.find((s) => sameSurface(s.signature, signature));
     if (match) duplicates.push({ tile, of: match.tile });
     else seen.push({ tile, signature });
   });
 
-  return duplicates;
+  return { duplicates, unread };
+}
+
+/** Both questions, asked of one decoded picture. */
+function screen(sample: Sample): ScreenVerdict {
+  const split = measureSplit(sample.data, sample.w, sample.h);
+  const mark = measureWordmark(sample.fine.data, sample.fine.w, sample.fine.h);
+  const verdict: ScreenVerdict = { ...split, word: mark.word, stroke: mark.stroke, evenness: mark.evenness };
+
+  if (!verdict.ok) return verdict;
+  if (!mark.printed) return verdict;
+
+  return {
+    ...verdict,
+    ok: false,
+    reason: `a word is printed across this capture (${mark.word} marks, stroke ${mark.stroke.toFixed(2)}, evenness ${mark.evenness.toFixed(2)}) -- a brand plate, not a tile`,
+  };
 }
 
 /** One picture's verdict. Anything unreadable is kept. */
@@ -341,7 +574,9 @@ export async function screenTileImage(url: string | null | undefined): Promise<S
   if (cached) return cached;
 
   const decoded = await sampleOf(url);
-  const verdict = decoded ? measureSplit(decoded.data, decoded.w, decoded.h) : KEPT('could not read the image');
+  const verdict = decoded
+    ? screen(decoded)
+    : KEPT('could not read the image');
   verdicts.set(url, verdict);
   return verdict;
 }

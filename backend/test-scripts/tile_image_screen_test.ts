@@ -16,6 +16,7 @@ import * as http from 'http';
 import { createCanvas, loadImage } from '@napi-rs/canvas';
 import {
   measureSplit,
+  measureWordmark,
   screenTileImage,
   screenSlate,
   clearScreenCache,
@@ -38,6 +39,78 @@ function check(label: string, ok: boolean, detail?: unknown) {
 
 const FIXTURES = path.join(__dirname, 'fixtures');
 const SAMPLE = 48;
+const FINE = 128;
+
+/** The wordmark measure reads at 128: a letter's stroke is gone at 48. */
+async function wordmarkOf(file: string) {
+  const image = await loadImage(file);
+  const canvas = createCanvas(FINE, FINE);
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(image, 0, 0, FINE, FINE);
+  return measureWordmark(ctx.getImageData(0, 0, FINE, FINE).data as unknown as Uint8ClampedArray, FINE, FINE);
+}
+
+/** A brand plate: a word set across a stone ground, as catalogs print them. */
+function plate(word: string, ink: string, file: string): string {
+  const c = createCanvas(240, 240);
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#C9C7C2'; ctx.fillRect(0, 0, 240, 240);
+  let s = 3;
+  const rand = () => { s = (s * 9301 + 49297) % 233280; return s / 233280; };
+  for (let i = 0; i < 4000; i += 1) {
+    const g = 190 + rand() * 40;
+    ctx.fillStyle = `rgb(${g},${g},${g - 4})`;
+    ctx.fillRect(rand() * 240, rand() * 240, 2, 2);
+  }
+  ctx.fillStyle = ink;
+  ctx.font = 'bold 74px sans-serif';
+  ctx.fillText(word, 12, 150);
+  fs.writeFileSync(file, c.toBuffer('image/png'));
+  return file;
+}
+
+/** Decor whose colours and motifs a themed board depends on. */
+function moroccan(file: string): string {
+  const c = createCanvas(240, 240);
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#F4F1E8'; ctx.fillRect(0, 0, 240, 240);
+  ctx.fillStyle = '#1F5FA8';
+  for (let r = 0; r < 6; r += 1) {
+    for (let q = 0; q < 6; q += 1) {
+      ctx.save(); ctx.translate(20 + q * 40, 20 + r * 40); ctx.rotate(Math.PI / 4);
+      ctx.fillRect(-13, -13, 26, 26); ctx.restore();
+    }
+  }
+  fs.writeFileSync(file, c.toBuffer('image/png'));
+  return file;
+}
+
+function tropical(file: string): string {
+  const c = createCanvas(240, 240);
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#EFEDE4'; ctx.fillRect(0, 0, 240, 240);
+  let s = 11;
+  const rand = () => { s = (s * 9301 + 49297) % 233280; return s / 233280; };
+  for (const col of ['#1E7F52', '#2FA36B', '#D8A62B']) {
+    ctx.fillStyle = col;
+    for (let i = 0; i < 26; i += 1) {
+      ctx.beginPath();
+      ctx.ellipse(rand() * 240, rand() * 240, 10 + rand() * 16, 5 + rand() * 7, rand() * 3.14, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  fs.writeFileSync(file, c.toBuffer('image/png'));
+  return file;
+}
+
+function cobaltBorder(file: string): string {
+  const c = createCanvas(240, 240);
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#F2EEE3'; ctx.fillRect(0, 0, 240, 240);
+  ctx.fillStyle = '#17489B'; ctx.fillRect(0, 96, 240, 48);
+  fs.writeFileSync(file, c.toBuffer('image/png'));
+  return file;
+}
 
 async function verdictOf(file: string) {
   const image = await loadImage(file);
@@ -167,6 +240,7 @@ async function main() {
     '/bad2.png': fs.readFileSync(path.join(FIXTURES, 'bad-colorbody-0004.png')),
     '/good1.png': fs.readFileSync(path.join(FIXTURES, 'good-colorbody-0002.png')),
     '/good2.png': fs.readFileSync(path.join(FIXTURES, 'good-decore-0004.png')),
+    '/plate.png': fs.readFileSync(path.join(FIXTURES, 'brand-plate-urvi.png')),
   };
   let hits = 0;
   const server = http.createServer((req, res) => {
@@ -275,7 +349,7 @@ async function main() {
     { role: 'highlight', tileId: 't-highlight' },
     { role: 'border', tileId: 't-border' },
   ];
-  const dupes = await lookalikeRoles(combo, (id) => urls[id]);
+  const { duplicates: dupes } = await lookalikeRoles(combo, (id) => urls[id]);
   check('32. The repeated surface is found', dupes.length === 1, dupes.map((d) => [d.tile.role, d.of.role]));
   check('33. ...and it is the LATER role that is named, not the base',
     dupes[0] && dupes[0].tile.role === 'border' && dupes[0].of.role === 'base', dupes[0]);
@@ -285,19 +359,86 @@ async function main() {
     kept.map((t) => t.role).join(',') === 'base,highlight', kept.map((t) => t.role));
 
   clearScreenCache();
-  const noDupes = await lookalikeRoles([
+  const { duplicates: noDupes } = await lookalikeRoles([
     { role: 'base', tileId: 't-base' },
     { role: 'highlight', tileId: 't-highlight' },
   ], (id) => urls[id]);
   check('35. A board of two real surfaces loses nothing', noDupes.length === 0, noDupes);
 
   clearScreenCache();
-  const blind = await lookalikeRoles([
+  const { duplicates: blind } = await lookalikeRoles([
     { role: 'base', tileId: 't-noimage' },
     { role: 'border', tileId: 't-noimage2' },
   ], () => null);
   check('36. Two products with no picture are never called the same',
     blind.length === 0, blind);
+
+  // ── 37. a word printed across the capture ──────────────────────────
+  //
+  // The owner's catalog yielded a brand plate as a product: stone with
+  // "urvi (TM)" set across it. fixtures/brand-plate-urvi.png is that
+  // capture, cropped from the board they sent.
+  //
+  // The decor below is the half of this that matters more. Two earlier
+  // rules were thrown away because they took these: one keyed on
+  // saturated colour and refused Moroccan blue and a cobalt border, the
+  // other on marks sharing a baseline and refused terrazzo, floral and
+  // tropical. So they are asserted here, by name, every run.
+  const plateUrvi = await wordmarkOf(path.join(FIXTURES, 'brand-plate-urvi.png'));
+  check('37. The brand plate reads as a printed word',
+    plateUrvi.printed, plateUrvi);
+  check('38. ...on the evidence of thin, evenly-weighted marks',
+    plateUrvi.word >= 3 && plateUrvi.stroke < 0.13 && plateUrvi.evenness < 0.13, plateUrvi);
+
+  const plateMozart = await wordmarkOf(plate('MOZART', '#2B2B2B', path.join(tmp, 'plate-mozart.png')));
+  check('39. A dark wordmark on stone reads the same way', plateMozart.printed, plateMozart);
+
+  for (const [label, file] of [
+    ['floral decor', path.join(FIXTURES, 'decor-0005.png')],
+    ['the plain pale body', path.join(FIXTURES, 'plain-pale-0015.png')],
+    ['a plain colourbody', path.join(FIXTURES, 'good-colorbody-0002.png')],
+    ['a plain black decor', path.join(FIXTURES, 'good-decore-0004.png')],
+    ['a modulo base', path.join(FIXTURES, 'twin-base-0015.png')],
+    ['a border', path.join(FIXTURES, 'twin-border-0018.png')],
+    ['moroccan blue', moroccan(path.join(tmp, 'moroccan.png'))],
+    ['tropical leaves', tropical(path.join(tmp, 'tropical.png'))],
+    ['a cobalt border', cobaltBorder(path.join(tmp, 'cobalt.png'))],
+    ['scattered terrazzo', scattered('#EFE7DA', '#5A5651', path.join(tmp, 'terrazzo.png'))],
+  ] as const) {
+    const m = await wordmarkOf(file);
+    check(`40. ${label} is not a printed word`, !m.printed, m);
+  }
+
+  // ── 41. and the screen acts on it ──────────────────────────────────
+  clearScreenCache();
+  const plateVerdict = await screenTileImage(`${base}/plate.png`);
+  check('41. The screen refuses the brand plate', !plateVerdict.ok, plateVerdict.reason);
+  check('42. ...and says why, in the owner’s terms',
+    /brand plate, not a tile/.test(plateVerdict.reason), plateVerdict.reason);
+
+  clearScreenCache();
+  const withPlate = await screenSlate([
+    { id: 'plate', imageUrl: `${base}/plate.png` },
+    { id: 'good-1', imageUrl: `${base}/good1.png` },
+    { id: 'good-2', imageUrl: `${base}/good2.png` },
+  ], 0);
+  check('43. It is out of the slate', !withPlate.kept.some((t) => t.id === 'plate'), withPlate.kept.map((t) => t.id));
+  check('44. ...and the real tiles beside it stay', withPlate.kept.length === 2, withPlate.kept.map((t) => t.id));
+
+  // ── 45. an unreadable picture is reported, not silently waved on ───
+  //
+  // Every check here fails open, which is right and was also silent. If
+  // the server cannot reach the catalog's images at all, every screen is
+  // inert and the boards look exactly as though they had run.
+  clearScreenCache();
+  const blindRun = await lookalikeRoles([
+    { role: 'base', tileId: 't-base' },
+    { role: 'highlight', tileId: 't-missing' },
+  ], (id) => (id === 't-base' ? `${base}/good1.png` : `${base}/nothing-here.png`));
+  check('45. The product whose picture could not be read is named',
+    blindRun.unread.length === 1 && blindRun.unread[0].tileId === 't-missing', blindRun.unread);
+  check('46. ...and it is not called a duplicate of anything',
+    blindRun.duplicates.length === 0, blindRun.duplicates);
 
   server.close();
   fs.rmSync(tmp, { recursive: true, force: true });

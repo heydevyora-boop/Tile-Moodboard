@@ -435,8 +435,9 @@ export async function generateCombinations(input: GenerateBriefInput, actorId: s
   // dropped, exactly as a repeated id is. The first use keeps its place,
   // so the base stays the base.
   const imageByTileId = new Map(tiles.map((t) => [t.id, t.imageUrl]));
+  const unreadable = new Set<string>();
   for (const combo of combinations) {
-    const duplicates = await lookalikeRoles(combo.tiles, (id) => imageByTileId.get(id));
+    const { duplicates, unread } = await lookalikeRoles(combo.tiles, (id) => imageByTileId.get(id));
     for (const { tile, of } of duplicates) {
       warnings.push(
         `Dropped the "${tile.role}" role — "${tile.name || tile.tileId}" shows the same surface as the "${of.role}" tile already in this board.`,
@@ -445,6 +446,23 @@ export async function generateCombinations(input: GenerateBriefInput, actorId: s
     if (duplicates.length > 0) {
       combo.tiles = combo.tiles.filter((t) => !duplicates.some((d) => d.tile === t));
     }
+    for (const tile of unread) unreadable.add(tile.name || tile.tileId);
+  }
+
+  // A SCREEN THAT CANNOT SEE SAYS SO.
+  //
+  // Every picture check here fails open: a product whose image cannot be
+  // fetched or decoded is kept, because "we could not look" is not
+  // evidence. That is the right default and it was also completely
+  // silent -- if the server cannot reach the catalog's images at all,
+  // the split screen, the brand-plate screen and this duplicate check
+  // are all inert and the boards come back looking exactly as though
+  // they had run. This is the only trace of that, and the owner needs it
+  // to tell "nothing was wrong" apart from "nothing was checked".
+  if (unreadable.size > 0) {
+    warnings.push(
+      `Could not read the picture for ${unreadable.size} product(s) (${[...unreadable].slice(0, 5).join(', ')}${unreadable.size > 5 ? ', …' : ''}), so the image checks — split captures, brand plates and duplicate surfaces — did not run on them.`,
+    );
   }
 
   if (tiles.length < rulesSettings.defaultMinTiles) {
