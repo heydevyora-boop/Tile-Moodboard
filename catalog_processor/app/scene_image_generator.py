@@ -345,16 +345,32 @@ def build_room_scene_prompt(
         )
 
         if references:
-            parts.append(
-                f"REFERENCE PHOTOGRAPHS: {len(references)} real bathrooms "
-                "in this theme are supplied with this request as images. LOOK at "
-                "them before drawing. They are the visual authority for this "
-                "theme's design language: its colour relationships, material "
-                "finishes, tile placement, fixtures, lighting and "
-                "architectural composition. Take the DESIGN from them and "
-                "design a new room -- do not copy any one of them, and do not "
+            # Every reference photograph is a BATHROOM, because that is
+            # what the catalog owner supplied. The client's room often
+            # is not one, and a prompt that hands five bathrooms to a
+            # kitchen without saying what to take from them is asking
+            # for a bathroom back -- the exact failure that was just
+            # fixed in the room itself.
+            reference_note = (
+                f"REFERENCE PHOTOGRAPHS: {len(references)} real rooms in this "
+                "theme are supplied with this request as images. LOOK at them "
+                "before drawing. They are the visual authority for this theme's "
+                "design language: its colour relationships, material finishes, "
+                "surface patterns, tile placement, lighting and detailing. Take "
+                "the DESIGN from them -- do not copy any one of them, and do not "
                 "reproduce their tiles, which are not the client's products."
             )
+            if noun not in {"bathroom", "powder washroom"}:
+                reference_note += (
+                    f" THEY ARE ALL BATHROOMS, AND THIS ROOM IS A {noun.upper()}. "
+                    "Take from them ONLY what is not a bathroom: the palette, the "
+                    f"materials, the finishes, the patterns, the light and the mood. "
+                    f"Take NOTHING of the room itself -- no vanity, no basin, no "
+                    f"shower, no bathtub, no sanitaryware, no towel rail. The room "
+                    f"you draw is a {noun} and must contain a {noun}'s own fittings, "
+                    "exactly as described above."
+                )
+            parts.append(reference_note)
         else:
             # Said out loud rather than left implied: a prompt that
             # talks about references it was never given is the failure

@@ -69,6 +69,11 @@ class Captured(Exception):
 
 def capture_scene_request(theme):
     """Runs the real room-scene assembly and returns the parts it would send."""
+    return capture_scene_request_for(theme, "Bathroom")
+
+
+def capture_scene_request_for(theme, room):
+    """The same, for a named room."""
     class FakeModels:
         def generate_content(self, **kwargs):
             raise Captured(kwargs["contents"])
@@ -83,7 +88,7 @@ def capture_scene_request(theme):
             output_path=ROOT / "output" / "theme_test.png",
             style=theme,
             theme="A Board Name",
-            requirements={"room": "Bathroom", "surface": "WALL", "style": theme},
+            requirements={"room": room, "surface": "WALL", "style": theme},
         )
     except Captured as captured:
         return captured.contents
@@ -160,7 +165,7 @@ def the_prompt_carries_the_right_theme():
             foreign not in prompt.lower(), foreign))
         results.append(check(
             f"{label}: the prompt says the photographs are supplied",
-            "REFERENCE PHOTOGRAPHS: 5 real bathrooms" in prompt))
+            "REFERENCE PHOTOGRAPHS: 5 real rooms" in prompt))
         results.append(check(
             f"{label}: ...and that they are not to be copied",
             "do not reproduce their tiles" in prompt))
@@ -276,6 +281,67 @@ def the_wizard_and_the_table_agree():
     return results
 
 
+def the_theme_holds_in_every_room():
+    """Every reference photograph is a bathroom. Most rooms are not.
+
+    Handing five bathrooms to a kitchen without saying what to take from
+    them is asking for a bathroom back -- the exact failure that was
+    just fixed in the room itself.
+    """
+    results = []
+    dry = {
+        "Kitchen & Dining": "kitchen",
+        "Bedroom": "bedroom",
+        "Living Room": "living room",
+        "Balcony & Patio": "balcony",
+    }
+
+    for room, noun in dry.items():
+        prompt = build_room_scene_prompt(
+            "Moroccan", "A Board Name",
+            {"room": room, "surface": "WALL", "style": "Moroccan"},
+        )
+        results.append(check(
+            f"{room}: still gets the theme description",
+            "zellige" in prompt.lower()))
+        results.append(check(
+            f"{room}: the photographs are named as bathrooms",
+            f"THEY ARE ALL BATHROOMS, AND THIS ROOM IS A {noun.upper()}" in prompt))
+        results.append(check(
+            f"{room}: only the palette and materials are taken from them",
+            "Take from them ONLY what is not a bathroom" in prompt))
+        results.append(check(
+            f"{room}: ...and none of the bathroom's fittings",
+            "no vanity, no basin, no shower, no bathtub" in prompt))
+        results.append(check(
+            f"{room}: the room drawn is still a {noun}",
+            f"The room you draw is a {noun}" in prompt))
+
+    # A bathroom needs none of that caveat: the references ARE bathrooms.
+    for room in ("Bathroom", "Powder Room"):
+        prompt = build_room_scene_prompt(
+            "Moroccan", "A Board Name",
+            {"room": room, "surface": "WALL", "style": "Moroccan"},
+        )
+        results.append(check(
+            f"{room}: no caveat is added, the references match the room",
+            "THEY ARE ALL BATHROOMS" not in prompt))
+        results.append(check(
+            f"{room}: ...and it still gets the theme and its photographs",
+            "zellige" in prompt.lower() and "REFERENCE PHOTOGRAPHS: 5 real rooms" in prompt))
+
+    # The photographs themselves do not change with the room: the theme
+    # decides which are sent, the room decides what to take from them.
+    kitchen = capture_scene_request_for("Moroccan", "Kitchen & Dining")
+    bathroom = capture_scene_request_for("Moroccan", "Bathroom")
+    sent = lambda parts: {bytes(p.inline_data.data) for p in parts if getattr(p, "inline_data", None) is not None}
+    results.append(check(
+        "a kitchen and a bathroom are sent the same Moroccan photographs",
+        sent(kitchen) == sent(bathroom) and len(sent(kitchen)) == 5,
+        len(sent(kitchen))))
+    return results
+
+
 def main():
     groups = [
         ("every theme is configured", every_theme_is_configured()),
@@ -283,6 +349,7 @@ def main():
         ("the prompt carries the right theme", the_prompt_carries_the_right_theme()),
         ("the photographs are actually sent", the_photographs_are_actually_sent()),
         ("the tile step knows the theme too", the_tile_step_knows_the_theme_too()),
+        ("the theme holds in every room", the_theme_holds_in_every_room()),
         ("the wizard and the table agree", the_wizard_and_the_table_agree()),
     ]
 

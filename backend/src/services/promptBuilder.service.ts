@@ -5,6 +5,7 @@ import { logActivity } from './activityLog.service';
 import { geminiClient } from './gemini.service';
 import { getRecommendedTiles } from './tileRecommendation.service';
 import { screenSlate, lookalikeRoles } from './tileImageScreen.service';
+import { themeBrief } from './themes.service';
 import { GenerateBriefInput } from '@validators/moodBoard.validators';
 import { getSettings } from './settings.service';
 
@@ -207,7 +208,8 @@ Rules about the budget:
 - When the budget line names more than one band, return one combination per band, in the order they are named, and say which band each one answers.
 
 Rules about the theme:
-- The brief names a design theme. Read it as a design language, not as a colour filter: British, Roman Touch, Floral, Tropical, Geometrical, Metallic, Rustic, Moroccan and Black & White each carry their own surfaces, patterns and contrast, and the floor, the wall and the decorated piece all have to belong to the same one.
+- The brief names a design theme and, above the tile list, states what that theme asks for. That statement is the specification: read it before choosing anything. Read it as a design language, not as a colour filter — British, Roman Touch, Floral, Tropical, Geometrical, Metallic, Rustic, Moroccan and Black & White each carry their own surfaces, patterns and contrast, and the floor, the wall and the decorated piece all have to belong to the same one.
+- Every role has to answer the theme, not just the decorated one. A Moroccan board whose base could sit in a Metallic board is not a Moroccan board. Where the listed stock allows it, pick the base for the theme's ground colour and the highlight or accent for its pattern and its contrast.
 - Choose on the theme's visual characteristics, using whatever each listed product gives you — its name and collection as much as its recorded finish, colour and size. A product whose attributes are blank can still be read from its name.
 - Say in "reason_for_selection" what makes the combination read as that theme, naming the pieces. If the listed stock cannot carry the theme, say that plainly instead of assembling something that does not.
 - When the brief says the theme is not specified, choose the theme yourself from the room, the budget and what is actually listed, and name the theme you chose in "board_name" or the first sentence of "reason_for_selection". Do not leave it unstated, and do not default to the same theme for every combination you return.
@@ -242,10 +244,31 @@ export function buildPrompt(
     designRulesText,
   ].join('\n');
 
+  // WHAT THE THEME ACTUALLY ASKS FOR.
+  //
+  // The brief named the theme and nothing more -- "Theme: Moroccan, with
+  // Ivory Matte grout." -- so the model had to recall what Moroccan
+  // means in order to pick tiles for it. The ranking engine already
+  // scores against the theme's finishes and colour families
+  // (tileRecommendation.service.ts), but the choice between what it
+  // ranks is made here, and here the theme was a word.
+  //
+  // The description is written for a bathroom, because that is what the
+  // catalog is built around. What it is used for here is the SURFACES,
+  // which is the part that holds in any room, so the line below says so
+  // and the room is stated separately.
+  const theme = themeBrief(brief.style);
+
   const briefLines = [
     `Client brief: ${brief.text}`,
     brief.customerName ? `Customer: ${brief.customerName}` : null,
     brief.style ? `Requested style: ${brief.style}` : null,
+    theme
+      ? `What that theme asks for — read this before choosing anything:\n${theme}\n`
+        + 'Take the SURFACES from it: the colours, the patterns, the finishes and the contrast '
+        + 'between them. Those are what a tile can carry. The fittings and the architecture it '
+        + `mentions belong to the room${brief.room ? ` (${brief.room})` : ''}, not to the products you are choosing.`
+      : null,
     brief.room ? `Room: ${brief.room}` : null,
     brief.budget ? `Budget: ${brief.budget}` : null,
   ].filter((line): line is string => line !== null);
