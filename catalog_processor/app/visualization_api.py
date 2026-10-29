@@ -786,6 +786,9 @@ def _build_success_response(
                 "",
             ),
         },
+        "theme_check": result.get(
+            "theme_check"
+        ),
         "drive": result.get(
             "drive_result"
         ),
@@ -846,6 +849,12 @@ def create_visualization(
             validate_visualization_request(
                 request
             )
+        )
+
+        requirements_for_check = (
+            normalized.get("requirements")
+            if isinstance(normalized.get("requirements"), dict)
+            else {}
         )
 
         result = (
@@ -912,6 +921,36 @@ def create_visualization(
                 ),
             )
         )
+
+        # DID IT COME BACK AS THE THEME THAT WAS ASKED FOR?
+        #
+        # Advisory, and deliberately NOT a retry loop: this request has
+        # already paid for two image generations and the function's
+        # maxDuration is 60s, so regenerating here risks returning no
+        # image at all -- a worse outcome than an imperfect one. The
+        # verdict rides along in the response and the showroom decides.
+        #
+        # Wrapped because the check must never be the reason a
+        # generation fails. "unchecked" is reported as unchecked, never
+        # as a pass.
+        try:
+            from app.theme_check import check_theme, summarise
+            verdict = check_theme(
+                result.get("image_path", ""),
+                requirements_for_check.get("style"),
+            )
+            line = summarise(verdict)
+            if line:
+                print(f"  [visualization] theme check -- {line}")
+            result["theme_check"] = verdict
+        except Exception as error:  # noqa: BLE001
+            result["theme_check"] = {
+                "status": "unchecked",
+                "theme": str(requirements_for_check.get("style") or ""),
+                "reason": f"the check could not run: {error}",
+                "present": [],
+                "missing": [],
+            }
 
         return _build_success_response(
             result

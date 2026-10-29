@@ -2929,7 +2929,20 @@ const ai = {
     );
   },
 
-  async generateImageUrl(
+  /**
+   * The generated scene, together with the backend's own verdict on
+   * whether it came back as the theme that was asked for.
+   *
+   * generateImageUrl below returns the URL alone and is left exactly as
+   * it was, so nothing that calls it has to change. This is for the
+   * caller that wants the verdict too -- the mood board, which shows it
+   * rather than letting a handsome generic bathroom pass as a finished
+   * board.
+   *
+   * themeCheck.status is "pass", "fail" or "unchecked". "unchecked" is
+   * never a pass: it means the check could not run.
+   */
+  async generateScene(
     payload
   ) {
 
@@ -2937,6 +2950,19 @@ const ai = {
       await this.generateVisualization(
         payload
       );
+
+    return {
+      imageUrl: this.imageUrlFrom(result),
+      themeCheck:
+        result.theme_check ||
+        result.data?.theme_check ||
+        null,
+    };
+  },
+
+  imageUrlFrom(
+    result
+  ) {
 
     return (
       result.imageUrl ||
@@ -2947,6 +2973,17 @@ const ai = {
       result.data?.visualization?.image_url ||
       result.data?.visualization?.imageUrl ||
       ''
+    );
+  },
+
+  async generateImageUrl(
+    payload
+  ) {
+
+    return this.imageUrlFrom(
+      await this.generateVisualization(
+        payload
+      )
     );
   },
 

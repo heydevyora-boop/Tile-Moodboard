@@ -41,7 +41,7 @@ from app.client_selections import (
     wants_no_feature_wall,
 )
 from app.devyora_system_prompt import DEVYORA_SYSTEM_PROMPT
-from app.themes import theme_brief
+from app.themes import describe_theme, theme_brief
 from app.scene_image_resolver import resolve_scene_image
 
 
@@ -512,6 +512,14 @@ def build_tile_application_prompt(
             + " Keep the materials below true to this, in how they are laid, "
             "cut and grouted -- without changing anything about the room."
         )
+        # The prohibitions travel too. They are what stops a Moroccan
+        # board's grout and trim being laid out like a British one's --
+        # the choices this step actually makes.
+        found = describe_theme(requirements.get("style"))
+        if found and found.get("avoid"):
+            selection_lines.append(
+                "- Not in this theme: " + "; ".join(found["avoid"]) + "."
+            )
 
     # Where the statement material goes is a statement about roles, so it
     # only exists for a combination.

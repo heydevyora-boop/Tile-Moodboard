@@ -12,7 +12,7 @@ from app.client_selections import (
     tile_goes_on_floor,
     wants_no_feature_wall,
 )
-from app.themes import reference_images, theme_brief
+from app.themes import reference_images, theme_specification
 from app.output_paths import writable_output_root
 from typing import Any, Dict, Optional
 
@@ -219,7 +219,7 @@ def build_room_scene_prompt(
     # theme came back as a colour wash and a lamp rather than zellige,
     # arches and brasswork. The description says what it asks for, and
     # the photographs are attached by generate_bathroom_scene below.
-    theme = theme_brief(requirements.get("style") or style_text)
+    theme = theme_specification(requirements.get("style") or style_text)
     references = reference_images(requirements.get("style") or style_text)
 
     selections = []
@@ -334,14 +334,41 @@ def build_room_scene_prompt(
     parts.append(photograph)
 
     if theme:
+        # TWO LAYERS, both required.
+        #
+        # The first is the same for every theme: how to read a
+        # specification and a set of references, and what the result has
+        # to satisfy. The second is this theme's own configuration, in
+        # full. Neither replaces the other -- the common layer alone is
+        # how eight themes come back as one generic bathroom, and the
+        # specific layer alone leaves the model to guess what to do with
+        # the photographs.
         parts.append(
             f"{SECTION_SEPARATOR}\nTHE SELECTED THEME\n{SECTION_SEPARATOR}\n"
-            f"{theme}\n\n"
-            "Read this in full before drawing anything. The theme has to be "
-            "recognisable from the WHOLE room -- its surfaces, its fittings, "
-            "its light and its proportions -- not from one ornament or a "
+            "Before generating anything, read the entire specification below "
+            "and visually analyse every supplied reference photograph for this "
+            "theme. Understand its design language, its dominant and secondary "
+            "colours, its tile arrangements, its material combinations, its "
+            "fixtures, its architecture, its lighting and its overall visual "
+            "identity.\n\n"
+            "Then look at the supplied catalog product images. Those products "
+            "are the source of truth for the tiles in this room.\n\n"
+            "Generate ONE coherent, photorealistic interior that follows this "
+            "theme through its whole composition -- wall treatments, floor, "
+            "tiles, cabinetry, fixtures, mirrors, architectural detail, "
+            "material choices and lighting together. The theme must be "
+            "recognisable from the room as a whole, not from one ornament or a "
             "colour wash over a generic interior. Someone shown the result "
-            "without being told the theme should be able to name it."
+            "without being told the theme should be able to name it.\n\n"
+            "Treat the written specification as the design requirement, the "
+            "reference photographs as visual guidance, and the catalog product "
+            "images as the source of truth for product appearance. Where a "
+            "selected product does not match the theme's ideal palette, KEEP "
+            "THE REAL PRODUCT and adapt the surrounding materials, paint, "
+            "stone, cabinetry, fixtures, lighting and accessories around it. "
+            "Never recolour, repattern or substitute a supplied product to "
+            "make it fit.\n\n"
+            f"{SECTION_SEPARATOR}\nTHE SPECIFICATION\n{SECTION_SEPARATOR}\n{theme}"
         )
 
         if references:

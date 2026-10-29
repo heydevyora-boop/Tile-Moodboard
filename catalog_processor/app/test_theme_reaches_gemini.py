@@ -36,7 +36,10 @@ from app.themes import (  # noqa: E402
     describe_theme,
     reference_images,
     theme_brief,
+    theme_checklist,
+    theme_specification,
 )
+from app.theme_check import check_theme, summarise  # noqa: E402
 from app.scene_image_generator import build_room_scene_prompt  # noqa: E402
 from app.tile_application_engine import build_tile_application_prompt  # noqa: E402
 
@@ -48,11 +51,17 @@ PHOTOGRAPHED = {
     "Roman Touch": ("travertine", "palm-leaf"),
     "Floral": ("blush-pink", "gunmetal"),
     "Tropical": ("palm-leaf", "oxblood"),
-    "Geometrical": ("hexagons", "terracotta tiles"),
+    "Geometrical": ("hexagonal", "zellige"),
     "Metallic": ("champagne-gold", "zellige"),
     "Rustic": ("ochre", "champagne-gold"),
     "Moroccan": ("zellige", "travertine"),
+    # No photographs yet, but a strict configuration like the rest.
+    "Black & White": ("charcoal", "zellige"),
 }
+
+# The eight with photographs on disk. Black & White has none, and the
+# prompt must say so rather than imply it has any.
+WITH_PHOTOGRAPHS = {k: v for k, v in PHOTOGRAPHED.items() if k != "Black & White"}
 
 
 def check(label, ok, detail=""):
@@ -104,8 +113,17 @@ def every_theme_is_configured():
         results.append(check(f"{label} is a theme the generator knows", found is not None))
         if found:
             results.append(check(
-                f"{label} has a written description",
-                len(found["description"]) > 120, len(found["description"])))
+                f"{label} has a written identity",
+                len(found["identity"]) > 120, len(found["identity"])))
+            results.append(check(
+                f"{label} has mandatory characteristics",
+                len(found["mandatory"]) >= 2, len(found["mandatory"])))
+            results.append(check(
+                f"{label} has prohibited deviations",
+                len(found["avoid"]) >= 2, len(found["avoid"])))
+            results.append(check(
+                f"{label} has a success condition",
+                len(found["success"]) > 40, found["success"][:60]))
 
     results.append(check(
         "a theme nobody named yields nothing, not a guess",
@@ -122,7 +140,7 @@ def every_theme_is_configured():
 def each_theme_has_its_own_references():
     results = []
     seen = {}
-    for label in PHOTOGRAPHED:
+    for label in WITH_PHOTOGRAPHS:
         paths = reference_images(label)
         results.append(check(f"{label} has reference photographs", len(paths) >= 3, len(paths)))
         results.append(check(
@@ -163,23 +181,27 @@ def the_prompt_carries_the_right_theme():
         results.append(check(
             f"{label}: ...and no other theme's wording is",
             foreign not in prompt.lower(), foreign))
-        results.append(check(
-            f"{label}: the prompt says the photographs are supplied",
-            "REFERENCE PHOTOGRAPHS: 5 real rooms" in prompt))
-        results.append(check(
-            f"{label}: ...and that they are not to be copied",
-            "do not reproduce their tiles" in prompt))
+        if label in WITH_PHOTOGRAPHS:
+            results.append(check(
+                f"{label}: the prompt says the photographs are supplied",
+                "REFERENCE PHOTOGRAPHS: 5 real rooms" in prompt))
+            results.append(check(
+                f"{label}: ...and that they are not to be copied",
+                "do not reproduce their tiles" in prompt))
+        else:
+            results.append(check(
+                f"{label}: the prompt states it has no photographs",
+                "REFERENCE PHOTOGRAPHS: none are available" in prompt))
 
-    # The one theme with no photographs must say so, not imply it has any.
-    mono = build_room_scene_prompt(
-        "Black & White", "A Board Name",
-        {"room": "Bathroom", "surface": "WALL", "style": "Black & White"},
-    )
-    results.append(check(
-        "Black & White states that it has no references",
-        "REFERENCE PHOTOGRAPHS: none are available" in mono))
-    results.append(check(
-        "...and still carries its description", "charcoal" in mono.lower()))
+    # Reachable by the id the owner specified, not only by its label.
+    for label, theme_id in [
+        ("Black & White", "black_white"), ("Roman Touch", "roman_touch"),
+        ("Moroccan", "moroccan"), ("Geometrical", "geometrical"),
+    ]:
+        results.append(check(
+            f"{label} is reachable by its id \"{theme_id}\"",
+            describe_theme(theme_id) is describe_theme(label)
+            and describe_theme(theme_id) is not None))
 
     # A theme the table does not know says nothing about a theme at all.
     unknown = build_room_scene_prompt(
@@ -194,7 +216,7 @@ def the_prompt_carries_the_right_theme():
 
 def the_photographs_are_actually_sent():
     results = []
-    for label in PHOTOGRAPHED:
+    for label in WITH_PHOTOGRAPHS:
         contents = capture_scene_request(label)
         blobs = [p for p in contents if getattr(p, "inline_data", None) is not None]
         expected = reference_images(label)
@@ -342,6 +364,143 @@ def the_theme_holds_in_every_room():
     return results
 
 
+def the_specification_reaches_the_prompt():
+    """Chunk 4 Part C: both layers, and the theme's own rules in full."""
+    results = []
+    for label, (belongs, foreign) in PHOTOGRAPHED.items():
+        prompt = build_room_scene_prompt(
+            label, "A Board Name",
+            {"room": "Bathroom", "surface": "WALL", "style": label},
+        )
+        found = describe_theme(label)
+
+        results.append(check(
+            f"{label}: the common instruction layer is present",
+            "Treat the written specification as the design requirement" in prompt
+            and "visually analyse every supplied reference photograph" in prompt))
+        results.append(check(
+            f"{label}: ...and the theme-specific layer beside it",
+            "THE SPECIFICATION" in prompt and belongs in prompt.lower()))
+        results.append(check(
+            f"{label}: every mandatory characteristic is sent, in full",
+            all(rule in prompt for rule in found["mandatory"]),
+            [r[:50] for r in found["mandatory"] if r not in prompt]))
+        results.append(check(
+            f"{label}: every prohibited deviation is sent",
+            all(item in prompt for item in found["avoid"]),
+            [i[:40] for i in found["avoid"] if i not in prompt]))
+        results.append(check(
+            f"{label}: the success condition is sent",
+            found["success"] in prompt))
+        results.append(check(
+            f"{label}: a mismatched product is kept, not recoloured",
+            "KEEP THE REAL PRODUCT" in prompt
+            and "Never recolour, repattern or substitute a supplied product" in prompt))
+        results.append(check(
+            f"{label}: no other theme's wording is present",
+            foreign not in prompt.lower(), foreign))
+
+    unknown = build_room_scene_prompt(
+        "Brutalist", "X", {"room": "Bathroom", "surface": "WALL", "style": "Brutalist"})
+    results.append(check(
+        "an unknown theme gets no specification at all",
+        "THE SPECIFICATION" not in unknown and theme_specification("Brutalist") == ""))
+    return results
+
+
+def the_theme_check_is_honest():
+    """Chunk 4 Part D / Chunk 5: never report a pass that was not earned."""
+    results = []
+
+    results.append(check(
+        "no theme selected -> unchecked, not a pass",
+        check_theme("/nowhere.png", "")["status"] == "unchecked"))
+    results.append(check(
+        "no image to read -> unchecked, not a pass",
+        check_theme("/nowhere.png", "Moroccan")["status"] == "unchecked"))
+    results.append(check(
+        "...and it says which theme it could not check",
+        check_theme("/nowhere.png", "Moroccan")["theme"] == "Moroccan"))
+
+    image = ROOT / "assets" / "theme_references" / "moroccan" / "01.webp"
+    results.append(check("a real image to check against exists", image.is_file()))
+
+    class Reply:
+        def __init__(self, text):
+            self.text = text
+
+    class Models:
+        def __init__(self, text):
+            self._text = text
+
+        def generate_content(self, **kwargs):
+            Models.last = kwargs
+            return Reply(self._text)
+
+    class Client:
+        def __init__(self, text):
+            self.models = Models(text)
+
+    rules = theme_checklist("Moroccan")
+    everything = ", ".join(str(i) for i in range(1, len(rules) + 1))
+
+    good = check_theme(image, "Moroccan", Client(
+        '{"present": [' + everything + '], "missing": [], "forbidden_seen": [], "notes": "ok"}'))
+    results.append(check("every characteristic visible -> pass", good["status"] == "pass", good))
+
+    bad = check_theme(image, "Moroccan", Client(
+        '{"present": [1], "missing": [2, 3], "forbidden_seen": ["British heritage styling"], "notes": "n"}'))
+    results.append(check("a characteristic missing -> fail", bad["status"] == "fail"))
+    results.append(check(
+        "...and the failure names the rules in the owner's own words",
+        bad["missing"] == [rules[1], rules[2]], bad["missing"]))
+    results.append(check(
+        "...and names the forbidden element that was seen",
+        bad["forbidden_seen"] == ["British heritage styling"]))
+
+    results.append(check(
+        "a forbidden element alone is enough to fail",
+        check_theme(image, "Moroccan", Client(
+            '{"present": [' + everything + '], "missing": [], "forbidden_seen": ["plain white minimalist interiors"]}'
+        ))["status"] == "fail"))
+
+    results.append(check(
+        "an unreadable reply -> unchecked, not a pass",
+        check_theme(image, "Moroccan", Client("I could not tell"))["status"] == "unchecked"))
+
+    class Exploding:
+        class models:
+            @staticmethod
+            def generate_content(**kwargs):
+                raise RuntimeError("the model is down")
+    results.append(check(
+        "a model error -> unchecked, and never raises",
+        check_theme(image, "Moroccan", Exploding())["status"] == "unchecked"))
+
+    # The question must be built from THIS theme's rules.
+    check_theme(image, "Rustic", Client('{"present": [1], "missing": []}'))
+    asked = " ".join(
+        getattr(part, "text", "") or "" for part in Models.last["contents"]
+    )
+    results.append(check(
+        "the check asks about the chosen theme's own rules",
+        all(rule in asked for rule in theme_checklist("Rustic"))))
+    results.append(check(
+        "...and about its prohibitions",
+        all(item in asked for item in describe_theme("Rustic")["avoid"])))
+    results.append(check(
+        "...and not another theme's",
+        "zellige" not in asked.lower()))
+    results.append(check(
+        "the image itself is sent, not its filename",
+        any(getattr(p, "inline_data", None) is not None for p in Models.last["contents"])))
+
+    results.append(check(
+        "an unchecked verdict reads as unchecked, never as approval",
+        "not checked" in summarise(check_theme("/nowhere.png", "Moroccan"))))
+    return results
+
+
 def main():
     groups = [
         ("every theme is configured", every_theme_is_configured()),
@@ -350,6 +509,8 @@ def main():
         ("the photographs are actually sent", the_photographs_are_actually_sent()),
         ("the tile step knows the theme too", the_tile_step_knows_the_theme_too()),
         ("the theme holds in every room", the_theme_holds_in_every_room()),
+        ("the specification reaches the prompt", the_specification_reaches_the_prompt()),
+        ("the theme check is honest", the_theme_check_is_honest()),
         ("the wizard and the table agree", the_wizard_and_the_table_agree()),
     ]
 

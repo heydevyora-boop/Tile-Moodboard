@@ -230,6 +230,12 @@
   /* ---- bathroom scene visualization (same tokens as the rest of this page) ---- */
   .btn-amber:disabled { opacity:.55; cursor:not-allowed; }
   .viz-section { display:flex; flex-direction:column; gap:10px; }
+  /* The theme verdict: quiet when it is only "not checked", amber when
+     the render missed the theme. Never red -- the image is usable, it
+     just may not be the theme that was asked for. */
+  .viz-note { margin:8px 0 0; font-size:10px; letter-spacing:.08em; color:var(--muted); display:flex; flex-direction:column; gap:3px; }
+  .viz-note.is-warn { color:#8A6A2E; }
+  .viz-note span { letter-spacing:.02em; font-size:10.5px; }
   .viz-error { padding:14px 16px; background:var(--err-bg); border-radius:13px; font-size:12.5px; line-height:1.5; color:var(--err); }
   .viz-image-frame { border-radius:16px; overflow:hidden; background:var(--sand); border:1px solid var(--line); cursor:zoom-in; }
   .viz-image-frame img { width:100%; display:block; object-fit:cover; }
@@ -1745,7 +1751,8 @@
     const v = vizStateFor(index);
 
     if (v.status === 'success' && v.imageUrl) {
-      return '<div class="mb-scene"><img src="' + v.imageUrl + '" alt="' + sceneAlt() + '"></div>';
+      return '<div class="mb-scene"><img src="' + v.imageUrl + '" alt="' + sceneAlt() + '"></div>'
+        + themeCheckHtml(index);
     }
     if (v.status === 'loading') {
       return '<div class="mb-scene-empty">' +
@@ -2041,6 +2048,37 @@
 
   const IDLE_VISUALIZATION = { status: 'idle', imageUrl: null, error: null };
 
+  /*
+   * The backend's verdict on whether the render came back as the theme
+   * that was asked for.
+   *
+   * A generation that returns a handsome generic bathroom is a failed
+   * result, and nothing used to say so -- the image appeared, the board
+   * looked finished, and only the showroom noticed. Shown only when
+   * there is something to say: a pass is silent.
+   *
+   * "unchecked" is reported as unchecked, never as a pass. The check is
+   * advisory; nothing here blocks on it.
+   */
+  function themeCheckHtml(index) {
+    const verdict = vizStateFor(index).themeCheck;
+    if (!verdict || verdict.status === 'pass') return '';
+
+    if (verdict.status === 'unchecked') {
+      return '<p class="viz-note mono">THEME NOT CHECKED \u2014 '
+        + escapeHtml(verdict.reason || 'no reason given') + '</p>';
+    }
+
+    const missing = (verdict.missing || []).slice(0, 3);
+    const seen = (verdict.forbidden_seen || []).slice(0, 2);
+    return '<p class="viz-note is-warn mono">'
+      + 'THIS MAY NOT READ AS ' + escapeHtml(String(verdict.theme || 'the theme').toUpperCase())
+      + (missing.length ? '<span>Not visible: ' + escapeHtml(missing.join('; ')) + '</span>' : '')
+      + (seen.length ? '<span>Should not be there: ' + escapeHtml(seen.join('; ')) + '</span>' : '')
+      + '<span>Generate again to try for a closer result.</span>'
+      + '</p>';
+  }
+
   function vizStateFor(index) {
     return state.visualizations[index] || IDLE_VISUALIZATION;
   }
@@ -2064,6 +2102,7 @@
     if (v.status === 'success' && v.imageUrl) {
       return label +
         '<div class="viz-image-frame"><img src="' + v.imageUrl + '" alt="' + sceneAlt() + '"></div>' +
+        themeCheckHtml(index) +
         button('btn-dashed', '↻ GENERATE AGAIN');
     }
     return label + button('btn-amber', 'GENERATE ' + sceneNounCaps() + ' →');
@@ -2170,7 +2209,7 @@
     renderVizSection(index);
 
     try {
-      const imageUrl = await CasaApi.ai.generateImageUrl({
+      const generated = await CasaApi.ai.generateScene({
         product_id: baseTile.tileId,
         // No surface picker exists in this UI; WALL matches the default
         // the previous Scene & Angles tool used for the same backend call.
@@ -2178,7 +2217,12 @@
         materials,
         requirements,
       });
-      state.visualizations[index] = { status: 'success', imageUrl, error: null };
+      state.visualizations[index] = {
+        status: 'success',
+        imageUrl: generated.imageUrl,
+        themeCheck: generated.themeCheck || null,
+        error: null,
+      };
     } catch (err) {
       state.visualizations[index] = { status: 'error', imageUrl: null, error: (err && err.message) || ('Something went wrong generating the ' + sceneNoun().toLowerCase() + '.') };
     }

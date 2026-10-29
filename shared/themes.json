@@ -1,0 +1,228 @@
+{
+  "_comment": [
+    "THE DESIGN THEMES, for BOTH halves of the generator.",
+    "",
+    "This file is the single source of truth. catalog_processor/app/themes.py reads it to",
+    "build the image prompts and to find each theme's reference photographs;",
+    "backend/src/services/themes.service.ts reads it so the step that PICKS the tiles is",
+    "held to the same specification. Node and Python run as separate functions on Vercel",
+    "with no shared disk and no shared package, so they cannot import one module -- but",
+    "they can read one file, and vercel.json bundles it into both.",
+    "",
+    "Keys are normalised labels: lower case, separators collapsed, '&' spelled out. The",
+    "wizard sends the label (frontend/mood-board.html, THEMES) and both readers normalise",
+    "it the same way, so 'Roman Touch', 'ROMAN_TOUCH' and 'roman-touch' are one theme.",
+    "",
+    "`slug` names the folder under catalog_processor/assets/theme_references/. A theme with",
+    "no folder has no references, which the prompt states outright rather than implying.",
+    "",
+    "`mandatory` and `avoid` are the catalog owner's own rules and prohibitions. They are",
+    "sent to the model in full. Do not summarise them into a colour list: a theme reduced",
+    "to its palette is how eight themes come back as one generic bathroom."
+  ],
+  "themes": {
+    "british": {
+      "id": "british",
+      "label": "British",
+      "palette": "Heritage green, oxblood/burgundy, warm ivory, antique brass",
+      "slug": "british",
+      "identity": "A recognisable British heritage or English country-house bathroom. Traditional cabinetry, deep heritage-green surfaces, carefully balanced oxblood accents, antique brass fittings, classic mirrors and heritage-inspired architectural details. Where the references support it: Victorian or Edwardian detailing, traditional patterned flooring, framed mirrors, traditional sanitaryware, wainscoting, decorative mouldings or botanical heritage motifs. The room must feel established, refined, traditional and historically inspired -- not a generic modern luxury bathroom.",
+      "mandatory": [
+        "Green and/or oxblood must be meaningfully represented where the selected catalog tiles and the references allow it.",
+        "Antique brass and traditional detailing must reinforce the heritage character.",
+        "Traditional cabinetry, mirrors, patterns or architectural details must be visible.",
+        "Grey or blue surfaces may appear where the actual catalog products or the references require them, but must not turn the room into a generic contemporary bathroom.",
+        "A burgundy vanity and brass taps alone do not establish the theme."
+      ],
+      "avoid": [
+        "minimalist contemporary styling",
+        "unrelated blue feature walls",
+        "generic grey-on-grey interiors",
+        "ultra-modern floating cabinetry without heritage details",
+        "visually sterile hotel bathrooms"
+      ],
+      "success": "The complete room reads as a British heritage or English country-house bathroom before any individual accessory is examined."
+    },
+    "roman touch": {
+      "id": "roman_touch",
+      "label": "Roman Touch",
+      "palette": "Travertine, warm limestone, sand, beige, muted terracotta",
+      "slug": "roman-touch",
+      "identity": "A Roman-inspired architectural bathing space with a strong natural-stone identity. Warm travertine or limestone textures, substantial stone surfaces, arched niches, sculptural stone basins, restrained terracotta accents and soft architectural lighting. It should feel like a refined Mediterranean bathhouse, or a contemporary reading of classical Roman architecture. Stone, arches, mass, proportion and natural materials come first.",
+      "mandatory": [
+        "Natural stone must be a major visual component.",
+        "Arches, recessed niches, sculptural forms or other convincing architectural details must communicate classical influence.",
+        "Terracotta stays an accent; it must not turn the design into a rustic clay bathroom.",
+        "Surfaces should feel substantial, warm and architectural.",
+        "Never present a selected catalog tile as travertine if it is a different material."
+      ],
+      "avoid": [
+        "generic white marble hotel bathrooms",
+        "glossy modern colour-blocking",
+        "tropical greenery as the dominant theme",
+        "excessive Moroccan ornamentation",
+        "contemporary minimalism without classical character"
+      ],
+      "success": "The bathroom reads as Roman-inspired stone architecture or a Mediterranean bathhouse, not an ordinary bathroom with beige tiles."
+    },
+    "floral": {
+      "id": "floral",
+      "label": "Floral",
+      "palette": "Blush pink, sage green, ivory, soft botanical tones",
+      "slug": "floral",
+      "identity": "A floral bathroom where botanical design is a defining part of the interior. Flower-patterned tiles, botanical wall treatments, floral feature surfaces or other clearly visible floral elements, following the supplied references. Balanced with blush-pink surfaces, sage-green accents, ivory finishes, elegant fixtures and a soft, harmonious atmosphere. The result should feel refined and botanical rather than merely pink.",
+      "mandatory": [
+        "Clearly recognisable floral or botanical motifs must be visible.",
+        "The floral treatment must have meaningful presence on an appropriate wall, tile surface or feature area.",
+        "Blush, sage and ivory should be used coherently where they are compatible with the actual catalog products.",
+        "If the selected catalog tiles are plain, use them honestly and carry the botanical identity on other compatible surfaces or accessories.",
+        "Floral detail must be integrated with the architecture, not stuck on it."
+      ],
+      "avoid": [
+        "plain pink bathrooms with no floral elements",
+        "a generic modern bathroom with one potted plant",
+        "random excessive flower decoration",
+        "unrelated geometric feature walls",
+        "childish or cartoon-like floral graphics"
+      ],
+      "success": "The floral theme is immediately evident from the actual surface treatments and the overall composition."
+    },
+    "tropical": {
+      "id": "tropical",
+      "label": "Tropical",
+      "palette": "Palm green, teal, sand, warm natural wood",
+      "slug": "tropical",
+      "identity": "A tropical resort-inspired bathroom with a strong relationship between lush greenery, natural materials and the bathing space. Palm-leaf motifs, tropical botanical patterns, teal accents, sand-toned stone, warm wood and abundant but believable planting. Following the references: large botanical feature surfaces, indoor greenery, natural wood vanities or visually open shower areas. A sophisticated tropical retreat, not a generic bathroom decorated with one plant.",
+      "mandatory": [
+        "Tropical greenery, palm motifs or another unmistakable tropical element must be visible.",
+        "Natural materials and the teal/sand relationship must reinforce the theme.",
+        "Plants must be plausible for a bathroom and must not obscure the catalog products.",
+        "Greenery supports the design; it does not replace proper tile and material planning.",
+        "Never fabricate botanical tile patterns as catalog products when none were supplied."
+      ],
+      "avoid": [
+        "plain white bathrooms with one plant",
+        "British heritage cabinetry as the dominant style",
+        "excessive jungle clutter",
+        "unrelated geometric feature walls",
+        "generic grey hotel bathrooms"
+      ],
+      "success": "The room feels like a cohesive tropical resort or botanical retreat, with the theme visible throughout the composition."
+    },
+    "geometrical": {
+      "id": "geometrical",
+      "label": "Geometrical",
+      "palette": "Ivory, graphite, terracotta",
+      "slug": "geometrical",
+      "identity": "A contemporary architectural bathroom defined by strong geometric relationships. Clearly visible geometric tile layouts, angular compositions, hexagonal patterns, repeating forms, structured feature walls or graphic flooring, in the visual language the references demonstrate. A deliberate balance between ivory, graphite and terracotta where the catalog products allow it. The geometry must be intentional, well aligned and part of the architecture.",
+      "mandatory": [
+        "At least one substantial, clearly visible surface must establish the geometric identity.",
+        "Patterns must hold consistent alignment, scale, perspective and repetition.",
+        "The room must show deliberate geometric composition, not random decorative shapes.",
+        "Use the actual catalog tile pattern; invent no additional motif on the product itself.",
+        "If the selected tile is plain, carry the geometric identity on other genuine, compatible elements without misrepresenting the product."
+      ],
+      "avoid": [
+        "random abstract shapes",
+        "inconsistent tile repetition",
+        "arbitrary colour splashes",
+        "unrelated floral wallpaper",
+        "Moroccan ornamentation mistaken for modern geometry",
+        "a bathroom with no meaningful geometric feature"
+      ],
+      "success": "The bathroom reads as a deliberately composed geometric interior, not a generic bathroom with a patterned tile added at random."
+    },
+    "metallic": {
+      "id": "metallic",
+      "label": "Metallic",
+      "palette": "Pearl, gunmetal, champagne",
+      "slug": "metallic",
+      "identity": "A sophisticated contemporary bathroom where metallic finishes and their relationship with reflective or stone surfaces define the design. Pearl-toned stone or tiles, champagne-gold hardware, gunmetal fittings or frames, carefully balanced reflective surfaces and elegant vanity detailing. The identity comes from the coordination of metal finishes, material textures, hardware and lighting -- not from making the whole room gold or silver.",
+      "mandatory": [
+        "Metallic finishes must be clearly visible in fixtures, hardware, frames or other appropriate elements.",
+        "Champagne and gunmetal must be balanced deliberately where the references support it.",
+        "Pearl-toned surfaces should provide a coherent foundation where they are compatible with the actual catalog tiles.",
+        "Metal reflections must be realistic and the different finishes must be distinguishable from one another.",
+        "Preserve the actual catalog tile's material appearance."
+      ],
+      "avoid": [
+        "an entirely gold bathroom",
+        "excessive chrome",
+        "random combinations of incompatible metals",
+        "generic white marble interiors with no meaningful metallic identity",
+        "unrealistic mirror-like walls"
+      ],
+      "success": "The complete bathroom feels like a coordinated metallic luxury interior, with believable materials and deliberately selected finishes."
+    },
+    "rustic": {
+      "id": "rustic",
+      "label": "Rustic",
+      "palette": "Natural clay, terracotta, ochre, warm wood, earthy stone",
+      "slug": "rustic",
+      "identity": "An earthy, handcrafted bathroom: terracotta surfaces, natural clay textures, warm wooden elements, earthy stone and finishes that feel tactile and authentic. Handmade-looking material treatments, subtle surface irregularities, warm natural light and organic composition. Where it fits: terracotta flooring, a natural stone basin, clay-toned walls, rustic timber detail. Grounded, warm and materially honest -- not a polished contemporary bathroom with orange accents.",
+      "mandatory": [
+        "Earthy materials and clay/terracotta tones must have meaningful presence where the catalog products allow it.",
+        "Textures should feel natural and tactile rather than artificially distressed.",
+        "Wood, stone and clay must work together coherently.",
+        "Avoid decorative objects so numerous that they obscure the bathroom design.",
+        "Do not turn a smooth catalog tile into a handmade terracotta product by recolouring it or inventing a texture."
+      ],
+      "avoid": [
+        "glossy minimalist luxury styling",
+        "excessive metallic glamour",
+        "generic white bathrooms with orange accessories",
+        "overly distressed surfaces",
+        "unrelated Moroccan mosaic patterns"
+      ],
+      "success": "The bathroom feels naturally earthy, warm and handcrafted, and is clearly distinct from the other themes."
+    },
+    "moroccan": {
+      "id": "moroccan",
+      "label": "Moroccan",
+      "palette": "Cobalt blue, saffron, warm ivory, terracotta, brass",
+      "slug": "moroccan",
+      "identity": "A recognisably Moroccan-inspired bathroom: distinctive zellige-style tilework, intricate mosaic compositions, decorative arches, rich cobalt-blue surfaces, saffron accents and warm brass detail. The interior must communicate Moroccan craftsmanship through its tile arrangements, decorative architecture, material contrasts and overall composition. Traditional hammam architecture or a refined contemporary Moroccan bathroom, according to the supplied references.",
+      "mandatory": [
+        "Moroccan architectural or decorative identity must be clearly visible.",
+        "Cobalt-blue or other reference-supported mosaic/zellige surfaces should have meaningful presence where they are compatible with the actual catalog products.",
+        "Arches, niches, decorative tile compositions or other unmistakable Moroccan elements should reinforce the style.",
+        "Saffron and brass complement the room; they must not overpower it.",
+        "Never invent zellige patterns on a selected catalog tile that does not have them."
+      ],
+      "avoid": [
+        "generic blue contemporary bathrooms",
+        "British heritage styling",
+        "plain white minimalist interiors",
+        "arbitrary geometric patterns without Moroccan character",
+        "excessive decorative clutter"
+      ],
+      "success": "The room reads as Moroccan-inspired architecture and craftsmanship, not simply a blue bathroom."
+    },
+    "black and white": {
+      "id": "black_white",
+      "label": "Black & White",
+      "palette": "Ivory, ash, charcoal, black and white",
+      "slug": "black-white",
+      "aliases": [
+        "black white"
+      ],
+      "identity": "A sophisticated monochromatic bathroom defined by a deliberate balance of ivory, ash, charcoal, black and white. Strong tonal contrast, refined material textures, clean architectural lines and carefully coordinated surfaces. Where the composition calls for it: monochrome patterned tiles, black-and-white flooring, charcoal feature walls, ivory stone, or contrasting vanity and fixture finishes. The whole room must read as an intentional black-and-white interior, not a generic grey bathroom.",
+      "mandatory": [
+        "Black, white, ivory and charcoal must create a clear, intentional monochromatic composition.",
+        "Contrast must be carried across several elements -- tiles, walls, flooring, vanity or fixtures.",
+        "Preserve the actual selected catalog tiles' original colours, patterns and textures.",
+        "Ash and charcoal are supporting tones; the room must not flatten into grey.",
+        "Keep visual balance, realistic materials and a coherent overall composition."
+      ],
+      "avoid": [
+        "unrelated colourful accents",
+        "dominant terracotta or tropical greens",
+        "random metallic glamour",
+        "a plain white bathroom with no meaningful contrast",
+        "generic grey-on-grey interiors with no distinctive monochromatic identity"
+      ],
+      "success": "The complete bathroom is immediately recognisable as a deliberately designed black-and-white interior, through its contrast, material choices, tile placement and overall composition.",
+      "referencesPending": true
+    }
+  }
+}
