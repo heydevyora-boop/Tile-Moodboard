@@ -26,22 +26,25 @@
       "label": "British",
       "palette": "Heritage green, oxblood/burgundy, warm ivory, antique brass",
       "slug": "british",
-      "identity": "A recognisable British heritage or English country-house bathroom. Traditional cabinetry, deep heritage-green surfaces, carefully balanced oxblood accents, antique brass fittings, classic mirrors and heritage-inspired architectural details. Where the references support it: Victorian or Edwardian detailing, traditional patterned flooring, framed mirrors, traditional sanitaryware, wainscoting, decorative mouldings or botanical heritage motifs. The room must feel established, refined, traditional and historically inspired -- not a generic modern luxury bathroom.",
+      "identity": "A recognisable British heritage or English country-house bathroom. The COMPLETE room has to communicate authentic heritage styling: deep forest-green surfaces, traditional Victorian or Edwardian architectural detailing, heritage cabinetry, antique brass fittings, classic framed mirrors, decorative wall panelling and traditional patterned flooring. Carefully balanced oxblood accents. Where the references support it: wainscoting, decorative mouldings, traditional sanitaryware or botanical heritage motifs. The room must feel established, refined, traditional and historically inspired -- a modern bathroom wearing a few British-inspired accessories is not this theme.",
       "mandatory": [
+        "Deep forest-green surfaces, Victorian or Edwardian architectural detailing, heritage cabinetry, antique brass fittings, classic framed mirrors, decorative wall panelling and traditional patterned flooring take priority in the composition. Several of these must carry the room, not one of them.",
         "Green and/or oxblood must be meaningfully represented where the selected catalog tiles and the references allow it.",
-        "Antique brass and traditional detailing must reinforce the heritage character.",
+        "Blue feature walls and sage-grey subway tiles must NOT dominate the composition unless they are the actual selected catalog products. Where they are, keep them and build the heritage character around them with panelling, cabinetry, brass, mirrors and flooring.",
         "Traditional cabinetry, mirrors, patterns or architectural details must be visible.",
         "Grey or blue surfaces may appear where the actual catalog products or the references require them, but must not turn the room into a generic contemporary bathroom.",
         "A burgundy vanity and brass taps alone do not establish the theme."
       ],
       "avoid": [
+        "a contemporary subway-tile bathroom carrying only a burgundy vanity and brass fixtures",
+        "a modern bathroom with a few British-inspired accessories standing in for the style",
         "minimalist contemporary styling",
         "unrelated blue feature walls",
         "generic grey-on-grey interiors",
         "ultra-modern floating cabinetry without heritage details",
         "visually sterile hotel bathrooms"
       ],
-      "success": "The complete room reads as a British heritage or English country-house bathroom before any individual accessory is examined."
+      "success": "The complete room reads as a British heritage or English country-house bathroom before any individual accessory is examined -- from its panelling, cabinetry, flooring and architectural detailing together, not from the vanity colour and the taps."
     },
     "roman touch": {
       "id": "roman_touch",
