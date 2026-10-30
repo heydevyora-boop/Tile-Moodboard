@@ -37,6 +37,7 @@ from app.themes import (  # noqa: E402
     reference_images,
     theme_brief,
     theme_checklist,
+    theme_rules,
     theme_specification,
 )
 from app.theme_check import check_theme, summarise  # noqa: E402
@@ -382,7 +383,7 @@ def the_specification_reaches_the_prompt():
             f"{label}: ...and the theme-specific layer beside it",
             "THE SPECIFICATION" in prompt and belongs in prompt.lower()))
         results.append(check(
-            f"{label}: every mandatory characteristic is sent, in full",
+            f"{label}: every mandatory rule is sent, in full",
             all(rule in prompt for rule in found["mandatory"]),
             [r[:50] for r in found["mandatory"] if r not in prompt]))
         results.append(check(
@@ -405,6 +406,52 @@ def the_specification_reaches_the_prompt():
     results.append(check(
         "an unknown theme gets no specification at all",
         "THE SPECIFICATION" not in unknown and theme_specification("Brutalist") == ""))
+    return results
+
+
+def the_check_asks_only_what_a_picture_can_answer():
+    """The verdict must name things that are either in the image or not.
+
+    The mandatory rules are written for the GENERATOR and include
+    conditions and prohibitions -- "blue feature walls must NOT dominate
+    unless they are the selected products", "a burgundy vanity and brass
+    taps alone do not establish the theme". The check used to ask "is
+    this visible?" of those, and the owner's British board duly reported
+    them under "Not visible", which says nothing anyone can act on.
+    """
+    import re
+    results = []
+    unanswerable = re.compile(r"must NOT|alone do not|\bunless\b|may appear|\bnever \b", re.I)
+
+    for label in [*PHOTOGRAPHED]:
+        asked = theme_checklist(label)
+        results.append(check(
+            f"{label}: the check has something to ask", len(asked) >= 3, len(asked)))
+        offending = [r[:70] for r in asked if unanswerable.search(r)]
+        results.append(check(
+            f"{label}: nothing it asks is a condition or a prohibition",
+            not offending, offending))
+
+        # ...while the generator still receives the full rules.
+        rules = theme_rules(label)
+        results.append(check(
+            f"{label}: the generator still gets every mandatory rule",
+            len(rules) >= len(describe_theme(label)["mandatory"]), len(rules)))
+
+    results.append(check(
+        "a theme with no configuration asks nothing", theme_checklist("Brutalist") == []))
+
+    # The British board's exact complaint must not be reproducible.
+    british = " ".join(theme_checklist("British"))
+    results.append(check(
+        "the lines the owner saw under \"Not visible\" are no longer asked",
+        "must NOT dominate" not in british and "alone do not establish" not in british))
+    results.append(check(
+        "...and what IS asked is the owner's own final visual check",
+        "immediately recognisable" in british
+        and "Victorian or Edwardian architectural detailing" in british
+        and "flooring" in british
+        and "Botanical detailing is balanced" in british))
     return results
 
 
@@ -577,6 +624,8 @@ def main():
         ("the tile step knows the theme too", the_tile_step_knows_the_theme_too()),
         ("the theme holds in every room", the_theme_holds_in_every_room()),
         ("the specification reaches the prompt", the_specification_reaches_the_prompt()),
+        ("the check asks only what a picture can answer",
+         the_check_asks_only_what_a_picture_can_answer()),
         ("the theme check is honest", the_theme_check_is_honest()),
         ("the wizard and the table agree", the_wizard_and_the_table_agree()),
     ]

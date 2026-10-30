@@ -172,7 +172,29 @@ def theme_specification(theme: Any) -> str:
 
 
 def theme_checklist(theme: Any) -> List[str]:
-    """The mandatory rules on their own, for the check that reads the image back."""
+    """
+    What the finished image is judged on.
+
+    NOT the mandatory rules. Those are written for the generator and
+    include conditions and prohibitions -- "blue feature walls must NOT
+    dominate unless they are the selected products", "a burgundy vanity
+    and brass taps alone do not establish the theme". Asking "is this
+    visible in the picture?" of a rule like that is meaningless, and the
+    board showed it: the owner's British board reported those very lines
+    under "Not visible", which says nothing anyone can act on.
+
+    `visible` is the positive half -- the things that either are or are
+    not in the photograph. A theme without one falls back to its
+    mandatory rules, which is the old behaviour.
+    """
+    found = describe_theme(theme)
+    if not found:
+        return []
+    return list(found.get("visible") or found["mandatory"])
+
+
+def theme_rules(theme: Any) -> List[str]:
+    """The mandatory rules, for the prompts. See theme_checklist for the other half."""
     found = describe_theme(theme)
     return list(found["mandatory"]) if found else []
 

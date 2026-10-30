@@ -104,7 +104,7 @@ def check_theme(
     label = found["label"]
     rules = theme_checklist(theme)
     if not rules:
-        return _unchecked("this theme has no mandatory characteristics configured", label)
+        return _unchecked("this theme has no visual characteristics configured", label)
 
     path = Path(str(image_path or ""))
     if not path.is_file():
@@ -125,7 +125,7 @@ def check_theme(
             f"This image was generated for the design theme \"{label}\" "
             f"({found['palette']}).\n\n"
             f"That theme is right when: {found['success']}\n\n"
-            "Judge the image against each of these mandatory characteristics. "
+            "Judge the image against each of these characteristics. "
             "Judge what is ACTUALLY VISIBLE, not what the theme's name suggests "
             "ought to be there. A matching colour palette on its own does not "
             "satisfy a characteristic.\n\n"
