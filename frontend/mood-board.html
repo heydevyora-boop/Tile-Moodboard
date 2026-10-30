@@ -236,6 +236,7 @@
   .viz-note { margin:8px 0 0; font-size:10px; letter-spacing:.08em; color:var(--muted); display:flex; flex-direction:column; gap:3px; }
   .viz-note.is-warn { color:#8A6A2E; }
   .viz-note span { letter-spacing:.02em; font-size:10.5px; }
+  .viz-note-h { font-weight:600; letter-spacing:.1em; font-size:9.5px; margin-top:5px; opacity:.85; }
   .viz-error { padding:14px 16px; background:var(--err-bg); border-radius:13px; font-size:12.5px; line-height:1.5; color:var(--err); }
   .viz-image-frame { border-radius:16px; overflow:hidden; background:var(--sand); border:1px solid var(--line); cursor:zoom-in; }
   .viz-image-frame img { width:100%; display:block; object-fit:cover; }
@@ -2061,22 +2062,37 @@
    * advisory; nothing here blocks on it.
    */
   function themeCheckHtml(index) {
-    const verdict = vizStateFor(index).themeCheck;
-    if (!verdict || verdict.status === 'pass') return '';
+    const v = vizStateFor(index).themeCheck;
+    if (!v || v.status === 'pass') return '';
 
-    if (verdict.status === 'unchecked') {
-      return '<p class="viz-note mono">THEME NOT CHECKED \u2014 '
-        + escapeHtml(verdict.reason || 'no reason given') + '</p>';
+    const theme = escapeHtml(String(v.theme || 'the theme').toUpperCase());
+
+    if (v.status === 'unchecked') {
+      return '<p class="viz-note mono">' + theme + ' \u2014 NOT CHECKED<span>'
+        + escapeHtml(v.reason || 'no reason given') + '</span></p>';
     }
 
-    const missing = (verdict.missing || []).slice(0, 3);
-    const seen = (verdict.forbidden_seen || []).slice(0, 2);
-    return '<p class="viz-note is-warn mono">'
-      + 'THIS MAY NOT READ AS ' + escapeHtml(String(verdict.theme || 'the theme').toUpperCase())
-      + (missing.length ? '<span>Not visible: ' + escapeHtml(missing.join('; ')) + '</span>' : '')
-      + (seen.length ? '<span>Should not be there: ' + escapeHtml(seen.join('; ')) + '</span>' : '')
-      + '<span>Generate again to try for a closer result.</span>'
-      + '</p>';
+    // Two categories, never mixed. A prohibition is not a missing
+    // feature -- reporting "blue feature walls must NOT dominate" under
+    // "Not visible" told the showroom nothing they could act on.
+    const list = (items) => (items || []).map((x) => '<span>\u00b7 ' + escapeHtml(x) + '</span>').join('');
+    const head = v.status === 'fail' ? ' \u2014 NON-COMPLIANT' : ' \u2014 PARTIAL COMPLIANCE';
+
+    let body = '';
+    if ((v.missing || []).length) body += '<span class="viz-note-h">Missing</span>' + list(v.missing);
+    if ((v.deviations || []).length) {
+      body += '<span class="viz-note-h">Detected deviations</span>' + list(v.deviations);
+    } else {
+      body += '<span class="viz-note-h">Detected deviations</span><span>\u00b7 None confirmed.</span>';
+    }
+    if ((v.uncertain || []).length) {
+      body += '<span class="viz-note-h">Could not tell from this image</span>' + list(v.uncertain);
+    }
+    if (v.recommendation) {
+      body += '<span class="viz-note-h">Recommendation</span><span>\u00b7 ' + escapeHtml(v.recommendation) + '</span>';
+    }
+
+    return '<p class="viz-note is-warn mono">' + theme + head + body + '</p>';
   }
 
   function vizStateFor(index) {
