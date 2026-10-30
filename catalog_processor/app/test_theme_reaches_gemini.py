@@ -515,6 +515,85 @@ def the_floral_living_room_is_furnished_and_controlled():
         "integration is part of what makes the theme right",
         "built into the architecture rather than hung on it" in living))
 
+    # THE FRAME. The live Floral bedroom put the pattern in a small
+    # rectangle and ran a terracotta border round it -- which both turns
+    # the feature back into a panel and pulls the eye off the blush,
+    # sage and ivory the theme is built on.
+    for label, prompt in (("living room", living), ("bathroom", bathroom)):
+        results.append(check(
+            f"{label}: no contrasting border may frame the floral surface",
+            "Do not frame the floral surface with a contrasting border" in prompt
+            and "terracotta, brass, dark trim" in prompt))
+        results.append(check(
+            f"{label}: a frame is named as what turns a wall back into a panel",
+            "A frame is what turns a feature wall back into a panel" in prompt))
+        results.append(check(
+            f"{label}: ...and forbidden outright",
+            "a terracotta, brass or dark contrasting border framing the floral "
+            "surface and turning it into a panel" in prompt))
+        results.append(check(
+            f"{label}: a border that IS a catalog product is kept, not removed",
+            "Where such a border is an actual selected catalog product, keep it "
+            "exactly as it is" in prompt))
+
+    # THE BEDROOM, furnished as one. The living room got this in the
+    # previous round and the bedroom did not, so a Floral bedroom was
+    # given the theme and no bed.
+    bedroom = build_room_scene_prompt(
+        "Floral", "A Board Name",
+        {"room": "Bedroom", "surface": "WALL", "style": "Floral"},
+    )
+    bed_styling = room_styling("Floral", "Bedroom")
+    results.append(check(
+        "the bedroom is furnished by the theme",
+        len(bed_styling) == 5 and all(item in bedroom for item in bed_styling),
+        [i[:40] for i in bed_styling if i not in bedroom]))
+    results.append(check(
+        "...under a heading that names the room",
+        "IN THIS ROOM -- how this theme is furnished in a bedroom:" in bedroom))
+    results.append(check(
+        "the feature runs the whole headboard wall, with the bed against it",
+        "The botanical feature runs the FULL headboard wall" in bedroom
+        and "skirting to ceiling, corner to corner" in bedroom
+        and "the bed stands against it" in bedroom))
+    results.append(check(
+        "...and is not a panel hung above the pillows",
+        "not a panel hung above the pillows" in bedroom))
+    results.append(check(
+        "a bed, bedding and timber furniture are asked for",
+        "upholstered or timber headboard in ivory, blush or sage" in bedroom
+        and "Bedding layered in warm ivory and blush with sage" in bedroom
+        and "Side tables and furniture in warm natural timber" in bedroom))
+    results.append(check(
+        "the bedroom still reads as a bedroom and nothing else",
+        "It must read unmistakably as a bedroom and as nothing else." in bedroom
+        and "a real bed, side tables and a wardrobe" in bedroom))
+    results.append(check(
+        "the bedroom carries the integration and distribution rules too",
+        "That dominant surface must be ARCHITECTURALLY INTEGRATED" in bedroom
+        and "ONE quieter botanical note besides the dominant surface" in bedroom
+        and "floral pattern covering most or all of the walls in the room" in bedroom))
+    results.append(check(
+        "...and still never alters a product",
+        "KEEP THE REAL PRODUCT" in bedroom))
+
+    # Each room gets its own furniture and no one else's.
+    results.append(check(
+        "a bedroom is given no living-room furniture",
+        "accent chairs" not in bedroom and "coffee table" not in bedroom))
+    results.append(check(
+        "a living room is given no bedroom furniture",
+        "headboard" not in living and "Bedding" not in living))
+    results.append(check(
+        "a floral bathroom is given neither",
+        "IN THIS ROOM" not in bathroom))
+    for other in ("British", "Moroccan", "Tropical", "Rustic"):
+        results.append(check(
+            f"a {other} bedroom is not given Floral's furniture",
+            "IN THIS ROOM" not in build_room_scene_prompt(
+                other, "A Board Name",
+                {"room": "Bedroom", "surface": "WALL", "style": other})))
+
     # THE ROOM TYPE. The specification was written for bathrooms.
     results.append(check(
         "the living room is told the specification is not the room type",
@@ -582,6 +661,9 @@ def the_floral_living_room_is_furnished_and_controlled():
     results.append(check(
         "...and for warm surfaces balancing the grey",
         "balance any large grey or neutral surfaces" in asked))
+    results.append(check(
+        "...and whether a border is framing the floral surface",
+        "No contrasting border or frame runs around the floral surface." in asked))
 
     # The live board reported "a generic modern bathroom with one potted
     # plant" against a living room, and its OWN evidence said "The image

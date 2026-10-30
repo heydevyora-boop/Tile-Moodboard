@@ -125,6 +125,7 @@
         "Hold the floral motif to one consistent scale, repeating realistically, at a size a real manufacturer would actually print. Do not enlarge it until a few flowers fill a wall.",
         "Blush, sage and ivory should be used coherently where they are compatible with the actual catalog products, with warm natural wood and subtle material texture for depth. No single one of them may take the whole room.",
         "Furniture, cabinetry and furnishings must complement the floral surface rather than compete with it, and must look deliberately coordinated rather than generically arranged, at realistic proportions and in premium materials.",
+        "Do not frame the floral surface with a contrasting border, moulding or band of another material -- terracotta, brass, dark trim. A frame is what turns a feature wall back into a panel, and a warm contrasting border pulls the eye off the blush, sage and ivory the theme is built on. Where such a border is an actual selected catalog product, keep it exactly as it is, and keep it narrow and quiet rather than letting it become the edge of a panel.",
         "Large-format grey, stone or neutral surfaces must be BALANCED against warmer ivory, blush and sage ones. Where such a surface is an actual selected catalog product, keep it exactly as it is and warm the room around it -- paint, timber, textiles, soft furnishings -- so the room does not settle into grey.",
         "If the selected catalog tiles are plain, use them honestly and carry the botanical identity on other compatible surfaces or accessories.",
         "Floral detail must be integrated with the architecture, not stuck on it."
@@ -139,6 +140,7 @@
         "busy decorative styling with too many ornaments competing for attention",
         "a rectangle of floral pattern floated in the middle of another material, framed like a picture or a sample board",
         "a generic contemporary room with one floral panel in it and nothing else botanical",
+        "a terracotta, brass or dark contrasting border framing the floral surface and turning it into a panel",
         "large-format grey or neutral surfaces taking over the room",
         "unrelated geometric feature walls",
         "childish or cartoon-like floral graphics"
@@ -151,6 +153,7 @@
         "That surface reads as a built part of the room -- a whole wall, alcove or recess -- rather than a framed rectangle set into another material.",
         "A quieter botanical note appears somewhere besides it, in artwork, cushions or soft furnishings.",
         "Warm ivory, blush and sage balance any large grey or neutral surfaces.",
+        "No contrasting border or frame runs around the floral surface.",
         "Smaller botanical detail is carried into textiles, cushions, artwork or accessories.",
         "Blush, sage and ivory are all present and balanced, with no single one taking the whole room.",
         "The floral motif is at one consistent scale and repeats realistically.",
@@ -164,6 +167,13 @@
         "INTEGRATED means the floral surface fills a real plane and its edges land on architecture -- a corner, the ceiling, the skirting, a recess. A floral rectangle with another material visible all the way around it is NOT integrated, however large it is."
       ],
       "rooms": {
+        "bedroom": [
+          "The botanical feature runs the FULL headboard wall -- behind the bed across its whole width, skirting to ceiling, corner to corner -- and the bed stands against it. That wall is the room's focal plane, not a panel hung above the pillows.",
+          "A bed with an upholstered or timber headboard in ivory, blush or sage, in realistic proportion to the room.",
+          "Bedding layered in warm ivory and blush with sage, and cushions carrying the motif at a smaller scale than the wall.",
+          "Side tables and furniture in warm natural timber, soft lamplight, and a quiet rug underfoot.",
+          "Botanical artwork or soft furnishings as the quieter second note, in an uncluttered room with few, chosen objects."
+        ],
         "living room": [
           "A principal sofa in blush pink or sage green, with ivory or warm-cream accent chairs, in realistic proportion to the room.",
           "Refined wooden furniture in warm natural timber, and a coffee table coordinated with it.",
