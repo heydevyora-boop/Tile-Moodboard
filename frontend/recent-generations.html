@@ -161,6 +161,16 @@
   .gen-empty { margin-top:clamp(20px,2.4vw,30px); background:var(--sand); border:1px solid var(--line); border-radius:20px; padding:clamp(22px,2.4vw,30px); }
   .gen-empty h3 { margin:0; font-size:clamp(19px,2vw,24px); }
   .gen-empty p { margin:10px 0 0; font-size:14px; line-height:1.6; color:var(--text2); max-width:62ch; }
+  .gen-products { display:flex; flex-direction:column; gap:7px; margin-top:4px; padding-top:12px; border-top:1px solid var(--line); }
+  .gen-products-lbl { font-size:8.5px; letter-spacing:.18em; color:var(--muted); }
+  .gen-product { display:flex; align-items:center; gap:10px; }
+  .gen-product img { width:34px; height:34px; flex:0 0 auto; border-radius:9px; object-fit:cover; background:var(--sand); border:1px solid var(--line); }
+  .gen-product-blank { width:34px; height:34px; flex:0 0 auto; border-radius:9px; background:var(--sand); border:1px solid var(--line); }
+  .gen-product-text { min-width:0; display:flex; flex-direction:column; gap:3px; }
+  .gen-product-name { font-size:12px; line-height:1.25; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .gen-product-meta { font-size:8.5px; letter-spacing:.12em; color:var(--muted); }
+  .gen-products-none { font-size:9.5px; letter-spacing:.06em; line-height:1.6; color:var(--muted); }
+  .gen-count { font-size:9.5px; letter-spacing:.14em; color:var(--muted); margin-top:14px; }
   .gen-lightbox { position:fixed; inset:0; background:rgba(26,21,18,.88); display:flex; align-items:center; justify-content:center; padding:clamp(16px,4vw,48px); z-index:100; cursor:zoom-out; animation:fadeIn .18s ease both; }
   .gen-lightbox img { max-width:100%; max-height:100%; display:block; border-radius:14px; box-shadow:0 24px 70px rgba(0,0,0,.45); }
 </style>
@@ -251,6 +261,48 @@
     document.body.appendChild(overlay);
   }
 
+  // THE PRODUCTS THE SCENE WAS BUILT FROM.
+  //
+  // The card showed the render and a theme name, so the one question
+  // anyone actually has of a history -- which tiles is this? -- had no
+  // answer on the page. Every material the generator was given is
+  // listed here with its own catalog image, in the order it was sent:
+  // base first, then highlight and accent.
+  //
+  // Generations recorded before the products were stored have none, and
+  // that is said rather than left as a blank space: an empty strip reads
+  // as "no tiles", which is never true of a generated scene.
+  function productsHtml(gen) {
+    const products = Array.isArray(gen.products) ? gen.products : [];
+
+    if (!products.length) {
+      const named = gen.productName
+        ? 'Only the base tile was recorded for this one: ' + escapeHtml(gen.productName) + '.'
+        : 'The tiles were not recorded for this generation.';
+      return '<div class="gen-products">' +
+        '<span class="gen-products-lbl mono">PRODUCTS USED</span>' +
+        '<span class="gen-products-none">' + named + '</span></div>';
+    }
+
+    const rows = products.map((product) => {
+      const name = product.name || product.code || 'Unnamed tile';
+      const meta = [product.role, product.code, product.size, product.finish]
+        .filter(Boolean).join(' · ');
+      const thumb = product.imageUrl
+        ? '<img src="' + escapeHtml(product.imageUrl) + '" alt="" loading="lazy">'
+        : '<span class="gen-product-blank"></span>';
+      return '<div class="gen-product">' + thumb +
+        '<span class="gen-product-text">' +
+        '<span class="gen-product-name">' + escapeHtml(name) + '</span>' +
+        (meta ? '<span class="gen-product-meta mono">' + escapeHtml(meta.toUpperCase()) + '</span>' : '') +
+        '</span></div>';
+    }).join('');
+
+    return '<div class="gen-products">' +
+      '<span class="gen-products-lbl mono">PRODUCTS USED — ' + products.length + '</span>' +
+      rows + '</div>';
+  }
+
   // A scene whose image could not be kept still gets a card. Hiding it
   // would quietly under-report what was generated, which is the one
   // thing a history must not do.
@@ -265,6 +317,7 @@
       '<div class="gen-body">' +
       '<span class="gen-name">' + escapeHtml(title) + '</span>' +
       '<span class="gen-meta mono">' + escapeHtml(whenText(gen.createdAt)) + (bits ? ' — ' + escapeHtml(bits) : '') + '</span>' +
+      productsHtml(gen) +
       '</div></article>';
   }
 
@@ -274,20 +327,35 @@
       '<div class="stage">' +
       '<div class="mono" style="font-size:10px; letter-spacing:.18em; color:var(--muted)">AI RENDERS</div>' +
       '<h1 class="step-h1 serif">Recent Generations</h1>' +
-      '<p class="step-sub">Every bathroom scene generated from a mood board, newest first.</p>' +
+      '<p class="step-sub">Every scene generated from a mood board, newest first, with the catalog products each one was built from.</p>' +
       (generations.length
         ? '<div class="gen-grid" id="genGrid"></div>'
         : '<div class="gen-empty"><h3 class="serif">Nothing generated yet</h3>' +
-          '<p>Scenes appear here as soon as they are generated. Open a mood board and press GENERATE BATHROOM SCENE — the render is kept here from that moment on. Scenes generated before this page existed were never recorded anywhere, so they cannot be shown.</p></div>') +
+          '<p>Scenes appear here as soon as they are generated. Open a mood board and press the generate button — the render is kept here from that moment on. Scenes generated before this page existed were never recorded anywhere, so they cannot be shown.</p></div>') +
+      (generations.length ? '<div class="gen-count mono" id="genCount"></div>' : '') +
       '</div>';
 
     if (!generations.length) return;
 
     const grid = document.getElementById('genGrid');
-    grid.innerHTML = generations.map(cardHtml).join('');
-    grid.querySelectorAll('.gen-shot[data-src]').forEach((shot) => {
-      shot.addEventListener('click', () => openLightbox(shot.dataset.src));
+    appendCards(grid, generations);
+  }
+
+  function appendCards(grid, generations) {
+    const start = grid.children.length;
+    grid.insertAdjacentHTML('beforeend', generations.map(cardHtml).join(''));
+    Array.prototype.slice.call(grid.children, start).forEach((card) => {
+      const shot = card.querySelector('.gen-shot[data-src]');
+      if (shot) shot.addEventListener('click', () => openLightbox(shot.dataset.src));
     });
+  }
+
+  function showCount(shown, total) {
+    const el = document.getElementById('genCount');
+    if (!el) return;
+    el.textContent = total && total !== shown
+      ? 'SHOWING ' + shown + ' OF ' + total
+      : shown + (shown === 1 ? ' GENERATION' : ' GENERATIONS');
   }
 
   function renderError(message) {
@@ -309,8 +377,33 @@
       location.href = 'login.html';
     });
 
+    // THE WHOLE HISTORY.
+    //
+    // This asked for one page and drew it, so with more generations than
+    // a page holds the rest were simply missing, with nothing on screen
+    // admitting it. It walks the cursor to the end now. The page cap is
+    // a guard against a runaway loop, not a limit on what is shown: when
+    // it is reached the count says how many of the total are on screen,
+    // rather than the page pretending it has them all.
+    const MAX_PAGES = 40;
+
     try {
-      render(await CasaApi.ai.recentGenerations());
+      const first = await CasaApi.ai.recentGenerationsPage({});
+      render(first.generations);
+      showCount(first.generations.length, first.total);
+
+      const grid = document.getElementById('genGrid');
+      let cursor = first.nextCursor;
+      let shown = first.generations.length;
+
+      for (let page = 1; grid && cursor && page < MAX_PAGES; page += 1) {
+        const next = await CasaApi.ai.recentGenerationsPage({ cursor });
+        if (!next.generations.length) break;
+        appendCards(grid, next.generations);
+        shown += next.generations.length;
+        showCount(shown, next.total);
+        cursor = next.nextCursor;
+      }
     } catch (err) {
       renderError((err && err.message) || '');
     }

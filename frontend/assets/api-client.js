@@ -2930,6 +2930,39 @@ const ai = {
   },
 
   /**
+   * One page of the history, with what follows it.
+   *
+   * recentGenerations above returns the generations alone and is left
+   * exactly as it was, so nothing that calls it has to change. This is
+   * for the caller that has to show EVERY generation: it returns
+   * `nextCursor` to ask for the next page with, and `total` so the page
+   * can say how many there are rather than implying the first screenful
+   * is all of them.
+   */
+  async recentGenerationsPage(
+    options
+  ) {
+    const { cursor, limit } =
+      options || {};
+
+    const query = [];
+    if (limit) query.push(`limit=${encodeURIComponent(limit)}`);
+    if (cursor) query.push(`cursor=${encodeURIComponent(cursor)}`);
+
+    const data = (
+      await apiFetch(
+        `/ai/visualizations/recent${query.length ? '?' + query.join('&') : ''}`
+      )
+    ).data;
+
+    return {
+      generations: data.generations || [],
+      nextCursor: data.nextCursor || null,
+      total: typeof data.total === 'number' ? data.total : null,
+    };
+  },
+
+  /**
    * The generated scene, together with the backend's own verdict on
    * whether it came back as the theme that was asked for.
    *

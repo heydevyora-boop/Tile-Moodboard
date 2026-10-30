@@ -359,7 +359,7 @@ router.post(
       // another container that will be gone by the next request. A
       // data URL is megabytes, so one that is implausibly large is
       // recorded without its image rather than bloating the table.
-      await recordGeneration(req, result);
+      await recordGeneration(req, result, resolvedMaterials);
 
       return res.status(200).json({
         success: true,
@@ -425,7 +425,92 @@ function durableImageUrl(result: VisualizationResult): { url: string; source: st
   return { url: '', source: 'not-kept' };
 }
 
-async function recordGeneration(req: Request, result: VisualizationResult): Promise<void> {
+// THE PRODUCTS THE SCENE WAS BUILT FROM.
+//
+// The log kept one `productName` -- the base -- so the history could
+// say a scene existed but not which tiles made it. The route has
+// already resolved every material to a real Tile row by the time it
+// records anything (name, product code, that tile's own extracted
+// image, size, finish), so the whole combination is kept, in the order
+// it was sent: base first, then highlight and accent.
+//
+// A tile's image is normally a URL. If it ever arrives as an inline
+// data: URL it is dropped rather than written -- four of those in one
+// row would be megabytes of history per generation, and the card falls
+// back to the name, which is the part that matters.
+export const GENERATION_PRODUCT_LIMIT = 8;
+const MAX_STORED_PRODUCT_URL_CHARS = 2048;
+
+export function generationProducts(
+  materials: ReadonlyArray<{
+    role?: string;
+    image_url?: string;
+    product_id?: string;
+    name?: string;
+    size?: string;
+    finish?: string;
+  }>,
+): Array<Record<string, string>> {
+  return materials.slice(0, GENERATION_PRODUCT_LIMIT).map((entry) => {
+    const imageUrl = String(entry.image_url ?? '');
+    return {
+      role: String(entry.role ?? ''),
+      name: String(entry.name ?? ''),
+      code: String(entry.product_id ?? ''),
+      size: String(entry.size ?? ''),
+      finish: String(entry.finish ?? ''),
+      imageUrl:
+        imageUrl.startsWith('data:') || imageUrl.length > MAX_STORED_PRODUCT_URL_CHARS
+          ? ''
+          : imageUrl,
+    };
+  });
+}
+
+/** One stored row as the history page reads it. */
+export function generationRow(row: {
+  id: string;
+  createdAt: Date | string;
+  metadata?: unknown;
+  user?: { name?: string | null } | null;
+}): Record<string, unknown> {
+  const meta = (row.metadata ?? {}) as Record<string, unknown>;
+  const products = Array.isArray(meta.products) ? meta.products : [];
+  return {
+    id: row.id,
+    createdAt: row.createdAt,
+    by: row.user?.name ?? '',
+    imageUrl: String(meta.imageUrl ?? ''),
+    imageSource: String(meta.imageSource ?? ''),
+    productName: String(meta.productName ?? ''),
+    room: String(meta.room ?? ''),
+    style: String(meta.style ?? ''),
+    combinationName: String(meta.combinationName ?? ''),
+    products: products
+      .filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === 'object')
+      .map((entry) => ({
+        role: String(entry.role ?? ''),
+        name: String(entry.name ?? ''),
+        code: String(entry.code ?? ''),
+        size: String(entry.size ?? ''),
+        finish: String(entry.finish ?? ''),
+        imageUrl: String(entry.imageUrl ?? ''),
+      })),
+  };
+}
+
+async function recordGeneration(
+  req: Request,
+  result: VisualizationResult,
+  materials: ReadonlyArray<{
+    role?: string;
+    image_url?: string;
+    product_id?: string;
+    name?: string;
+    size?: string;
+    finish?: string;
+  }> = [],
+): Promise<void> {
   const { url, source } = durableImageUrl(result);
   const body = req.body as Record<string, unknown>;
   const requirements = (body.requirements ?? {}) as Record<string, unknown>;
@@ -443,6 +528,7 @@ async function recordGeneration(req: Request, result: VisualizationResult): Prom
       room: String(requirements.room ?? ''),
       style: String(requirements.style ?? ''),
       combinationName: String(requirements.combination_name ?? ''),
+      products: generationProducts(materials),
     },
     req,
   });
@@ -456,33 +542,41 @@ router.get(
   '/visualizations/recent',
   requirePermission('visualizations:write'),
   async (req: Request, res: Response) => {
+    // EVERY generation, not the newest 30.
+    //
+    // This took the first 30 rows and stopped, with nothing to ask for
+    // the rest, so a studio with more history than that simply could
+    // not see it -- and nothing on the page said so. It is paged now
+    // rather than unbounded: the page walks `nextCursor` until it comes
+    // back null, and `total` lets it say how many it is showing.
+    //
+    // Ordered by id as well as createdAt. Two rows written in the same
+    // millisecond are otherwise in an arbitrary order, and a cursor into
+    // an arbitrary order can repeat a row or skip one.
     const asked = Number.parseInt(String(req.query.limit ?? ''), 10);
-    const limit = Number.isFinite(asked) ? Math.min(Math.max(asked, 1), 60) : 30;
+    const limit = Number.isFinite(asked) ? Math.min(Math.max(asked, 1), 100) : 60;
+    const cursor = String(req.query.cursor ?? '').trim();
 
-    const rows = await prisma.activityLog.findMany({
-      where: { action: GENERATION_ACTION },
-      orderBy: { createdAt: 'desc' },
-      take: limit,
-      select: { id: true, createdAt: true, metadata: true, user: { select: { name: true } } },
-    });
+    const where = { action: GENERATION_ACTION };
+    const [total, rows] = await Promise.all([
+      prisma.activityLog.count({ where }),
+      prisma.activityLog.findMany({
+        where,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: limit + 1,
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+        select: { id: true, createdAt: true, metadata: true, user: { select: { name: true } } },
+      }),
+    ]);
+
+    const page = rows.slice(0, limit);
 
     return res.status(200).json({
       success: true,
       data: {
-        generations: rows.map((row) => {
-          const meta = (row.metadata ?? {}) as Record<string, unknown>;
-          return {
-            id: row.id,
-            createdAt: row.createdAt,
-            by: row.user?.name ?? '',
-            imageUrl: String(meta.imageUrl ?? ''),
-            imageSource: String(meta.imageSource ?? ''),
-            productName: String(meta.productName ?? ''),
-            room: String(meta.room ?? ''),
-            style: String(meta.style ?? ''),
-            combinationName: String(meta.combinationName ?? ''),
-          };
-        }),
+        total,
+        nextCursor: rows.length > limit ? page[page.length - 1].id : null,
+        generations: page.map(generationRow),
       },
     });
   },
