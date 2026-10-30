@@ -60,7 +60,18 @@
         "The flooring is traditional patterned work that supports the heritage aesthetic, not plain undifferentiated floor.",
         "Botanical detailing is balanced and controlled rather than dominating a wall or the shower.",
         "The complete room looks like a professionally designed British country-house bathroom, not a generic modern interior."
-      ]
+      ],
+      "counts": [
+        "Forest-green or heritage-green CABINETRY counts as heritage green. It does not have to be on the walls.",
+        "A burgundy or oxblood BATHTUB, vanity or textile counts toward the oxblood palette.",
+        "A Victorian-style or ornate framed MIRROR counts as heritage architectural detailing.",
+        "Traditional PANELLED cabinetry counts as British-inspired styling and as architectural detailing.",
+        "Antique or aged BRASS fixtures count as heritage hardware.",
+        "Patterned, encaustic, mosaic or bordered FLOORING counts as heritage-inspired flooring.",
+        "Large-format stone-effect or marble-effect wall tiles are NOT subway tiles and are NOT contemporary styling on their own. A heritage room may legitimately use large stone panels.",
+        "Botanical detailing is optional. Mark it missing only if the room plainly needed it and has none; a coherent British room without botanical pattern is not a failure."
+      ],
+      "identityCheck": 1
     },
     "roman touch": {
       "id": "roman_touch",
@@ -88,7 +99,8 @@
         "Arches, recessed niches or sculptural stone forms communicate classical influence.",
         "Surfaces read as substantial, warm and architectural.",
         "Terracotta is present as an accent rather than as the dominant material."
-      ]
+      ],
+      "identityCheck": 1
     },
     "floral": {
       "id": "floral",
@@ -116,7 +128,8 @@
         "The floral treatment has meaningful presence on a wall, tile surface or feature area.",
         "Blush, sage and ivory are used coherently.",
         "The floral detail is integrated with the architecture rather than applied on top of it."
-      ]
+      ],
+      "identityCheck": 1
     },
     "tropical": {
       "id": "tropical",
@@ -143,7 +156,8 @@
         "Tropical greenery, palm motifs or another unmistakable tropical element is visible.",
         "Natural materials and a teal/sand relationship reinforce the theme.",
         "Planting is plausible for a bathroom and does not obscure the tiled surfaces."
-      ]
+      ],
+      "identityCheck": 1
     },
     "geometrical": {
       "id": "geometrical",
@@ -171,7 +185,8 @@
         "At least one substantial, clearly visible surface establishes the geometric identity.",
         "Patterns hold consistent alignment, scale, perspective and repetition.",
         "The room shows deliberate geometric composition rather than random decorative shapes."
-      ]
+      ],
+      "identityCheck": 1
     },
     "metallic": {
       "id": "metallic",
@@ -199,7 +214,8 @@
         "Champagne and gunmetal are balanced deliberately against each other.",
         "Pearl-toned surfaces provide a coherent foundation.",
         "Metal reflections are realistic and the different finishes are distinguishable."
-      ]
+      ],
+      "identityCheck": 1
     },
     "rustic": {
       "id": "rustic",
@@ -226,7 +242,8 @@
         "Earthy materials and clay or terracotta tones have meaningful presence.",
         "Textures read as natural and tactile rather than artificially distressed.",
         "Wood, stone and clay work together coherently."
-      ]
+      ],
+      "identityCheck": 1
     },
     "moroccan": {
       "id": "moroccan",
@@ -254,7 +271,8 @@
         "Mosaic or zellige-style surfaces have meaningful presence.",
         "Arches, niches or decorative tile compositions reinforce the style.",
         "Saffron and brass complement the room without overpowering it."
-      ]
+      ],
+      "identityCheck": 1
     },
     "black and white": {
       "id": "black_white",
@@ -285,7 +303,8 @@
         "Black, white, ivory and charcoal form a clear, intentional monochromatic composition.",
         "Contrast is carried across several elements -- tiles, walls, flooring, vanity or fixtures.",
         "The room has real contrast rather than flattening into grey."
-      ]
+      ],
+      "identityCheck": 1
     }
   }
 }
