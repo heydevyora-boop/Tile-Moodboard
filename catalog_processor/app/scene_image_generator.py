@@ -219,7 +219,16 @@ def build_room_scene_prompt(
     # theme came back as a colour wash and a lamp rather than zellige,
     # arches and brasswork. The description says what it asks for, and
     # the photographs are attached by generate_bathroom_scene below.
-    theme = theme_specification(requirements.get("style") or style_text)
+    # The room is passed in because a theme may have written something
+    # for it. Most of a theme travels between spaces -- a palette, a
+    # motif, a material -- but furniture does not, and a floral living
+    # room's sofas and coffee table are the whole difference between a
+    # designed room and a wallpapered one. A theme that says nothing
+    # about this room adds nothing. See themes.room_styling.
+    theme = theme_specification(
+        requirements.get("style") or style_text,
+        space["noun"] if space else None,
+    )
     references = reference_images(requirements.get("style") or style_text)
 
     selections = []
@@ -367,7 +376,26 @@ def build_room_scene_prompt(
             "THE REAL PRODUCT and adapt the surrounding materials, paint, "
             "stone, cabinetry, fixtures, lighting and accessories around it. "
             "Never recolour, repattern or substitute a supplied product to "
-            "make it fit.\n\n"
+            "make it fit."
+        )
+
+        # The catalog owner wrote every specification for a bathroom,
+        # because that is the room the references are of. Read into a
+        # living room's prompt as THE SPECIFICATION, the opening words
+        # "a floral bathroom" are an instruction to draw one -- which
+        # is the same failure the reference photographs needed guarding
+        # against, one section further down.
+        if noun not in {"bathroom", "powder washroom"}:
+            parts.append(
+                "THE SPECIFICATION BELOW DESCRIBES THE THEME, NOT THE ROOM TYPE. "
+                "It was written for bathrooms, so where it names a bathroom or a "
+                f"bathroom's fittings, read it as this theme applied to a {noun}. "
+                "Take its palette, its motifs, its materials, its patterns, its "
+                "finishes and its atmosphere; take none of its sanitaryware. The "
+                f"room you draw is a {noun}."
+            )
+
+        parts.append(
             f"{SECTION_SEPARATOR}\nTHE SPECIFICATION\n{SECTION_SEPARATOR}\n{theme}"
         )
 

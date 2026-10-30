@@ -146,12 +146,46 @@ def reference_images(theme: Any) -> List[Path]:
     )
 
 
-def theme_specification(theme: Any) -> str:
+def room_styling(theme: Any, room: Any) -> List[str]:
+    """
+    What this theme's furnishing looks like in THIS room, if it says.
+
+    A theme is described once and then asked for in seven different
+    spaces. Most of what it says travels: a palette, a motif, a material
+    is the same thing in a bathroom and in a living room. Furniture is
+    not. "Sage-green sofas, ivory accent chairs, a coffee table" is the
+    whole of what makes a floral LIVING ROOM read as designed rather
+    than wallpapered, and it is meaningless in a floral bathroom -- so
+    it cannot go in the shared description, and it cannot go in
+    client_selections.py either, where it would hand British and
+    Moroccan living rooms a sage sofa.
+
+    Keyed by the room's own noun from SPACES. A theme that says nothing
+    about the selected room returns nothing, which is what every theme
+    did before this existed.
+    """
+    found = describe_theme(theme)
+    if not found:
+        return []
+    rooms = found.get("rooms")
+    if not isinstance(rooms, dict):
+        return []
+    wanted = _key(room)
+    for name, styling in rooms.items():
+        if _key(name) == wanted:
+            return list(styling or [])
+    return []
+
+
+def theme_specification(theme: Any, room: Any = None) -> str:
     """
     The theme as prompt text: everything the owner wrote about it.
 
     Empty when the selection names no theme this knows -- the caller then
     says nothing about the theme rather than inventing one.
+
+    `room` is optional and adds nothing unless this theme has written
+    something for that room; see room_styling.
     """
     found = describe_theme(theme)
     if not found:
@@ -167,6 +201,15 @@ def theme_specification(theme: Any) -> str:
     lines += [f"- {rule}" for rule in found["mandatory"]]
     lines += ["", "FORBIDDEN in this theme -- none of these may appear:"]
     lines += [f"- {item}" for item in found["avoid"]]
+
+    styling = room_styling(theme, room)
+    if styling:
+        lines += [
+            "",
+            f"IN THIS ROOM -- how this theme is furnished in a {_key(room)}:",
+        ]
+        lines += [f"- {item}" for item in styling]
+
     lines += ["", f"IT IS RIGHT WHEN: {found['success']}"]
     return "\n".join(lines)
 

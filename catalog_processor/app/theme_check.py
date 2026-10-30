@@ -52,6 +52,7 @@ import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from app.client_selections import describe_space
 from app.themes import describe_theme, theme_checklist
 
 
@@ -126,7 +127,33 @@ def _clean(items: Any, limit: int = 6) -> List[str]:
     return out
 
 
-def _question(theme: Dict[str, Any], required: List[str]) -> str:
+def _room(room: Any) -> Dict[str, str]:
+    """
+    What the image is OF, in the question's own words.
+
+    This asked "you are judging ONE generated bathroom image" whatever
+    the client had chosen, and then listed a bathroom's parts for the
+    model to look at -- vanity, bathtub, shower. A living room judged as
+    a bathroom is judged on things that are not in it, and QUESTION D
+    asked whether it read as "a generic contemporary bathroom", which is
+    not the failure a living room can have.
+
+    Falls back to a bathroom, which is what the generator draws when no
+    room is named, so an unnamed room asks exactly what it asked before.
+    """
+    space = describe_space(room)
+    if not space:
+        return {
+            "noun": "bathroom",
+            "parts": "walls, flooring, vanity, bathtub, shower, fixtures, mirrors",
+        }
+    return {
+        "noun": space["noun"],
+        "parts": f"walls, flooring, {space['fixtures']}, fixtures",
+    }
+
+
+def _question(theme: Dict[str, Any], required: List[str], room: Any = None) -> str:
     """
     What the model is asked.
 
@@ -146,12 +173,14 @@ def _question(theme: Dict[str, Any], required: List[str]) -> str:
     counts = theme.get("counts") or []
     counting = ("\n\nWHAT COUNTS for this theme:\n" + "\n".join(f"- {c}" for c in counts)) if counts else ""
 
+    space = _room(room)
+
     return (
-        f"You are judging ONE generated bathroom image against the design theme "
+        f"You are judging ONE generated {space['noun']} image against the design theme "
         f"\"{theme['label']}\" ({theme['palette']}).\n\n"
         f"The theme is right when: {theme['success']}\n\n"
-        "Look at the WHOLE room before answering -- walls, flooring, vanity, bathtub, shower, "
-        "fixtures, mirrors, architectural detailing and decorative elements together. A theme is "
+        f"Look at the WHOLE room before answering -- {space['parts']}, "
+        "architectural detailing and decorative elements together. A theme is "
         "established by several coordinated elements, not by one wall or one material.\n\n"
         "PRESENCE IS NOT DOMINANCE. A characteristic is PRESENT if you can see it anywhere in the "
         "room, at any size. A green vanity is heritage green. A burgundy bathtub is oxblood. Do "
@@ -173,7 +202,7 @@ def _question(theme: Dict[str, Any], required: List[str]) -> str:
         "QUESTION C -- the products. Do the tiled surfaces look like real, consistently laid catalog "
         "products, or like invented patterns? One sentence.\n\n"
         "QUESTION D -- does the room read as a designed interior in this theme's language, or as a "
-        "generic contemporary bathroom? One sentence.\n\n"
+        f"generic contemporary {space['noun']}? One sentence.\n\n"
         "Every item you report must carry what you SAW, in your own words. Reply with JSON only, no "
         "prose and no code fence:\n"
         '{"present": [<numbers>], '
@@ -186,11 +215,18 @@ def _question(theme: Dict[str, Any], required: List[str]) -> str:
     )
 
 
-def check_theme(image_path: Any, theme: Any, client: Any = None) -> Dict[str, Any]:
+def check_theme(
+    image_path: Any,
+    theme: Any,
+    client: Any = None,
+    room: Any = None,
+) -> Dict[str, Any]:
     """
     Reads the generated image and judges it against this theme.
 
     `client` is injectable so the check can be exercised without a key.
+    `room` is what the client asked for, so the question is about that
+    room and not about a bathroom; omitted, it asks what it always did.
     Returns a verdict dict; it never raises.
     """
     found = describe_theme(theme)
@@ -215,7 +251,7 @@ def check_theme(image_path: Any, theme: Any, client: Any = None) -> Dict[str, An
         from google.genai import types
 
         contents = [
-            types.Part.from_text(text=_question(found, required)),
+            types.Part.from_text(text=_question(found, required, room)),
             types.Part.from_bytes(data=path.read_bytes(), mime_type=_mime_type(path)),
         ]
 
