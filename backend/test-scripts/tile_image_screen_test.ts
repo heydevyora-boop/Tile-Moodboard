@@ -440,6 +440,78 @@ async function main() {
   check('46. ...and it is not called a duplicate of anything',
     blindRun.duplicates.length === 0, blindRun.duplicates);
 
+  // ── 47. the two captures that reached the owner's boards ──────────
+  //
+  // A fluted panel that is navy on top and copper below, and a tile
+  // split corner-to-corner into ivory and terracotta. Both were in
+  // generated combinations. The measure was never wrong -- it refuses
+  // both on sight -- so they are fixtures now, and what actually failed
+  // is covered by checks 50-52 below.
+  for (const [label, file] of [
+    ['a fluted panel in two colours', 'bad-fluted-twotone.png'],
+    ['a diagonal ivory/terracotta split', 'bad-diagonal-split.png'],
+  ] as const) {
+    const v = await verdictOf(path.join(FIXTURES, file));
+    check(`47. ${label} is refused`, !v.ok, v);
+    check(`48. ...as two materials, with its numbers`,
+      /two materials/.test(v.reason) && v.edge < 0.55 && v.touches && !v.band, v);
+  }
+
+  // ...and the decor that must survive is unaffected by them being there.
+  for (const [label, file] of [
+    ['plain colourbody', 'good-colorbody-0002.png'],
+    ['floral decor', 'decor-0005.png'],
+    ['modulo base', 'twin-base-0015.png'],
+    ['border', 'twin-border-0018.png'],
+  ] as const) {
+    const v = await verdictOf(path.join(FIXTURES, file));
+    check(`49. ${label} still survives the screen`, v.ok, v);
+  }
+
+  // ── 50. WHAT ACTUALLY FAILED: the screen never got to look ────────
+  //
+  // screenSlate fetched the whole slate with one Promise.all -- eighty
+  // simultaneous requests to one host, each given six seconds. The
+  // throttled ones fail open, silently, and a split capture walks in.
+  clearScreenCache();
+  let inFlight = 0;
+  let peak = 0;
+  const pacedServer = http.createServer((_req, res) => {
+    inFlight += 1;
+    peak = Math.max(peak, inFlight);
+    setTimeout(() => {
+      inFlight -= 1;
+      res.writeHead(200, { 'content-type': 'image/png' });
+      res.end(fs.readFileSync(path.join(FIXTURES, 'good-colorbody-0002.png')));
+    }, 25);
+  });
+  await new Promise<void>((r) => pacedServer.listen(8802, r));
+
+  const many = Array.from({ length: 40 }, (_, i) => ({
+    id: `t-${i}`, imageUrl: `http://127.0.0.1:8802/tile-${i}.png`,
+  }));
+  await screenSlate(many, 0);
+  check('50. The slate is fetched a few at a time, not all at once',
+    peak <= 8, `${peak} requests were in flight at once`);
+  pacedServer.close();
+
+  // ── 51. a picture it could not read is COUNTED, never silent ──────
+  clearScreenCache();
+  const blindSlate = await screenSlate([
+    { id: 'readable', imageUrl: `${base}/good1.png` },
+    { id: 'gone-1', imageUrl: `${base}/nothing-here-1.png` },
+    { id: 'gone-2', imageUrl: `${base}/nothing-here-2.png` },
+    { id: 'no-url', imageUrl: null },
+  ], 0);
+  check('51. Unreadable pictures are counted, not passed over in silence',
+    blindSlate.unread.length === 2
+    && blindSlate.unread.every((t) => t.id.startsWith('gone')), blindSlate.unread.map((t) => t.id));
+  check('52. ...and they are still KEPT, because unreadable is not evidence',
+    blindSlate.kept.some((t) => t.id === 'gone-1')
+    && blindSlate.kept.some((t) => t.id === 'readable'), blindSlate.kept.map((t) => t.id));
+  check('53. A product with no picture at all is not counted as unreadable',
+    !blindSlate.unread.some((t) => t.id === 'no-url'), blindSlate.unread.map((t) => t.id));
+
   server.close();
   fs.rmSync(tmp, { recursive: true, force: true });
   console.log(`\n${pass} passed, ${fail} failed`);
