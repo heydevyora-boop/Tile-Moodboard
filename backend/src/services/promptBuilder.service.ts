@@ -58,6 +58,12 @@ export interface TileSummary {
    * number instead of a guess.
    */
   poolMatched?: number;
+  /**
+   * How many of those the image screen could not fetch, and therefore
+   * could not judge. Also first tile only. A split capture gets through
+   * exactly when this is not zero, so it must never be silent again.
+   */
+  poolUnread?: number;
 }
 
 const MAX_TILES_IN_PROMPT = 80;
@@ -93,14 +99,15 @@ export async function getAvailableTiles(
   // them. They are taken out of the slate before the model sees it.
   // screenSlate refuses to empty the slate, so a catalog whose every
   // capture is odd still produces a board.
-  const { kept } = await screenSlate(ranked);
+  const { kept, unread } = await screenSlate(ranked);
 
-  // Carried out on the first tile so generateCombinations can report it
-  // without changing this function's return shape.
+  // Carried out on the first tile so generateCombinations can report
+  // them without changing this function's return shape.
   const matched = ranked[0]?.poolMatched;
 
   return kept.map((t, index) => ({
     ...(index === 0 && matched !== undefined ? { poolMatched: matched } : {}),
+    ...(index === 0 && unread.length > 0 ? { poolUnread: unread.length } : {}),
     id: t.id,
     name: t.name,
     brandName: t.brandName ?? '',
@@ -526,6 +533,23 @@ export async function generateCombinations(input: GenerateBriefInput, actorId: s
   // the model -- a real limit, because the whole catalog will not fit in
   // one prompt. Saying so turns "it never even looks at the rest" into a
   // number the showroom can see.
+  // THE SCREEN CAN ONLY REFUSE WHAT IT CAN SEE.
+  //
+  // Every picture check fails open, which is right -- and it was also
+  // silent, so a slate whose images could not be fetched produced boards
+  // that looked exactly as though every capture had been examined. That
+  // is how the split captures reached the owner's boards: not a wrong
+  // measure, an unread one.
+  const unread = tiles.find((t) => t.poolUnread !== undefined)?.poolUnread;
+  if (unread) {
+    warnings.push(
+      `The image screen could not fetch ${unread} product picture(s), so split captures, brand `
+      + 'plates and duplicate surfaces were not ruled out for them. They were kept, because being '
+      + 'unreadable is not evidence of anything — but a bad capture reaching a board is only '
+      + 'possible while this number is above zero.',
+    );
+  }
+
   const matched = tiles.find((t) => t.poolMatched !== undefined)?.poolMatched;
   if (matched !== undefined && matched > tiles.length) {
     warnings.push(

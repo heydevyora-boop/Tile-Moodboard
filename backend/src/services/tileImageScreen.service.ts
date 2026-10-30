@@ -92,7 +92,24 @@ const GAP_FLOOR = 0.15;
 const BAND_REACH = 0.25;
 const BAND_SPAN = 0.9;
 
-const FETCH_TIMEOUT_MS = 6000;
+/**
+ * HOW THE SCREEN WENT BLIND.
+ *
+ * screenSlate fetched the whole slate with one Promise.all -- EIGHTY
+ * simultaneous requests to drive.google.com, each given six seconds.
+ * Google throttles a burst like that, so most of them failed or timed
+ * out; every failure fails open, silently, and the split captures this
+ * file exists to stop walked straight into the boards. The measure was
+ * never wrong: the two captures the owner reported are both rejected by
+ * it on sight. It simply never got to look at them.
+ *
+ * So the fetching is paced instead of flung: a few at a time, longer to
+ * answer, and one retry for a request that times out or errors -- which
+ * is what a throttled host wants.
+ */
+const FETCH_TIMEOUT_MS = 12_000;
+const FETCH_AT_ONCE = 6;
+const FETCH_ATTEMPTS = 2;
 const MAX_IMAGE_BYTES = 12 * 1024 * 1024;
 
 export interface ScreenVerdict {
@@ -412,14 +429,48 @@ interface Sample {
   fine: { data: Uint8ClampedArray; w: number; h: number };
 }
 
-async function decode(url: string): Promise<Sample | null> {
+/** One attempt at the bytes. Null means "not this time", which may be worth retrying. */
+async function fetchBytes(url: string): Promise<ArrayBuffer | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
-    const response = await fetch(url, { signal: controller.signal });
+    const response = await fetch(url, {
+      signal: controller.signal,
+      redirect: 'follow',
+      // Drive's thumbnail endpoint answers a plain client differently
+      // from a browser; this is the shape the <img> tag that already
+      // displays these images sends.
+      headers: { accept: 'image/avif,image/webp,image/png,image/jpeg,*/*' },
+    });
     if (!response.ok) return null;
-    const buffer = await response.arrayBuffer();
-    if (buffer.byteLength === 0 || buffer.byteLength > MAX_IMAGE_BYTES) return null;
+    return await response.arrayBuffer();
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Runs tasks a few at a time rather than all at once. */
+async function paced<T, R>(items: T[], limit: number, run: (item: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = new Array(items.length);
+  let next = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    for (let i = next++; i < items.length; i = next++) {
+      out[i] = await run(items[i]);
+    }
+  });
+  await Promise.all(workers);
+  return out;
+}
+
+async function decode(url: string): Promise<Sample | null> {
+  try {
+    let buffer: ArrayBuffer | null = null;
+    for (let attempt = 0; attempt < FETCH_ATTEMPTS && !buffer; attempt += 1) {
+      buffer = await fetchBytes(url);
+    }
+    if (!buffer || buffer.byteLength === 0 || buffer.byteLength > MAX_IMAGE_BYTES) return null;
 
     const { createCanvas, loadImage } = await import('@napi-rs/canvas');
     const image = await loadImage(Buffer.from(buffer));
@@ -435,8 +486,6 @@ async function decode(url: string): Promise<Sample | null> {
     return { ...coarse, fine: draw(FINE) };
   } catch {
     return null;
-  } finally {
-    clearTimeout(timer);
   }
 }
 
@@ -591,12 +640,19 @@ export async function screenTileImage(url: string | null | undefined): Promise<S
 export async function screenSlate<T extends { id: string; imageUrl?: string | null }>(
   tiles: T[],
   floor = 6,
-): Promise<{ kept: T[]; rejected: Array<{ tile: T; reason: string }> }> {
-  const verdictList = await Promise.all(tiles.map((t) => screenTileImage(t.imageUrl)));
+): Promise<{ kept: T[]; rejected: Array<{ tile: T; reason: string }>; unread: T[] }> {
+  const verdictList = await paced(tiles, FETCH_AT_ONCE, (t) => screenTileImage(t.imageUrl));
 
   const kept: T[] = [];
   const rejected: Array<{ tile: T; reason: string }> = [];
+  // A PRODUCT THE SCREEN COULD NOT LOOK AT.
+  //
+  // It is kept, because "we could not look" is not evidence -- and that
+  // was silent, which is how eighty throttled fetches turned the whole
+  // screen off without a word. Counted here so the caller can say it.
+  const unread: T[] = [];
   tiles.forEach((tile, i) => {
+    if (/could not read the image/.test(verdictList[i].reason)) unread.push(tile);
     if (verdictList[i].ok) kept.push(tile);
     else rejected.push({ tile, reason: verdictList[i].reason });
   });
@@ -605,7 +661,7 @@ export async function screenSlate<T extends { id: string; imageUrl?: string | nu
     kept.push(rejected.shift()!.tile);
   }
 
-  return { kept, rejected };
+  return { kept, rejected, unread };
 }
 
 /** Test seam: the cache would otherwise carry a verdict between cases. */
