@@ -51,6 +51,13 @@ export interface TileSummary {
   // caller that has no pictures to offer still type-checks and simply
   // gets no surface comparison.
   imageUrl?: string | null;
+  /**
+   * How many catalog rows matched this brief before the pool limit cut
+   * them, carried on the first tile only. Reported to the showroom so
+   * "it only ever uses the same few products" is answerable with a
+   * number instead of a guess.
+   */
+  poolMatched?: number;
 }
 
 const MAX_TILES_IN_PROMPT = 80;
@@ -69,12 +76,15 @@ const MAX_TILES_IN_PROMPT = 80;
  * living-room board using versatile/close tiles, ranked appropriately,
  * rather than failing outright because no tile has an exact room tag.
  */
-export async function getAvailableTiles(filter: { brandId?: string; room?: string; style?: string }): Promise<TileSummary[]> {
+export async function getAvailableTiles(
+  filter: { brandId?: string; room?: string; style?: string; varietySeed?: number },
+): Promise<TileSummary[]> {
   const ranked = await getRecommendedTiles(prisma, {
     brandId: filter.brandId,
     room: filter.room,
     style: filter.style,
     limit: MAX_TILES_IN_PROMPT,
+    varietySeed: filter.varietySeed,
   });
 
   // A capture holding two materials -- a tile with its neighbour caught
@@ -85,7 +95,12 @@ export async function getAvailableTiles(filter: { brandId?: string; room?: strin
   // capture is odd still produces a board.
   const { kept } = await screenSlate(ranked);
 
-  return kept.map((t) => ({
+  // Carried out on the first tile so generateCombinations can report it
+  // without changing this function's return shape.
+  const matched = ranked[0]?.poolMatched;
+
+  return kept.map((t, index) => ({
+    ...(index === 0 && matched !== undefined ? { poolMatched: matched } : {}),
     id: t.id,
     name: t.name,
     brandName: t.brandName ?? '',
@@ -435,7 +450,24 @@ export async function generateCombinations(input: GenerateBriefInput, actorId: s
   ]);
   const combinationCount = input.combinationCount ?? rulesSettings.defaultMaxCombinations;
 
-  const tiles = await getAvailableTiles({ brandId: input.brandId, room: brief.room, style: brief.style });
+  // A DIFFERENT DRAW EACH TIME, FROM THE SAME CATALOG.
+  //
+  // The ranking's tie-break used to be the tile's NAME, which made the
+  // whole pool deterministic: one catalog and one brief produced the
+  // same candidates in the same order on every generation, so the model
+  // saw the same products every time and picked the same ones. A
+  // catalog of four hundred behaved like a catalog of eighty.
+  //
+  // The seed moves only the tiles that score EQUALLY -- which this
+  // engine already calls equally good for the brief -- so a better tile
+  // still outranks a worse one every time. What changes is which of the
+  // equals gets the place.
+  const tiles = await getAvailableTiles({
+    brandId: input.brandId,
+    room: brief.room,
+    style: brief.style,
+    varietySeed: Date.now() ^ Math.floor(Math.random() * 0xffffffff),
+  });
   if (tiles.length === 0) {
     throw AppError.badRequest('No in-stock tiles are available for this request — check that this brand has tiles in stock, or add tiles to the catalog first.');
   }
@@ -485,6 +517,21 @@ export async function generateCombinations(input: GenerateBriefInput, actorId: s
   if (unreadable.size > 0) {
     warnings.push(
       `Could not read the picture for ${unreadable.size} product(s) (${[...unreadable].slice(0, 5).join(', ')}${unreadable.size > 5 ? ', …' : ''}), so the image checks — split captures, brand plates and duplicate surfaces — did not run on them.`,
+    );
+  }
+
+  // HOW MUCH OF THE CATALOG WAS IN CONTENTION.
+  //
+  // Only the best-fitting MAX_TILES_IN_PROMPT products are offered to
+  // the model -- a real limit, because the whole catalog will not fit in
+  // one prompt. Saying so turns "it never even looks at the rest" into a
+  // number the showroom can see.
+  const matched = tiles.find((t) => t.poolMatched !== undefined)?.poolMatched;
+  if (matched !== undefined && matched > tiles.length) {
+    warnings.push(
+      `${matched} products matched this brief; the ${tiles.length} best-fitting were offered to the model. `
+      + 'Products that score equally are drawn differently on each generation, so generating again '
+      + 'offers a different set.',
     );
   }
 

@@ -41,9 +41,35 @@ from typing import Any, Dict, List, Optional
 from app.themes import describe_theme, theme_checklist
 
 # A text model, not an image one: this reads a picture and answers a
-# question about it. GEMINI_MODEL belongs to the extraction side and is
-# not touched here -- this has its own variable with its own default.
-CHECK_MODEL = os.getenv("GEMINI_THEME_CHECK_MODEL", "gemini-3-flash")
+# question about it.
+#
+# The first default, "gemini-3-flash", does not exist -- the live check
+# came back 404 NOT_FOUND on every board. A model name is not something
+# to guess at, so these are the names this deployment ALREADY runs
+# successfully: GEMINI_MODEL is what the catalog side uses for text and
+# vision, and GEMINI_IMAGE_MODEL is what both generation stages use. The
+# env var is read, not the module, so nothing on the extraction side is
+# imported or touched.
+#
+# They are tried in order and a NOT_FOUND moves to the next, so a model
+# retired upstream degrades to the next working one instead of silently
+# turning the check off again.
+def _candidate_models() -> List[str]:
+    names = [
+        os.getenv("GEMINI_THEME_CHECK_MODEL", ""),
+        os.getenv("GEMINI_MODEL", ""),
+        "gemini-3.1-flash-lite",
+        os.getenv("GEMINI_IMAGE_MODEL", ""),
+        "gemini-3.1-flash-image",
+    ]
+    seen = set()
+    ordered = []
+    for name in names:
+        name = (name or "").strip()
+        if name and name not in seen:
+            seen.add(name)
+            ordered.append(name)
+    return ordered
 
 # The check is advisory. It must never be the reason a board fails.
 CHECK_TIMEOUT_NOTE = "the theme check is advisory and never blocks a generation"
@@ -111,16 +137,32 @@ def check_theme(
             '"forbidden_seen": [<any forbidden item, quoted>], "notes": "<one sentence>"}'
         )
 
-        response = client.models.generate_content(
-            model=CHECK_MODEL,
-            contents=[
-                types.Part.from_text(text=question),
-                types.Part.from_bytes(
-                    data=path.read_bytes(),
-                    mime_type=get_mime_type(path),
-                ),
-            ],
-        )
+        contents = [
+            types.Part.from_text(text=question),
+            types.Part.from_bytes(
+                data=path.read_bytes(),
+                mime_type=get_mime_type(path),
+            ),
+        ]
+
+        response = None
+        tried = []
+        for model in _candidate_models():
+            try:
+                response = client.models.generate_content(model=model, contents=contents)
+                break
+            except Exception as error:  # noqa: BLE001
+                tried.append(f"{model}: {error}")
+                # Only a missing/unsupported model is worth moving on
+                # from. Anything else is a real failure of this call.
+                if "NOT_FOUND" not in str(error) and "404" not in str(error):
+                    raise
+
+        if response is None:
+            return _unchecked(
+                "no configured model could run the check -- " + "; ".join(t[:120] for t in tried),
+                label,
+            )
 
         text = (getattr(response, "text", "") or "").strip()
         start = text.find("{")

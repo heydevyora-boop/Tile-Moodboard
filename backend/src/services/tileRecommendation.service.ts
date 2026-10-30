@@ -196,11 +196,20 @@ export interface RankingCriteria {
   room?: string;
   style?: string;
   colorTone?: string;
+  /**
+   * Varies which of the EQUALLY-scoring tiles lead the list.
+   *
+   * Omit it and the order is the alphabetical one this always had, so
+   * nothing that does not ask for variety is affected.
+   */
+  varietySeed?: number;
 }
 
 export interface RankedTile extends TileForRanking {
   score: number;
   matchReasons: string[];
+  /** How many catalog rows matched the filters, before the pool limit cut them. */
+  poolMatched?: number;
   // True for the tiles from the newest extraction in this pool. It adds
   // nothing to the score -- it is carried out of the scorer purely so the
   // prompt can explain their blank attributes; see formatTileForPrompt
@@ -309,6 +318,22 @@ function scoreColor(tile: TileForRanking, requestedColor: string | undefined): {
  * me what's close") as well as feeding a stricter downstream consumer
  * that only wants the top N.
  */
+/**
+ * A stable shuffle value for one tile under one seed.
+ *
+ * Not Math.random: a tile has to keep the same value for the whole of a
+ * single ranking pass, or the sort comparator is inconsistent and the
+ * result is undefined. This is a cheap hash of the id and the seed --
+ * fixed within a pass, different between passes.
+ */
+function tieBreak(id: string, seed: number): number {
+  let hash = seed >>> 0;
+  for (let i = 0; i < id.length; i += 1) {
+    hash = (Math.imul(hash ^ id.charCodeAt(i), 0x01000193) >>> 0);
+  }
+  return hash;
+}
+
 export function rankTiles(tiles: TileForRanking[], criteria: RankingCriteria): RankedTile[] {
   // "Latest" is measured against this pool's own newest row, so it means
   // the same thing whether the database holds two catalogs or two
@@ -332,7 +357,29 @@ export function rankTiles(tiles: TileForRanking[], criteria: RankingCriteria): R
     };
   });
 
-  return ranked.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
+  // SCORE DECIDES. THE TIE-BREAK MUST NOT ALWAYS PICK THE SAME TILE.
+  //
+  // This sorted by score and then by NAME, which made the whole pool
+  // deterministic: one catalog and one brief produced byte-identical
+  // candidates in byte-identical order on every generation, so the model
+  // was shown the same products every time and picked the same ones. A
+  // catalog of four hundred tiles behaved like a catalog of eighty.
+  //
+  // Tiles that score the same are, by this engine's own measure, equally
+  // good for the brief -- so which of them goes first is free, and
+  // spending it on the alphabet bought nothing. With a seed it buys
+  // variety across generations, and with none it is the old alphabetical
+  // order exactly, so every existing caller and test is unaffected.
+  //
+  // Only TIES move. A better-scoring tile still outranks a worse one,
+  // every time.
+  const seed = criteria.varietySeed;
+  if (seed === undefined) {
+    return ranked.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
+  }
+  return ranked.sort(
+    (a, b) => b.score - a.score || tieBreak(a.id, seed) - tieBreak(b.id, seed) || a.name.localeCompare(b.name),
+  );
 }
 
 export interface RecommendationFilter {
@@ -340,6 +387,8 @@ export interface RecommendationFilter {
   type?: string;
   room?: string;
   style?: string;
+  /** Varies which of the EQUALLY-scoring tiles lead the pool. See rankTiles. */
+  varietySeed?: number;
   colorTone?: string;
   limit?: number;
 }
@@ -578,7 +627,12 @@ export async function getRecommendedTiles(prisma: PrismaTileClient, filter: Reco
   // Ranking decides the order, on room, theme and colour fit alone.
   // When a tile was extracted is not one of the signals: old and new
   // stock compete on the same terms.
-  const ranked = rankTiles(forRanking, { room: filter.room, style: filter.style, colorTone: filter.colorTone });
+  const ranked = rankTiles(forRanking, {
+    room: filter.room,
+    style: filter.style,
+    colorTone: filter.colorTone,
+    varietySeed: filter.varietySeed,
+  });
 
   const sourceByTileId = new Map<string, string>(tiles.map((t) => [t.id, sourceGroupKey(t)]));
   const selected = ensureRoleCoverage(
@@ -586,7 +640,15 @@ export async function getRecommendedTiles(prisma: PrismaTileClient, filter: Reco
     ranked,
   );
 
-  return selected.map((t) => ({ ...t, catalogGroup: sourceByTileId.get(t.id) ?? `tile:${t.id}` }));
+  return selected.map((t) => ({
+    ...t,
+    catalogGroup: sourceByTileId.get(t.id) ?? `tile:${t.id}`,
+    // How many rows the filters accepted, so the caller can say how much
+    // of the catalog was in contention for the places it is about to
+    // offer. Carried on the tiles rather than changing the return shape,
+    // which every existing caller and test depends on.
+    poolMatched: tiles.length,
+  }));
 }
 
 // ─────────────────────────────────────────────────────────────────────────

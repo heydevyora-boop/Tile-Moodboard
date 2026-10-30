@@ -498,6 +498,73 @@ def the_theme_check_is_honest():
     results.append(check(
         "an unchecked verdict reads as unchecked, never as approval",
         "not checked" in summarise(check_theme("/nowhere.png", "Moroccan"))))
+
+    # THE MODEL NAME. The live check came back 404 NOT_FOUND on every
+    # board because the default, "gemini-3-flash", does not exist. A
+    # model name is not something to guess at, so these are the names
+    # this deployment already runs.
+    from app.theme_check import _candidate_models
+    candidates = _candidate_models()
+    results.append(check(
+        "the invented model name is gone", "gemini-3-flash" not in candidates, candidates))
+    results.append(check(
+        "the candidates are models this project already runs",
+        all(c.startswith("gemini-3.1-") for c in candidates), candidates))
+    results.append(check(
+        "there is more than one, so a retired model is not the end of it",
+        len(candidates) >= 2, candidates))
+
+    class Missing:
+        """Every model 404s, as the live deployment did."""
+        class models:
+            tried = []
+
+            @staticmethod
+            def generate_content(**kwargs):
+                Missing.models.tried.append(kwargs["model"])
+                raise RuntimeError("404 NOT_FOUND models/x is not found for API version v1beta")
+
+    verdict = check_theme(image, "Moroccan", Missing())
+    results.append(check(
+        "every model missing -> unchecked, never a pass", verdict["status"] == "unchecked"))
+    results.append(check(
+        "...after trying each candidate, not just the first",
+        len(Missing.models.tried) == len(candidates), Missing.models.tried))
+
+    class SecondWorks:
+        """The first model is gone; the next one answers."""
+        class models:
+            calls = []
+
+            @staticmethod
+            def generate_content(**kwargs):
+                SecondWorks.models.calls.append(kwargs["model"])
+                if len(SecondWorks.models.calls) == 1:
+                    raise RuntimeError("404 NOT_FOUND")
+                class R:
+                    text = '{"present": [1,2,3,4,5], "missing": []}'
+                return R()
+
+    recovered = check_theme(image, "Moroccan", SecondWorks())
+    results.append(check(
+        "a missing first model falls through to the next and still checks",
+        recovered["status"] == "pass", recovered))
+
+    class RealFailure:
+        class models:
+            calls = []
+
+            @staticmethod
+            def generate_content(**kwargs):
+                RealFailure.models.calls.append(kwargs["model"])
+                raise RuntimeError("429 RESOURCE_EXHAUSTED")
+
+    quota = check_theme(image, "Moroccan", RealFailure())
+    results.append(check(
+        "a real failure is NOT retried against every model",
+        len(RealFailure.models.calls) == 1, RealFailure.models.calls))
+    results.append(check(
+        "...and is reported as unchecked", quota["status"] == "unchecked"))
     return results
 
 
