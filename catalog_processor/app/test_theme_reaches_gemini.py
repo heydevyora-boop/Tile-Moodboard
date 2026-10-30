@@ -37,6 +37,7 @@ from app.themes import (  # noqa: E402
     reference_images,
     theme_brief,
     theme_checklist,
+    theme_rules,
     theme_specification,
 )
 from app.theme_check import check_theme, summarise  # noqa: E402
@@ -382,7 +383,7 @@ def the_specification_reaches_the_prompt():
             f"{label}: ...and the theme-specific layer beside it",
             "THE SPECIFICATION" in prompt and belongs in prompt.lower()))
         results.append(check(
-            f"{label}: every mandatory characteristic is sent, in full",
+            f"{label}: every mandatory rule is sent, in full",
             all(rule in prompt for rule in found["mandatory"]),
             [r[:50] for r in found["mandatory"] if r not in prompt]))
         results.append(check(
@@ -408,114 +409,186 @@ def the_specification_reaches_the_prompt():
     return results
 
 
+def the_check_asks_only_what_a_picture_can_answer():
+    """The verdict must name things that are either in the image or not.
+
+    The mandatory rules are written for the GENERATOR and include
+    conditions and prohibitions -- "blue feature walls must NOT dominate
+    unless they are the selected products", "a burgundy vanity and brass
+    taps alone do not establish the theme". The check used to ask "is
+    this visible?" of those, and the owner's British board duly reported
+    them under "Not visible", which says nothing anyone can act on.
+    """
+    import re
+    results = []
+    unanswerable = re.compile(r"must NOT|alone do not|\bunless\b|may appear|\bnever \b", re.I)
+
+    for label in [*PHOTOGRAPHED]:
+        asked = theme_checklist(label)
+        results.append(check(
+            f"{label}: the check has something to ask", len(asked) >= 3, len(asked)))
+        offending = [r[:70] for r in asked if unanswerable.search(r)]
+        results.append(check(
+            f"{label}: nothing it asks is a condition or a prohibition",
+            not offending, offending))
+
+        # ...while the generator still receives the full rules.
+        rules = theme_rules(label)
+        results.append(check(
+            f"{label}: the generator still gets every mandatory rule",
+            len(rules) >= len(describe_theme(label)["mandatory"]), len(rules)))
+
+    results.append(check(
+        "a theme with no configuration asks nothing", theme_checklist("Brutalist") == []))
+
+    # The British board's exact complaint must not be reproducible.
+    british = " ".join(theme_checklist("British"))
+    results.append(check(
+        "the lines the owner saw under \"Not visible\" are no longer asked",
+        "must NOT dominate" not in british and "alone do not establish" not in british))
+    results.append(check(
+        "...and what IS asked is the owner's own final visual check",
+        "immediately recognisable" in british
+        and "Victorian or Edwardian architectural detailing" in british
+        and "flooring" in british
+        and "Botanical detailing is balanced" in british))
+    return results
+
+
 def the_theme_check_is_honest():
-    """Chunk 4 Part D / Chunk 5: never report a pass that was not earned."""
+    """The five cases the owner asked for, plus the ways it must not lie.
+
+    Gemini is stubbed: what is under test is how a reply is turned into
+    a verdict, which is where a validator that recites its own avoid-list
+    back would do its damage.
+    """
     results = []
 
+    for label, verdict in [
+        ("no theme selected", check_theme("/nowhere.png", "")),
+        ("no image to read", check_theme("/nowhere.png", "British")),
+    ]:
+        results.append(check(f"{label} -> unchecked, not a pass", verdict["status"] == "unchecked"))
     results.append(check(
-        "no theme selected -> unchecked, not a pass",
-        check_theme("/nowhere.png", "")["status"] == "unchecked"))
-    results.append(check(
-        "no image to read -> unchecked, not a pass",
-        check_theme("/nowhere.png", "Moroccan")["status"] == "unchecked"))
-    results.append(check(
-        "...and it says which theme it could not check",
-        check_theme("/nowhere.png", "Moroccan")["theme"] == "Moroccan"))
+        "...and it names the theme it could not check",
+        check_theme("/nowhere.png", "British")["theme"] == "British"))
 
-    image = ROOT / "assets" / "theme_references" / "moroccan" / "01.webp"
+    image = ROOT / "assets" / "theme_references" / "british" / "01.webp"
     results.append(check("a real image to check against exists", image.is_file()))
 
-    class Reply:
-        def __init__(self, text):
-            self.text = text
-
-    class Models:
-        def __init__(self, text):
-            self._text = text
-
-        def generate_content(self, **kwargs):
-            Models.last = kwargs
-            return Reply(self._text)
-
-    class Client:
-        def __init__(self, text):
-            self.models = Models(text)
-
-    rules = theme_checklist("Moroccan")
+    rules = theme_checklist("British")
     everything = ", ".join(str(i) for i in range(1, len(rules) + 1))
 
-    good = check_theme(image, "Moroccan", Client(
-        '{"present": [' + everything + '], "missing": [], "forbidden_seen": [], "notes": "ok"}'))
-    results.append(check("every characteristic visible -> pass", good["status"] == "pass", good))
+    def stub(payload):
+        class Models:
+            last = None
 
-    bad = check_theme(image, "Moroccan", Client(
-        '{"present": [1], "missing": [2, 3], "forbidden_seen": ["British heritage styling"], "notes": "n"}'))
-    results.append(check("a characteristic missing -> fail", bad["status"] == "fail"))
-    results.append(check(
-        "...and the failure names the rules in the owner's own words",
-        bad["missing"] == [rules[1], rules[2]], bad["missing"]))
-    results.append(check(
-        "...and names the forbidden element that was seen",
-        bad["forbidden_seen"] == ["British heritage styling"]))
-
-    results.append(check(
-        "a forbidden element alone is enough to fail",
-        check_theme(image, "Moroccan", Client(
-            '{"present": [' + everything + '], "missing": [], "forbidden_seen": ["plain white minimalist interiors"]}'
-        ))["status"] == "fail"))
-
-    results.append(check(
-        "an unreadable reply -> unchecked, not a pass",
-        check_theme(image, "Moroccan", Client("I could not tell"))["status"] == "unchecked"))
-
-    class Exploding:
-        class models:
             @staticmethod
             def generate_content(**kwargs):
-                raise RuntimeError("the model is down")
-    results.append(check(
-        "a model error -> unchecked, and never raises",
-        check_theme(image, "Moroccan", Exploding())["status"] == "unchecked"))
+                Models.last = kwargs
+                class R:
+                    text = payload
+                return R()
 
-    # The question must be built from THIS theme's rules.
-    check_theme(image, "Rustic", Client('{"present": [1], "missing": []}'))
-    asked = " ".join(
-        getattr(part, "text", "") or "" for part in Models.last["contents"]
-    )
-    results.append(check(
-        "the check asks about the chosen theme's own rules",
-        all(rule in asked for rule in theme_checklist("Rustic"))))
-    results.append(check(
-        "...and about its prohibitions",
-        all(item in asked for item in describe_theme("Rustic")["avoid"])))
-    results.append(check(
-        "...and not another theme's",
-        "zellige" not in asked.lower()))
-    results.append(check(
-        "the image itself is sent, not its filename",
-        any(getattr(p, "inline_data", None) is not None for p in Models.last["contents"])))
+        class Client:
+            models = Models
+        return Client()
 
-    results.append(check(
-        "an unchecked verdict reads as unchecked, never as approval",
-        "not checked" in summarise(check_theme("/nowhere.png", "Moroccan"))))
+    # ── 1. a clearly compliant British bathroom ───────────────────────
+    compliant = check_theme(image, "British", stub(
+        '{"present": [' + everything + '], "missing": [], "uncertain": [], "deviations": [],'
+        ' "products": "the tiles look consistently laid", "identity": "reads as a country house"}'))
+    results.append(check("1. a compliant room -> PASS", compliant["status"] == "pass", compliant["status"]))
+    results.append(check("1. ...with nothing missing and nothing flagged",
+        compliant["missing"] == [] and compliant["deviations"] == [], compliant))
+    results.append(check("1. ...and no recommendation to act on", compliant["recommendation"] == ""))
 
-    # THE MODEL NAME. The live check came back 404 NOT_FOUND on every
-    # board because the default, "gemini-3-flash", does not exist. A
-    # model name is not something to guess at, so these are the names
-    # this deployment already runs.
+    # ── 2. a generic contemporary bathroom, generated for British ─────
+    generic = check_theme(image, "British", stub(
+        '{"present": [], "missing": [{"n": 1, "seen": "a plain modern room"},'
+        ' {"n": 2, "seen": "flat painted walls, no panelling"},'
+        ' {"n": 5, "seen": "plain large-format floor"}],'
+        ' "deviations": [{"what": "generic modern luxury bathroom styling",'
+        ' "seen": "frameless glass, floating vanity, no mouldings"}],'
+        ' "products": "tiles look real", "identity": "generic contemporary"}'))
+    results.append(check("2. a generic room -> FAIL", generic["status"] == "fail", generic["status"]))
+    results.append(check("2. ...missing and deviations are separate",
+        len(generic["missing"]) == 3 and len(generic["deviations"]) == 1, generic))
+    results.append(check("2. ...and each carries what was SEEN",
+        all("(" in m for m in generic["missing"]) and "floating vanity" in generic["deviations"][0]))
+
+    # ── 3. prohibited dominant blue surfaces ──────────────────────────
+    blue = check_theme(image, "British", stub(
+        '{"present": [' + everything + '], "missing": [],'
+        ' "deviations": [{"what": "dominant blue feature wall", "seen": "the shower wall is cobalt"}],'
+        ' "products": "fine", "identity": "British apart from the blue"}'))
+    results.append(check("3. a confirmed prohibited element -> FAIL", blue["status"] == "fail"))
+    results.append(check("3. ...reported as a deviation, never as something missing",
+        blue["missing"] == [] and "cobalt" in blue["deviations"][0], blue))
+    results.append(check("3. ...and the recommendation says to replace it, keeping the products",
+        "blue feature wall" in blue["recommendation"]
+        and "Keep the selected catalog products exactly as they are" in blue["recommendation"],
+        blue["recommendation"]))
+
+    # ── 4. correct British styling, plain flooring ────────────────────
+    floor = check_theme(image, "British", stub(
+        '{"present": [1, 2, 3, 4], "missing": [{"n": 5, "seen": "plain pale floor, no pattern"}],'
+        ' "deviations": [], "products": "fine", "identity": "British"}'))
+    results.append(check("4. right styling, wrong floor -> PARTIAL, not FAIL",
+        floor["status"] == "partial", floor["status"]))
+    results.append(check("4. ...the one real gap is named, and nothing is invented",
+        len(floor["missing"]) == 1 and floor["deviations"] == []
+        and "plain pale floor" in floor["missing"][0], floor))
+    results.append(check("4. ...and what IS right is acknowledged, not re-demanded",
+        len(floor["present"]) == 4, floor["present"]))
+
+    # ── 5. uncertain / partially visible characteristics ──────────────
+    unsure = check_theme(image, "British", stub(
+        '{"present": [1, 2], "missing": [],'
+        ' "uncertain": [{"n": 3, "why": "the image is too dim to judge the colour"}],'
+        ' "deviations": [], "products": "fine", "identity": "probably British"}'))
+    results.append(check("5. uncertainty is NOT a failure", unsure["status"] == "pass", unsure["status"]))
+    results.append(check("5. ...it is reported apart from the confirmed findings",
+        len(unsure["uncertain"]) == 1 and unsure["missing"] == []
+        and "too dim" in unsure["uncertain"][0], unsure))
+
+    # ── a validator that recites its own lists back is the failure ────
+    recited = check_theme(image, "British", stub(
+        '{"present": [], "missing": [{"n": 1}, {"n": 2}],'
+        ' "deviations": [{"what": "dominant blue feature walls"}, {"what": "excessive gold"}],'
+        ' "products": "", "identity": ""}'))
+    results.append(check(
+        "a finding with no evidence is dropped, not reported",
+        recited["missing"] == [] and recited["deviations"] == [], recited))
+    results.append(check(
+        "...so an evidence-free reply reads as a pass, not as invented failures",
+        recited["status"] == "pass", recited["status"]))
+
+    # ── it must ask about THIS theme, in both directions ──────────────
+    probe = stub('{"present": [1], "missing": [], "deviations": []}')
+    check_theme(image, "Rustic", probe)
+    asked = " ".join(getattr(p, "text", "") or "" for p in probe.models.last["contents"])
+    results.append(check("the question carries this theme's required characteristics",
+        all(r in asked for r in theme_checklist("Rustic"))))
+    results.append(check("...and its prohibitions, as a separate question",
+        all(a in asked for a in describe_theme("Rustic")["avoid"])
+        and "QUESTION A" in asked and "QUESTION B" in asked))
+    results.append(check("...and tells the model an empty list is the right answer",
+        "an empty list is the correct and expected answer" in asked))
+    results.append(check("...and not to copy the prohibitions into its reply",
+        "Do NOT copy this list" in asked))
+    results.append(check("...and not another theme's wording", "zellige" not in asked.lower()))
+    results.append(check("the image itself is sent, not its filename",
+        any(getattr(p, "inline_data", None) is not None for p in probe.models.last["contents"])))
+
+    # ── the model fallback, which the live 404 made necessary ─────────
     from app.theme_check import _candidate_models
     candidates = _candidate_models()
-    results.append(check(
-        "the invented model name is gone", "gemini-3-flash" not in candidates, candidates))
-    results.append(check(
-        "the candidates are models this project already runs",
+    results.append(check("the invented model name is gone", "gemini-3-flash" not in candidates, candidates))
+    results.append(check("the candidates are models this project already runs",
         all(c.startswith("gemini-3.1-") for c in candidates), candidates))
-    results.append(check(
-        "there is more than one, so a retired model is not the end of it",
-        len(candidates) >= 2, candidates))
 
     class Missing:
-        """Every model 404s, as the live deployment did."""
         class models:
             tried = []
 
@@ -524,47 +597,27 @@ def the_theme_check_is_honest():
                 Missing.models.tried.append(kwargs["model"])
                 raise RuntimeError("404 NOT_FOUND models/x is not found for API version v1beta")
 
-    verdict = check_theme(image, "Moroccan", Missing())
-    results.append(check(
-        "every model missing -> unchecked, never a pass", verdict["status"] == "unchecked"))
-    results.append(check(
-        "...after trying each candidate, not just the first",
+    gone = check_theme(image, "British", Missing())
+    results.append(check("every model missing -> unchecked, never a pass", gone["status"] == "unchecked"))
+    results.append(check("...after trying each candidate",
         len(Missing.models.tried) == len(candidates), Missing.models.tried))
 
-    class SecondWorks:
-        """The first model is gone; the next one answers."""
+    class Quota:
         class models:
             calls = []
 
             @staticmethod
             def generate_content(**kwargs):
-                SecondWorks.models.calls.append(kwargs["model"])
-                if len(SecondWorks.models.calls) == 1:
-                    raise RuntimeError("404 NOT_FOUND")
-                class R:
-                    text = '{"present": [1,2,3,4,5], "missing": []}'
-                return R()
-
-    recovered = check_theme(image, "Moroccan", SecondWorks())
-    results.append(check(
-        "a missing first model falls through to the next and still checks",
-        recovered["status"] == "pass", recovered))
-
-    class RealFailure:
-        class models:
-            calls = []
-
-            @staticmethod
-            def generate_content(**kwargs):
-                RealFailure.models.calls.append(kwargs["model"])
+                Quota.models.calls.append(kwargs["model"])
                 raise RuntimeError("429 RESOURCE_EXHAUSTED")
 
-    quota = check_theme(image, "Moroccan", RealFailure())
-    results.append(check(
-        "a real failure is NOT retried against every model",
-        len(RealFailure.models.calls) == 1, RealFailure.models.calls))
-    results.append(check(
-        "...and is reported as unchecked", quota["status"] == "unchecked"))
+    quota = check_theme(image, "British", Quota())
+    results.append(check("a real failure is not retried against every model",
+        len(Quota.models.calls) == 1, Quota.models.calls))
+    results.append(check("...and is reported as unchecked", quota["status"] == "unchecked"))
+
+    results.append(check("an unchecked verdict reads as unchecked, never as approval",
+        "not checked" in summarise(check_theme("/nowhere.png", "British"))))
     return results
 
 
@@ -577,6 +630,8 @@ def main():
         ("the tile step knows the theme too", the_tile_step_knows_the_theme_too()),
         ("the theme holds in every room", the_theme_holds_in_every_room()),
         ("the specification reaches the prompt", the_specification_reaches_the_prompt()),
+        ("the check asks only what a picture can answer",
+         the_check_asks_only_what_a_picture_can_answer()),
         ("the theme check is honest", the_theme_check_is_honest()),
         ("the wizard and the table agree", the_wizard_and_the_table_agree()),
     ]
