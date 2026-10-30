@@ -105,6 +105,7 @@ def _blank(status: str, theme: Optional[Dict[str, Any]] = None, reason: str = ""
         "theme": (theme or {}).get("label", ""),
         "reason": reason,
         "present": [],
+        "partial": [],
         "missing": [],
         "deviations": [],
         "uncertain": [],
@@ -129,38 +130,58 @@ def _question(theme: Dict[str, Any], required: List[str]) -> str:
     """
     What the model is asked.
 
-    It is asked to LOOK, in both directions, and to leave a list empty
-    rather than fill it -- because a validator that recites the
-    configuration back is the failure mode this is guarding against.
+    Written against three false positives the live board produced. It
+    marked heritage green MISSING while looking at a forest-green vanity
+    and a burgundy bathtub, because the only words available were
+    "present" and "missing" and the room was not GREEN OVERALL. And it
+    reported "a contemporary subway-tile bathroom" over large-format
+    marble panels, by stretching a prohibition until it fit.
+
+    So: four states rather than two, presence separated from dominance
+    in as many words, the theme's own counting rules, and a prohibition
+    that has to be identified confidently before it is reported at all.
     """
     numbered = "\n".join(f"{i}. {rule}" for i, rule in enumerate(required, start=1))
     forbidden = "\n".join(f"- {item}" for item in theme["avoid"])
+    counts = theme.get("counts") or []
+    counting = ("\n\nWHAT COUNTS for this theme:\n" + "\n".join(f"- {c}" for c in counts)) if counts else ""
 
     return (
         f"You are judging ONE generated bathroom image against the design theme "
         f"\"{theme['label']}\" ({theme['palette']}).\n\n"
         f"The theme is right when: {theme['success']}\n\n"
-        "Judge ONLY what is actually visible in the image. Not what the theme's name "
-        "suggests ought to be there, and not what the lists below say. A matching colour "
-        "palette on its own satisfies nothing.\n\n"
-        "QUESTION A -- REQUIRED CHARACTERISTICS. For each, say whether it is clearly "
-        "present, clearly absent, or you cannot tell from this image:\n"
+        "Look at the WHOLE room before answering -- walls, flooring, vanity, bathtub, shower, "
+        "fixtures, mirrors, architectural detailing and decorative elements together. A theme is "
+        "established by several coordinated elements, not by one wall or one material.\n\n"
+        "PRESENCE IS NOT DOMINANCE. A characteristic is PRESENT if you can see it anywhere in the "
+        "room, at any size. A green vanity is heritage green. A burgundy bathtub is oxblood. Do "
+        "NOT call something missing because it is not the largest thing in the picture, and do NOT "
+        "expect every characteristic to occupy a large share of the room."
+        f"{counting}\n\n"
+        "QUESTION A -- REQUIRED CHARACTERISTICS. Give each one exactly one state:\n"
+        "  present    you can see it\n"
+        "  partial    it is there but thin, small or only half-done\n"
+        "  missing    you looked and it is genuinely not in the room\n"
+        "  uncertain  you cannot tell from this image\n"
         f"{numbered}\n\n"
-        "QUESTION B -- PROHIBITED ELEMENTS. These must not appear. Report one ONLY if you "
-        "can actually SEE it dominating the image. If you see none, say none -- an empty "
-        "list is the correct and expected answer for a good image. Do NOT copy this list "
-        "into your answer:\n"
-        f"{forbidden}\n\n"
-        "QUESTION C -- the products. Do the tiled surfaces look like real, consistently "
-        "laid catalog products, or like invented patterns? One sentence.\n\n"
-        "QUESTION D -- does the room read as a designed interior in this theme's language, "
-        "or as a generic contemporary bathroom? One sentence.\n\n"
-        "Every item you report must carry what you SAW, in your own words. Reply with JSON "
-        "only, no prose and no code fence:\n"
-        '{"present": [<numbers clearly present>], '
+        "QUESTION B -- PROHIBITED ELEMENTS. Report one ONLY if you can actually SEE it and are "
+        "confident. Do not stretch an item until it fits: large-format stone or marble panels are "
+        "NOT subway tiles; a dark painted wall is not a blue feature wall; traditional cabinetry is "
+        "not a floating vanity. If you are unsure, leave it out or mark it not confident. Seeing "
+        "none is the correct and expected answer for a good image. Do NOT copy this list into your "
+        f"answer:\n{forbidden}\n\n"
+        "QUESTION C -- the products. Do the tiled surfaces look like real, consistently laid catalog "
+        "products, or like invented patterns? One sentence.\n\n"
+        "QUESTION D -- does the room read as a designed interior in this theme's language, or as a "
+        "generic contemporary bathroom? One sentence.\n\n"
+        "Every item you report must carry what you SAW, in your own words. Reply with JSON only, no "
+        "prose and no code fence:\n"
+        '{"present": [<numbers>], '
+        '"partial": [{"n": <number>, "seen": "<what is there, and why it is thin>"}], '
         '"missing": [{"n": <number>, "seen": "<what is there instead>"}], '
         '"uncertain": [{"n": <number>, "why": "<why you cannot tell>"}], '
-        '"deviations": [{"what": "<the prohibited element>", "seen": "<where you see it>"}], '
+        '"deviations": [{"what": "<the prohibited element>", "seen": "<where you see it>", '
+        '"confident": true}], '
         '"products": "<one sentence>", "identity": "<one sentence>"}'
     )
 
@@ -233,47 +254,53 @@ def check_theme(image_path: Any, theme: Any, client: Any = None) -> Dict[str, An
 
         present = [rule(n) for n in reply.get("present", []) if rule(n)]
 
+        def detailed(field: str, key: str) -> List[str]:
+            """Findings that carry what was SEEN. The rest are recitation."""
+            out = []
+            for item in reply.get(field, []) if isinstance(reply.get(field), list) else []:
+                if not isinstance(item, dict):
+                    continue
+                name, why = rule(item.get("n")), str(item.get(key, "")).strip()
+                if name and (why or field == "uncertain"):
+                    out.append(f"{name}{f' ({why[:140]})' if why else ''}")
+            return out
+
         # EVIDENCE OR IT DID NOT HAPPEN.
         #
         # A finding without something the model says it SAW is a
         # finding it recited from the lists above, which is exactly
         # what this must not report. Dropped, not trusted.
-        missing = []
-        for item in reply.get("missing", []) if isinstance(reply.get("missing"), list) else []:
-            if not isinstance(item, dict):
-                continue
-            name, seen = rule(item.get("n")), str(item.get("seen", "")).strip()
-            if name and seen:
-                missing.append(f"{name} ({seen[:140]})")
+        partial = detailed("partial", "seen")
+        missing = detailed("missing", "seen")
+        uncertain = detailed("uncertain", "why")
 
-        uncertain = []
-        for item in reply.get("uncertain", []) if isinstance(reply.get("uncertain"), list) else []:
-            if not isinstance(item, dict):
-                continue
-            name, why = rule(item.get("n")), str(item.get("why", "")).strip()
-            if name:
-                uncertain.append(f"{name}{f' ({why[:120]})' if why else ''}")
-
+        # A PROHIBITION HAS TO BE IDENTIFIED, NOT MATCHED.
+        #
+        # The live board reported "a contemporary subway-tile bathroom"
+        # over large-format marble panels, by stretching the avoid-list
+        # until it fit. So a deviation needs evidence AND confidence;
+        # anything less is an observation, not a finding, and goes to
+        # uncertain where it cannot fail the board.
         deviations = []
         for item in reply.get("deviations", []) if isinstance(reply.get("deviations"), list) else []:
             if not isinstance(item, dict):
                 continue
             what, seen = str(item.get("what", "")).strip(), str(item.get("seen", "")).strip()
-            if what and seen:
+            if not what or not seen:
+                continue
+            if item.get("confident") is False:
+                uncertain.append(f"possibly {what} ({seen[:120]})")
+            else:
                 deviations.append(f"{what} ({seen[:140]})")
 
-        # The status follows from the findings, not from the model's own
-        # opinion of them -- so the same findings always read the same way.
-        if deviations:
-            status = "fail"
-        elif missing:
-            status = "partial"
-        else:
-            status = "pass"
+        status = _status(found, required, present, partial, missing, deviations, reply)
 
         verdict = _blank(status, found)
+        if status == "unchecked":
+            verdict["reason"] = "the check model judged none of the characteristics"
         verdict.update({
             "present": present[:8],
+            "partial": _clean(partial),
             "missing": _clean(missing),
             "deviations": _clean(deviations, 4),
             "uncertain": _clean(uncertain, 4),
@@ -285,6 +312,64 @@ def check_theme(image_path: Any, theme: Any, client: Any = None) -> Dict[str, An
 
     except Exception as error:  # noqa: BLE001 -- advisory, never fatal
         return _blank("unchecked", found, f"the check could not run: {error}")
+
+
+def _status(
+    theme: Dict[str, Any],
+    required: List[str],
+    present: List[str],
+    partial: List[str],
+    missing: List[str],
+    deviations: List[str],
+    reply: Dict[str, Any],
+) -> str:
+    """
+    PASS, PARTIAL or FAIL, from the findings alone.
+
+    Weighted, and the weights come from the theme's own configuration
+    rather than from invented thresholds:
+
+      * The theme names ONE of its characteristics as the one that
+        carries it (`identityCheck`). If that is present the room reads
+        as the theme, and a thin decorative element elsewhere cannot
+        take it to FAIL -- which is what happened to the owner's board.
+
+      * Everything else is counted as a share of the theme's own
+        characteristics: present counts whole, partial counts half.
+        Below half of them is a room that does not carry the theme.
+
+    FAIL is reserved for a room that genuinely is not the theme: its
+    identity absent, OR a confidently identified prohibited element, OR
+    fewer than half its characteristics satisfied.
+    """
+    identity_index = theme.get("identityCheck")
+    identity_rule = (
+        required[identity_index - 1]
+        if isinstance(identity_index, int) and 1 <= identity_index <= len(required)
+        else None
+    )
+    identity_failed = identity_rule is not None and any(m.startswith(identity_rule) for m in missing)
+
+    # ONLY WHAT THE MODEL ACTUALLY CLASSIFIED COUNTS.
+    #
+    # A characteristic it never mentions is unknown, not absent. Dividing
+    # by the full list punished a room for the model's silence: a reply
+    # naming two of seven as present scored 0.29 and failed, although
+    # nothing had been found wrong with it.
+    classified = len(present) + len(partial) + len(missing)
+    satisfied = len(present) + 0.5 * len(partial)
+    share = satisfied / classified if classified else 0.0
+
+    # Nothing judged at all is not a pass. It is a check that did not
+    # happen, and saying so is the whole point of having "unchecked".
+    if not classified and not deviations:
+        return "unchecked"
+
+    if deviations or identity_failed or (classified and share < 0.5):
+        return "fail"
+    if missing or partial:
+        return "partial"
+    return "pass"
 
 
 def _recommend(theme: Dict[str, Any], missing: List[str], deviations: List[str]) -> str:

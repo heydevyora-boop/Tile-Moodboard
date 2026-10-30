@@ -2079,6 +2079,15 @@
     const head = v.status === 'fail' ? ' \u2014 NON-COMPLIANT' : ' \u2014 PARTIAL COMPLIANCE';
 
     let body = '';
+    // What is already right is said first, so the showroom is not asked
+    // for things the room plainly has.
+    if ((v.present || []).length) {
+      body += '<span class="viz-note-h">Present</span><span>\u00b7 '
+        + escapeHtml(String((v.present || []).length)) + ' of this theme\u2019s characteristics are visible.</span>';
+    }
+    if ((v.partial || []).length) {
+      body += '<span class="viz-note-h">Partially present</span>' + list(v.partial);
+    }
     if ((v.missing || []).length) body += '<span class="viz-note-h">Missing</span>' + list(v.missing);
     if ((v.deviations || []).length) {
       body += '<span class="viz-note-h">Detected deviations</span>' + list(v.deviations);

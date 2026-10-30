@@ -547,7 +547,7 @@ def the_theme_check_is_honest():
         '{"present": [1, 2], "missing": [],'
         ' "uncertain": [{"n": 3, "why": "the image is too dim to judge the colour"}],'
         ' "deviations": [], "products": "fine", "identity": "probably British"}'))
-    results.append(check("5. uncertainty is NOT a failure", unsure["status"] == "pass", unsure["status"]))
+    results.append(check("5. uncertainty is NOT a failure", unsure["status"] != "fail", unsure["status"]))
     results.append(check("5. ...it is reported apart from the confirmed findings",
         len(unsure["uncertain"]) == 1 and unsure["missing"] == []
         and "too dim" in unsure["uncertain"][0], unsure))
@@ -561,8 +561,12 @@ def the_theme_check_is_honest():
         "a finding with no evidence is dropped, not reported",
         recited["missing"] == [] and recited["deviations"] == [], recited))
     results.append(check(
-        "...so an evidence-free reply reads as a pass, not as invented failures",
-        recited["status"] == "pass", recited["status"]))
+        "...so an evidence-free reply invents no failures",
+        recited["missing"] == [] and recited["deviations"] == [] and recited["status"] != "fail",
+        recited["status"]))
+    results.append(check(
+        "...and a reply that judged nothing is reported as unchecked, not as a pass",
+        recited["status"] == "unchecked", recited["status"]))
 
     # ── it must ask about THIS theme, in both directions ──────────────
     probe = stub('{"present": [1], "missing": [], "deviations": []}')
@@ -573,8 +577,8 @@ def the_theme_check_is_honest():
     results.append(check("...and its prohibitions, as a separate question",
         all(a in asked for a in describe_theme("Rustic")["avoid"])
         and "QUESTION A" in asked and "QUESTION B" in asked))
-    results.append(check("...and tells the model an empty list is the right answer",
-        "an empty list is the correct and expected answer" in asked))
+    results.append(check("...and tells the model that seeing none is the right answer",
+        "Seeing none is the correct and expected answer" in asked))
     results.append(check("...and not to copy the prohibitions into its reply",
         "Do NOT copy this list" in asked))
     results.append(check("...and not another theme's wording", "zellige" not in asked.lower()))
@@ -615,6 +619,85 @@ def the_theme_check_is_honest():
     results.append(check("a real failure is not retried against every model",
         len(Quota.models.calls) == 1, Quota.models.calls))
     results.append(check("...and is reported as unchecked", quota["status"] == "unchecked"))
+
+    # ── the owner's own board: the false positives must not recur ────
+    #
+    # Green panelled vanity, burgundy freestanding bathtub, brass
+    # fittings, patterned floor, Victorian mirror -- on large-format
+    # marble walls. The first validator called it NON-COMPLIANT and said
+    # heritage green was missing.
+    real = check_theme(image, "British", stub(
+        '{"present": [1,2,4,5,7],'
+        ' "partial": [{"n": 3, "seen": "green vanity and burgundy bathtub present, walls are brown marble"}],'
+        ' "missing": [], "uncertain": [], "deviations": [],'
+        ' "products": "consistently laid", "identity": "reads as a country house"}'))
+    results.append(check(
+        "the owner's board is PARTIAL, not NON-COMPLIANT", real["status"] == "partial", real["status"]))
+    results.append(check(
+        "...heritage green is PARTIAL, not missing",
+        real["missing"] == [] and len(real["partial"]) == 1
+        and "green vanity" in real["partial"][0], real))
+    results.append(check(
+        "...and the five characteristics it does have are acknowledged",
+        len(real["present"]) == 5, real["present"]))
+
+    # A prohibition stretched to fit must not fail the board.
+    stretched = check_theme(image, "British", stub(
+        '{"present": [1,2,4,5,7], "partial": [], "missing": [],'
+        ' "deviations": [{"what": "a contemporary subway-tile bathroom",'
+        ' "seen": "large-format marble panels that mimic subway proportions", "confident": false}],'
+        ' "products": "ok", "identity": "British"}'))
+    results.append(check(
+        "a prohibition the model is not sure of does not fail the board",
+        stretched["status"] != "fail" and stretched["deviations"] == [], stretched))
+    results.append(check(
+        "...it is reported as uncertain instead",
+        any("possibly" in u for u in stretched["uncertain"]), stretched["uncertain"]))
+
+    # One thin decorative element must not sink a room whose identity holds.
+    thin = check_theme(image, "British", stub(
+        '{"present": [1,2,3,4,5,7], "partial": [],'
+        ' "missing": [{"n": 6, "seen": "no botanical pattern anywhere"}],'
+        ' "deviations": [], "products": "ok", "identity": "British"}'))
+    results.append(check(
+        "one missing decorative element is PARTIAL when the identity holds",
+        thin["status"] == "partial", thin["status"]))
+
+    # ...but a room that is NOT the theme still fails.
+    notTheme = check_theme(image, "British", stub(
+        '{"present": [], "partial": [],'
+        ' "missing": [{"n": 1, "seen": "a plain modern hotel bathroom"},'
+        ' {"n": 2, "seen": "flat walls"}, {"n": 4, "seen": "floating vanity"},'
+        ' {"n": 5, "seen": "plain floor"}, {"n": 7, "seen": "generic"}],'
+        ' "deviations": [], "products": "ok", "identity": "generic contemporary"}'))
+    results.append(check(
+        "a room whose identity is absent still FAILS", notTheme["status"] == "fail", notTheme["status"]))
+
+    # ...and a confidently seen prohibition still fails.
+    realDeviation = check_theme(image, "British", stub(
+        '{"present": [1,2,4,5,7], "partial": [], "missing": [],'
+        ' "deviations": [{"what": "dominant blue feature wall",'
+        ' "seen": "the entire shower wall is cobalt gloss", "confident": true}],'
+        ' "products": "ok", "identity": "British apart from the blue"}'))
+    results.append(check(
+        "a prohibition actually seen still FAILS", realDeviation["status"] == "fail"))
+
+    # The counting rules must reach the model.
+    probe2 = stub('{"present": [1], "partial": [], "missing": [], "deviations": []}')
+    check_theme(image, "British", probe2)
+    asked2 = " ".join(getattr(p, "text", "") or "" for p in probe2.models.last["contents"])
+    results.append(check(
+        "the model is told presence is not dominance", "PRESENCE IS NOT DOMINANCE" in asked2))
+    results.append(check(
+        "...that a green vanity counts", "A green vanity is heritage green" in asked2))
+    results.append(check(
+        "...that large-format stone is not subway tile",
+        "are NOT subway tiles" in asked2))
+    results.append(check(
+        "...and it is offered all four states",
+        all(w in asked2 for w in ["present ", "partial ", "missing ", "uncertain "])))
+    results.append(check(
+        "...and told to look at the whole room", "Look at the WHOLE room" in asked2))
 
     results.append(check("an unchecked verdict reads as unchecked, never as approval",
         "not checked" in summarise(check_theme("/nowhere.png", "British"))))
