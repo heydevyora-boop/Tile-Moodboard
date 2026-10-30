@@ -406,7 +406,7 @@ def the_floral_living_room_is_furnished_and_controlled():
             and "Do not enlarge it until a few flowers fill a wall" in prompt))
         results.append(check(
             f"{label}: the botanical identity reaches the smaller things",
-            "cushions, textiles, artwork, accessories" in prompt))
+            "cushions, textiles, artwork, soft furnishings, accessories" in prompt))
         results.append(check(
             f"{label}: covering every wall is forbidden outright",
             "floral pattern covering most or all of the walls in the room" in prompt))
@@ -427,15 +427,16 @@ def the_floral_living_room_is_furnished_and_controlled():
     styling = room_styling("Floral", "Living Room")
     results.append(check(
         "the living room is furnished by the theme",
-        len(styling) == 5 and all(item in living for item in styling),
+        len(styling) == 6 and all(item in living for item in styling),
         [i[:40] for i in styling if i not in living]))
     results.append(check(
         "...under a heading that names the room",
         "IN THIS ROOM -- how this theme is furnished in a living room:" in living))
     results.append(check(
-        "sage seating and ivory accent chairs are asked for",
-        "Seating in sage green or a muted botanical tone" in living
-        and "ivory or warm-cream accent chairs" in living))
+        "a blush or sage sofa and ivory accent chairs are asked for",
+        "A principal sofa in blush pink or sage green" in living
+        and "ivory or warm-cream accent chairs" in living
+        and "in realistic proportion to the room" in living))
     results.append(check(
         "so is wood, a coffee table and botanical artwork",
         "warm natural timber" in living and "coffee table" in living
@@ -463,6 +464,56 @@ def the_floral_living_room_is_furnished_and_controlled():
         results.append(check(
             f"...and {other} still gets its own rules",
             all(rule in prompt for rule in describe_theme(other)["mandatory"])))
+
+    # THE INTEGRATION. The first live Floral living room obeyed "ONE
+    # dominant floral surface" by hanging a framed rectangle of pattern
+    # in the middle of a grey tiled wall. Capping the pattern was right;
+    # saying nothing about where it STOPS was not.
+    for label, prompt in (("living room", living), ("bathroom", bathroom)):
+        results.append(check(
+            f"{label}: the dominant surface must be architecturally integrated",
+            "That dominant surface must be ARCHITECTURALLY INTEGRATED" in prompt))
+        results.append(check(
+            f"{label}: ...filling a real plane, edges landing on architecture",
+            "every edge of it lands on an architectural line" in prompt
+            and "a whole wall, an alcove, a chimney breast, a panelled recess" in prompt))
+        results.append(check(
+            f"{label}: a framed rectangle is named as NOT a feature wall",
+            "is NOT a feature wall and does not satisfy this theme" in prompt))
+        results.append(check(
+            f"{label}: ...and forbidden outright",
+            "a rectangle of floral pattern floated in the middle of another material, "
+            "framed like a picture or a sample board" in prompt))
+        results.append(check(
+            f"{label}: one quieter botanical note is required besides it",
+            "ONE quieter botanical note besides the dominant surface" in prompt
+            and "clearly subordinate to it" in prompt))
+        results.append(check(
+            f"{label}: a single floral element in a plain room is not the theme",
+            "One isolated floral element in an otherwise plain contemporary room "
+            "is not this theme." in prompt))
+        results.append(check(
+            f"{label}: one floral panel and nothing else is forbidden",
+            "a generic contemporary room with one floral panel in it and nothing "
+            "else botanical" in prompt))
+        results.append(check(
+            f"{label}: grey must be balanced, and kept when it is the product",
+            "must be BALANCED against warmer ivory, blush and sage ones" in prompt
+            and "keep it exactly as it is and warm the room around it" in prompt))
+        results.append(check(
+            f"{label}: grey taking over is forbidden",
+            "large-format grey or neutral surfaces taking over the room" in prompt))
+        results.append(check(
+            f"{label}: the products themselves are still never altered",
+            "KEEP THE REAL PRODUCT" in prompt
+            and "Never recolour, repattern or substitute a supplied product" in prompt))
+
+    results.append(check(
+        "the feature wall is the living room's focal plane",
+        "the room's focal plane, with the furniture arranged to face it" in living))
+    results.append(check(
+        "integration is part of what makes the theme right",
+        "built into the architecture rather than hung on it" in living))
 
     # THE ROOM TYPE. The specification was written for bathrooms.
     results.append(check(
@@ -517,6 +568,32 @@ def the_floral_living_room_is_furnished_and_controlled():
     results.append(check(
         "excess is reported only when the pattern really does cover the walls",
         "only when it actually covers most of the walls" in asked))
+
+    results.append(check(
+        "the check asks whether the surface is built in or set into another material",
+        "rather than a framed rectangle set into another material" in asked))
+    results.append(check(
+        "...and is told how to tell the two apart",
+        "INTEGRATED means the floral surface fills a real plane" in asked
+        and "another material visible all the way around it is NOT integrated" in asked))
+    results.append(check(
+        "the check asks for the quieter botanical note",
+        "A quieter botanical note appears somewhere besides it" in asked))
+    results.append(check(
+        "...and for warm surfaces balancing the grey",
+        "balance any large grey or neutral surfaces" in asked))
+
+    # The live board reported "a generic modern bathroom with one potted
+    # plant" against a living room, and its OWN evidence said "The image
+    # is a living room, not a bathroom". A prohibition naming another
+    # room cannot be a finding about this one.
+    results.append(check(
+        "a prohibition naming another room type does not apply to this one",
+        "you are judging a living room -- that item does not apply" in asked
+        and "reporting it is a false positive" in asked))
+    results.append(check(
+        "...and evidence that contradicts the finding disqualifies it",
+        "if what you saw shows the prohibited thing is absent, do not report it" in asked))
 
     with_no_room = _question(floral, theme_checklist("Floral"))
     results.append(check(

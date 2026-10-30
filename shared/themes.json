@@ -114,15 +114,18 @@
       "label": "Floral",
       "palette": "Blush pink, sage green, ivory, soft botanical tones",
       "slug": "floral",
-      "identity": "A room where botanical design is a defining part of the interior. Flower-patterned tiles, botanical wall treatments, floral feature surfaces or other clearly visible floral elements, following the supplied references. The pattern is a CONTROLLED feature: ONE dominant floral surface, with the walls around it plain blush, ivory or sage so the pattern reads as a deliberate statement rather than wallpaper applied everywhere. Balanced with blush-pink surfaces, sage-green accents, ivory finishes, warm natural wood for depth, elegant fixtures and a soft, harmonious atmosphere. The result should feel refined, fresh and professionally composed -- botanical rather than merely pink.",
+      "identity": "A room where botanical design is a defining part of the interior. Flower-patterned tiles, botanical wall treatments, floral feature surfaces or other clearly visible floral elements, following the supplied references. The pattern is a CONTROLLED feature: ONE dominant floral surface, with the walls around it plain blush, ivory or sage so the pattern reads as a deliberate statement rather than wallpaper applied everywhere. That surface is a piece of ARCHITECTURE -- a whole wall, an alcove, a chimney breast, a panelled recess or a full run between two real edges -- not a rectangle of pattern floated in the middle of another material like a framed picture. Quieter botanical notes in cushions, artwork, soft furnishings and a subtle secondary treatment tie the room back to it. Balanced with blush-pink surfaces, sage-green accents, ivory finishes, warm natural wood for depth, elegant fixtures and a soft, harmonious atmosphere. The result should feel refined, fresh and professionally composed -- a cohesive botanical interior, not a contemporary room with one floral panel in it.",
       "mandatory": [
         "Clearly recognisable floral or botanical motifs must be visible.",
         "The floral treatment must have meaningful presence on an appropriate wall, tile surface or feature area.",
         "The floral pattern is a CONTROLLED feature: ONE dominant floral surface and no more. The remaining walls and large surfaces are plain blush, ivory or sage -- they carry the palette, not the pattern.",
-        "Carry the botanical identity into the smaller things as well -- cushions, textiles, artwork, accessories -- so it is coordinated through the room instead of concentrated in one sheet of wallpaper.",
+        "That dominant surface must be ARCHITECTURALLY INTEGRATED: it runs the full height and width of a real plane -- a whole wall, an alcove, a chimney breast, a panelled recess, or a full run from corner to corner and skirting to ceiling -- and every edge of it lands on an architectural line. A rectangle of pattern floating in the middle of a different material, framed like a picture or a sample board, is NOT a feature wall and does not satisfy this theme.",
+        "Carry the botanical identity into the smaller things as well -- cushions, textiles, artwork, soft furnishings, accessories -- so it is coordinated through the room instead of concentrated in one sheet of wallpaper.",
+        "Give the room ONE quieter botanical note besides the dominant surface -- a subtle secondary wall treatment, a soft furnishing, a grouping of botanical artwork -- clearly subordinate to it. One isolated floral element in an otherwise plain contemporary room is not this theme.",
         "Hold the floral motif to one consistent scale, repeating realistically, at a size a real manufacturer would actually print. Do not enlarge it until a few flowers fill a wall.",
         "Blush, sage and ivory should be used coherently where they are compatible with the actual catalog products, with warm natural wood and subtle material texture for depth. No single one of them may take the whole room.",
-        "Furniture, cabinetry and furnishings must complement the floral surface rather than compete with it, and must look deliberately coordinated rather than generically arranged.",
+        "Furniture, cabinetry and furnishings must complement the floral surface rather than compete with it, and must look deliberately coordinated rather than generically arranged, at realistic proportions and in premium materials.",
+        "Large-format grey, stone or neutral surfaces must be BALANCED against warmer ivory, blush and sage ones. Where such a surface is an actual selected catalog product, keep it exactly as it is and warm the room around it -- paint, timber, textiles, soft furnishings -- so the room does not settle into grey.",
         "If the selected catalog tiles are plain, use them honestly and carry the botanical identity on other compatible surfaces or accessories.",
         "Floral detail must be integrated with the architecture, not stuck on it."
       ],
@@ -134,14 +137,20 @@
         "oversized flower motifs enlarged until a few of them fill a whole surface",
         "a room that reads as overwhelmingly pink, or overwhelmingly green",
         "busy decorative styling with too many ornaments competing for attention",
+        "a rectangle of floral pattern floated in the middle of another material, framed like a picture or a sample board",
+        "a generic contemporary room with one floral panel in it and nothing else botanical",
+        "large-format grey or neutral surfaces taking over the room",
         "unrelated geometric feature walls",
         "childish or cartoon-like floral graphics"
       ],
-      "success": "The floral theme is immediately evident from the actual surface treatments and the overall composition, and the pattern is placed selectively rather than spread across every wall.",
+      "success": "The floral theme is immediately evident from the actual surface treatments and the overall composition, and the pattern is placed selectively rather than spread across every wall, and it is built into the architecture rather than hung on it.",
       "visible": [
         "Clearly recognisable floral or botanical motifs are visible.",
         "The floral treatment has meaningful presence on a wall, tile surface or feature area.",
         "The floral pattern is concentrated on one dominant surface, with the other walls plain.",
+        "That surface reads as a built part of the room -- a whole wall, alcove or recess -- rather than a framed rectangle set into another material.",
+        "A quieter botanical note appears somewhere besides it, in artwork, cushions or soft furnishings.",
+        "Warm ivory, blush and sage balance any large grey or neutral surfaces.",
         "Smaller botanical detail is carried into textiles, cushions, artwork or accessories.",
         "Blush, sage and ivory are all present and balanced, with no single one taking the whole room.",
         "The floral motif is at one consistent scale and repeats realistically.",
@@ -151,14 +160,16 @@
       "counts": [
         "A patterned feature wall plus plain walls around it is CORRECT -- that is the controlled distribution this theme asks for, not a missing floral treatment.",
         "Blush is present if you can see it anywhere -- a cushion, a plain wall, a textile. The same for sage and for ivory. None of them has to dominate.",
-        "Report the pattern as excessive only when it actually covers most of the walls, or when the motif has been enlarged until a few flowers fill a surface."
+        "Report the pattern as excessive only when it actually covers most of the walls, or when the motif has been enlarged until a few flowers fill a surface.",
+        "INTEGRATED means the floral surface fills a real plane and its edges land on architecture -- a corner, the ceiling, the skirting, a recess. A floral rectangle with another material visible all the way around it is NOT integrated, however large it is."
       ],
       "rooms": {
         "living room": [
-          "Seating in sage green or a muted botanical tone, with ivory or warm-cream accent chairs.",
+          "A principal sofa in blush pink or sage green, with ivory or warm-cream accent chairs, in realistic proportion to the room.",
           "Refined wooden furniture in warm natural timber, and a coffee table coordinated with it.",
           "Soft decorative cushions and selected botanical artwork, carrying the motif at a smaller scale than the feature surface.",
           "Natural textures and premium fabrics, with balanced curtains or window treatments in a plain or finely patterned cloth.",
+          "The feature wall sits behind the seating or the console as the room's focal plane, with the furniture arranged to face it rather than standing in front of it as decoration.",
           "An uncluttered, considered arrangement: the furniture complements the floral surface instead of competing with it, and decorative objects are few and chosen."
         ]
       },
