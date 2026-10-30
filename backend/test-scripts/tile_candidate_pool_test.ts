@@ -264,6 +264,65 @@ async function main() {
       typeof winner?.catalogGroup === 'string' && winner.catalogGroup.length > 0, winner);
   }
 
+  // ── the same catalog must not always yield the same pool ──────────
+  //
+  // The tie-break was the tile's NAME, so one catalog and one brief gave
+  // byte-identical candidates in byte-identical order on every
+  // generation -- the model saw the same products every time and picked
+  // the same ones. A catalog of four hundred behaved like a catalog of
+  // eighty.
+  {
+    // Forty tiles that all score the same: nothing but the tie-break can
+    // separate them, which is exactly the case that was frozen.
+    const equal = Array.from({ length: 40 }, (_, i) => tile({
+      id: `equal-${String(i).padStart(2, '0')}`,
+      name: `Tile ${String.fromCharCode(65 + (i % 26))}${i}`,
+      productCode: `EQ-${i}`,
+      catalogId: 'cat-1',
+    }));
+
+    const draw = async (seed?: number) =>
+      (await getRecommendedTiles(fakePrisma(equal), { room: 'Bathroom', limit: 10, varietySeed: seed }))
+        .map((t) => t.id).join(',');
+
+    const noSeedA = await draw();
+    const noSeedB = await draw();
+    check('30. With no seed the order is unchanged, exactly as before', noSeedA === noSeedB, noSeedA);
+
+    const seeded = await Promise.all([1, 2, 3, 4, 5].map((n) => draw(n * 7919)));
+    check('31. Different seeds draw different tiles from the same catalog',
+      new Set(seeded).size >= 4, seeded.map((s) => s.slice(0, 40)));
+    check('32. The same seed always draws the same tiles',
+      (await draw(12345)) === (await draw(12345)));
+
+    // Across a handful of generations, far more of the catalog is seen
+    // than the pool limit -- which is the whole complaint.
+    const seen = new Set<string>();
+    for (let n = 0; n < 8; n += 1) {
+      (await draw(n * 104729)).split(',').forEach((id) => seen.add(id));
+    }
+    check('33. Eight generations reach well past the pool limit of 10',
+      seen.size >= 25, `${seen.size} of 40 tiles seen`);
+
+    // ...and score still decides. A better tile must never be displaced.
+    // One tile that scores HIGHER (its colour matches the brief's) and
+    // sorts LAST alphabetically -- so only its score can keep it in.
+    const withBest = [
+      tile({ id: 'best', name: 'Zzz Last Alphabetically', colorTone: 'Ivory', catalogId: 'cat-1' }),
+      ...equal.map((t) => ({ ...t, colorTone: 'Charcoal' })),
+    ];
+    for (let n = 0; n < 6; n += 1) {
+      const pool = await getRecommendedTiles(fakePrisma(withBest), {
+        room: 'Bathroom', colorTone: 'Ivory', limit: 5, varietySeed: n * 31337,
+      });
+      if (!pool.some((t) => t.id === 'best')) {
+        check('34. The best-scoring tile is never dropped by the shuffle', false, { seed: n, pool: pool.map((t) => t.id) });
+        break;
+      }
+      if (n === 5) check('34. The best-scoring tile is never dropped by the shuffle', true);
+    }
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail > 0 ? 1 : 0);
 }
