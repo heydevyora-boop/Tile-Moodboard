@@ -938,6 +938,7 @@ def create_visualization(
             verdict = check_theme(
                 result.get("image_path", ""),
                 requirements_for_check.get("style"),
+                room=requirements_for_check.get("room"),
             )
             line = summarise(verdict)
             if line:

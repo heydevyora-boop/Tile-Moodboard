@@ -39,8 +39,9 @@ from app.themes import (  # noqa: E402
     theme_checklist,
     theme_rules,
     theme_specification,
+    room_styling,
 )
-from app.theme_check import check_theme, summarise  # noqa: E402
+from app.theme_check import check_theme, summarise, _question  # noqa: E402
 from app.scene_image_generator import build_room_scene_prompt  # noqa: E402
 from app.tile_application_engine import build_tile_application_prompt  # noqa: E402
 
@@ -362,6 +363,166 @@ def the_theme_holds_in_every_room():
         "a kitchen and a bathroom are sent the same Moroccan photographs",
         sent(kitchen) == sent(bathroom) and len(sent(kitchen)) == 5,
         len(sent(kitchen))))
+    return results
+
+
+def the_floral_living_room_is_furnished_and_controlled():
+    """The owner's floral LIVING ROOM came back as wallpaper everywhere.
+
+    Two separate faults, in one board. The pattern was on almost every
+    wall at an enlarged scale, so the room read as repetitive rather
+    than designed -- nothing in the theme asked for the pattern to be
+    CONTROLLED. And the specification opened "A floral bathroom", which
+    is an instruction to draw one, pasted into a living room's prompt
+    under the heading THE SPECIFICATION.
+
+    Nothing here can prove what the model draws. What it proves is that
+    the room is asked for as a living room, furnished as one, and told
+    where the pattern may and may not go.
+    """
+    results = []
+    living = build_room_scene_prompt(
+        "Floral", "A Board Name",
+        {"room": "Living Room", "surface": "WALL", "style": "Floral"},
+    )
+    bathroom = build_room_scene_prompt(
+        "Floral", "A Board Name",
+        {"room": "Bathroom", "surface": "WALL", "style": "Floral"},
+    )
+    floral = describe_theme("Floral")
+
+    # THE DISTRIBUTION. Every room, not just this one: the pattern was
+    # uncontrolled in the theme itself.
+    for label, prompt in (("living room", living), ("bathroom", bathroom)):
+        results.append(check(
+            f"{label}: one dominant floral surface, and no more",
+            "ONE dominant floral surface and no more" in prompt))
+        results.append(check(
+            f"{label}: the other walls carry the palette, not the pattern",
+            "they carry the palette, not the pattern" in prompt))
+        results.append(check(
+            f"{label}: the motif is held to one realistic scale",
+            "one consistent scale" in prompt
+            and "Do not enlarge it until a few flowers fill a wall" in prompt))
+        results.append(check(
+            f"{label}: the botanical identity reaches the smaller things",
+            "cushions, textiles, artwork, accessories" in prompt))
+        results.append(check(
+            f"{label}: covering every wall is forbidden outright",
+            "floral pattern covering most or all of the walls in the room" in prompt))
+        results.append(check(
+            f"{label}: so is an enlarged motif",
+            "oversized flower motifs enlarged until a few of them fill a whole surface"
+            in prompt))
+        results.append(check(
+            f"{label}: neither blush nor sage may take the room",
+            "a room that reads as overwhelmingly pink, or overwhelmingly green" in prompt
+            and "No single one of them may take the whole room." in prompt))
+        results.append(check(
+            f"{label}: and the styling may not be busy",
+            "busy decorative styling with too many ornaments competing for attention"
+            in prompt))
+
+    # THE FURNITURE. A living room's, and only a living room's.
+    styling = room_styling("Floral", "Living Room")
+    results.append(check(
+        "the living room is furnished by the theme",
+        len(styling) == 5 and all(item in living for item in styling),
+        [i[:40] for i in styling if i not in living]))
+    results.append(check(
+        "...under a heading that names the room",
+        "IN THIS ROOM -- how this theme is furnished in a living room:" in living))
+    results.append(check(
+        "sage seating and ivory accent chairs are asked for",
+        "Seating in sage green or a muted botanical tone" in living
+        and "ivory or warm-cream accent chairs" in living))
+    results.append(check(
+        "so is wood, a coffee table and botanical artwork",
+        "warm natural timber" in living and "coffee table" in living
+        and "botanical artwork" in living))
+    results.append(check(
+        "the furniture must not compete with the feature surface",
+        "complements the floral surface instead of competing with it" in living))
+
+    # ...and nowhere else. A floral bathroom gets no sofa, and a British
+    # living room gets no sage one.
+    results.append(check(
+        "a floral bathroom is given no living-room furniture",
+        "IN THIS ROOM" not in bathroom and "accent chairs" not in bathroom))
+    results.append(check(
+        "a floral bathroom keeps its own description otherwise",
+        all(rule in bathroom for rule in floral["mandatory"])))
+    for other in ("British", "Moroccan", "Tropical", "Rustic"):
+        prompt = build_room_scene_prompt(
+            other, "A Board Name",
+            {"room": "Living Room", "surface": "WALL", "style": other},
+        )
+        results.append(check(
+            f"a {other} living room is not given Floral's furniture",
+            "IN THIS ROOM" not in prompt and "accent chairs" not in prompt))
+        results.append(check(
+            f"...and {other} still gets its own rules",
+            all(rule in prompt for rule in describe_theme(other)["mandatory"])))
+
+    # THE ROOM TYPE. The specification was written for bathrooms.
+    results.append(check(
+        "the living room is told the specification is not the room type",
+        "THE SPECIFICATION BELOW DESCRIBES THE THEME, NOT THE ROOM TYPE" in living))
+    results.append(check(
+        "...to read its bathroom wording as this theme in a living room",
+        "read it as this theme applied to a living room" in living))
+    results.append(check(
+        "...to take none of its sanitaryware",
+        "take none of its sanitaryware" in living))
+    results.append(check(
+        "the room drawn is a living room, said outright",
+        "It must read unmistakably as a living room and as nothing else." in living))
+    results.append(check(
+        "a bathroom needs no such caveat",
+        "NOT THE ROOM TYPE" not in bathroom))
+    results.append(check(
+        "the floral description no longer opens by naming a bathroom",
+        not floral["identity"].lower().startswith("a floral bathroom")))
+
+    # THE VALIDATION. The check has to judge a living room as one.
+    asked = _question(floral, theme_checklist("Floral"), "Living Room")
+    results.append(check(
+        "the check is told it is judging a living room",
+        "ONE generated living room image" in asked))
+    results.append(check(
+        "...and looks at a living room's parts",
+        "real seating, a media unit and side tables" in asked
+        and "vanity, bathtub, shower" not in asked))
+    results.append(check(
+        "...and asks whether it reads as a generic contemporary living room",
+        "generic contemporary living room" in asked))
+    results.append(check(
+        "the check asks about the pattern's distribution",
+        "concentrated on one dominant surface, with the other walls plain" in asked))
+    results.append(check(
+        "...about the scale it repeats at",
+        "one consistent scale and repeats realistically" in asked))
+    results.append(check(
+        "...about the balance of blush, sage and ivory",
+        "all present and balanced, with no single one taking the whole room" in asked))
+    results.append(check(
+        "...and about whether the furnishings look coordinated",
+        "deliberately coordinated with the floral scheme" in asked))
+    results.append(check(
+        "a plain wall beside the feature wall is not reported as missing floral",
+        "that is the controlled distribution this theme asks for" in asked))
+    results.append(check(
+        "...and blush counts wherever it appears",
+        "Blush is present if you can see it anywhere" in asked))
+    results.append(check(
+        "excess is reported only when the pattern really does cover the walls",
+        "only when it actually covers most of the walls" in asked))
+
+    with_no_room = _question(floral, theme_checklist("Floral"))
+    results.append(check(
+        "an unnamed room asks exactly what it asked before",
+        "ONE generated bathroom image" in with_no_room
+        and "vanity, bathtub, shower" in with_no_room))
     return results
 
 
@@ -713,6 +874,8 @@ def main():
         ("the tile step knows the theme too", the_tile_step_knows_the_theme_too()),
         ("the theme holds in every room", the_theme_holds_in_every_room()),
         ("the specification reaches the prompt", the_specification_reaches_the_prompt()),
+        ("the floral living room is furnished and controlled",
+         the_floral_living_room_is_furnished_and_controlled()),
         ("the check asks only what a picture can answer",
          the_check_asks_only_what_a_picture_can_answer()),
         ("the theme check is honest", the_theme_check_is_honest()),
