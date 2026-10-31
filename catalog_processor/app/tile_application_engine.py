@@ -41,6 +41,52 @@ from app.client_selections import (
     wants_no_feature_wall,
 )
 from app.devyora_system_prompt import DEVYORA_SYSTEM_PROMPT
+
+
+def _doctrine_for(room: Any) -> str:
+    """
+    The system prompt, with Section 8A dropped for rooms it excludes.
+
+    BEFORE: every call sent all thirteen sections, including 8A --
+    "BATHROOM FUNCTIONAL COMPLETENESS (applies only when the selected
+    space is a Bathroom)" -- so a kitchen, a bedroom, a living room, a
+    balcony or a patio paid for 915 tokens of bathroom completeness
+    rules that the section's own heading says do not apply to it.
+
+    AFTER: a bathroom and a powder washroom get the prompt verbatim,
+    byte for byte. Every other room gets it without 8A.
+
+    This asks the model for exactly what it was already being asked
+    for. The section states its own scope, and the room generator has
+    worked this way since it was fixed for the same fault -- a kitchen
+    was being handed a page of bathroom rules. This brings the tile
+    step into line with it.
+
+    Nothing is deleted from devyora_system_prompt.py: the text is read
+    at call time, so an edit there still reaches both stages.
+    """
+    space = describe_space(room)
+    if space is None or space.get("doctrine_8a"):
+        return DEVYORA_SYSTEM_PROMPT
+
+    lines = DEVYORA_SYSTEM_PROMPT.split("\n")
+
+    def opens_section(index: int) -> bool:
+        return (
+            index + 2 < len(lines)
+            and lines[index].startswith("═")
+            and lines[index + 2].startswith("═")
+        )
+
+    for start in range(len(lines)):
+        if opens_section(start) and lines[start + 1].startswith("8A. "):
+            end = start + 3
+            while end < len(lines) and not opens_section(end):
+                end += 1
+            return "\n".join(lines[:start] + lines[end:])
+
+    # The owner removed or renamed the section: send what is there.
+    return DEVYORA_SYSTEM_PROMPT
 from app.themes import describe_theme, theme_brief
 from app.scene_image_resolver import resolve_scene_image
 
@@ -621,7 +667,7 @@ exactly the same as it would for any other angle of this same room.
 
         material_block = "\n".join(lines)
 
-        return f"""{DEVYORA_SYSTEM_PROMPT}
+        return f"""{_doctrine_for(room)}
 
 ═══════════════════════════════════════
 THIS REQUEST
@@ -718,7 +764,7 @@ built room — not an illustration, rendering, drawing, diagram,
 or CGI-looking image.
 """
 
-    return f"""{DEVYORA_SYSTEM_PROMPT}
+    return f"""{_doctrine_for(room)}
 
 ═══════════════════════════════════════
 THIS REQUEST
