@@ -401,9 +401,12 @@ def the_floral_living_room_is_furnished_and_controlled():
             f"{label}: the other walls carry the palette, not the pattern",
             "they carry the palette, not the pattern" in prompt))
         results.append(check(
-            f"{label}: the motif is held to one realistic scale",
-            "one consistent scale" in prompt
-            and "Do not enlarge it until a few flowers fill a wall" in prompt))
+            f"{label}: a large mural and a fine print are both allowed",
+            "Large-scale and small-scale floral work are BOTH right" in prompt
+            and "An oversized botanical mural is a legitimate treatment" in prompt))
+        results.append(check(
+            f"{label}: ...and two scales may sit together, one leading",
+            "two scales may sit together where one clearly leads" in prompt))
         results.append(check(
             f"{label}: the botanical identity reaches the smaller things",
             "cushions, textiles, artwork, soft furnishings, accessories" in prompt))
@@ -411,13 +414,21 @@ def the_floral_living_room_is_furnished_and_controlled():
             f"{label}: covering every wall is forbidden outright",
             "floral pattern covering most or all of the walls in the room" in prompt))
         results.append(check(
-            f"{label}: so is an enlarged motif",
-            "oversized flower motifs enlarged until a few of them fill a whole surface"
+            f"{label}: a BROKEN pattern is the failure, not a big one",
+            "distorted or malformed flowers" in prompt
+            and "a pattern whose repeat breaks, misaligns or dissolves" in prompt
+            and "chaotic repetition, or unrelated floral motifs mixed together" in prompt))
+        results.append(check(
+            f"{label}: size alone is never reported as excess",
+            "oversized flower motifs enlarged" not in prompt))
+        results.append(check(
+            f"{label}: ivory may lead and sage need not dominate",
+            "WARM IVORY MAY LEAD as the room's background and sage need not dominate"
             in prompt))
         results.append(check(
-            f"{label}: neither blush nor sage may take the room",
+            f"{label}: ...but no colour may swallow the other two",
             "a room that reads as overwhelmingly pink, or overwhelmingly green" in prompt
-            and "No single one of them may take the whole room." in prompt))
+            and "one colour swallowing the room until the other two disappear" in prompt))
         results.append(check(
             f"{label}: and the styling may not be busy",
             "busy decorative styling with too many ornaments competing for attention"
@@ -546,7 +557,7 @@ def the_floral_living_room_is_furnished_and_controlled():
     bed_styling = room_styling("Floral", "Bedroom")
     results.append(check(
         "the bedroom is furnished by the theme",
-        len(bed_styling) == 5 and all(item in bedroom for item in bed_styling),
+        len(bed_styling) == 8 and all(item in bedroom for item in bed_styling),
         [i[:40] for i in bed_styling if i not in bedroom]))
     results.append(check(
         "...under a heading that names the room",
@@ -564,6 +575,18 @@ def the_floral_living_room_is_furnished_and_controlled():
         "upholstered or timber headboard in ivory, blush or sage" in bedroom
         and "Bedding layered in warm ivory and blush with sage" in bedroom
         and "Side tables and furniture in warm natural timber" in bedroom))
+    results.append(check(
+        "the bedroom gets storage and window treatments",
+        "a wardrobe, chest or built-in run" in bedroom
+        and "curtains or blinds in a plain or finely patterned cloth" in bedroom))
+    results.append(check(
+        "...flooring and layered light that each cast their own shadow",
+        "Flooring the bedroom would actually have, and layered light" in bedroom
+        and "the ceiling fitting, bedside lamps and daylight from the window" in bedroom))
+    results.append(check(
+        "...and furniture that sits on the floor at a believable size",
+        "No floating or half-scaled furniture, no distorted or impossible "
+        "architecture" in bedroom))
     results.append(check(
         "the bedroom still reads as a bedroom and nothing else",
         "It must read unmistakably as a bedroom and as nothing else." in bedroom
@@ -630,11 +653,19 @@ def the_floral_living_room_is_furnished_and_controlled():
         "the check asks about the pattern's distribution",
         "concentrated on one dominant surface, with the other walls plain" in asked))
     results.append(check(
-        "...about the scale it repeats at",
-        "one consistent scale and repeats realistically" in asked))
+        "the check asks whether the motif is drawn cleanly, not whether it is small",
+        "flowers undistorted, the repeat continuous and correctly aligned" in asked
+        and "one consistent scale" not in asked))
+    results.append(check(
+        "...and is told a large mural is not excess",
+        "A LARGE motif is not excessive" in asked
+        and "an oversized botanical mural on one wall is a legitimate treatment" in asked))
     results.append(check(
         "...about the balance of blush, sage and ivory",
-        "all present and balanced, with no single one taking the whole room" in asked))
+        "all present and coherent, whether or not ivory leads as the background" in asked))
+    results.append(check(
+        "...and that an ivory-led room is correct, not unbalanced",
+        "an ivory-led room with blush and sage running through it is CORRECT" in asked))
     results.append(check(
         "...and about whether the furnishings look coordinated",
         "deliberately coordinated with the floral scheme" in asked))
