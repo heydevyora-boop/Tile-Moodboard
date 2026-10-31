@@ -187,7 +187,8 @@ def the_prompt_carries_the_right_theme():
         if label in WITH_PHOTOGRAPHS:
             results.append(check(
                 f"{label}: the prompt says the photographs are supplied",
-                "REFERENCE PHOTOGRAPHS: 5 real rooms" in prompt))
+                f"REFERENCE PHOTOGRAPHS: {len(reference_images(label))} real rooms"
+                in prompt))
             results.append(check(
                 f"{label}: ...and that they are not to be copied",
                 "do not reproduce their tiles" in prompt))
@@ -535,7 +536,8 @@ def the_theme_holds_in_every_room():
             "THEY ARE ALL BATHROOMS" not in prompt))
         results.append(check(
             f"{room}: ...and it still gets the theme and its photographs",
-            "zellige" in prompt.lower() and "REFERENCE PHOTOGRAPHS: 5 real rooms" in prompt))
+            "zellige" in prompt.lower()
+            and f"REFERENCE PHOTOGRAPHS: {len(reference_images('Moroccan'))} real rooms" in prompt))
 
     # The photographs themselves do not change with the room: the theme
     # decides which are sent, the room decides what to take from them.
@@ -544,7 +546,8 @@ def the_theme_holds_in_every_room():
     sent = lambda parts: {bytes(p.inline_data.data) for p in parts if getattr(p, "inline_data", None) is not None}
     results.append(check(
         "a kitchen and a bathroom are sent the same Moroccan photographs",
-        sent(kitchen) == sent(bathroom) and len(sent(kitchen)) == 5,
+        sent(kitchen) == sent(bathroom)
+        and len(sent(kitchen)) == len(reference_images("Moroccan")),
         len(sent(kitchen))))
     return results
 
