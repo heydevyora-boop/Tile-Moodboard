@@ -21,6 +21,7 @@
     "pm2:logs": "pm2 logs casa-de-aurum-api",
     "test:tile-recency": "ts-node -r tsconfig-paths/register test-scripts/tile_recency_selection_test.ts",
     "test:visualization-materials": "ts-node -r tsconfig-paths/register test-scripts/visualization_materials_test.ts",
+    "test:floral-bedroom": "cd ../catalog_processor && GEMINI_API_KEY=${GEMINI_API_KEY:-test-key-not-used} python3.13 app/test_floral_bedroom_scenarios.py",
     "test:recent-generations": "ts-node -r tsconfig-paths/register test-scripts/recent_generations_test.ts",
     "test:recent-generations-page": "node test-scripts/recent_generations_page_wiring_test.js",
     "test:gemini": "ts-node -r tsconfig-paths/register test-scripts/gemini_client_test.ts",
