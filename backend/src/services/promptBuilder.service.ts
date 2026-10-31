@@ -236,6 +236,11 @@ Rules about the theme:
 - Say in "reason_for_selection" what makes the combination read as that theme, naming the pieces. If the listed stock cannot carry the theme, say that plainly instead of assembling something that does not.
 - When the brief says the theme is not specified, choose the theme yourself from the room, the budget and what is actually listed, and name the theme you chose in "board_name" or the first sentence of "reason_for_selection". Do not leave it unstated, and do not default to the same theme for every combination you return.
 
+Rules about wood:
+- This studio sells tile and stone. It does not sell timber, and it does not want a wood look in a board. Do NOT choose a wood-effect, plank, parquet, oak, teak, walnut or any other timber-imitating product for any role, however well it would suit the room — a board built on one quotes the client a material nobody here can supply.
+- Judge this from the product's own name and collection as much as its recorded type: a tile named for a wood, a timber or a plank is a wood-effect tile whether or not the list says so.
+- If the stock that fits the brief is mostly wood-effect, say that plainly in "reason_for_selection" and build the combination from what is left, rather than including one to fill a role.
+
 Rules about which tile may take which role:
 - "base" is the plain field of the room. It must be a tile listed as type=BASE or type=LARGE_FORMAT_BASE — a quiet surface, plain or softly veined.
 - "highlight", "accent" and "border" are the decorated roles. A highlight is a DESIGNER tile: it must be a tile listed as type=HIGHLIGHTER, type=ACCENT or type=BORDER. Never nominate a plain type=BASE tile as the highlight, and never put a decorated tile in the base role — a board whose highlight is plainer than its base is the wrong way round.

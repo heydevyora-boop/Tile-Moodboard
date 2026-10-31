@@ -114,7 +114,7 @@
       "label": "Floral",
       "palette": "Blush pink, sage green, ivory, soft botanical tones",
       "slug": "floral",
-      "identity": "A room where botanical design is a defining part of the interior. Botanical murals, floral wallpapers, flower-inspired tile patterns, botanical feature walls, floral textiles and botanical artwork -- any clearly recognisable floral form, following the supplied references. The pattern is a CONTROLLED feature: ONE dominant floral surface, with the walls around it plain blush, ivory or sage so the pattern reads as a deliberate statement rather than wallpaper applied everywhere. That surface is a piece of ARCHITECTURE -- a whole wall, an alcove, a chimney breast, a panelled recess or a full run between two real edges -- not a rectangle of pattern floated in the middle of another material like a framed picture. Quieter botanical notes in cushions, artwork, soft furnishings and a subtle secondary treatment tie the room back to it. Balanced with blush-pink surfaces, sage-green accents, ivory finishes, warm natural wood for depth, elegant fixtures and a soft, harmonious atmosphere. The result should feel fresh, elegant, serene and premium -- a cohesive botanical interior, not a contemporary room with one floral panel in it.",
+      "identity": "A room where botanical design is a defining part of the interior. Botanical murals, floral wallpapers, flower-inspired tile patterns, botanical feature walls, floral textiles and botanical artwork -- any clearly recognisable floral form, following the supplied references. The pattern is a CONTROLLED feature: ONE dominant floral surface, with the walls around it plain blush, ivory or sage so the pattern reads as a deliberate statement rather than wallpaper applied everywhere. That surface is a piece of ARCHITECTURE -- a whole wall, an alcove, a chimney breast, a panelled recess or a full run between two real edges -- not a rectangle of pattern floated in the middle of another material like a framed picture. Quieter botanical notes in cushions, artwork, soft furnishings and a subtle secondary treatment tie the room back to it. Balanced with blush-pink surfaces, sage-green accents, ivory finishes, elegant fixtures and a soft, harmonious atmosphere. The result should feel fresh, elegant, serene and premium -- a cohesive botanical interior, not a contemporary room with one floral panel in it.",
       "mandatory": [
         "Clearly recognisable floral or botanical motifs must be visible.",
         "The floral treatment must have meaningful presence on an appropriate wall, tile surface or feature area.",
@@ -123,10 +123,10 @@
         "Carry the botanical identity into the smaller things as well -- cushions, textiles, artwork, soft furnishings, accessories -- so it is coordinated through the room instead of concentrated in one sheet of wallpaper.",
         "Give the room ONE quieter botanical note besides the dominant surface -- a subtle secondary wall treatment, a soft furnishing, a grouping of botanical artwork -- clearly subordinate to it. One isolated floral element in an otherwise plain contemporary room is not this theme.",
         "Large-scale and small-scale floral work are BOTH right when they are visually coherent. An oversized botanical mural is a legitimate treatment, and so is a fine repeating print; two scales may sit together where one clearly leads and the other supports. What must not happen is a motif that is distorted, a repeat that breaks or misaligns, chaotic repetition, or unrelated motifs thrown together.",
-        "Blush, sage and ivory should all be present and used coherently where they are compatible with the actual catalog products, with warm natural wood and subtle material texture for depth. WARM IVORY MAY LEAD as the room's background and sage need not dominate -- blush through upholstery and bedding, sage through cushions, furniture and foliage, and the natural greens of the flowers themselves. What must not happen is one colour swallowing the room until the other two disappear.",
+        "Blush, sage and ivory should all be present and used coherently where they are compatible with the actual catalog products, with subtle material texture for depth. WARM IVORY MAY LEAD as the room's background and sage need not dominate -- blush through upholstery and bedding, sage through cushions, furniture and foliage, and the natural greens of the flowers themselves. What must not happen is one colour swallowing the room until the other two disappear.",
         "Furniture, cabinetry and furnishings must complement the floral surface rather than compete with it, and must look deliberately coordinated rather than generically arranged, at realistic proportions and in premium materials.",
         "Do not frame the floral surface with a contrasting border, moulding or band of another material -- terracotta, brass, dark trim. A frame is what turns a feature wall back into a panel, and a warm contrasting border pulls the eye off the blush, sage and ivory the theme is built on. Where such a border is an actual selected catalog product, keep it exactly as it is, and keep it narrow and quiet rather than letting it become the edge of a panel.",
-        "Large-format grey, stone or neutral surfaces must be BALANCED against warmer ivory, blush and sage ones. Where such a surface is an actual selected catalog product, keep it exactly as it is and warm the room around it -- paint, timber, textiles, soft furnishings -- so the room does not settle into grey.",
+        "Large-format grey, stone or neutral surfaces must be BALANCED against warmer ivory, blush and sage ones. Where such a surface is an actual selected catalog product, keep it exactly as it is and warm the room around it -- paint, textiles, soft furnishings -- so the room does not settle into grey.",
         "If the selected catalog tiles are plain, use them honestly and carry the botanical identity on other compatible surfaces or accessories.",
         "Floral detail must be integrated with the architecture, not stuck on it."
       ],
@@ -171,17 +171,17 @@
       "rooms": {
         "bedroom": [
           "The botanical feature runs the FULL headboard wall -- behind the bed across its whole width, skirting to ceiling, corner to corner -- and the bed stands against it. That wall is the room's focal plane, not a panel hung above the pillows.",
-          "A bed with an upholstered or timber headboard in ivory, blush or sage, in realistic proportion to the room.",
+          "A bed with an upholstered or painted headboard in ivory, blush or sage, in realistic proportion to the room.",
           "Bedding layered in warm ivory and blush with sage, and cushions carrying the motif at a smaller scale than the wall.",
-          "Side tables and furniture in warm natural timber, soft lamplight, and a quiet rug underfoot.",
-          "Storage that belongs to the room -- a wardrobe, chest or built-in run -- in timber or a painted ivory, blush or sage finish, and window treatments: curtains or blinds in a plain or finely patterned cloth, hung to the room's real proportions.",
+          "Side tables and furniture in painted or lacquered finishes, soft lamplight, and a quiet rug underfoot.",
+          "Storage that belongs to the room -- a wardrobe, chest or built-in run -- in a painted ivory, blush or sage finish, and window treatments: curtains or blinds in a plain or finely patterned cloth, hung to the room's real proportions.",
           "Flooring the bedroom would actually have, and layered light: the ceiling fitting, bedside lamps and daylight from the window, each casting its own correct shadow.",
           "Every piece sits on the floor and reads at a believable size against the bed and the ceiling height. No floating or half-scaled furniture, no distorted or impossible architecture, no object that does not cast the shadow it should.",
           "Botanical artwork or soft furnishings as the quieter second note, in an uncluttered room with few, chosen objects."
         ],
         "living room": [
           "A principal sofa in blush pink or sage green, with ivory or warm-cream accent chairs, in realistic proportion to the room.",
-          "Refined wooden furniture in warm natural timber, and a coffee table coordinated with it.",
+          "Refined furniture in painted or lacquered finishes, and a coffee table coordinated with it.",
           "Soft decorative cushions and selected botanical artwork, carrying the motif at a smaller scale than the feature surface.",
           "Natural textures and premium fabrics, with balanced curtains or window treatments in a plain or finely patterned cloth.",
           "The feature wall sits behind the seating or the console as the room's focal plane, with the furniture arranged to face it rather than standing in front of it as decoration.",
@@ -193,9 +193,9 @@
     "tropical": {
       "id": "tropical",
       "label": "Tropical",
-      "palette": "Palm green, teal, sand, warm natural wood",
+      "palette": "Palm green, teal, sand, warm rattan and cane",
       "slug": "tropical",
-      "identity": "A tropical resort-inspired bathroom with a strong relationship between lush greenery, natural materials and the bathing space. Palm-leaf motifs, tropical botanical patterns, teal accents, sand-toned stone, warm wood and abundant but believable planting. Following the references: large botanical feature surfaces, indoor greenery, natural wood vanities or visually open shower areas. A sophisticated tropical retreat, not a generic bathroom decorated with one plant.",
+      "identity": "A tropical resort-inspired bathroom with a strong relationship between lush greenery, natural materials and the bathing space. Palm-leaf motifs, tropical botanical patterns, teal accents, sand-toned stone, warm rattan and cane, and abundant but believable planting. Following the references: large botanical feature surfaces, indoor greenery, stone or painted vanities, or visually open shower areas. A sophisticated tropical retreat, not a generic bathroom decorated with one plant.",
       "mandatory": [
         "Tropical greenery, palm motifs or another unmistakable tropical element must be visible.",
         "Natural materials and the teal/sand relationship must reinforce the theme.",
@@ -279,13 +279,13 @@
     "rustic": {
       "id": "rustic",
       "label": "Rustic",
-      "palette": "Natural clay, terracotta, ochre, warm wood, earthy stone",
+      "palette": "Natural clay, terracotta, ochre, lime plaster, earthy stone",
       "slug": "rustic",
-      "identity": "An earthy, handcrafted bathroom: terracotta surfaces, natural clay textures, warm wooden elements, earthy stone and finishes that feel tactile and authentic. Handmade-looking material treatments, subtle surface irregularities, warm natural light and organic composition. Where it fits: terracotta flooring, a natural stone basin, clay-toned walls, rustic timber detail. Grounded, warm and materially honest -- not a polished contemporary bathroom with orange accents.",
+      "identity": "An earthy, handcrafted bathroom: terracotta surfaces, natural clay textures, lime-washed and plastered walls, earthy stone and finishes that feel tactile and authentic. Handmade-looking material treatments, subtle surface irregularities, warm natural light and organic composition. Where it fits: terracotta flooring, a natural stone basin, clay-toned walls, hand-worked plaster and wrought-iron detail. Grounded, warm and materially honest -- not a polished contemporary bathroom with orange accents.",
       "mandatory": [
         "Earthy materials and clay/terracotta tones must have meaningful presence where the catalog products allow it.",
         "Textures should feel natural and tactile rather than artificially distressed.",
-        "Wood, stone and clay must work together coherently.",
+        "Terracotta, stone and clay must work together coherently.",
         "Avoid decorative objects so numerous that they obscure the bathroom design.",
         "Do not turn a smooth catalog tile into a handmade terracotta product by recolouring it or inventing a texture."
       ],
@@ -300,7 +300,7 @@
       "visible": [
         "Earthy materials and clay or terracotta tones have meaningful presence.",
         "Textures read as natural and tactile rather than artificially distressed.",
-        "Wood, stone and clay work together coherently."
+        "Terracotta, stone and clay work together coherently."
       ],
       "identityCheck": 1
     },

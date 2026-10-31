@@ -331,6 +331,31 @@ def build_room_scene_prompt(
         "The room must contain NO toilet, WC, commode, bidet, cistern or "
         "flush plate anywhere -- not in the frame, not cropped at an edge, "
         "not behind a screen, not reflected in a mirror or in glass. "
+        # NO WOOD, IN ANY ROOM, UNDER ANY THEME.
+        #
+        # This studio sells tile and stone. It does not sell timber, and
+        # a board that shows a walnut vanity or an oak floor is quoting
+        # the client something nobody can supply.
+        #
+        # The grain is the part that keeps slipping through: the owner's
+        # last board had painted green beading with a wood grain drawn
+        # into it. That is why the rule names the grain separately from
+        # the furniture -- the model will paint a moulding the right
+        # colour and still texture it like timber.
+        # Deliberately names NO fitting that belongs to one room type.
+        # Writing "no timber vanity" into a bedroom's prompt puts a
+        # vanity in front of the model, which is the fault this
+        # generator was fixed for once already.
+        "NO WOOD ANYWHERE IN THE ROOM. No timber furniture, "
+        "cabinetry, joinery, shelving or seating of any kind; "
+        "no wood or laminate flooring, decking or panelling; and NO "
+        "WOOD GRAIN as a texture on any surface at all -- not on trim, "
+        "beading, mouldings, skirting, architrave, window or door frames, "
+        "not on a painted surface, and not in a reflection. Where a piece "
+        "would ordinarily be timber, make it painted joinery, stone, "
+        "metal, glass, plaster, rattan, cane or the room's own tile "
+        "instead. Painted mouldings are smooth painted wood-free joinery: "
+        "flat colour, no grain drawn into them. "
         "This must look like an actual photograph of a real room — not an "
         "illustration, rendering, drawing, diagram, or CGI-looking image — "
         "and with no text, watermark or logo anywhere in the frame."

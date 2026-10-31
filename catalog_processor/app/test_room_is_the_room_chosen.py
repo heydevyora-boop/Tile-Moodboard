@@ -345,8 +345,91 @@ def section_8a_reaches_only_the_rooms_it_names():
     return results
 
 
+def no_wood_reaches_any_room():
+    """The studio sells tile and stone. It does not sell timber.
+
+    A board came back with painted green beading that had a wood grain
+    drawn into it -- the colour was right and the texture was oak. That
+    is the part that keeps slipping through: the model will paint a
+    moulding correctly and still grain it like timber, so the rule has
+    to name the GRAIN separately from the furniture.
+
+    Three themes used to ask for wood outright. Floral wanted "warm
+    natural timber" side tables, Tropical wanted "natural wood
+    vanities", and Rustic's own identity was built on "warm wooden
+    elements". None of them does now, and no theme mentions wood at
+    all -- asserted over the whole table, not theme by theme, so a new
+    one cannot reintroduce it unnoticed.
+    """
+    import json
+    import re
+    from app.themes import THEMES
+
+    results = []
+    WOOD = re.compile(r"\b(wood|wooden|timber|oak|teak|walnut|veneer|plywood)\b", re.I)
+
+    for room in ("Bathroom", "Powder Room", "Bedroom", "Kitchen & Dining",
+                 "Living Room", "Balcony & Patio"):
+        for theme in ("British", "Floral", "Rustic", "Tropical", "Moroccan"):
+            prompt = build_room_scene_prompt(
+                theme, "A Board Name",
+                {"room": room, "surface": "WALL", "style": theme},
+            )
+            results.append(check(
+                f"{room} / {theme}: the no-wood rule is sent",
+                "NO WOOD ANYWHERE IN THE ROOM" in prompt))
+
+    prompt = build_room_scene_prompt(
+        "British", "A Board Name",
+        {"room": "Bathroom", "surface": "WALL", "style": "British"},
+    )
+    results.append(check(
+        "no timber furniture, cabinetry, joinery, shelving or seating",
+        "No timber furniture, cabinetry, joinery, shelving or seating of any kind"
+        in prompt))
+    results.append(check(
+        "no wood or laminate floor, decking or panelling",
+        "no wood or laminate flooring, decking or panelling" in prompt))
+    results.append(check(
+        "and the GRAIN is forbidden separately -- this is the one that slips",
+        "NO WOOD GRAIN as a texture on any surface at all" in prompt))
+    results.append(check(
+        "...named on the mouldings the owner actually saw it on",
+        "not on trim, beading, mouldings, skirting, architrave" in prompt))
+    results.append(check(
+        "...and in a reflection, where it also hides",
+        "and not in a reflection" in prompt))
+    results.append(check(
+        "painted mouldings are said to be flat colour, no grain",
+        "flat colour, no grain drawn into them" in prompt))
+    results.append(check(
+        "something is offered in wood's place, so the model is not stuck",
+        "painted joinery, stone, metal, glass, plaster, rattan, cane" in prompt))
+
+    # The rule must not smuggle a wet fitting into a dry room: naming
+    # "no timber vanity" in a bedroom puts a vanity in front of the model.
+    for room in ("Bedroom", "Kitchen & Dining", "Living Room"):
+        dry = build_room_scene_prompt(
+            "Floral", "A Board Name",
+            {"room": room, "surface": "WALL", "style": "Floral"},
+        )
+        line = [l for l in dry.split(". ") if "NO WOOD ANYWHERE" in l]
+        results.append(check(
+            f"{room}: the no-wood rule names no bathroom fitting",
+            all(not WET_FITTINGS.search(l) for l in line), line[:1]))
+
+    # No theme asks for wood any more, anywhere in its configuration.
+    for key, theme in THEMES.items():
+        hits = [m.group(0) for m in WOOD.finditer(json.dumps(theme))]
+        results.append(check(
+            f"{theme['label']}: asks for no wood at all",
+            not hits, hits))
+    return results
+
+
 def main():
     groups = [
+        ("no wood reaches any room", no_wood_reaches_any_room()),
         ("section 8A reaches only the rooms it names",
          section_8a_reaches_only_the_rooms_it_names()),
         ("every room the wizard offers is known", every_room_is_known()),

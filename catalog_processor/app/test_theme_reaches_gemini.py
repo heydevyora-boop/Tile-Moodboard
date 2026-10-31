@@ -635,8 +635,8 @@ def the_floral_living_room_is_furnished_and_controlled():
         and "ivory or warm-cream accent chairs" in living
         and "in realistic proportion to the room" in living))
     results.append(check(
-        "so is wood, a coffee table and botanical artwork",
-        "warm natural timber" in living and "coffee table" in living
+        "painted furniture, a coffee table and botanical artwork -- no timber",
+        "painted or lacquered finishes" in living and "coffee table" in living
         and "botanical artwork" in living))
     results.append(check(
         "the furniture must not compete with the feature surface",
@@ -757,10 +757,10 @@ def the_floral_living_room_is_furnished_and_controlled():
         "...and is not a panel hung above the pillows",
         "not a panel hung above the pillows" in bedroom))
     results.append(check(
-        "a bed, bedding and timber furniture are asked for",
-        "upholstered or timber headboard in ivory, blush or sage" in bedroom
+        "a bed and bedding are asked for, and nothing is made of timber",
+        "upholstered or painted headboard in ivory, blush or sage" in bedroom
         and "Bedding layered in warm ivory and blush with sage" in bedroom
-        and "Side tables and furniture in warm natural timber" in bedroom))
+        and "Side tables and furniture in painted or lacquered finishes" in bedroom))
     results.append(check(
         "the bedroom gets storage and window treatments",
         "a wardrobe, chest or built-in run" in bedroom
