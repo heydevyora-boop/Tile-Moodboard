@@ -420,6 +420,40 @@ const envSchema = z.object({
 
   LOG_DIR:
     absolutePath('logs'),
+
+  // ==========================================================
+  // TEMPORARY DEVELOPMENT LOGIN
+  // ==========================================================
+  //
+  // A short username and a weak password, for local work and for a
+  // protected testing environment. Declared here because nothing
+  // outside this file reads process.env, and OPTIONAL because the
+  // normal state of this application is not to have one.
+  //
+  // These three values do nothing on their own. config/index.ts
+  // refuses to expose them when NODE_ENV is production, so setting
+  // them on a public deployment has no effect -- see the comment
+  // there, which is where the guarantee actually lives.
+
+  DEV_LOGIN_USERNAME: z
+    .string()
+    .trim()
+    .min(1)
+    .optional(),
+
+  DEV_LOGIN_PASSWORD: z
+    .string()
+    .min(1)
+    .optional(),
+
+  DEV_LOGIN_EMAIL: z
+    .string()
+    .email()
+    .optional(),
+
+  DEV_LOGIN_ROLE: z
+    .string()
+    .default('OWNER'),
 });
 
 // ============================================================

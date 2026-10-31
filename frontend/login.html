@@ -63,7 +63,7 @@
 
       <div class="field">
         <label class="mono" for="email">EMAIL</label>
-        <input type="email" id="email" name="email" autocomplete="username" placeholder="you@casadeaurum.com" required>
+        <input type="text" inputmode="email" id="email" name="email" autocomplete="username" placeholder="you@casadeaurum.com" required>
         <div class="field-error" id="emailError" style="display:none"></div>
       </div>
 
@@ -138,6 +138,21 @@
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
   }
 
+  // WHAT THIS PAGE WILL SEND.
+  //
+  // An email address, as always -- or a plain username with no spaces,
+  // for a temporary development login.
+  //
+  // This is a typing check and nothing more. It carries no username and
+  // no password: there is no credential in this file, and none can be
+  // put here, because the page is served to anyone who visits. The
+  // server decides whether an identifier is acceptable, whether the
+  // account exists, and whether the password matches its stored hash --
+  // and it refuses a development identifier outright in production.
+  function isValidIdentifier(value) {
+    return isValidEmail(value) || /^[^\s@]+$/.test(value);
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
     hideAlert();
@@ -147,7 +162,7 @@
     const password = document.getElementById('password').value;
 
     let hasClientError = false;
-    if (!email || !isValidEmail(email)) {
+    if (!email || !isValidIdentifier(email)) {
       showFieldError('email', 'Enter a valid email address');
       hasClientError = true;
     }

@@ -54,9 +54,25 @@ async function issueTokenPair(user: UserWithRole, req?: Request) {
   return { accessToken, refreshToken };
 }
 
+/**
+ * The email this identifier names.
+ *
+ * A temporary development login is typed as a plain username, and the
+ * User table is keyed on email, so that one configured username maps
+ * to its account's address. Everything else passes through untouched.
+ *
+ * config.devLogin is null in production, so there this returns the
+ * identifier unchanged and no username resolves to anything.
+ */
+function accountEmail(identifier: string): string {
+  const typed = identifier.toLowerCase().trim();
+  const dev = config.devLogin;
+  return dev && typed === dev.username ? dev.email : typed;
+}
+
 export async function login(email: string, password: string, req?: Request) {
   const user = (await prisma.user.findUnique({
-    where: { email: email.toLowerCase().trim() },
+    where: { email: accountEmail(email) },
     include: { role: true },
   })) as UserWithRole | null;
 
