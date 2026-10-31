@@ -2065,7 +2065,14 @@
     const v = vizStateFor(index).themeCheck;
     if (!v || v.status === 'pass') return '';
 
-    const theme = escapeHtml(String(v.theme || 'the theme').toUpperCase());
+    // THE THEME **AND THE ROOM**. The verdict is about both -- a
+    // bedroom judged as the Floral theme -- and the heading named only
+    // the theme, so a report about the wrong room type read as a
+    // complaint about the decoration.
+    const room = String(v.room || '').trim();
+    const theme = escapeHtml(
+      (String(v.theme || 'the theme') + (room ? ' \u00b7 ' + room : '')).toUpperCase()
+    );
 
     if (v.status === 'unchecked') {
       return '<p class="viz-note mono">' + theme + ' \u2014 NOT CHECKED<span>'
@@ -2089,6 +2096,16 @@
       body += '<span class="viz-note-h">Partially present</span>' + list(v.partial);
     }
     if ((v.missing || []).length) body += '<span class="viz-note-h">Missing</span>' + list(v.missing);
+    // The two findings that are fatal on their own, said in plain words
+    // rather than left to be inferred from a deviation line.
+    if (v.roomOk === 'no') {
+      body += '<span class="viz-note-h">Wrong room</span><span>\u00b7 This was asked for as a '
+        + escapeHtml(room || 'room') + ', and the image is not one.</span>';
+    }
+    if (v.productFidelity === 'altered') {
+      body += '<span class="viz-note-h">Product integrity</span><span>\u00b7 '
+        + escapeHtml(v.products || 'A supplied catalog product was altered.') + '</span>';
+    }
     if ((v.deviations || []).length) {
       body += '<span class="viz-note-h">Detected deviations</span>' + list(v.deviations);
     } else {
