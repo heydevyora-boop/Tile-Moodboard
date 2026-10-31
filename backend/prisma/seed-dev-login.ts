@@ -12,8 +12,12 @@
  * there is no configuration of a public deployment in which this
  * creates a weak account.
  *
- *   DEV_LOGIN_USERNAME=devyora DEV_LOGIN_PASSWORD=123 \
- *     npm run seed:dev-login
+ * Put the variables in the env file the server loads -- locally that
+ * is backend/.env.development -- and then run `npm run seed:dev-login`.
+ * Not on the command line: the RUNNING SERVER reads them too, and
+ * without them in its environment the username is rejected at login
+ * even though this created the account. (An inline prefix is also
+ * bash-only, and does nothing in PowerShell.)
  */
 
 import bcrypt from 'bcrypt';
@@ -71,8 +75,12 @@ async function main(): Promise<void> {
       `   username : ${dev.username}\n` +
       `   account  : ${user.email}  (role ${role.name})\n` +
       `   password : the value of DEV_LOGIN_PASSWORD, stored as a bcrypt hash\n\n` +
-      '   This account exists only where DEV_LOGIN_USERNAME is set and NODE_ENV is not\n' +
-      '   production. Do not set these variables on a public deployment.',
+      '   THE ACCOUNT IS NOT ENOUGH ON ITS OWN. The running server reads these\n' +
+      '   variables as well, and rejects the username at login without them. If\n' +
+      '   you passed them only to this command, put them in the env file the\n' +
+      '   server loads (locally .env.development) and restart it.\n\n' +
+      '   This login exists only where DEV_LOGIN_USERNAME is set and NODE_ENV is\n' +
+      '   not production. Do not set these variables on a public deployment.',
   );
 }
 
