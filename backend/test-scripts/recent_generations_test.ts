@@ -159,11 +159,40 @@ function main(): number {
   check('14. a row recorded before products existed still reads back',
     old.imageUrl === 'https://drive.example/old.webp' && old.productName === 'Midnight Contrast',
     old);
-  check('15. ...with an empty product list rather than a missing field',
-    Array.isArray(old.products) && old.products.length === 0, old.products);
+  check('15. ...and its base tile is recovered from the product code it kept',
+    old.products.length === 1 && old.products[0].role === 'base'
+    && old.products[0].code === 'Midnight Contrast', old.products);
+  check('16. ...and the row says the list is partial, not the whole board',
+    old.productsRecorded === false, old.productsRecorded);
+  check('17. a row that DID record its products is not marked partial',
+    (row as any).productsRecorded === true, (row as any).productsRecorded);
+
+  // The code is a real catalog product, so it resolves to a real tile:
+  // a picture and a name, not a bare code on a card.
+  const known = new Map([['URV-0014', {
+    name: 'Urvi Statuario', productCode: 'URV-0014',
+    imageUrl: 'https://drive.example/URV-0014.webp', size: '600x1200mm', finish: 'Glossy',
+  }]]);
+  const resolved = generationRow({
+    id: 'log-r', createdAt: '2026-10-26T02:18:00Z',
+    metadata: { imageUrl: 'https://x/s.webp', productName: 'URV-0014' },
+  }, known) as Record<string, any>;
+  check('18. an old row resolves its code to the real tile, with its image',
+    resolved.products.length === 1
+    && resolved.products[0].name === 'Urvi Statuario'
+    && resolved.products[0].imageUrl === 'https://drive.example/URV-0014.webp'
+    && resolved.products[0].size === '600x1200mm', resolved.products);
+  check('19. ...and is still marked partial -- one tile is not the combination',
+    resolved.productsRecorded === false, resolved.productsRecorded);
+  check('20. a code that matches no tile still shows, as a code',
+    (generationRow({ id: 'x', createdAt: '2026-01-01T00:00:00Z',
+      metadata: { productName: 'GONE-0001' } }, known) as any).products[0].code === 'GONE-0001');
+  check('21. a row with neither products nor a code shows nothing at all',
+    (generationRow({ id: 'x', createdAt: '2026-01-01T00:00:00Z' }, known) as any)
+      .products.length === 0);
 
   const noMeta = generationRow({ id: 'x', createdAt: '2026-01-01T00:00:00Z' }) as Record<string, any>;
-  check('16. a row with no metadata at all does not throw',
+  check('22. a row with no metadata at all does not throw',
     noMeta.imageUrl === '' && Array.isArray(noMeta.products) && noMeta.products.length === 0, noMeta);
 
   // A product entry that is not an object cannot reach the page as one.
@@ -171,14 +200,14 @@ function main(): number {
     id: 'x', createdAt: '2026-01-01T00:00:00Z',
     metadata: { products: ['not an object', null, 42, { name: 'Real Tile' }] },
   }) as Record<string, any>;
-  check('17. junk in the stored product list is dropped, the real one kept',
+  check('23. junk in the stored product list is dropped, the real one kept',
     junk.products.length === 1 && junk.products[0].name === 'Real Tile', junk.products);
 
   const partial = generationRow({
     id: 'x', createdAt: '2026-01-01T00:00:00Z',
     metadata: { products: [{ name: 'Half Tile' }] },
   }) as Record<string, any>;
-  check('18. a product with no image reads back as empty, never "undefined"',
+  check('24. a product with no image reads back as empty, never "undefined"',
     partial.products[0].imageUrl === '' && partial.products[0].code === ''
     && partial.products[0].role === '',
     partial.products[0]);

@@ -468,14 +468,41 @@ export function generationProducts(
 }
 
 /** One stored row as the history page reads it. */
-export function generationRow(row: {
-  id: string;
-  createdAt: Date | string;
-  metadata?: unknown;
-  user?: { name?: string | null } | null;
-}): Record<string, unknown> {
+/** A tile the history resolved from a stored product code. */
+export type KnownTile = {
+  name?: string | null;
+  productCode?: string | null;
+  imageUrl?: string | null;
+  size?: string | null;
+  finish?: string | null;
+};
+
+export function generationRow(
+  row: {
+    id: string;
+    createdAt: Date | string;
+    metadata?: unknown;
+    user?: { name?: string | null } | null;
+  },
+  tilesByCode: ReadonlyMap<string, KnownTile> = new Map(),
+): Record<string, unknown> {
   const meta = (row.metadata ?? {}) as Record<string, unknown>;
-  const products = Array.isArray(meta.products) ? meta.products : [];
+  const stored = Array.isArray(meta.products) ? meta.products : [];
+
+  // A GENERATION FROM BEFORE THE COMBINATION WAS RECORDED.
+  //
+  // The log kept one product CODE and nothing else, so the card showed
+  // a bare "DME-ITACA-1200X2400-COLLECTION-1-0023" and no picture -- of
+  // a board whose highlight tile is plainly visible in the render.
+  //
+  // The code is still a real catalog product, so it is resolved to its
+  // Tile row here and shown with its own image and name like any other.
+  // What CANNOT be recovered is the rest of the combination: this flow
+  // never wrote a mood board to the database, so there is nowhere the
+  // highlight and accent survive. The card says that in as many words
+  // rather than implying the room was built from one tile.
+  const products = stored.length ? stored : recoveredBase(String(meta.productName ?? ''), tilesByCode);
+
   return {
     id: row.id,
     createdAt: row.createdAt,
@@ -486,6 +513,9 @@ export function generationRow(row: {
     room: String(meta.room ?? ''),
     style: String(meta.style ?? ''),
     combinationName: String(meta.combinationName ?? ''),
+    // False when the combination was never recorded, so the page can say
+    // the list is partial instead of presenting it as the whole board.
+    productsRecorded: stored.length > 0,
     products: products
       .filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === 'object')
       .map((entry) => ({
@@ -497,6 +527,25 @@ export function generationRow(row: {
         imageUrl: String(entry.imageUrl ?? ''),
       })),
   };
+}
+
+/** The base tile of an old row, as one product entry, or none. */
+function recoveredBase(
+  code: string,
+  tilesByCode: ReadonlyMap<string, KnownTile>,
+): Array<Record<string, string>> {
+  const trimmed = code.trim();
+  if (!trimmed) return [];
+  const tile = tilesByCode.get(trimmed);
+  if (!tile) return [{ role: 'base', name: '', code: trimmed, size: '', finish: '', imageUrl: '' }];
+  return [{
+    role: 'base',
+    name: String(tile.name ?? ''),
+    code: String(tile.productCode ?? trimmed),
+    size: String(tile.size ?? ''),
+    finish: String(tile.finish ?? ''),
+    imageUrl: String(tile.imageUrl ?? ''),
+  }];
 }
 
 async function recordGeneration(
@@ -571,12 +620,37 @@ router.get(
 
     const page = rows.slice(0, limit);
 
+    // THE OLD ROWS' BASE TILE, RESOLVED ONCE.
+    //
+    // Rows written before the combination was recorded carry a product
+    // code and nothing else. One query turns every such code on this
+    // page into a real tile, so those cards show a picture and a name
+    // instead of a bare code. Rows that recorded their products need
+    // nothing and are not looked up.
+    const codes = [...new Set(
+      page
+        .filter((row) => !Array.isArray((row.metadata as Record<string, unknown> | null)?.products))
+        .map((row) => String((row.metadata as Record<string, unknown> | null)?.productName ?? '').trim())
+        .filter(Boolean),
+    )];
+
+    const tilesByCode = new Map<string, KnownTile>();
+    if (codes.length) {
+      const tiles = await prisma.tile.findMany({
+        where: { productCode: { in: codes } },
+        select: { name: true, productCode: true, imageUrl: true, size: true, finish: true },
+      });
+      tiles.forEach((tile) => {
+        if (tile.productCode) tilesByCode.set(tile.productCode, tile);
+      });
+    }
+
     return res.status(200).json({
       success: true,
       data: {
         total,
         nextCursor: rows.length > limit ? page[page.length - 1].id : null,
-        generations: page.map(generationRow),
+        generations: page.map((row) => generationRow(row, tilesByCode)),
       },
     });
   },
