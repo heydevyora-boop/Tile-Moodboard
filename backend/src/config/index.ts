@@ -240,6 +240,55 @@ export const config = {
     dir:
       env.LOG_DIR,
   },
+
+  // ============================================================
+  // TEMPORARY DEVELOPMENT LOGIN
+  // ============================================================
+  //
+  // A short username and a weak password, for local work and for a
+  // protected testing environment.
+  //
+  // THIS IS WHERE THE GUARANTEE LIVES. `isProd` short-circuits before
+  // the variables are read at all, so on a production deployment this
+  // is null no matter what is set in the environment -- there is no
+  // configuration of a public deployment in which a weak development
+  // password is accepted. Everything downstream reads this, never the
+  // environment, so nothing downstream can re-enable it.
+  //
+  // It is also null when no username is configured, which is the
+  // normal state: a deployment that has not asked for a development
+  // login does not have one.
+  //
+  // This changes WHICH IDENTIFIER the login accepts, and nothing else.
+  // The password is still compared against the bcrypt hash stored on
+  // the account, the session is still issued the same way, and the
+  // account's role still decides what it may do. There is no path here
+  // that skips a password check.
+
+  devLogin:
+    isProd || !env.DEV_LOGIN_USERNAME
+      ? null
+      : {
+          username:
+            env.DEV_LOGIN_USERNAME
+              .toLowerCase(),
+
+          email:
+            (
+              env.DEV_LOGIN_EMAIL
+              ?? `${env.DEV_LOGIN_USERNAME}@devyora.local`
+            ).toLowerCase(),
+
+          // Read by the seeder that creates the account. The request
+          // path never touches it: login compares what was typed
+          // against the stored hash, exactly as it always did.
+          password:
+            env.DEV_LOGIN_PASSWORD
+            ?? null,
+
+          role:
+            env.DEV_LOGIN_ROLE,
+        },
 } as const;
 
 export { env };

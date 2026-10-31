@@ -15,6 +15,8 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
     "prisma:seed": "ts-node prisma/seed.ts",
+    "test:dev-login": "ts-node -r tsconfig-paths/register test-scripts/dev_login_test.ts",
+    "seed:dev-login": "ts-node -r tsconfig-paths/register prisma/seed-dev-login.ts",
     "pm2:start": "pm2 start ecosystem.config.js",
     "pm2:stop": "pm2 stop ecosystem.config.js",
     "pm2:restart": "pm2 restart ecosystem.config.js",
