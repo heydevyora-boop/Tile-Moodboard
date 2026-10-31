@@ -281,8 +281,74 @@ def each_room_keeps_its_own_close_up():
     return results
 
 
+def section_8a_reaches_only_the_rooms_it_names():
+    """Section 8A says it "applies only when the selected space is a
+    Bathroom", and the tile step sent it to every room anyway.
+
+    915 tokens of bathroom completeness rules, paid for on every kitchen,
+    bedroom, living room, balcony and patio generation. The room
+    generator was fixed for exactly this -- a kitchen was being handed a
+    page of bathroom rules -- and the tile step was left behind.
+
+    What is asserted here is that nothing else moved: a bathroom's
+    doctrine is byte-identical to the file, and every other section
+    still reaches every room.
+    """
+    from app.tile_application_engine import build_tile_application_prompt, _doctrine_for
+    from app.devyora_system_prompt import DEVYORA_SYSTEM_PROMPT
+
+    results = []
+    HEADER = "8A. BATHROOM FUNCTIONAL COMPLETENESS"
+
+    def prompt_for(room):
+        return build_tile_application_prompt(
+            surface="WALL", tile_product_id="X", tile_name="T",
+            requirements={"room": room, "style": "British"},
+        )
+
+    # The wet rooms are untouched, to the byte.
+    for room in ("Bathroom", "Powder Room"):
+        results.append(check(
+            f"{room}: the doctrine is byte-identical to the file",
+            _doctrine_for(room) == DEVYORA_SYSTEM_PROMPT))
+        results.append(check(
+            f"{room}: ...so 8A still reaches it",
+            HEADER in prompt_for(room)))
+
+    # Every other room stops paying for it.
+    for room in ("Bedroom", "Kitchen & Dining", "Living Room", "Balcony", "Patio"):
+        full, trimmed = prompt_for("Bathroom"), prompt_for(room)
+        results.append(check(
+            f"{room}: 8A is not sent",
+            HEADER not in trimmed))
+        results.append(check(
+            f"{room}: ...and that is a real saving, not a rounding error",
+            len(full) - len(trimmed) > 3000, len(full) - len(trimmed)))
+        results.append(check(
+            f"{room}: every other section still reaches it",
+            all(f"\n{n}. " in trimmed for n in range(1, 14))))
+        results.append(check(
+            f"{room}: the request text is untouched",
+            "Everything above governs this generation" in trimmed
+            and "The room is fixed by IMAGE 1" in trimmed))
+
+    # A room nobody named still gets everything: the generator draws a
+    # bathroom by default, so the bathroom rules still apply.
+    results.append(check(
+        "an unnamed room keeps the whole doctrine",
+        _doctrine_for(None) == DEVYORA_SYSTEM_PROMPT))
+
+    # Nothing was deleted from the owner's file.
+    results.append(check(
+        "the section is still in devyora_system_prompt.py",
+        HEADER in DEVYORA_SYSTEM_PROMPT))
+    return results
+
+
 def main():
     groups = [
+        ("section 8A reaches only the rooms it names",
+         section_8a_reaches_only_the_rooms_it_names()),
         ("every room the wizard offers is known", every_room_is_known()),
         ("the room prompt asks for that room",
          the_room_prompt_asks_for_that_room()),
