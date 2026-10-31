@@ -42,6 +42,7 @@ from app.themes import (  # noqa: E402
     room_styling,
 )
 from app.theme_check import check_theme, summarise, _question  # noqa: E402
+import json  # noqa: E402
 from app.scene_image_generator import build_room_scene_prompt  # noqa: E402
 from app.tile_application_engine import build_tile_application_prompt  # noqa: E402
 
@@ -282,6 +283,188 @@ def the_tile_step_knows_the_theme_too():
         "an unknown theme adds no line at all",
         "- Theme:" not in build_tile_application_prompt(
             "WALL", tile_name="X", requirements={"room": "Bathroom", "style": "Brutalist"})))
+    return results
+
+
+def the_check_does_not_fail_a_good_room():
+    """Professionally designed rooms were being marked NON-COMPLIANT.
+
+    Three causes, all of them the check's own rules rather than the
+    picture. ANY confirmed deviation failed a board, so one imperfect
+    decorative element sank a room that was otherwise right. Falling
+    below half the characteristics failed it too, which a couple of thin
+    details could do on their own. And the two things that genuinely
+    ARE fatal -- the wrong room, an altered catalog product -- could not
+    be reported at all: the room type was asserted in the question and
+    never checked, and product fidelity came back as a free sentence
+    nothing could act on.
+
+    Nothing here can prove what a model answers. What it proves is what
+    a given answer is turned into.
+    """
+    results = []
+    image = ROOT / "assets" / "theme_references" / "floral" / "01.webp"
+    floral = describe_theme("Floral")
+    rules = theme_checklist("Floral")
+    every = ",".join(str(i) for i in range(1, len(rules) + 1))
+
+    def stub(payload):
+        class Models:
+            last = None
+
+            @staticmethod
+            def generate_content(**kwargs):
+                Models.last = kwargs
+                class R:
+                    text = payload
+                return R()
+
+        class Client:
+            models = Models
+        return Client()
+
+    def answer(**over):
+        body = {
+            "present": [1, 2, 3], "partial": [], "missing": [], "uncertain": [],
+            "deviations": [],
+            "room": {"verdict": "yes", "seen": "a bedroom with a bed and side tables"},
+            "productFidelity": {"verdict": "faithful", "seen": "tiles are consistently laid"},
+            "products": "fine", "identity": "reads as Floral",
+        }
+        body.update(over)
+        return check_theme(image, "Floral", stub(json.dumps(body)), room="Bedroom")
+
+    # ── the room is asked about, not assumed ──────────────────────────
+    probe = stub('{"present": [1], "deviations": []}')
+    check_theme(image, "Floral", probe, room="Bedroom")
+    asked = " ".join(getattr(p, "text", "") or "" for p in probe.models.last["contents"])
+    results.append(check(
+        "the check asks whether the image IS the room that was ordered",
+        "QUESTION A0 -- THE ROOM" in asked
+        and "This was asked for as a bedroom. Is that what the image shows?" in asked))
+    results.append(check(
+        "...about the KIND of room, not how well it is decorated",
+        "This is about the KIND of room only" in asked))
+
+    good = answer()
+    results.append(check("a clean bedroom passes", good["status"] == "pass", good["status"]))
+    results.append(check("...and the verdict names the room it judged",
+        good["room"] == "bedroom" and good["roomOk"] == "yes", good["room"]))
+
+    wrong = answer(room={"verdict": "no", "seen": "this is a bathroom, with a basin and shower"})
+    results.append(check("the WRONG ROOM fails, whatever else is right",
+        wrong["status"] == "fail", wrong["status"]))
+    results.append(check("...reported as a deviation carrying what was seen",
+        any("not a bedroom" in d and "basin" in d for d in wrong["deviations"]), wrong["deviations"]))
+    results.append(check("...and the recommendation asks for the right room",
+        "Generate a bedroom" in wrong["recommendation"], wrong["recommendation"]))
+    unsure_room = answer(room={"verdict": "unsure", "seen": "cannot tell from this angle"})
+    results.append(check("a room it cannot identify is PARTIAL, never a silent pass",
+        unsure_room["status"] == "partial", unsure_room["status"]))
+
+    # ── product integrity is judged, not described ────────────────────
+    results.append(check(
+        "the check is told the products had to be reproduced exactly",
+        "QUESTION C -- THE PRODUCTS" in asked
+        and "had to be reproduced exactly" in asked
+        and "faithful" in asked and "altered" in asked))
+    results.append(check(
+        "...and that an unfamiliar tile is not an altered one",
+        "An ordinary tile you simply do not recognise is NOT altered." in asked))
+
+    altered = answer(productFidelity={
+        "verdict": "altered", "seen": "a flower pattern has been drawn onto a plain tile"})
+    results.append(check("an ALTERED catalog product fails", altered["status"] == "fail",
+        altered["status"]))
+    results.append(check("...and says what was done to it",
+        altered["productFidelity"] == "altered"
+        and "drawn onto a plain tile" in altered["products"], altered["products"]))
+    results.append(check("...and asks for the real product back",
+        "Restore the supplied catalog products exactly" in altered["recommendation"]))
+
+    # ── one imperfect detail is not a failure ─────────────────────────
+    minor = answer(deviations=[{
+        "what": "busy decorative styling", "seen": "several ornaments on the chest",
+        "confident": True, "critical": False}])
+    results.append(check("a deviation the model did not call critical -> PARTIAL",
+        minor["status"] == "partial", minor["status"]))
+    results.append(check("...and is still reported, not swept into a pass",
+        minor["deviations"] and "ornaments" in minor["deviations"][0], minor["deviations"]))
+    fatal = answer(deviations=[{
+        "what": "no recognisable floral identity", "seen": "not one flower in the room",
+        "confident": True, "critical": True}])
+    results.append(check("a deviation it DID call critical -> FAIL",
+        fatal["status"] == "fail", fatal["status"]))
+    results.append(check(
+        "the check is told what critical means, and that a thin detail is not it",
+        "critical means the room is fundamentally not this theme" in asked
+        and "A thin or imperfect decorative element is never critical." in asked))
+
+    thin = answer(present=[1, 2], partial=[{"n": 4, "seen": "only one cushion carries it"}],
+                  missing=[{"n": 5, "seen": "no secondary treatment"}])
+    results.append(check("a couple of thin details is PARTIAL, not NON-COMPLIANT",
+        thin["status"] == "partial", thin["status"]))
+    gone = answer(present=[], partial=[], missing=[
+        {"n": 1, "seen": "no flowers anywhere"}, {"n": 2, "seen": "no feature surface"},
+        {"n": 3, "seen": "nothing botanical"}])
+    results.append(check("a room with none of the theme in it still FAILS",
+        gone["status"] == "fail", gone["status"]))
+
+    # ── valid design decisions may not be held against the room ───────
+    for phrase in (
+        "one dominant feature wall, with the other walls plain and complementary",
+        "an oversized mural, or a large-scale motif, on that one wall",
+        "two pattern scales together, where one leads and the other supports",
+        "an accent colour used subtly rather than everywhere",
+        "one colour of the palette leading as the room's background",
+        "contemporary furniture, where it is styled to the theme",
+    ):
+        results.append(check(f"valid choice stated: {phrase[:46]}", phrase in asked))
+    results.append(check("no colour percentage may be invented",
+        "Do NOT apply a percentage to any colour" in asked
+        and "do NOT expect a pattern on every wall" in asked))
+
+    # ── judged against the actual references, not the words alone ─────
+    sent = [p for p in probe.models.last["contents"] if getattr(p, "inline_data", None) is not None]
+    results.append(check(
+        "the theme's own reference photographs are sent with the image",
+        len(sent) == 1 + min(4, len(reference_images("Floral"))), len(sent)))
+    results.append(check("...labelled so they are not mistaken for the room being judged",
+        "THEME REFERENCE 1" in asked
+        and "It is NOT the room you are judging" in asked
+        and "never to require that the generated image copy it" in asked))
+    results.append(check("...and the verdict says how many it actually saw",
+        good["referencesSeen"] == 4, good["referencesSeen"]))
+
+    bw = stub('{"present": [1], "deviations": []}')
+    check_theme(image, "Black & White", bw, room="Bedroom")
+    bw_images = [p for p in bw.models.last["contents"] if getattr(p, "inline_data", None) is not None]
+    results.append(check(
+        "a theme with no references sends none, and claims none",
+        len(bw_images) == 1, len(bw_images)))
+
+    # ── the recommendation does not repeat what is already right ──────
+    results.append(check("a clean room gets no recommendation at all",
+        good["recommendation"] == "", good["recommendation"]))
+    results.append(check(
+        "...and nothing advises keeping products that were never in question",
+        "Keep the selected catalog products" not in minor["recommendation"],
+        minor["recommendation"]))
+
+    # ── one pass, no retries, no extra spend ──────────────────────────
+    calls = {"n": 0}
+
+    class Counting:
+        class models:
+            @staticmethod
+            def generate_content(**kwargs):
+                calls["n"] += 1
+                class R:
+                    text = json.dumps({"present": [1], "deviations": []})
+                return R()
+
+    check_theme(image, "Floral", Counting, room="Bedroom")
+    results.append(check("the check is still ONE call", calls["n"] == 1, calls["n"]))
     return results
 
 
@@ -873,13 +1056,22 @@ def the_theme_check_is_honest():
         '{"present": [' + everything + '], "missing": [],'
         ' "deviations": [{"what": "dominant blue feature wall", "seen": "the shower wall is cobalt"}],'
         ' "products": "fine", "identity": "British apart from the blue"}'))
-    results.append(check("3. a confirmed prohibited element -> FAIL", blue["status"] == "fail"))
+    results.append(check("3. a confirmed prohibited element -> PARTIAL, not FAIL",
+        blue["status"] == "partial", blue["status"]))
     results.append(check("3. ...reported as a deviation, never as something missing",
         blue["missing"] == [] and "cobalt" in blue["deviations"][0], blue))
-    results.append(check("3. ...and the recommendation says to replace it, keeping the products",
-        "blue feature wall" in blue["recommendation"]
-        and "Keep the selected catalog products exactly as they are" in blue["recommendation"],
+    results.append(check("3. ...and the recommendation says to replace it",
+        "blue feature wall" in blue["recommendation"], blue["recommendation"]))
+    results.append(check("3. ...without advising care of products that were never in question",
+        "Keep the selected catalog products" not in blue["recommendation"],
         blue["recommendation"]))
+    critical = check_theme(image, "British", stub(
+        '{"present": [' + everything + '], "missing": [],'
+        ' "deviations": [{"what": "dominant blue feature wall", "seen": "the whole room is cobalt",'
+        ' "confident": true, "critical": true}],'
+        ' "products": "fine", "identity": "not British at all"}'))
+    results.append(check("3. ...and a deviation called CRITICAL does fail it",
+        critical["status"] == "fail", critical["status"]))
 
     # ── 4. correct British styling, plain flooring ────────────────────
     floor = check_theme(image, "British", stub(
@@ -1031,7 +1223,9 @@ def the_theme_check_is_honest():
         ' "seen": "the entire shower wall is cobalt gloss", "confident": true}],'
         ' "products": "ok", "identity": "British apart from the blue"}'))
     results.append(check(
-        "a prohibition actually seen still FAILS", realDeviation["status"] == "fail"))
+        "a prohibition actually seen is reported, at PARTIAL",
+        realDeviation["status"] == "partial" and realDeviation["deviations"],
+        realDeviation["status"]))
 
     # The counting rules must reach the model.
     probe2 = stub('{"present": [1], "partial": [], "missing": [], "deviations": []}')
@@ -1069,6 +1263,8 @@ def main():
         ("the check asks only what a picture can answer",
          the_check_asks_only_what_a_picture_can_answer()),
         ("the theme check is honest", the_theme_check_is_honest()),
+        ("the check does not fail a good room",
+         the_check_does_not_fail_a_good_room()),
         ("the wizard and the table agree", the_wizard_and_the_table_agree()),
     ]
 

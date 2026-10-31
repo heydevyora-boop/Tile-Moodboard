@@ -53,7 +53,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from app.client_selections import describe_space
-from app.themes import describe_theme, theme_checklist
+from app.themes import describe_theme, reference_images, theme_checklist
 
 
 def _candidate_models() -> List[str]:
@@ -89,6 +89,11 @@ def _candidate_models() -> List[str]:
 # API key, so a check with no key failed with "GEMINI_API_KEY is missing
 # from .env" instead of its own honest reason -- and a report that names
 # the wrong cause is worse than no report.
+# How many of a theme's reference photographs ride along with the check.
+# Enough to establish the design language, few enough that one advisory
+# call does not grow without limit.
+REFERENCE_LIMIT = 4
+
 _MIME = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp"}
 
 
@@ -104,6 +109,10 @@ def _blank(status: str, theme: Optional[Dict[str, Any]] = None, reason: str = ""
         "status": status,
         "themeId": (theme or {}).get("id", ""),
         "theme": (theme or {}).get("label", ""),
+        "room": "",
+        "roomOk": "",
+        "productFidelity": "",
+        "referencesSeen": 0,
         "reason": reason,
         "present": [],
         "partial": [],
@@ -153,6 +162,14 @@ def _room(room: Any) -> Dict[str, str]:
     }
 
 
+def _verdict_of(value: Any, allowed: set) -> tuple:
+    """A one-word verdict and its evidence, or ("", "") when unusable."""
+    if not isinstance(value, dict):
+        return "", ""
+    word = str(value.get("verdict", "")).strip().lower()
+    return (word if word in allowed else ""), str(value.get("seen", "")).strip()
+
+
 def _question(theme: Dict[str, Any], required: List[str], room: Any = None) -> str:
     """
     What the model is asked.
@@ -167,6 +184,17 @@ def _question(theme: Dict[str, Any], required: List[str], room: Any = None) -> s
     So: four states rather than two, presence separated from dominance
     in as many words, the theme's own counting rules, and a prohibition
     that has to be identified confidently before it is reported at all.
+
+    And then the board failed a professionally designed room over
+    subjective judgements, so three things were added. The ROOM TYPE is
+    asked about rather than assumed -- the question always claimed to be
+    judging a bedroom without ever checking it was one. The PRODUCTS are
+    judged rather than described in a free sentence, because a
+    substituted or recoloured product is the one failure nothing could
+    report. And a prohibition now carries its own severity, so the
+    difference between "this is not the theme" and "this could be
+    better" is the model's call on what it saw, not an assumption that
+    every deviation is fatal.
     """
     numbered = "\n".join(f"{i}. {rule}" for i, rule in enumerate(required, start=1))
     forbidden = "\n".join(f"- {item}" for item in theme["avoid"])
@@ -187,6 +215,20 @@ def _question(theme: Dict[str, Any], required: List[str], room: Any = None) -> s
         "NOT call something missing because it is not the largest thing in the picture, and do NOT "
         "expect every characteristic to occupy a large share of the room."
         f"{counting}\n\n"
+        "THESE ARE VALID DESIGN DECISIONS, NOT FAULTS. None of them may be reported as a problem, "
+        "and none of them may lower any judgement below:\n"
+        "- one dominant feature wall, with the other walls plain and complementary\n"
+        "- an oversized mural, or a large-scale motif, on that one wall\n"
+        "- two pattern scales together, where one leads and the other supports\n"
+        "- an accent colour used subtly rather than everywhere\n"
+        "- one colour of the palette leading as the room's background\n"
+        "- contemporary furniture, where it is styled to the theme\n"
+        "Judge what you see against the theme's own words above. Do NOT apply a percentage to any "
+        "colour, and do NOT expect a pattern on every wall.\n\n"
+        f"QUESTION A0 -- THE ROOM. This was asked for as a {space['noun']}. Is that what the image "
+        f"shows? Answer \"yes\" if it is clearly a {space['noun']}, \"no\" only if it is plainly a "
+        "different kind of room, and \"unsure\" if you cannot tell. This is about the KIND of room "
+        "only -- its furniture and purpose -- not about how well it is designed or decorated.\n\n"
         "QUESTION A -- REQUIRED CHARACTERISTICS. Give each one exactly one state:\n"
         "  present    you can see it\n"
         "  partial    it is there but thin, small or only half-done\n"
@@ -202,9 +244,16 @@ def _question(theme: Dict[str, Any], required: List[str], room: Any = None) -> s
         "evidence must support the item you report: if what you saw shows the prohibited thing is "
         "absent, do not report it. If you are unsure, leave it out or mark it not confident. Seeing "
         "none is the correct and expected answer for a good image. Do NOT copy this list into your "
-        f"answer:\n{forbidden}\n\n"
-        "QUESTION C -- the products. Do the tiled surfaces look like real, consistently laid catalog "
-        "products, or like invented patterns? One sentence.\n\n"
+        "answer. For each one you DO report, say whether it is critical -- critical means the room "
+        "is fundamentally not this theme because of it, not merely that it could be improved. A "
+        "thin or imperfect decorative element is never critical. Here is the "
+        f"list:\n{forbidden}\n\n"
+        "QUESTION C -- THE PRODUCTS. The tiled surfaces were supplied as real catalog products and "
+        "had to be reproduced exactly. Answer \"faithful\" if they look like real, consistently "
+        "laid products; \"altered\" ONLY if you can see a product has been recoloured, "
+        "re-patterned, substituted or invented -- a flower pattern drawn onto a plain tile, a "
+        "surface in a colour no supplied product has; \"unsure\" if you cannot tell. Say what you "
+        "saw either way. An ordinary tile you simply do not recognise is NOT altered.\n\n"
         "QUESTION D -- does the room read as a designed interior in this theme's language, or as a "
         f"generic contemporary {space['noun']}? One sentence.\n\n"
         "Every item you report must carry what you SAW, in your own words. Reply with JSON only, no "
@@ -213,8 +262,10 @@ def _question(theme: Dict[str, Any], required: List[str], room: Any = None) -> s
         '"partial": [{"n": <number>, "seen": "<what is there, and why it is thin>"}], '
         '"missing": [{"n": <number>, "seen": "<what is there instead>"}], '
         '"uncertain": [{"n": <number>, "why": "<why you cannot tell>"}], '
+        '"room": {"verdict": "yes|no|unsure", "seen": "<what kind of room this is>"}, '
         '"deviations": [{"what": "<the prohibited element>", "seen": "<where you see it>", '
-        '"confident": true}], '
+        '"confident": true, "critical": false}], '
+        '"productFidelity": {"verdict": "faithful|altered|unsure", "seen": "<what you saw>"}, '
         '"products": "<one sentence>", "identity": "<one sentence>"}'
     )
 
@@ -254,10 +305,50 @@ def check_theme(
 
         from google.genai import types
 
+        # THE IMAGE, AND WHAT IT IS BEING JUDGED AGAINST.
+        #
+        # This sent the generated picture and the theme's words, so the
+        # judgement was made against text alone -- against an idea of
+        # the theme rather than the photographs that define it. The same
+        # references the generator was given go in here, labelled, so
+        # the check compares like with like.
+        #
+        # They ride on the SINGLE existing call. No extra request is
+        # made and maxDuration is untouched; the cost is a few small
+        # images added to one call that was happening anyway, which is
+        # why they are capped rather than sent in full.
         contents = [
             types.Part.from_text(text=_question(found, required, room)),
+            types.Part.from_text(
+                text="THE GENERATED IMAGE, which is what you are judging:"
+            ),
             types.Part.from_bytes(data=path.read_bytes(), mime_type=_mime_type(path)),
         ]
+
+        references = reference_images(theme)[:REFERENCE_LIMIT]
+        attached = 0
+        for position, reference in enumerate(references, start=1):
+            try:
+                data = reference.read_bytes()
+            except OSError:
+                continue
+            contents.append(
+                types.Part.from_text(
+                    text=(
+                        f"THEME REFERENCE {position}. A real room the catalog owner "
+                        "supplied for this theme. It shows the design language the "
+                        "theme means -- its colours, materials, finishes and the way "
+                        "pattern is placed. It is NOT the room you are judging, its "
+                        "room type may differ, and its tiles are not the client's "
+                        "products. Use it to decide what this theme looks like, never "
+                        "to require that the generated image copy it."
+                    )
+                )
+            )
+            contents.append(
+                types.Part.from_bytes(data=data, mime_type=_mime_type(reference))
+            )
+            attached += 1
 
         response = None
         tried = []
@@ -322,6 +413,7 @@ def check_theme(
         # anything less is an observation, not a finding, and goes to
         # uncertain where it cannot fail the board.
         deviations = []
+        critical = []
         for item in reply.get("deviations", []) if isinstance(reply.get("deviations"), list) else []:
             if not isinstance(item, dict):
                 continue
@@ -330,12 +422,41 @@ def check_theme(
                 continue
             if item.get("confident") is False:
                 uncertain.append(f"possibly {what} ({seen[:120]})")
-            else:
-                deviations.append(f"{what} ({seen[:140]})")
+                continue
+            line = f"{what} ({seen[:140]})"
+            deviations.append(line)
+            # Only the model's own "this makes it not the theme" fails a
+            # board. Every deviation used to, so one imperfect decorative
+            # element sank a room that was otherwise right.
+            if item.get("critical") is True:
+                critical.append(line)
 
-        status = _status(found, required, present, partial, missing, deviations, reply)
+        # THE ROOM, AND THE PRODUCTS -- the two things that ARE fatal.
+        #
+        # A wrong room is not the theme being thin, it is the wrong
+        # picture. A recoloured or substituted product is the one
+        # failure the client would never accept, and it had no way of
+        # being reported at all: QUESTION C used to return a sentence
+        # nothing could act on.
+        room_ok, room_seen = _verdict_of(reply.get("room"), {"yes", "no", "unsure"})
+        fidelity, fidelity_seen = _verdict_of(
+            reply.get("productFidelity"), {"faithful", "altered", "unsure"}
+        )
+        if room_ok == "no" and room_seen:
+            deviations.insert(0, f"this is not a {_room(room)['noun']} ({room_seen[:140]})")
+        if fidelity == "altered" and fidelity_seen:
+            deviations.insert(0, f"a supplied catalog product was altered ({fidelity_seen[:140]})")
+
+        status = _status(
+            found, required, present, partial, missing, critical, room_ok, fidelity,
+            deviations,
+        )
 
         verdict = _blank(status, found)
+        verdict["room"] = _room(room)["noun"]
+        verdict["referencesSeen"] = attached
+        verdict["roomOk"] = room_ok
+        verdict["productFidelity"] = fidelity
         if status == "unchecked":
             verdict["reason"] = "the check model judged none of the characteristics"
         verdict.update({
@@ -344,9 +465,11 @@ def check_theme(
             "missing": _clean(missing),
             "deviations": _clean(deviations, 4),
             "uncertain": _clean(uncertain, 4),
-            "products": str(reply.get("products", ""))[:240],
+            "products": (fidelity_seen or str(reply.get("products", "")))[:240],
             "references": str(reply.get("identity", ""))[:240],
-            "recommendation": _recommend(found, missing, deviations),
+            "recommendation": _recommend(
+                found, missing, deviations, room_ok, fidelity, _room(room)["noun"],
+            ),
         })
         return verdict
 
@@ -360,28 +483,39 @@ def _status(
     present: List[str],
     partial: List[str],
     missing: List[str],
-    deviations: List[str],
-    reply: Dict[str, Any],
+    critical: List[str],
+    room_ok: str = "",
+    fidelity: str = "",
+    deviations: Optional[List[str]] = None,
 ) -> str:
     """
-    PASS, PARTIAL or FAIL, from the findings alone.
+    PASS, PARTIAL or FAIL.
 
-    Weighted, and the weights come from the theme's own configuration
-    rather than from invented thresholds:
+    FAIL IS FOR THREE THINGS, and nothing else:
 
-      * The theme names ONE of its characteristics as the one that
-        carries it (`identityCheck`). If that is present the room reads
-        as the theme, and a thin decorative element elsewhere cannot
-        take it to FAIL -- which is what happened to the owner's board.
+      * the wrong room -- a bedroom was asked for and this is not one
+      * a product that was altered -- recoloured, re-patterned,
+        substituted or invented
+      * a fundamental theme mismatch -- the characteristic the theme
+        names as the one that carries it (`identityCheck`) is absent,
+        a deviation the model itself called critical, or so little of
+        the theme present that the room simply is not it
 
-      * Everything else is counted as a share of the theme's own
-        characteristics: present counts whole, partial counts half.
-        Below half of them is a room that does not carry the theme.
+    EVERYTHING ELSE IS PARTIAL. This used to fail a board for any
+    confirmed deviation at all, and for falling below half its
+    characteristics -- so one thin decorative element could take a
+    professionally designed room to NON-COMPLIANT. A missing detail is
+    a note for the designer, not a verdict on the room.
 
-    FAIL is reserved for a room that genuinely is not the theme: its
-    identity absent, OR a confidently identified prohibited element, OR
-    fewer than half its characteristics satisfied.
+    The share threshold is a third rather than a half, and it only
+    applies once at least three characteristics have been judged: below
+    that there is not enough to call anything fundamental.
     """
+    if room_ok == "no":
+        return "fail"
+    if fidelity == "altered":
+        return "fail"
+
     identity_index = theme.get("identityCheck")
     identity_rule = (
         required[identity_index - 1]
@@ -402,28 +536,48 @@ def _status(
 
     # Nothing judged at all is not a pass. It is a check that did not
     # happen, and saying so is the whole point of having "unchecked".
-    if not classified and not deviations:
+    if not classified and not critical and not room_ok and not fidelity:
         return "unchecked"
 
-    if deviations or identity_failed or (classified and share < 0.5):
+    if identity_failed or critical or (classified >= 3 and share < (1.0 / 3.0)):
         return "fail"
-    if missing or partial:
+    # A deviation the model did NOT call critical is still something it
+    # saw and reported. It is worth the designer's attention, so it
+    # lands on PARTIAL -- not swept into PASS, and not failing a room
+    # that is otherwise right.
+    if missing or partial or deviations or room_ok == "unsure" or fidelity == "unsure":
         return "partial"
     return "pass"
 
 
-def _recommend(theme: Dict[str, Any], missing: List[str], deviations: List[str]) -> str:
+def _recommend(
+    theme: Dict[str, Any],
+    missing: List[str],
+    deviations: List[str],
+    room_ok: str = "",
+    fidelity: str = "",
+    room_noun: str = "",
+) -> str:
     """
-    One corrective line, built from what was actually found.
+    One corrective line, built only from what was actually found WRONG.
 
     Only from the findings -- a recommendation assembled from the theme
     configuration would be advice about things that may well already be
     in the picture, which is the thing this must not do.
-    """
-    if not missing and not deviations:
-        return ""
 
+    And it used to close every recommendation with "Keep the selected
+    catalog products exactly as they are", on a board whose products
+    were never in question: advice to keep doing the thing already being
+    done. That line is now only given when the products ARE in question.
+    """
     sentences = []
+    if room_ok == "no":
+        sentences.append(f"Generate a {room_noun or 'room'} -- the image is not one.")
+    if fidelity == "altered":
+        sentences.append(
+            "Restore the supplied catalog products exactly: their own colours, "
+            "patterns and textures, with nothing drawn onto them."
+        )
     if deviations:
         sentences.append(
             "Replace the "
@@ -436,7 +590,6 @@ def _recommend(theme: Dict[str, Any], missing: List[str], deviations: List[str])
             + "; ".join(m.split(" (")[0].rstrip(".") for m in missing[:2])
             + "."
         )
-    sentences.append("Keep the selected catalog products exactly as they are.")
     return " ".join(sentences)
 
 
@@ -445,6 +598,9 @@ def summarise(verdict: Optional[Dict[str, Any]]) -> str:
     if not verdict:
         return ""
     theme = verdict.get("theme") or "the theme"
+    room = verdict.get("room")
+    if room:
+        theme = f"{theme} {room}"
     status = verdict.get("status")
     if status == "pass":
         return f"{theme}: every required characteristic was visible, no deviations seen."
