@@ -130,13 +130,10 @@ async function main() {
     && thumbs[0] === 'https://drive.example/URV-0014.webp'
     && thumbs[1] === 'https://drive.example/DEC-0002.webp', thumbs);
 
-  const roles = [...doc.querySelectorAll('.gen-product-role')].map((r) => r.textContent);
-  check('6. the ROLE leads each line, as it does on the mood board',
-    roles.join('|') === 'BASE|HIGHLIGHT', roles);
   const meta = [...doc.querySelectorAll('.gen-product-meta')].map((m) => m.textContent);
-  check('6b. ...with the code, size and finish beside it',
-    meta[0].includes('URV-0014') && meta[0].includes('600X1200MM')
-    && meta[0].includes('MATT'), meta);
+  check('6. the role, code, size and finish ride along',
+    meta[0].includes('BASE') && meta[0].includes('URV-0014')
+    && meta[0].includes('600X1200MM') && meta[0].includes('MATT'), meta);
 
   check('7. the scene image is still shown above them',
     doc.querySelector('.gen-shot img').getAttribute('src') === 'https://drive.example/scene-1.webp');
@@ -160,40 +157,10 @@ async function main() {
   await settle();
   check('10. a generation recorded before products existed is still shown',
     doc.querySelectorAll('.gen-card').length === 1);
-  check('11. ...showing the tiles it does have, not a sentence about them',
-    doc.querySelectorAll('.gen-product').length === 0
-    && !!doc.querySelector('.gen-products-none'),
-    doc.querySelectorAll('.gen-product').length);
-
-  // An old row whose base tile was recovered: a picture and a name, and
-  // a line saying the list is partial -- never "only the base was used",
-  // which would be a false claim about the room.
-  const recovered = pagedStub(1, 60);
-  recovered.all[0].productsRecorded = false;
-  recovered.all[0].products = [product('base', 'Urvi Statuario', 'URV-0014', true)];
-  doc = loadPage(recovered.stub).window.document;
-  await settle();
-  check('11a. a recovered base tile shows its image and name',
-    doc.querySelector('.gen-product-name').textContent === 'Urvi Statuario'
-    && doc.querySelector('.gen-product img').getAttribute('src')
-       === 'https://drive.example/URV-0014.webp');
-  check('11b. ...labelled BASE',
-    (doc.querySelector('.gen-product-role') || {}).textContent === 'BASE');
-  check('11c. ...and says the record is partial, not that one tile built the room',
+  check('11. ...and says the tiles were not recorded, naming the base it has',
     (doc.querySelector('.gen-products-none') || {}).textContent
-      === 'Generated before the full combination was recorded, so only the base tile is known. '
-        + 'The highlight and accent are not in the record.',
+      === 'Only the base tile was recorded for this one: Urvi Statuario.',
     (doc.querySelector('.gen-products-none') || {}).textContent);
-  check('11d. ...and never claims only the base tile was USED',
-    !doc.body.textContent.includes('Only the base tile was recorded'));
-
-  const full = pagedStub(1, 60);
-  full.all[0].productsRecorded = true;
-  doc = loadPage(full.stub).window.document;
-  await settle();
-  check('11e. a fully recorded board carries no partial note',
-    doc.querySelectorAll('.gen-product').length === 2
-    && !doc.querySelector('.gen-products-none'));
 
   const bare = pagedStub(1, 60);
   bare.all[0].products = [];

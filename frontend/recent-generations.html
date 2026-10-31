@@ -164,10 +164,9 @@
   .gen-products { display:flex; flex-direction:column; gap:7px; margin-top:4px; padding-top:12px; border-top:1px solid var(--line); }
   .gen-products-lbl { font-size:8.5px; letter-spacing:.18em; color:var(--muted); }
   .gen-product { display:flex; align-items:center; gap:10px; }
-  .gen-product img { width:42px; height:42px; flex:0 0 auto; border-radius:9px; object-fit:cover; background:var(--sand); border:1px solid var(--line); }
-  .gen-product-blank { width:42px; height:42px; flex:0 0 auto; border-radius:9px; background:var(--sand); border:1px solid var(--line); }
+  .gen-product img { width:34px; height:34px; flex:0 0 auto; border-radius:9px; object-fit:cover; background:var(--sand); border:1px solid var(--line); }
+  .gen-product-blank { width:34px; height:34px; flex:0 0 auto; border-radius:9px; background:var(--sand); border:1px solid var(--line); }
   .gen-product-text { min-width:0; display:flex; flex-direction:column; gap:3px; }
-  .gen-product-role { font-size:8px; letter-spacing:.18em; color:var(--gold); }
   .gen-product-name { font-size:12px; line-height:1.25; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .gen-product-meta { font-size:8.5px; letter-spacing:.12em; color:var(--muted); }
   .gen-products-none { font-size:9.5px; letter-spacing:.06em; line-height:1.6; color:var(--muted); }
@@ -274,46 +273,34 @@
   // that is said rather than left as a blank space: an empty strip reads
   // as "no tiles", which is never true of a generated scene.
   function productsHtml(gen) {
-    const products = (Array.isArray(gen.products) ? gen.products : [])
-      .filter((p) => p && (p.name || p.code));
+    const products = Array.isArray(gen.products) ? gen.products : [];
 
     if (!products.length) {
+      const named = gen.productName
+        ? 'Only the base tile was recorded for this one: ' + escapeHtml(gen.productName) + '.'
+        : 'The tiles were not recorded for this generation.';
       return '<div class="gen-products">' +
         '<span class="gen-products-lbl mono">PRODUCTS USED</span>' +
-        '<span class="gen-products-none">The tiles were not recorded for this generation.</span>' +
-        '</div>';
+        '<span class="gen-products-none">' + named + '</span></div>';
     }
 
-    // The role is what the showroom actually asks of this list -- which
-    // one is the base, which the highlight, which the accent -- so it
-    // leads the line, exactly as it does on the mood board.
     const rows = products.map((product) => {
       const name = product.name || product.code || 'Unnamed tile';
-      const role = (product.role || '').toUpperCase();
-      const spec = [product.code, product.size, product.finish].filter(Boolean).join(' \u00b7 ');
+      const meta = [product.role, product.code, product.size, product.finish]
+        .filter(Boolean).join(' · ');
       const thumb = product.imageUrl
         ? '<img src="' + escapeHtml(product.imageUrl) + '" alt="" loading="lazy">'
         : '<span class="gen-product-blank"></span>';
       return '<div class="gen-product">' + thumb +
         '<span class="gen-product-text">' +
-        (role ? '<span class="gen-product-role mono">' + escapeHtml(role) + '</span>' : '') +
         '<span class="gen-product-name">' + escapeHtml(name) + '</span>' +
-        (spec ? '<span class="gen-product-meta mono">' + escapeHtml(spec.toUpperCase()) + '</span>' : '') +
+        (meta ? '<span class="gen-product-meta mono">' + escapeHtml(meta.toUpperCase()) + '</span>' : '') +
         '</span></div>';
     }).join('');
 
-    // An old generation recorded only its base tile. Saying "only the
-    // base tile was used" would be a claim about the ROOM, and a false
-    // one -- the highlight is plainly visible in those renders. The
-    // list is partial, and that is what is said.
-    const partial = gen.productsRecorded === false
-      ? '<span class="gen-products-none">Generated before the full combination was recorded, so only '
-        + 'the base tile is known. The highlight and accent are not in the record.</span>'
-      : '';
-
     return '<div class="gen-products">' +
-      '<span class="gen-products-lbl mono">PRODUCTS USED \u2014 ' + products.length + '</span>' +
-      rows + partial + '</div>';
+      '<span class="gen-products-lbl mono">PRODUCTS USED — ' + products.length + '</span>' +
+      rows + '</div>';
   }
 
   // A scene whose image could not be kept still gets a card. Hiding it
