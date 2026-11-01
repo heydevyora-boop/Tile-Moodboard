@@ -183,6 +183,62 @@ function main(): number {
     && partial.products[0].role === '',
     partial.products[0]);
 
+  // ----------------------------------------------------------------
+  // THE PICTURE THE LOG DOES NOT HOLD.
+  //
+  // A product whose image was an inline data: URL is recorded without
+  // one, so the card showed a name and a grey square. The code names a
+  // real product, so the image is read back from the Tile row.
+  // ----------------------------------------------------------------
+  const known = new Map([
+    ['URV-0014', { imageUrl: 'https://drive.example/URV-0014.webp' }],
+    ['DEC-0002', { imageUrl: '/uploads/extracted-images/DEC-0002.webp' }],
+  ]);
+
+  const dropped = generationRow({
+    id: 'log-d',
+    createdAt: '2026-10-30T02:17:00Z',
+    metadata: {
+      products: [
+        { role: 'base', name: 'Urvi Statuario', code: 'URV-0014', imageUrl: '' },
+        { role: 'highlight', name: 'Botanical Decor', code: 'DEC-0002', imageUrl: '' },
+      ],
+    },
+  }, known) as Record<string, any>;
+
+  check('19. a product recorded without a picture gets one from its tile',
+    dropped.products[0].imageUrl === 'https://drive.example/URV-0014.webp',
+    dropped.products[0]);
+  check('20. ...including a path that is relative to the backend',
+    dropped.products[1].imageUrl === '/uploads/extracted-images/DEC-0002.webp',
+    dropped.products[1]);
+  check('21. ...and everything else about the product is untouched',
+    dropped.products[0].name === 'Urvi Statuario'
+    && dropped.products[0].role === 'base'
+    && dropped.products[0].code === 'URV-0014', dropped.products[0]);
+
+  const keptOwn = generationRow({
+    id: 'log-k', createdAt: '2026-10-30T02:17:00Z',
+    metadata: { products: [
+      { role: 'base', name: 'N', code: 'URV-0014', imageUrl: 'https://stored/own.webp' },
+    ] },
+  }, known) as Record<string, any>;
+  check('22. a product that recorded its own picture keeps it, not the tile\'s',
+    keptOwn.products[0].imageUrl === 'https://stored/own.webp', keptOwn.products[0]);
+
+  const unknownCode = generationRow({
+    id: 'log-u', createdAt: '2026-10-30T02:17:00Z',
+    metadata: { products: [{ role: 'base', name: 'Gone', code: 'GONE-0001', imageUrl: '' }] },
+  }, known) as Record<string, any>;
+  check('23. a code that matches no tile leaves the product named, with no image',
+    unknownCode.products[0].name === 'Gone' && unknownCode.products[0].imageUrl === '',
+    unknownCode.products[0]);
+
+  check('24. no lookup at all still reads back cleanly',
+    (generationRow({ id: 'x', createdAt: '2026-01-01T00:00:00Z',
+      metadata: { products: [{ role: 'base', code: 'URV-0014' }] } }) as any)
+      .products[0].imageUrl === '');
+
   let failures = 0;
   for (const [label, ok, detail] of results) {
     if (ok) console.log(`  PASS  ${label}`);

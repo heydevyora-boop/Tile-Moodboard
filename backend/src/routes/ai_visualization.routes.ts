@@ -467,13 +467,32 @@ export function generationProducts(
   });
 }
 
-/** One stored row as the history page reads it. */
-export function generationRow(row: {
-  id: string;
-  createdAt: Date | string;
-  metadata?: unknown;
-  user?: { name?: string | null } | null;
-}): Record<string, unknown> {
+/** A tile the history resolved from a stored product code. */
+export type KnownTile = { imageUrl?: string | null };
+
+/**
+ * One stored row as the history page reads it.
+ *
+ * `tilesByCode` fills in a picture the log does not hold. A product's
+ * image is dropped at write time when it is an inline data: URL or an
+ * absurdly long one -- four of those would be megabytes of history per
+ * generation -- so the row keeps the product CODE and no picture, and
+ * the card showed a grey placeholder beside a name.
+ *
+ * The code names a real catalog product, so the image is read back from
+ * the Tile row at display time instead. That also keeps it CURRENT: a
+ * re-extracted product shows its new picture rather than the one it had
+ * on the day the board was generated.
+ */
+export function generationRow(
+  row: {
+    id: string;
+    createdAt: Date | string;
+    metadata?: unknown;
+    user?: { name?: string | null } | null;
+  },
+  tilesByCode: ReadonlyMap<string, KnownTile> = new Map(),
+): Record<string, unknown> {
   const meta = (row.metadata ?? {}) as Record<string, unknown>;
   const products = Array.isArray(meta.products) ? meta.products : [];
   return {
@@ -488,14 +507,18 @@ export function generationRow(row: {
     combinationName: String(meta.combinationName ?? ''),
     products: products
       .filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === 'object')
-      .map((entry) => ({
-        role: String(entry.role ?? ''),
-        name: String(entry.name ?? ''),
-        code: String(entry.code ?? ''),
-        size: String(entry.size ?? ''),
-        finish: String(entry.finish ?? ''),
-        imageUrl: String(entry.imageUrl ?? ''),
-      })),
+      .map((entry) => {
+        const code = String(entry.code ?? '');
+        const stored = String(entry.imageUrl ?? '');
+        return {
+          role: String(entry.role ?? ''),
+          name: String(entry.name ?? ''),
+          code,
+          size: String(entry.size ?? ''),
+          finish: String(entry.finish ?? ''),
+          imageUrl: stored || String(tilesByCode.get(code)?.imageUrl ?? ''),
+        };
+      }),
   };
 }
 
@@ -571,12 +594,42 @@ router.get(
 
     const page = rows.slice(0, limit);
 
+    // THE PICTURES THE LOG DOES NOT HOLD, READ BACK ONCE.
+    //
+    // A product whose image was an inline data: URL was recorded
+    // without one, so its card showed a name and a grey square -- and a
+    // history nobody can recognise a product in is not much of a
+    // history. One query turns every such code on this page into its
+    // tile, and products that recorded their own picture need nothing.
+    const codes = [...new Set(
+      page.flatMap((row) => {
+        const meta = (row.metadata ?? {}) as Record<string, unknown>;
+        const products = Array.isArray(meta.products) ? meta.products : [];
+        return products
+          .filter((e): e is Record<string, unknown> => Boolean(e) && typeof e === 'object')
+          .filter((e) => !String(e.imageUrl ?? '').trim())
+          .map((e) => String(e.code ?? '').trim())
+          .filter(Boolean);
+      }),
+    )];
+
+    const tilesByCode = new Map<string, KnownTile>();
+    if (codes.length) {
+      const tiles = await prisma.tile.findMany({
+        where: { productCode: { in: codes } },
+        select: { productCode: true, imageUrl: true },
+      });
+      tiles.forEach((tile) => {
+        if (tile.productCode) tilesByCode.set(tile.productCode, { imageUrl: tile.imageUrl });
+      });
+    }
+
     return res.status(200).json({
       success: true,
       data: {
         total,
         nextCursor: rows.length > limit ? page[page.length - 1].id : null,
-        generations: page.map(generationRow),
+        generations: page.map((row) => generationRow(row, tilesByCode)),
       },
     });
   },
