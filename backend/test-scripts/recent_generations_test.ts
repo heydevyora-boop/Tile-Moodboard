@@ -239,6 +239,54 @@ function main(): number {
       metadata: { products: [{ role: 'base', code: 'URV-0014' }] } }) as any)
       .products[0].imageUrl === '');
 
+  // ----------------------------------------------------------------
+  // THE DRIVE LINK A BROWSER CAN ACTUALLY RENDER.
+  //
+  // Tile.imageUrl carries Drive's webViewLink -- an HTML viewer PAGE.
+  // An <img> pointed at it is handed a document instead of pixels and
+  // shows a broken-image icon, which is what this card showed beside
+  // every product name. The mood board's own tile lookup has always
+  // normalised these; this did not.
+  // ----------------------------------------------------------------
+  const drive = generationRow({
+    id: 'log-dr', createdAt: '2026-10-31T00:00:00Z',
+    metadata: { products: [
+      { role: 'base', name: 'A', code: 'C1',
+        imageUrl: 'https://drive.google.com/file/d/1AbCdEf/view?usp=sharing' },
+      { role: 'highlight', name: 'B', code: 'C2',
+        imageUrl: 'https://drive.google.com/uc?export=download&id=9XyZ' },
+      { role: 'accent', name: 'C', code: 'C3',
+        imageUrl: '/uploads/extracted-images/x.webp' },
+    ] },
+  }) as Record<string, any>;
+
+  check('25. a Drive viewer PAGE becomes a renderable thumbnail',
+    drive.products[0].imageUrl === 'https://drive.google.com/thumbnail?id=1AbCdEf&sz=w1000',
+    drive.products[0].imageUrl);
+  check('26. ...and so does the download form, which also serves HTML',
+    drive.products[1].imageUrl === 'https://drive.google.com/thumbnail?id=9XyZ&sz=w1000',
+    drive.products[1].imageUrl);
+  check('27. a path that is not Drive is left exactly as it is',
+    drive.products[2].imageUrl === '/uploads/extracted-images/x.webp',
+    drive.products[2].imageUrl);
+
+  // A picture recovered from the tile row needs the same treatment --
+  // it comes from the same column, in the same shape.
+  const recovered = generationRow({
+    id: 'log-rv', createdAt: '2026-10-31T00:00:00Z',
+    metadata: { products: [{ role: 'base', name: 'A', code: 'URV-0014', imageUrl: '' }] },
+  }, new Map([['URV-0014', { imageUrl: 'https://drive.google.com/file/d/ZZZ/view' }]])) as Record<string, any>;
+  check('28. a picture recovered from the tile row is normalised too',
+    recovered.products[0].imageUrl === 'https://drive.google.com/thumbnail?id=ZZZ&sz=w1000',
+    recovered.products[0].imageUrl);
+
+  const nothing = generationRow({
+    id: 'log-n', createdAt: '2026-10-31T00:00:00Z',
+    metadata: { products: [{ role: 'base', name: 'A', code: 'X', imageUrl: '' }] },
+  }) as Record<string, any>;
+  check('29. no picture anywhere still reads back as an empty string',
+    nothing.products[0].imageUrl === '', nothing.products[0].imageUrl);
+
   let failures = 0;
   for (const [label, ok, detail] of results) {
     if (ok) console.log(`  PASS  ${label}`);
