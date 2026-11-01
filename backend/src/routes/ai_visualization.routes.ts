@@ -6,6 +6,7 @@ import {
 
 import { prisma } from '@db/connection';
 import { logActivity } from '@services/activityLog.service';
+import { normalizeDriveImageUrl } from '@services/referenceImages.service';
 
 import { authenticate, requirePermission } from '@middlewares/auth';
 
@@ -510,13 +511,26 @@ export function generationRow(
       .map((entry) => {
         const code = String(entry.code ?? '');
         const stored = String(entry.imageUrl ?? '');
+        // THE DRIVE LINK A BROWSER CAN ACTUALLY RENDER.
+        //
+        // Tile.imageUrl carries Drive's webViewLink -- an HTML viewer
+        // PAGE. An <img> pointed at it is handed a document instead of
+        // pixels and shows a broken-image icon, which is exactly what
+        // this card was showing beside every product name.
+        //
+        // The mood board's own tile lookup has always normalised these
+        // (moodBoard.service.ts, getTilesByIds). This did not. Done at
+        // READ time so the history already written is fixed too, not
+        // only what is generated from now on.
         return {
           role: String(entry.role ?? ''),
           name: String(entry.name ?? ''),
           code,
           size: String(entry.size ?? ''),
           finish: String(entry.finish ?? ''),
-          imageUrl: stored || String(tilesByCode.get(code)?.imageUrl ?? ''),
+          imageUrl: String(
+            normalizeDriveImageUrl(stored || String(tilesByCode.get(code)?.imageUrl ?? '')) ?? '',
+          ),
         };
       }),
   };
