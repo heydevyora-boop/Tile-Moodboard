@@ -288,8 +288,19 @@
       const name = product.name || product.code || 'Unnamed tile';
       const meta = [product.role, product.code, product.size, product.finish]
         .filter(Boolean).join(' · ');
-      const thumb = product.imageUrl
-        ? '<img src="' + escapeHtml(product.imageUrl) + '" alt="" loading="lazy">'
+      // THROUGH THE RESOLVER, like every other tile picture on the site.
+      //
+      // A Tile's imageUrl is not always a browser-ready address: it can
+      // be a path relative to the backend, which resolves against THIS
+      // page's origin if it is dropped into src unchanged, and 404s.
+      // The mood board has always sent tile images through
+      // resolveBackendImageUrl; this one did not, and showed a grey
+      // square where the product should be.
+      const src = CasaApi.resolveBackendImageUrl
+        ? CasaApi.resolveBackendImageUrl(product.imageUrl)
+        : product.imageUrl;
+      const thumb = src
+        ? '<img src="' + escapeHtml(src) + '" alt="" loading="lazy">'
         : '<span class="gen-product-blank"></span>';
       return '<div class="gen-product">' + thumb +
         '<span class="gen-product-text">' +

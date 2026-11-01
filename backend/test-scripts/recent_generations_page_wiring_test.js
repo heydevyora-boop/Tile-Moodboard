@@ -80,6 +80,10 @@ function pagedStub(total, pageSize) {
       requireAuth: async () => ({ name: 'Priya', role: 'STAFF', email: 'p@x.com' }),
       initials: (n) => String(n || '?').split(/\s+/).map((p) => p[0]).join('').toUpperCase(),
       auth: { logout: async () => {} },
+      // The real one prefixes a backend-relative path with the API host.
+      resolveBackendImageUrl: (v) => (
+        !v ? '' : /^(https?:|data:|blob:)/i.test(v) ? v : 'https://api.example' + v
+      ),
       ai: {
         recentGenerations: async () => { throw new Error('the page must use the paged call'); },
         recentGenerationsPage: async (options) => {
@@ -256,6 +260,38 @@ async function main() {
   check('28. the page does not call every room a bathroom',
     !doc.querySelector('.step-sub').textContent.toLowerCase().includes('bathroom'),
     doc.querySelector('.step-sub').textContent);
+
+  // A backend-relative image must go through the resolver, or it lands
+  // on THIS page's origin and 404s. Every other tile picture on the
+  // site has always been resolved; this page was not.
+  const relative = pagedStub(1, 60);
+  relative.all[0].products = [{
+    role: 'base', name: 'Relative Tile', code: 'REL-1',
+    size: '', finish: '', imageUrl: '/uploads/extracted-images/REL-1.webp',
+  }];
+  doc = loadPage(relative.stub).window.document;
+  await settle();
+  check('29. a backend-relative product image is resolved against the API host',
+    doc.querySelector('.gen-product img').getAttribute('src')
+      === 'https://api.example/uploads/extracted-images/REL-1.webp',
+    doc.querySelector('.gen-product img')
+      && doc.querySelector('.gen-product img').getAttribute('src'));
+
+  const absolute = pagedStub(1, 60);
+  doc = loadPage(absolute.stub).window.document;
+  await settle();
+  check('30. an absolute URL is passed through unchanged',
+    doc.querySelector('.gen-product img').getAttribute('src')
+      === 'https://drive.example/URV-0014.webp');
+
+  const imageless = pagedStub(1, 60);
+  imageless.all[0].products = [{ role: 'base', name: 'No Picture', code: 'X', size: '', finish: '', imageUrl: '' }];
+  doc = loadPage(imageless.stub).window.document;
+  await settle();
+  check('31. a product with no image still shows its name, with a placeholder',
+    doc.querySelector('.gen-product-name').textContent === 'No Picture'
+    && !!doc.querySelector('.gen-product-blank')
+    && !doc.querySelector('.gen-product img'));
 
   console.log(`\n${pass}/${pass + fail} checks passed`);
   process.exit(fail ? 1 : 0);
