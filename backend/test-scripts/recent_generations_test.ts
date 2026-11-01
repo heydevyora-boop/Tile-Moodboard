@@ -159,8 +159,9 @@ function main(): number {
   check('14. a row recorded before products existed still reads back',
     old.imageUrl === 'https://drive.example/old.webp' && old.productName === 'Midnight Contrast',
     old);
-  check('15. ...with an empty product list rather than a missing field',
-    Array.isArray(old.products) && old.products.length === 0, old.products);
+  check('15. ...and its base product code becomes a product entry',
+    old.products.length === 1 && old.products[0].role === 'base'
+    && old.products[0].code === 'Midnight Contrast', old.products);
 
   const noMeta = generationRow({ id: 'x', createdAt: '2026-01-01T00:00:00Z' }) as Record<string, any>;
   check('16. a row with no metadata at all does not throw',
@@ -286,6 +287,61 @@ function main(): number {
   }) as Record<string, any>;
   check('29. no picture anywhere still reads back as an empty string',
     nothing.products[0].imageUrl === '', nothing.products[0].imageUrl);
+
+  // ----------------------------------------------------------------
+  // A GENERATION FROM BEFORE THE COMBINATION WAS RECORDED.
+  //
+  // Those rows kept one product CODE and nothing else, so the card
+  // printed the bare code in a sentence -- no product, no picture, and
+  // no readable name. The code names a real catalog product.
+  // ----------------------------------------------------------------
+  const CODE = 'DME-ITACA-1200X2400-COLLECTION-1-0023';
+  const catalog = new Map([[CODE, {
+    imageUrl: 'https://drive.google.com/file/d/ABC/view',
+    name: 'Travertine Vain Lait', size: '1200x2400mm', finish: 'Matt',
+  }]]);
+
+  const legacy = generationRow({
+    id: 'log-l', createdAt: '2026-10-30T02:33:00Z',
+    metadata: { imageUrl: 'https://x/s.webp', productName: CODE, room: 'Living Room' },
+  }, catalog) as Record<string, any>;
+
+  check('30. an old row becomes a real product, not a sentence',
+    legacy.products.length === 1 && legacy.products[0].role === 'base',
+    legacy.products);
+  check('31. ...with the tile\'s readable name, not just its code',
+    legacy.products[0].name === 'Travertine Vain Lait', legacy.products[0].name);
+  check('32. ...its size and finish',
+    legacy.products[0].size === '1200x2400mm' && legacy.products[0].finish === 'Matt',
+    legacy.products[0]);
+  check('33. ...and a picture a browser can actually render',
+    legacy.products[0].imageUrl === 'https://drive.google.com/thumbnail?id=ABC&sz=w1000',
+    legacy.products[0].imageUrl);
+  check('34. ...flagged partial, so one tile is not shown as the whole board',
+    legacy.productsPartial === true, legacy.productsPartial);
+
+  const full = generationRow({
+    id: 'log-f', createdAt: '2026-10-31T00:00:00Z',
+    metadata: { productName: CODE, products: [
+      { role: 'base', name: 'A', code: 'C1', imageUrl: 'https://x/a.webp' },
+      { role: 'highlight', name: 'B', code: 'C2', imageUrl: 'https://x/b.webp' },
+    ] },
+  }, catalog) as Record<string, any>;
+  check('35. a row that recorded its combination is not flagged partial',
+    full.productsPartial === false && full.products.length === 2, full.productsPartial);
+
+  const neither = generationRow({
+    id: 'log-x', createdAt: '2026-10-30T02:33:00Z', metadata: { imageUrl: 'https://x/s.webp' },
+  }, catalog) as Record<string, any>;
+  check('36. a row with no product at all stays empty, and is not flagged',
+    neither.products.length === 0 && neither.productsPartial === false, neither.products);
+
+  const unknown = generationRow({
+    id: 'log-g', createdAt: '2026-10-30T02:33:00Z', metadata: { productName: 'GONE-1' },
+  }, catalog) as Record<string, any>;
+  check('37. a code no tile matches still shows as a product, by its code',
+    unknown.products.length === 1 && unknown.products[0].code === 'GONE-1'
+    && unknown.products[0].imageUrl === '', unknown.products[0]);
 
   let failures = 0;
   for (const [label, ok, detail] of results) {
