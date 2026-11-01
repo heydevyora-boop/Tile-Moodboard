@@ -469,7 +469,12 @@ export function generationProducts(
 }
 
 /** A tile the history resolved from a stored product code. */
-export type KnownTile = { imageUrl?: string | null };
+export type KnownTile = {
+  imageUrl?: string | null;
+  name?: string | null;
+  size?: string | null;
+  finish?: string | null;
+};
 
 /**
  * One stored row as the history page reads it.
@@ -495,7 +500,28 @@ export function generationRow(
   tilesByCode: ReadonlyMap<string, KnownTile> = new Map(),
 ): Record<string, unknown> {
   const meta = (row.metadata ?? {}) as Record<string, unknown>;
-  const products = Array.isArray(meta.products) ? meta.products : [];
+  const stored = Array.isArray(meta.products) ? meta.products : [];
+
+  // A GENERATION FROM BEFORE THE COMBINATION WAS RECORDED.
+  //
+  // Those rows kept one product CODE -- the base -- and nothing else,
+  // so the card printed the bare code in a sentence and showed no
+  // product and no picture at all.
+  //
+  // The code names a real catalog product, so it is turned into an
+  // ordinary product entry here and shown with its own image and name
+  // like any other. What CANNOT be recovered is the rest of the
+  // combination: this flow never wrote a mood board to the database
+  // (moodBoards.generate is stateless by design), so there is no
+  // MoodBoardTile row anywhere holding the highlight and the accent.
+  // They are gone, and `productsPartial` lets the card say so rather
+  // than presenting one tile as the whole board.
+  const legacyCode = String(meta.productName ?? '').trim();
+  const partial = stored.length === 0 && Boolean(legacyCode);
+  const products = partial
+    ? [{ role: 'base', name: '', code: legacyCode, size: '', finish: '', imageUrl: '' }]
+    : stored;
+
   return {
     id: row.id,
     createdAt: row.createdAt,
@@ -506,11 +532,14 @@ export function generationRow(
     room: String(meta.room ?? ''),
     style: String(meta.style ?? ''),
     combinationName: String(meta.combinationName ?? ''),
+    // True when only the base survives, so the card does not present one
+    // tile as if it were the whole combination.
+    productsPartial: partial,
     products: products
       .filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === 'object')
       .map((entry) => {
         const code = String(entry.code ?? '');
-        const stored = String(entry.imageUrl ?? '');
+        const storedUrl = String(entry.imageUrl ?? '');
         // THE DRIVE LINK A BROWSER CAN ACTUALLY RENDER.
         //
         // Tile.imageUrl carries Drive's webViewLink -- an HTML viewer
@@ -522,14 +551,15 @@ export function generationRow(
         // (moodBoard.service.ts, getTilesByIds). This did not. Done at
         // READ time so the history already written is fixed too, not
         // only what is generated from now on.
+        const tile = tilesByCode.get(code);
         return {
           role: String(entry.role ?? ''),
-          name: String(entry.name ?? ''),
+          name: String(entry.name ?? '') || String(tile?.name ?? ''),
           code,
-          size: String(entry.size ?? ''),
-          finish: String(entry.finish ?? ''),
+          size: String(entry.size ?? '') || String(tile?.size ?? ''),
+          finish: String(entry.finish ?? '') || String(tile?.finish ?? ''),
           imageUrl: String(
-            normalizeDriveImageUrl(stored || String(tilesByCode.get(code)?.imageUrl ?? '')) ?? '',
+            normalizeDriveImageUrl(storedUrl || String(tile?.imageUrl ?? '')) ?? '',
           ),
         };
       }),
@@ -619,6 +649,10 @@ router.get(
       page.flatMap((row) => {
         const meta = (row.metadata ?? {}) as Record<string, unknown>;
         const products = Array.isArray(meta.products) ? meta.products : [];
+        if (!products.length) {
+          // Pre-products rows keep the base code under productName.
+          return [String(meta.productName ?? '').trim()].filter(Boolean);
+        }
         return products
           .filter((e): e is Record<string, unknown> => Boolean(e) && typeof e === 'object')
           .filter((e) => !String(e.imageUrl ?? '').trim())
@@ -631,10 +665,17 @@ router.get(
     if (codes.length) {
       const tiles = await prisma.tile.findMany({
         where: { productCode: { in: codes } },
-        select: { productCode: true, imageUrl: true },
+        select: { productCode: true, imageUrl: true, name: true, size: true, finish: true },
       });
       tiles.forEach((tile) => {
-        if (tile.productCode) tilesByCode.set(tile.productCode, { imageUrl: tile.imageUrl });
+        if (tile.productCode) {
+          tilesByCode.set(tile.productCode, {
+            imageUrl: tile.imageUrl,
+            name: tile.name,
+            size: tile.size,
+            finish: tile.finish,
+          });
+        }
       });
     }
 

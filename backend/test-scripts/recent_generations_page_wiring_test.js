@@ -161,10 +161,15 @@ async function main() {
   await settle();
   check('10. a generation recorded before products existed is still shown',
     doc.querySelectorAll('.gen-card').length === 1);
-  check('11. ...and says the tiles were not recorded, naming the base it has',
+  // A row the server sent with NO products at all. The server turns a
+  // base product code into a product entry before it gets here, so this
+  // is only reachable when nothing was recorded.
+  check('11. ...and says plainly that no tile was recorded',
     (doc.querySelector('.gen-products-none') || {}).textContent
-      === 'Only the base tile was recorded for this one: Urvi Statuario.',
+      === 'The tiles were not recorded for this generation.',
     (doc.querySelector('.gen-products-none') || {}).textContent);
+  check('11a. ...never printing a bare product code in a sentence',
+    !doc.body.textContent.includes('Only the base tile was recorded'));
 
   const bare = pagedStub(1, 60);
   bare.all[0].products = [];
@@ -292,6 +297,33 @@ async function main() {
     doc.querySelector('.gen-product-name').textContent === 'No Picture'
     && !!doc.querySelector('.gen-product-blank')
     && !doc.querySelector('.gen-product img'));
+
+  // An older generation: its base tile shown like any other product,
+  // and a line saying what the record does not hold.
+  const older = pagedStub(1, 60);
+  older.all[0].productsPartial = true;
+  older.all[0].products = [product('base', 'Travertine Vain Lait', 'DME-ITACA-1', true)];
+  doc = loadPage(older.stub).window.document;
+  await settle();
+  check('32. an old generation shows its base tile as a real product',
+    doc.querySelectorAll('.gen-product').length === 1
+    && doc.querySelector('.gen-product-name').textContent === 'Travertine Vain Lait');
+  check('33. ...with its picture, not a bare code in a sentence',
+    !!doc.querySelector('.gen-product img')
+    && !doc.body.textContent.includes('Only the base tile was recorded'));
+  check('34. ...and says the highlight and accent are not in the record',
+    (doc.querySelector('.gen-products-none') || {}).textContent
+      === 'Generated before the full combination was recorded. The highlight and '
+        + 'accent are not in the record.',
+    (doc.querySelector('.gen-products-none') || {}).textContent);
+
+  const whole = pagedStub(1, 60);
+  whole.all[0].productsPartial = false;
+  doc = loadPage(whole.stub).window.document;
+  await settle();
+  check('35. a fully recorded board carries no partial note',
+    doc.querySelectorAll('.gen-product').length === 2
+    && !doc.querySelector('.gen-products-none'));
 
   console.log(`\n${pass}/${pass + fail} checks passed`);
   process.exit(fail ? 1 : 0);
