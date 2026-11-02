@@ -44,6 +44,45 @@ function loadPage(casaApiStub) {
   return dom;
 }
 
+/**
+ * The same page, but with an IntersectionObserver it can actually use.
+ *
+ * jsdom has none, and the page falls back to fetching every page up
+ * front when that is so -- deliberately, because a browser that cannot
+ * watch the scroll must not be left showing a partial history. These
+ * tests are for the path a real browser takes: the observer records what
+ * it is asked to watch, and the test decides when something comes into
+ * view.
+ */
+function loadPageWatching(casaApiStub) {
+  let html = fs.readFileSync(path.join(frontendDir, 'recent-generations.html'), 'utf8');
+  html = html.replace(/<script src="assets\/api-client\.js"><\/script>\s*/, '');
+
+  const dom = new JSDOM(html, { runScripts: 'outside-only', url: 'http://localhost/recent-generations.html' });
+  const watched = [];
+  dom.window.requestAnimationFrame = (cb) => cb();
+  dom.window.IntersectionObserver = class {
+    constructor(cb) { this.cb = cb; }
+    observe(el) { watched.push({ el, obs: this }); }
+    unobserve() {}
+    disconnect() { this.dead = true; }
+  };
+  dom.window.CasaApi = casaApiStub;
+  dom.window.alert = () => { throw new Error('alert() should never be called on this page'); };
+
+  const start = html.lastIndexOf('<script>');
+  const end = html.indexOf('</script>', start);
+  dom.window.eval(html.slice(start + '<script>'.length, end));
+
+  /** Tells the page that these elements have come into view. */
+  const reveal = (predicate) => {
+    watched
+      .filter(({ el }) => predicate(el))
+      .forEach(({ el, obs }) => obs.cb([{ isIntersecting: true, target: el }], obs));
+  };
+  return { dom, watched, reveal };
+}
+
 function product(role, name, code, withImage) {
   return {
     role, name, code, size: '600x1200mm', finish: 'Matt',
@@ -324,6 +363,113 @@ async function main() {
   check('35. a fully recorded board carries no partial note',
     doc.querySelectorAll('.gen-product').length === 2
     && !doc.querySelector('.gen-products-none'));
+
+  // ----------------------------------------------------------------
+  // THE SCENE ITSELF IS FETCHED WHEN IT IS LOOKED AT
+  //
+  // A generated scene is kept as an inline data: URL of a megabyte or
+  // two. The card used to be written with those bytes inside its own
+  // HTML, for every generation at once, and the page sat blank until all
+  // of it had arrived. The row carries a path now, and the picture comes
+  // down when the card is near the screen.
+  // ----------------------------------------------------------------
+  const inlineStub = pagedStub(3, 24);
+  inlineStub.all.forEach((gen, i) => {
+    gen.imageUrl = '';
+    gen.imagePath = '/ai/visualizations/recent/gen-' + (i + 1) + '/image';
+    gen.hasImage = true;
+    gen.imageSource = 'inline';
+  });
+  const asked = [];
+  inlineStub.stub.ai.recentGenerationImage = async (p) => {
+    asked.push(p);
+    return 'blob:scene-' + p.split('/')[4];
+  };
+
+  let watching = loadPageWatching(inlineStub.stub);
+  doc = watching.dom.window.document;
+  await settle();
+  check('36. a card whose scene is stored inline draws no picture at first',
+    doc.querySelectorAll('.gen-shot').length === 3
+    && doc.querySelectorAll('.gen-shot img').length === 0
+    && doc.querySelectorAll('.gen-shot-wait').length === 3,
+    doc.querySelectorAll('.gen-shot img').length);
+  check('37. ...and nothing has been fetched for it yet', asked.length === 0, asked);
+
+  watching.reveal((el) => el.classList && el.classList.contains('gen-shot'));
+  await settle();
+  check('38. the scene arrives once the card comes into view',
+    asked.length === 3 && doc.querySelectorAll('.gen-shot img').length === 3, asked);
+  check('39. ...and it is the picture the row pointed at',
+    doc.querySelector('.gen-shot img').getAttribute('src') === 'blob:scene-gen-1',
+    doc.querySelector('.gen-shot img').getAttribute('src'));
+  check('40. ...and the waiting frame is gone',
+    doc.querySelectorAll('.gen-shot-wait').length === 0);
+
+  // The lightbox shows whatever the frame is holding, which is the only
+  // thing it can honestly show now that no data: URL is on the card.
+  doc.querySelector('.gen-shot').dispatchEvent(
+    new watching.dom.window.MouseEvent('click', { bubbles: true }),
+  );
+  check('41. clicking a loaded scene opens it full size',
+    (doc.querySelector('.gen-lightbox img') || {}).getAttribute
+      && doc.querySelector('.gen-lightbox img').getAttribute('src') === 'blob:scene-gen-1',
+    (doc.querySelector('.gen-lightbox img') || {}).src);
+
+  // A scene the fetch cannot return says so in its own frame, and does
+  // not take the page down with it.
+  const brokenStub = pagedStub(1, 24);
+  brokenStub.all[0].imageUrl = '';
+  brokenStub.all[0].imagePath = '/ai/visualizations/recent/gen-1/image';
+  brokenStub.stub.ai.recentGenerationImage = async () => { throw new Error('gone'); };
+  watching = loadPageWatching(brokenStub.stub);
+  doc = watching.dom.window.document;
+  await settle();
+  watching.reveal((el) => el.classList && el.classList.contains('gen-shot'));
+  await settle();
+  check('42. a scene that cannot be loaded says so in its frame',
+    /COULD NOT LOAD THIS SCENE/.test(doc.querySelector('.gen-shot').textContent)
+    && doc.querySelectorAll('.gen-card').length === 1,
+    doc.querySelector('.gen-shot').textContent);
+
+  // ----------------------------------------------------------------
+  // THE REST OF THE HISTORY IS ASKED FOR WHEN IT IS WANTED
+  // ----------------------------------------------------------------
+  const deep = pagedStub(90, 24);
+  watching = loadPageWatching(deep.stub);
+  doc = watching.dom.window.document;
+  await settle();
+  check('43. only the newest page is fetched on arrival',
+    deep.calls.length === 1 && doc.querySelectorAll('.gen-card').length === 24,
+    { calls: deep.calls.length, cards: doc.querySelectorAll('.gen-card').length });
+  check('44. ...and the count says how many of the total are on screen',
+    doc.getElementById('genCount').textContent === 'SHOWING 24 OF 90',
+    doc.getElementById('genCount').textContent);
+
+  watching.reveal((el) => el.id === 'genMore');
+  await settle();
+  check('45. the next page arrives when the bottom comes near',
+    deep.calls.length === 2 && doc.querySelectorAll('.gen-card').length === 48,
+    { calls: deep.calls.length, cards: doc.querySelectorAll('.gen-card').length });
+
+  watching.reveal((el) => el.id === 'genMore');
+  await settle();
+  watching.reveal((el) => el.id === 'genMore');
+  await settle();
+  check('46. ...and keeps going to the end of the history',
+    doc.querySelectorAll('.gen-card').length === 90
+    && doc.getElementById('genCount').textContent === '90 GENERATIONS',
+    { cards: doc.querySelectorAll('.gen-card').length, count: doc.getElementById('genCount').textContent });
+
+  // A Drive link is a URL and tiny, so it stays on the card -- but the
+  // browser is told it may wait until the card is on screen.
+  const driveStub = pagedStub(1, 24);
+  doc = loadPage(driveStub.stub).window.document;
+  await settle();
+  check('47. a scene stored as a plain URL loads from the card, lazily',
+    doc.querySelector('.gen-shot img').getAttribute('src') === 'https://drive.example/scene-1.webp'
+    && doc.querySelector('.gen-shot img').getAttribute('loading') === 'lazy',
+    doc.querySelector('.gen-shot img').getAttribute('loading'));
 
   console.log(`\n${pass}/${pass + fail} checks passed`);
   process.exit(fail ? 1 : 0);

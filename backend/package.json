@@ -25,6 +25,7 @@
     "test:visualization-materials": "ts-node -r tsconfig-paths/register test-scripts/visualization_materials_test.ts",
     "test:floral-bedroom": "cd ../catalog_processor && GEMINI_API_KEY=${GEMINI_API_KEY:-test-key-not-used} python3.13 app/test_floral_bedroom_scenarios.py",
     "test:recent-generations": "ts-node -r tsconfig-paths/register test-scripts/recent_generations_test.ts",
+    "test:scene-progress": "node test-scripts/scene_progress_test.js",
     "test:recent-generations-page": "node test-scripts/recent_generations_page_wiring_test.js",
     "test:gemini": "ts-node -r tsconfig-paths/register test-scripts/gemini_client_test.ts",
     "test:prompt-builder": "ts-node -r tsconfig-paths/register test-scripts/prompt_builder_test.ts",
