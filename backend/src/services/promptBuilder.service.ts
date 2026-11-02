@@ -385,9 +385,60 @@ function isDarkTone(text: string): boolean {
 }
 
 function isBlackAndWhite(style: string | undefined): boolean {
-  if (!style) return false;
-  const key = style.toLowerCase().replace(/[_-]/g, ' ').replace(/&/g, ' and ').split(/\s+/).join(' ');
-  return key === 'black and white' || key === 'black white';
+  return themeKey(style) === 'black and white' || themeKey(style) === 'black white';
+}
+
+function themeKey(style: string | undefined): string {
+  if (!style) return '';
+  return style.toLowerCase().replace(/[_-]/g, ' ').replace(/&/g, ' and ').split(/\s+/).join(' ');
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// A MOTIF THE THEME ITSELF RULES OUT
+//
+// A Roman Touch bathroom came back with a brown-and-green leaf border
+// running under the ceiling and across the shower wall. The border was
+// a REAL selected product and the generator drew it faithfully, exactly
+// as it is told to ("KEEP THE REAL PRODUCT ... never recolour, repattern
+// or substitute"). Nothing was wrong downstream. It was chosen.
+//
+// And it was chosen because every stage that chooses is blind to what a
+// pattern depicts. Ranking scores finish, colour family and type;
+// `Tile` records no motif, no pattern and no description, so a product's
+// NAME is the only place a motif is ever written down. A warm terracotta
+// leaf decor reads as earth/warm-neutral -- the best possible colour
+// match for this theme -- so the tile that clashes is the one the
+// ranking likes most.
+//
+// A combination must carry a decorated tile (see the schema rules
+// above), so the model had to pick one from what it was shown.
+//
+// This WARNS. It does not reject, and it does not drop the product: the
+// catalog owner's own rule is to report a conflict rather than silently
+// replace a selected product, and a board quoted from real stock is more
+// useful than no board. Whether the catalog held a decorated tile
+// WITHOUT the motif decides which of the two things it says, because
+// those are different problems: one is a choice, the other is the stock.
+// ─────────────────────────────────────────────────────────────────────────
+
+const FORBIDDEN_MOTIFS: Record<string, { words: string[]; motif: string; instead: string }> = {
+  'roman touch': {
+    words: [
+      'tropical', 'palm', 'leaf', 'leaves', 'botanic', 'floral', 'flower',
+      'fern', 'monstera', 'banana', 'jungle', 'foliage', 'bloom',
+    ],
+    motif: 'a tropical or botanical leaf motif',
+    instead: 'travertine, limestone, stone or a plain classical trim',
+  },
+};
+
+function forbiddenMotif(style: string | undefined) {
+  return FORBIDDEN_MOTIFS[themeKey(style)];
+}
+
+function readsAsMotif(text: string, words: string[]): boolean {
+  const lower = text.toLowerCase();
+  return words.some((w) => lower.includes(w));
 }
 
 export function validateCombinations(
@@ -426,6 +477,17 @@ export function validateCombinations(
     ? [...toneByTileId.values()].some(isLightTone) : false;
   const poolHasDark = monochrome && toneByTileId
     ? [...toneByTileId.values()].some(isDarkTone) : false;
+
+  // Was there a decorated tile in the catalog WITHOUT the motif this
+  // theme rules out? If there was, the model had a choice and did not
+  // take it. If there was not, the stock is the problem and saying "pick
+  // something else" would be asking for a product that does not exist.
+  const banned = forbiddenMotif(style);
+  const poolHasCleanDecor = banned && typeByTileId && toneByTileId
+    ? [...typeByTileId.entries()].some(([id, type]) => (
+      DECORATED_TYPES.has(type) && !readsAsMotif(toneByTileId.get(id) ?? '', banned.words)
+    ))
+    : false;
 
   if (!Array.isArray(raw)) {
     throw AppError.internal('Gemini response was not a JSON array as instructed');
@@ -509,6 +571,32 @@ export function validateCombinations(
         warnings.push(
           `Combination ${index} ("${obj.board_name}"): every tile in it is light, and the catalog `
           + 'offered a dark one. Black & White needs a black or charcoal TILE to carry the contrast.',
+        );
+      }
+    }
+
+    // A MOTIF THIS THEME RULES OUT, NAMED RATHER THAN REMOVED.
+    //
+    // The product stays in the board. What it gets is a line saying
+    // which tile carries the motif, so the studio can answer a client
+    // who asks about it -- or swap it deliberately, which is their
+    // decision and not this function's.
+    if (banned && toneByTileId && validTiles.length > 0) {
+      const offenders = validTiles.filter(
+        (t) => readsAsMotif(toneByTileId.get(t.tileId) ?? '', banned.words),
+      );
+      if (offenders.length > 0) {
+        const named = offenders
+          .map((t) => `"${(toneByTileId.get(t.tileId) ?? t.tileId).trim()}" as the ${t.role}`)
+          .join(', ');
+        warnings.push(
+          `Combination ${index} ("${obj.board_name}"): this theme rules out ${banned.motif}, `
+          + `and the board carries ${named}. `
+          + (poolHasCleanDecor
+            ? `The catalog offered a decorated tile without it — ${banned.instead} would answer `
+              + 'the theme instead. The product is kept as selected; nothing has been substituted.'
+            : 'Every decorated tile in the catalog carries one, so there was nothing else to '
+              + 'choose. The product is kept as selected; the gap is in the stock, not the board.'),
         );
       }
     }
