@@ -25,6 +25,7 @@
 import {
   GENERATION_PRODUCT_LIMIT,
   decodeDataUrl,
+  generationVerdict,
   generationProducts,
   generationRow,
 } from '../src/routes/ai_visualization.routes';
@@ -391,6 +392,67 @@ function main(): number {
     decodeDataUrl('data:text/html;base64,' + Buffer.from('<b>no</b>').toString('base64')) === null);
   check('47. ...and an empty payload is not served as an image',
     decodeDataUrl('data:image/png;base64,') === null);
+
+  // ------------------------------------------------------------------
+  // THE VERDICT IS KEPT WITH THE GENERATION
+  //
+  // Every scene is judged against its theme as it is generated, and the
+  // mood board shows the finding once. Nothing kept it, so a board whose
+  // floor was reported as missing its heritage pattern looked, a week
+  // later, exactly like one that passed.
+  // ------------------------------------------------------------------
+  const verdict = generationVerdict({
+    status: 'partial',
+    theme: 'British',
+    room: 'Bathroom',
+    present: ['panelling', 'brass', 'a classic mirror'],
+    partial: ['Heritage green and/or oxblood are meaningfully represented.'],
+    missing: ['The flooring supports the heritage aesthetic.'],
+  }) as Record<string, any>;
+  check('48. the verdict is kept with the generation',
+    verdict?.status === 'partial' && verdict?.theme === 'British' && verdict?.room === 'Bathroom',
+    verdict);
+  check('49. ...with the half a person can act on',
+    verdict.missing.length === 1 && verdict.partial.length === 1, verdict);
+  check('50. ...and not the reassuring half, which is not worth a database row',
+    !('present' in verdict), Object.keys(verdict));
+
+  const flood = generationVerdict({
+    status: 'fail',
+    missing: Array.from({ length: 40 }, (_, i) => `line ${i} `.repeat(200)),
+  }) as Record<string, any>;
+  check('51. a verdict is bounded, not trusted',
+    flood.missing.length === 8 && flood.missing.every((l: string) => l.length <= 300),
+    { lines: flood.missing.length, longest: Math.max(...flood.missing.map((l: string) => l.length)) });
+
+  check('52. something that is not a verdict is not stored as one',
+    generationVerdict(null) === null
+    && generationVerdict('partial') === null
+    && generationVerdict({ theme: 'British' }) === null);
+
+  const unchecked = generationVerdict({
+    status: 'unchecked', theme: 'British', reason: 'the check could not run: no key',
+  }) as Record<string, any>;
+  check('53. an unchecked verdict keeps the reason it was not checked',
+    unchecked.status === 'unchecked' && /no key/.test(unchecked.reason), unchecked);
+
+  const judged = generationRow({
+    id: 'log-v', createdAt: '2026-11-02T12:00:00Z',
+    metadata: {
+      imageUrl: 'https://drive.example/s.webp',
+      themeCheck: { status: 'fail', theme: 'British', missing: ['The flooring.'] },
+    },
+  }) as Record<string, any>;
+  check('54. the row carries the verdict out to the page',
+    judged.themeCheck?.status === 'fail' && judged.themeCheck.missing[0] === 'The flooring.',
+    judged.themeCheck);
+
+  const unjudged = generationRow({
+    id: 'log-old', createdAt: '2026-10-30T02:33:00Z',
+    metadata: { imageUrl: 'https://drive.example/old.webp' },
+  }) as Record<string, any>;
+  check('55. a generation from before the verdict was kept carries none',
+    unjudged.themeCheck === null, unjudged.themeCheck);
 
   let failures = 0;
   for (const [label, ok, detail] of results) {

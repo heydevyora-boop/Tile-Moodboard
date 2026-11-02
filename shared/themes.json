@@ -35,7 +35,8 @@
       "slug": "british",
       "identity": "An authentic British Heritage / Victorian English country-house bathroom. The ARCHITECTURE carries it, not the accessories: deep forest and heritage green wall treatments, oxblood and burgundy accents, warm ivory and cream wall panelling, antique brass fixtures and hardware, Victorian or Edwardian architectural detailing, traditional framed mirrors and decorative mouldings, classic British panelled vanity cabinetry, heritage-inspired patterned flooring, traditional sanitaryware and a freestanding bathtub where the room suits one, and elegant botanical or heritage wallpaper as a CONTROLLED accent. A modern bathroom wearing a few British-inspired accessories is not this theme.",
       "mandatory": [
-        "The flooring must be traditional British patterned work -- Victorian encaustic-style pattern or a subtle heritage geometric motif -- in a coordinated ivory, dark green, burgundy and muted neutral palette. Plain undifferentiated flooring is not enough.",
+        "The flooring must be traditional British patterned work -- Victorian encaustic-style pattern or a subtle heritage geometric motif -- in a coordinated ivory, dark green, burgundy and muted neutral palette. Plain undifferentiated flooring is not enough. This is a rule about what to CHOOSE for the floor, never a licence to draw a pattern onto a supplied product: where the selected floor tile is plain, it stays plain, exactly as supplied.",
+        "Where the selected floor tile is plain and no patterned product was supplied, do not invent a pattern and do not leave the room bare either: carry the Victorian character in the architecture instead -- panelling, wainscoting, mouldings, a cornice, a skirting, a dado and traditional cabinetry -- and let the floor be an honest plain stone or ivory field under it.",
         "The walls must carry Victorian panelling, wainscoting and decorative mouldings, balanced against heritage-green surfaces.",
         "The vanity must be traditional British cabinetry: detailed panelled fronts, classic proportions, antique brass handles, refined detailing.",
         "Taps, shower fittings, towel rails and sanitaryware must be coordinated antique or aged brass and traditional in form.",
@@ -44,6 +45,7 @@
         "Green and/or oxblood must be meaningfully represented where the selected catalog tiles and the references allow it.",
         "Blue feature walls and sage-grey subway tiles must NOT dominate the composition unless they are the actual selected catalog products. Where they are, keep them and build the heritage character around them with panelling, cabinetry, brass, mirrors and flooring.",
         "Grey or blue surfaces may appear where the actual catalog products or the references require them, but must not turn the room into a generic contemporary bathroom.",
+        "Where the selected products put grey or blue in the room, it must still read as ONE scheme rather than two. The grey or blue is the quiet ground; the heritage green or oxblood is then carried on the joinery and architecture of that same room -- panelling, wainscoting, cabinetry, a dado or the window joinery -- in a tone that sits with the walls rather than against them. Heritage green on a window frame or a single band, with walls of an unrelated colour behind it, is two schemes in one bathroom and is not this theme.",
         "A burgundy vanity and brass taps alone do not establish the theme."
       ],
       "avoid": [
@@ -64,7 +66,7 @@
         "Victorian or Edwardian architectural detailing is visible -- panelling, wainscoting, cornices or decorative mouldings.",
         "Heritage green and/or oxblood are meaningfully represented.",
         "Traditional panelled cabinetry, a classic framed mirror and traditional brass fittings are present.",
-        "The flooring is traditional patterned work that supports the heritage aesthetic, not plain undifferentiated floor.",
+        "The flooring supports the heritage aesthetic -- either traditional patterned work, or a plain heritage stone or ivory floor in a room whose panelling, mouldings and cabinetry carry the Victorian character instead.",
         "Botanical detailing is balanced and controlled rather than dominating a wall or the shower.",
         "The complete room looks like a professionally designed British country-house bathroom, not a generic modern interior."
       ],
@@ -76,7 +78,8 @@
         "Antique or aged BRASS fixtures count as heritage hardware.",
         "Patterned, encaustic, mosaic or bordered FLOORING counts as heritage-inspired flooring.",
         "Large-format stone-effect or marble-effect wall tiles are NOT subway tiles and are NOT contemporary styling on their own. A heritage room may legitimately use large stone panels.",
-        "Botanical detailing is optional. Mark it missing only if the room plainly needed it and has none; a coherent British room without botanical pattern is not a failure."
+        "Botanical detailing is optional. Mark it missing only if the room plainly needed it and has none; a coherent British room without botanical pattern is not a failure.",
+        "A plain stone or ivory FLOOR is not a fault by itself. The selected floor tile is often plain and may not be repatterned, so judge the flooring line against the room: mark it missing only where the floor is plain AND the panelling, mouldings and cabinetry are plain with it."
       ],
       "identityCheck": 1
     },
