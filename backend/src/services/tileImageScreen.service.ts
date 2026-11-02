@@ -167,6 +167,45 @@ const MARGIN_MIN = 0.03;
 const MARGIN_MAX = 0.2;
 
 /**
+ * PATCHY DETAIL: part of the picture is busy and the rest of it is not.
+ *
+ * A tile swatch is a flat surface photographed square-on, so whatever
+ * detail it has, it has EVERYWHERE -- a plain body is smooth all over, a
+ * floral is busy all over, a terrazzo is speckled all over. One corner
+ * full of detail beside a smooth field is not a surface at all.
+ *
+ * That is what the owner reported third: a smeared fragment of some
+ * photograph, flat grey-green across two thirds with a black bar and
+ * blown-out noise down the right. It holds one material (so the split
+ * screen kept it, correctly), carries no word, has no joint and no page
+ * margin. Nothing had anything to say about it.
+ *
+ * The frame is divided into 36 cells and each one's DETAIL measured as
+ * the mean difference between neighbouring pixels. Then two things have
+ * to hold together: the busiest cell is genuinely busy, AND it is far
+ * busier than the quiet quarter of the same picture.
+ *
+ *                            peak   spread
+ *   smeared photograph       0.070  0.068   REJECT
+ *   brand plate              0.031  0.010   keep (the wordmark screen has it)
+ *   floral decor             0.015  0.010   keep
+ *   plain pale               0.004  0.004   keep
+ *   plain modulo base        0.002  0.002   keep
+ *   border tile              0.001  0.001   keep
+ *   plain colourbody         0.001  0.000   keep
+ *
+ * Both conditions are needed. `peak` alone would refuse a finely
+ * grained or sharply printed tile that is busy everywhere, which is a
+ * tile's right. `spread` alone would refuse a plain tile with one
+ * slightly textured corner. Checked over seven crops of the reported
+ * capture: refused in all seven, and no legitimate fixture comes within
+ * a factor of four of either threshold at any of them.
+ */
+const DETAIL_CELLS = 6;
+const DETAIL_PEAK = 0.035;
+const DETAIL_SPREAD = 0.030;
+
+/**
  * HOW THE SCREEN WENT BLIND.
  *
  * screenSlate fetched the whole slate with one Promise.all -- EIGHTY
@@ -514,11 +553,15 @@ export function measureWordmark(data: Uint8ClampedArray, w: number, h: number): 
 
 export interface CropReading {
   joints: number; margin: number; side: string; step: number; flat: number;
+  /** The busiest cell's detail, 0..1. */
+  peak: number;
+  /** How far that cell stands above the quiet quarter of the picture. */
+  spread: number;
 }
 
 export function measureCrop(data: Uint8ClampedArray, w: number, h: number): CropReading {
   const n = w * h;
-  if (n === 0) return { joints: 0, margin: 0, side: '', step: 0, flat: 0 };
+  if (n === 0) return { joints: 0, margin: 0, side: '', step: 0, flat: 0, peak: 0, spread: 0 };
 
   const lum = new Float32Array(n);
   for (let i = 0; i < n; i += 1) {
@@ -604,7 +647,34 @@ export function measureCrop(data: Uint8ClampedArray, w: number, h: number): Crop
     }
   }
 
-  return { joints, margin, side, step, flat };
+  // PATCHY DETAIL. Each cell's detail is the mean difference between
+  // neighbouring pixels inside it; comparisons stay within a cell, so a
+  // boundary between two cells is never counted as detail in either.
+  const detail: number[] = [];
+  const cellW = Math.floor(w / DETAIL_CELLS);
+  const cellH = Math.floor(h / DETAIL_CELLS);
+  if (cellW > 1 && cellH > 1) {
+    for (let gy = 0; gy < DETAIL_CELLS; gy += 1) {
+      for (let gx = 0; gx < DETAIL_CELLS; gx += 1) {
+        const x1 = (gx + 1) * cellW;
+        const y1 = (gy + 1) * cellH;
+        let sum = 0;
+        let count = 0;
+        for (let y = gy * cellH; y < y1; y += 1) {
+          for (let x = gx * cellW; x < x1; x += 1) {
+            if (x + 1 < x1) { sum += Math.abs(lum[y * w + x] - lum[y * w + x + 1]); count += 1; }
+            if (y + 1 < y1) { sum += Math.abs(lum[y * w + x] - lum[(y + 1) * w + x]); count += 1; }
+          }
+        }
+        detail.push(count ? sum / count / 255 : 0);
+      }
+    }
+    detail.sort((a, b) => a - b);
+  }
+  const peak = detail.length ? detail[detail.length - 1] : 0;
+  const quiet = detail.length ? detail[Math.floor(0.25 * (detail.length - 1))] : 0;
+
+  return { joints, margin, side, step, flat, peak, spread: peak - quiet };
 }
 
 // Per-process, because the same twenty products are looked at on every
@@ -840,6 +910,14 @@ function screen(sample: Sample): ScreenVerdict {
       ...verdict,
       ok: false,
       reason: `the catalog page shows beside the tile (${crop.margin.toFixed(2)} of the ${crop.side} edge, step ${crop.step.toFixed(2)}, flat ${crop.flat.toFixed(2)}) -- the crop took the page with it`,
+    };
+  }
+
+  if (crop.peak >= DETAIL_PEAK && crop.spread >= DETAIL_SPREAD) {
+    return {
+      ...verdict,
+      ok: false,
+      reason: `part of this capture is busy and the rest is smooth (peak ${crop.peak.toFixed(3)}, spread ${crop.spread.toFixed(3)}) -- not one flat surface photographed square-on`,
     };
   }
 

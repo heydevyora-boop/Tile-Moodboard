@@ -658,6 +658,67 @@ async function main() {
   check('72. A catalog of nothing but bad crops still returns a slate',
     allCropped.kept.length === 2, allCropped.kept.map((t) => t.id));
 
+  // ── A PICTURE THAT IS NOT A SURFACE AT ALL ─────────────────────
+  //
+  // A smeared fragment of some photograph: flat grey-green across two
+  // thirds, a black bar and blown-out noise down the right. It holds one
+  // material, carries no word, has no joint and no page margin -- so all
+  // three earlier screens had nothing to say about it, correctly. What
+  // is wrong with it is that its DETAIL is in one part of the frame and
+  // nowhere else, which no flat surface photographed square-on does.
+  const smeared = await cropOf(path.join(FIXTURES, 'bad-smeared-photo.png'));
+  const smearedSplit = await verdictOf(path.join(FIXTURES, 'bad-smeared-photo.png'));
+  check('73. The smeared photograph is busy in one place and smooth elsewhere',
+    smeared.peak >= 0.035 && smeared.spread >= 0.030, smeared);
+  check('74. The split screen reads it as one material, correctly — it is',
+    smearedSplit.ok, smearedSplit);
+  check('75. ...and it is a scatter by the edge measure, which is why it survived that',
+    smearedSplit.edge > 0.55, smearedSplit.edge);
+
+  // What must survive it: a tile is entitled to detail, as long as it has
+  // that detail all over, which is what being one surface means.
+  for (const [label, file] of [
+    ['the plain colourbody', 'good-colorbody-0002.png'],
+    ['the plain black decor', 'good-decore-0004.png'],
+    ['the floral decor', 'decor-0005.png'],
+    ['the plain modulo base', 'twin-base-0015.png'],
+    ['the border tile', 'twin-border-0018.png'],
+    ['the plain pale tile', 'plain-pale-0015.png'],
+  ] as Array<[string, string]>) {
+    const flat = await cropOf(path.join(FIXTURES, file));
+    check(`76. Detail is evenly spread on ${label}`,
+      !(flat.peak >= 0.035 && flat.spread >= 0.030), { file, peak: flat.peak, spread: flat.spread });
+  }
+
+  for (const [label, file] of [
+    ['a Moroccan pattern', moroccan(path.join(tmp, 'moroccan-detail.png'))],
+    ['tropical leaves', tropical(path.join(tmp, 'tropical-detail.png'))],
+    ['a scattered terrazzo', scattered('#EFEAE0', '#8A7F6E', path.join(tmp, 'terrazzo-detail.png'))],
+    ['a border band', band(path.join(tmp, 'band-detail.png'))],
+    ['a cobalt border', cobaltBorder(path.join(tmp, 'cobalt-detail.png'))],
+  ] as Array<[string, string]>) {
+    const decor = await cropOf(file);
+    check(`77. ${label} is busy all over, so it survives`,
+      !(decor.peak >= 0.035 && decor.spread >= 0.030), { label, peak: decor.peak, spread: decor.spread });
+  }
+
+  // End to end, on the slate the model would have seen.
+  served['/smeared.png'] = fs.readFileSync(path.join(FIXTURES, 'bad-smeared-photo.png'));
+  clearScreenCache();
+  const smearSlate = await screenSlate([
+    { id: 'smeared', imageUrl: `${base}/smeared.png` },
+    { id: 'good-1', imageUrl: `${base}/good1.png` },
+    { id: 'good-2', imageUrl: `${base}/good2.png` },
+  ], 0);
+  check('78. It is out of the slate',
+    !smearSlate.kept.some((t) => t.id === 'smeared'), smearSlate.kept.map((t) => t.id));
+  check('79. ...and the real swatches beside it stay',
+    smearSlate.kept.length === 2, smearSlate.kept.map((t) => t.id));
+  check('80. ...and the refusal says it is not one flat surface',
+    /not one flat surface photographed square-on/.test(
+      smearSlate.rejected.find((r) => r.tile.id === 'smeared')?.reason ?? '',
+    ), smearSlate.rejected.map((r) => r.reason));
+
   server.close();
   fs.rmSync(tmp, { recursive: true, force: true });
   console.log(`\n${pass} passed, ${fail} failed`);
