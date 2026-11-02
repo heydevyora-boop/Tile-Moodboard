@@ -25,6 +25,7 @@ IMPORTANT:
 import hashlib
 import os
 import re
+import time
 
 import requests
 
@@ -75,18 +76,70 @@ OUTPUT_ROOT = writable_output_root(
 # MASTER LOADER
 # ============================================================
 
+# ============================================================
+# MASTER, READ ONCE PER CONTAINER RATHER THAN PER GENERATION
+# ============================================================
+#
+# Every scene generation downloaded the WHOLE MASTER sheet before it
+# generated anything -- columns A to ZZ, no row bound, deliberately so
+# (see google_master_loader: a fixed cap once made later products
+# unfindable). MASTER grows by one row per extracted product image, so
+# that fetch gets slower with every catalog the studio extracts, and it
+# sits in front of two image generations the client is already waiting
+# on.
+#
+# Nothing about it needs to be per-request. The sheet is read to find
+# ONE product's row, and a row that was true thirty seconds ago is still
+# true. So it is remembered for MASTER_CACHE_SECONDS inside the process:
+# the first generation in a warm container pays for it, the ones after
+# it do not.
+#
+# Only SUCCESSFUL reads are remembered. A failure is left to happen
+# again, because the usual reason for one is that Sheets is not
+# configured on this host at all -- it raises before a row is read, and
+# the caller already degrades to the image the Node layer supplied --
+# and because a credential that has come back should take effect at
+# once, not after a timer.
+#
+# This is the VISUALIZATION path's loader. The extraction pipeline calls
+# google_master_loader directly and is not touched: a stage that writes
+# MASTER and reads it back must not be handed anything remembered.
+MASTER_CACHE_SECONDS = float(
+    os.getenv("MASTER_CACHE_SECONDS", "300")
+)
+
+_master_cache: Dict[Any, Any] = {}
+
+
+def clear_master_cache() -> None:
+    """Forget what MASTER said. For tests, and for a deliberate refresh."""
+    _master_cache.clear()
+
+
 def load_product_master(
     spreadsheet_id: str,
     sheet_name: str = "MASTER",
 ):
     """
     Load MASTER records from Google Sheets.
+
+    Remembered per (spreadsheet, sheet) for MASTER_CACHE_SECONDS, so a
+    warm container reads the sheet once instead of once per generation.
     """
+
+    key = (str(spreadsheet_id), str(sheet_name))
+    now = time.monotonic()
+
+    cached = _master_cache.get(key)
+    if cached is not None and now - cached[0] < MASTER_CACHE_SECONDS:
+        return cached[1]
 
     records = load_master_records(
         spreadsheet_id=spreadsheet_id,
         sheet_name=sheet_name,
     )
+
+    _master_cache[key] = (now, records)
 
     return records
 
