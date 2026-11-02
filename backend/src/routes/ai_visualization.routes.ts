@@ -407,7 +407,56 @@ type VisualizationResult = {
   image?: { url?: string; data_url?: string };
   drive?: { image?: { url?: string; webContentLink?: string; webViewLink?: string } };
   visualization?: { product_name?: string; surface?: string };
+  theme_check?: unknown;
 };
+
+// ─────────────────────────────────────────────────────────────────────────
+// THE VERDICT, KEPT WITH THE GENERATION
+//
+// Every scene is already judged against its theme, and the mood board
+// shows the finding -- once. Nothing kept it: recordGeneration wrote the
+// picture, the products and the room, and dropped the verdict, so the
+// history could say a scene existed and not whether it came back as the
+// theme that was asked for. A board whose floor was reported as missing
+// its heritage pattern looks, a week later, exactly like one that passed.
+//
+// Only what a person can act on is kept: the status, what it judged, and
+// the lines that were partial or missing. The "present" list is the
+// reassuring half and is not worth a database row.
+//
+// Bounded on purpose. This goes into a Json column that already carries
+// a generated image, so it is capped rather than trusted.
+// ─────────────────────────────────────────────────────────────────────────
+
+const VERDICT_LINES = 8;
+const VERDICT_LINE_CHARS = 300;
+
+export function generationVerdict(raw: unknown): Record<string, unknown> | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const v = raw as Record<string, unknown>;
+
+  const status = String(v.status ?? '').trim().toLowerCase();
+  if (!status) return null;
+
+  const lines = (value: unknown): string[] => (
+    Array.isArray(value)
+      ? value
+        .filter((x): x is string => typeof x === 'string')
+        .map((x) => x.trim().slice(0, VERDICT_LINE_CHARS))
+        .filter(Boolean)
+        .slice(0, VERDICT_LINES)
+      : []
+  );
+
+  return {
+    status,
+    theme: String(v.theme ?? '').slice(0, 120),
+    room: String(v.room ?? '').slice(0, 60),
+    reason: String(v.reason ?? '').slice(0, VERDICT_LINE_CHARS),
+    partial: lines(v.partial),
+    missing: lines(v.missing),
+  };
+}
 
 function durableImageUrl(result: VisualizationResult): { url: string; source: string } {
   const drive = result.drive?.image;
@@ -550,6 +599,9 @@ export function generationRow(
     /** Whether there is a picture at all, however it is reached. */
     hasImage: Boolean(storedImage),
     imageSource: String(meta.imageSource ?? ''),
+    // Null for everything generated before the verdict was kept, which
+    // the card reads as "not recorded" rather than as a pass.
+    themeCheck: generationVerdict(meta.themeCheck),
     productName: String(meta.productName ?? ''),
     room: String(meta.room ?? ''),
     style: String(meta.style ?? ''),
@@ -618,6 +670,7 @@ async function recordGeneration(
       style: String(requirements.style ?? ''),
       combinationName: String(requirements.combination_name ?? ''),
       products: generationProducts(materials),
+      themeCheck: generationVerdict(result.theme_check),
     },
     req,
   });

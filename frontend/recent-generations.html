@@ -177,6 +177,14 @@
   .gen-product-meta { font-size:8.5px; letter-spacing:.12em; color:var(--muted); }
   .gen-products-none { font-size:9.5px; letter-spacing:.06em; line-height:1.6; color:var(--muted); }
   .gen-count { font-size:9.5px; letter-spacing:.14em; color:var(--muted); margin-top:14px; }
+  /* The theme verdict, as it was recorded with the generation. */
+  .gen-verdict { display:flex; flex-direction:column; gap:6px; margin-top:4px; padding-top:12px; border-top:1px solid var(--line); }
+  .gen-verdict-lbl { font-size:8.5px; letter-spacing:.18em; }
+  .gen-verdict-pass .gen-verdict-lbl { color:#4B7B52; }
+  .gen-verdict-partial .gen-verdict-lbl { color:#A8552A; }
+  .gen-verdict-fail .gen-verdict-lbl { color:var(--err); }
+  .gen-verdict-none .gen-verdict-lbl { color:var(--muted); }
+  .gen-verdict span.gen-verdict-line { font-size:9.5px; letter-spacing:.04em; line-height:1.6; color:var(--muted); }
   .gen-lightbox { position:fixed; inset:0; background:rgba(26,21,18,.88); display:flex; align-items:center; justify-content:center; padding:clamp(16px,4vw,48px); z-index:100; cursor:zoom-out; animation:fadeIn .18s ease both; }
   .gen-lightbox img { max-width:100%; max-height:100%; display:block; border-radius:14px; box-shadow:0 24px 70px rgba(0,0,0,.45); }
 </style>
@@ -331,6 +339,57 @@
       rows + partial + '</div>';
   }
 
+  // WHETHER IT CAME BACK AS THE THEME THAT WAS ASKED FOR.
+  //
+  // Every scene is judged against its theme at the moment it is
+  // generated, and the mood board shows the finding -- once, on the card
+  // that asked for it. The history kept the picture, the products and
+  // the room, and dropped the verdict, so a board whose floor was
+  // reported as missing its heritage pattern looked, a week later,
+  // exactly like one that passed.
+  //
+  // A generation from before the verdict was kept says so, rather than
+  // being shown as a pass. "We did not record it" and "it was fine" are
+  // not the same sentence.
+  function verdictHtml(gen) {
+    const v = gen.themeCheck;
+    const label = (text, kind) => '<div class="gen-verdict gen-verdict-' + kind + '">'
+      + '<span class="gen-verdict-lbl mono">' + text + '</span>';
+
+    if (!v || !v.status) {
+      return label('THEME CHECK — NOT RECORDED', 'none')
+        + '<span class="gen-verdict-line">This scene was generated before the verdict was kept '
+        + 'with the record.</span></div>';
+    }
+
+    const named = [v.theme, v.room].filter(Boolean).join(' · ').toUpperCase();
+    const head = {
+      pass: 'THEME CHECK — PASSED',
+      partial: 'THEME CHECK — PARTIAL',
+      fail: 'THEME CHECK — NON-COMPLIANT',
+      unchecked: 'THEME CHECK — NOT CHECKED',
+    }[v.status] || ('THEME CHECK — ' + String(v.status).toUpperCase());
+    const kind = v.status === 'pass' ? 'pass'
+      : v.status === 'fail' ? 'fail'
+        : v.status === 'partial' ? 'partial' : 'none';
+
+    let body = '';
+    if (named) body += '<span class="gen-verdict-line">' + escapeHtml(named) + '</span>';
+    if (v.status === 'unchecked' && v.reason) {
+      body += '<span class="gen-verdict-line">' + escapeHtml(v.reason) + '</span>';
+    }
+    const list = (items, head2) => (
+      Array.isArray(items) && items.length
+        ? '<span class="gen-verdict-line">' + escapeHtml(head2) + ': '
+          + items.map((x) => escapeHtml(x)).join(' · ') + '</span>'
+        : ''
+    );
+    body += list(v.partial, 'Partially present');
+    body += list(v.missing, 'Missing');
+
+    return label(head, kind) + body + '</div>';
+  }
+
   // A scene whose image could not be kept still gets a card. Hiding it
   // would quietly under-report what was generated, which is the one
   // thing a history must not do.
@@ -358,6 +417,7 @@
       '<span class="gen-name">' + escapeHtml(title) + '</span>' +
       '<span class="gen-meta mono">' + escapeHtml(whenText(gen.createdAt)) + (bits ? ' — ' + escapeHtml(bits) : '') + '</span>' +
       productsHtml(gen) +
+      verdictHtml(gen) +
       '</div></article>';
   }
 

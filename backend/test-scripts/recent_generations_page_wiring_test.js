@@ -471,6 +471,50 @@ async function main() {
     && doc.querySelector('.gen-shot img').getAttribute('loading') === 'lazy',
     doc.querySelector('.gen-shot img').getAttribute('loading'));
 
+  // ----------------------------------------------------------------
+  // THE VERDICT, ON THE CARD
+  //
+  // A board whose floor was reported as missing its heritage pattern
+  // looked, a week later, exactly like one that passed. It no longer
+  // does -- and a generation from before the verdict was kept says so
+  // rather than being shown as a pass.
+  // ----------------------------------------------------------------
+  const judged = pagedStub(4, 24);
+  judged.all[0].themeCheck = {
+    status: 'partial', theme: 'British', room: 'Bathroom',
+    partial: ['Heritage green is meaningfully represented.'],
+    missing: ['The flooring supports the heritage aesthetic.'],
+  };
+  judged.all[1].themeCheck = { status: 'pass', theme: 'Floral', room: 'Bedroom' };
+  judged.all[2].themeCheck = {
+    status: 'unchecked', theme: 'Rustic', reason: 'the check could not run: no key',
+  };
+  judged.all[3].themeCheck = null;
+
+  doc = loadPage(judged.stub).window.document;
+  await settle();
+  const verdicts = Array.prototype.slice.call(doc.querySelectorAll('.gen-verdict'));
+  check('48. every card carries a verdict block', verdicts.length === 4, verdicts.length);
+  check('49. a partial verdict is named as partial',
+    /THEME CHECK — PARTIAL/.test(verdicts[0].textContent)
+    && /BRITISH · BATHROOM/.test(verdicts[0].textContent), verdicts[0].textContent);
+  check('50. ...and says what was missing, so it can be acted on',
+    /Missing: The flooring supports the heritage aesthetic\./.test(verdicts[0].textContent),
+    verdicts[0].textContent);
+  check('51. ...and what was only partly there, separately',
+    /Partially present: Heritage green/.test(verdicts[0].textContent), verdicts[0].textContent);
+  check('52. a passing verdict reads as passed',
+    /THEME CHECK — PASSED/.test(verdicts[1].textContent)
+    && !/Missing/.test(verdicts[1].textContent), verdicts[1].textContent);
+  check('53. a check that could not run says why, and is not a pass',
+    /THEME CHECK — NOT CHECKED/.test(verdicts[2].textContent)
+    && /no key/.test(verdicts[2].textContent), verdicts[2].textContent);
+  check('54. a generation recorded before the verdict was kept says exactly that',
+    /THEME CHECK — NOT RECORDED/.test(verdicts[3].textContent)
+    && /before the verdict was kept/.test(verdicts[3].textContent), verdicts[3].textContent);
+  check('55. ...and is not dressed up as a pass',
+    !/PASSED/.test(verdicts[3].textContent));
+
   console.log(`\n${pass}/${pass + fail} checks passed`);
   process.exit(fail ? 1 : 0);
 }

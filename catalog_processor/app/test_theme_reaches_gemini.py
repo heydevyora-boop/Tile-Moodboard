@@ -1106,6 +1106,107 @@ def roman_touch_asks_for_its_architecture():
     return results
 
 
+def british_is_one_scheme_and_an_honest_floor():
+    """
+    A British bathroom came back with blue-grey panelled walls, a
+    heritage-green window frame and dado, a charcoal shower wall and a
+    plain pale floor. Two of those were the theme working, not failing.
+
+    Green is this theme's FIRST palette colour and rule 7 requires it.
+    Grey and blue are permitted BY rules 8 and 9, in as many words, when
+    they are the selected products. Nothing told the two to be
+    reconciled, so the model satisfied both -- grey on the walls, green
+    on the joinery -- which is the uncoordinated room that was reported.
+
+    And the floor: rule 1 demands Victorian patterned work, while the
+    tile engine is told never to repattern a supplied product. When the
+    selected floor tile is plain, those two cannot both be obeyed, and
+    fidelity is the one that must win.
+    """
+    from app.theme_check import _question, theme_checklist
+
+    results = []
+    british = describe_theme("British")
+    prompt = build_room_scene_prompt(
+        "British", "A Board Name",
+        {"room": "Bathroom", "surface": "WALL", "style": "British"},
+    )
+    asked = _question(british, theme_checklist("British"), "Bathroom")
+
+    # A -- one scheme, not two.
+    for fragment in (
+        "it must still read as ONE scheme rather than two",
+        "The grey or blue is the quiet ground",
+        "is two schemes in one bathroom and is not this theme",
+    ):
+        results.append(check(
+            f"grey and green are reconciled: {fragment[:42]}",
+            any(fragment in rule for rule in british["mandatory"]),
+            [r[:40] for r in british["mandatory"]]))
+        results.append(check(
+            f"...and it reaches the room prompt: {fragment[:30]}",
+            fragment in prompt))
+
+    results.append(check(
+        "the rules that PERMIT grey and blue are still there",
+        any("unless they are the actual selected catalog products" in r
+            for r in british["mandatory"])
+        and any("Grey or blue surfaces may appear" in r for r in british["mandatory"])))
+    results.append(check(
+        "...and green is still required, which is why they had to be reconciled",
+        any("Green and/or oxblood must be meaningfully represented" in r
+            for r in british["mandatory"])))
+
+    # B -- a plain floor is kept plain, and the character goes elsewhere.
+    results.append(check(
+        "the floor rule says it is about CHOOSING, not about drawing a pattern on",
+        any("never a licence to draw a pattern onto a supplied product" in r
+            for r in british["mandatory"])))
+    results.append(check(
+        "...and that a plain selected floor stays plain, as supplied",
+        any("it stays plain, exactly as supplied" in r for r in british["mandatory"])))
+    results.append(check(
+        "...and says where the Victorian character goes instead",
+        any("carry the Victorian character in the architecture instead" in r
+            for r in british["mandatory"])))
+    results.append(check(
+        "...and both reach the room prompt",
+        "never a licence to draw a pattern onto a supplied product" in prompt
+        and "carry the Victorian character in the architecture instead" in prompt))
+
+    # ...and the CHECK stops calling an honest plain floor a fault.
+    results.append(check(
+        "the check's flooring question allows an honest plain floor",
+        any("plain heritage stone or ivory floor in a room whose panelling" in v
+            for v in british["visible"]),
+        [v[:50] for v in british["visible"]]))
+    results.append(check(
+        "...and it reaches the check",
+        "plain heritage stone or ivory floor in a room whose panelling" in asked))
+    results.append(check(
+        "...with a counting rule so it is judged against the room, not alone",
+        any("A plain stone or ivory FLOOR is not a fault by itself" in c
+            for c in british.get("counts", []))
+        and "A plain stone or ivory FLOOR is not a fault by itself" in asked))
+
+    # The index that editing `visible` could have broken.
+    required = theme_checklist("British")
+    results.append(check(
+        "identityCheck still points at the identity rule",
+        required[british["identityCheck"] - 1].startswith(
+            "The British heritage identity is immediately recognisable"),
+        required[british["identityCheck"] - 1][:60]))
+
+    # And no other theme moved.
+    for other in ("Roman Touch", "Floral", "Moroccan", "Geometrical"):
+        spec = describe_theme(other)
+        results.append(check(
+            f"{other} is untouched by this",
+            not any("ONE scheme rather than two" in r for r in spec["mandatory"])
+            and not any("exactly as supplied" in r for r in spec["mandatory"])))
+    return results
+
+
 def the_check_asks_only_what_a_picture_can_answer():
     """The verdict must name things that are either in the image or not.
 
@@ -1428,6 +1529,8 @@ def main():
         ("every colour has a source", every_colour_has_a_source()),
         ("roman touch asks for its architecture",
          roman_touch_asks_for_its_architecture()),
+        ("british is one scheme and an honest floor",
+         british_is_one_scheme_and_an_honest_floor()),
         ("the theme check is honest", the_theme_check_is_honest()),
         ("the check does not fail a good room",
          the_check_does_not_fail_a_good_room()),
