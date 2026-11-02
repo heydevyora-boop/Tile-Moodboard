@@ -241,6 +241,13 @@ Rules about wood:
 - Judge this from the product's own name and collection as much as its recorded type: a tile named for a wood, a timber or a plank is a wood-effect tile whether or not the list says so.
 - If the stock that fits the brief is mostly wood-effect, say that plainly in "reason_for_selection" and build the combination from what is left, rather than including one to fill a role.
 
+Rules for the Black & White theme specifically:
+- Both ends of the palette must be ACTUAL SELECTED TILE PRODUCTS. A combination for this theme needs at least one light tile (white, ivory, bianco, cream) AND at least one dark tile (black, charcoal, espresso), chosen from the list below.
+- White arriving only as a wash basin, a towel, sanitaryware, a lighting fixture, a painted wall or the background does NOT count. The contrast has to be something this studio sells, because the client will ask for it.
+- Judge a product's tone from its name and collection as much as from its recorded colour: a tile named Bianco, Carrara, Statuario or Ivory is a light tile whether or not the list records a colour for it, and one named Nero, Marquina or Charcoal is a dark one.
+- This applies to EVERY combination you return, independently. Two all-dark boards are not a Black & White pair.
+- If the list genuinely holds only one end of the palette, say so plainly in "reason_for_selection" and build what the stock allows. Do not pull in an unrelated product just to add a colour.
+
 Rules about which tile may take which role:
 - "base" is the plain field of the room. It must be a tile listed as type=BASE or type=LARGE_FORMAT_BASE — a quiet surface, plain or softly veined.
 - "highlight", "accent" and "border" are the decorated roles. A highlight is a DESIGNER tile: it must be a tile listed as type=HIGHLIGHTER, type=ACCENT or type=BORDER. Never nominate a plain type=BASE tile as the highlight, and never put a decorated tile in the base role — a board whose highlight is plainer than its base is the wrong way round.
@@ -354,6 +361,35 @@ const DECORATED_ROLES = new Set(['highlight', 'accent', 'border']);
 const DECORATED_TYPES = new Set(['HIGHLIGHTER', 'ACCENT', 'BORDER']);
 const BASE_TYPES = new Set(['BASE', 'LARGE_FORMAT_BASE']);
 
+// ─────────────────────────────────────────────────────────────────────────
+// Light and dark, for the one theme that is defined by having both.
+//
+// Read from the product's NAME as well as its recorded colour, because a
+// freshly extracted row has no colour at all (backend_sync.py sends only
+// code, brand, name, size and type until classification runs) -- and a
+// tile called Bianco Carrara is a light tile whether or not anything has
+// filled that field in yet.
+// ─────────────────────────────────────────────────────────────────────────
+
+const LIGHT_WORDS = ['white', 'ivory', 'bianco', 'cream', 'carrara', 'statuario', 'calacatta', 'alabaster'];
+const DARK_WORDS = ['black', 'charcoal', 'nero', 'espresso', 'marquina', 'graphite', 'onyx', 'anthracite'];
+
+function isLightTone(text: string): boolean {
+  const lower = text.toLowerCase();
+  return LIGHT_WORDS.some((w) => lower.includes(w));
+}
+
+function isDarkTone(text: string): boolean {
+  const lower = text.toLowerCase();
+  return DARK_WORDS.some((w) => lower.includes(w));
+}
+
+function isBlackAndWhite(style: string | undefined): boolean {
+  if (!style) return false;
+  const key = style.toLowerCase().replace(/[_-]/g, ' ').replace(/&/g, ' and ').split(/\s+/).join(' ');
+  return key === 'black and white' || key === 'black white';
+}
+
 export function validateCombinations(
   raw: unknown,
   consideredTileIds: Set<string>,
@@ -361,6 +397,10 @@ export function validateCombinations(
   // supplied the role check below runs, and when it is not the behaviour
   // is exactly what it was.
   typeByTileId?: Map<string, string>,
+  // Optional for the same reason as typeByTileId: supplied, the Black &
+  // White contrast check below runs; absent, behaviour is unchanged.
+  toneByTileId?: Map<string, string>,
+  style?: string,
 ): { combinations: GeneratedCombination[]; warnings: string[] } {
   // Only worth enforcing when the pool actually offered an alternative.
   // A catalog with nothing decorated in it must still produce a board,
@@ -369,6 +409,23 @@ export function validateCombinations(
     ? [...typeByTileId.values()].some((type) => DECORATED_TYPES.has(type))
     : false;
   const warnings: string[] = [];
+
+  // BOTH ENDS OF A BLACK & WHITE BOARD HAVE TO BE PRODUCTS.
+  //
+  // Nothing checked colour at all, so two all-charcoal combinations
+  // passed validation and the room came back a dark grey box. The theme
+  // asks for "a clear, intentional monochromatic composition", which a
+  // model can satisfy in its head with white walls and a white basin --
+  // neither of which this studio sells.
+  //
+  // A WARNING, not a rejection: rejecting would empty the board when the
+  // catalog genuinely holds only one end, and regenerating would cost
+  // another Gemini call. The board is built; the gap is reported.
+  const monochrome = isBlackAndWhite(style);
+  const poolHasLight = monochrome && toneByTileId
+    ? [...toneByTileId.values()].some(isLightTone) : false;
+  const poolHasDark = monochrome && toneByTileId
+    ? [...toneByTileId.values()].some(isDarkTone) : false;
 
   if (!Array.isArray(raw)) {
     throw AppError.internal('Gemini response was not a JSON array as instructed');
@@ -434,6 +491,28 @@ export function validateCombinations(
       warnings.push(`Combination ${index} ("${obj.board_name}"): no base tile — kept anyway, but flag for review`);
     }
 
+    // Checked per combination, independently: two boards are only a
+    // Black & White pair if each one carries the contrast itself.
+    if (monochrome && toneByTileId && validTiles.length > 0) {
+      const tones = validTiles.map((t) => toneByTileId.get(t.tileId) ?? '');
+      const hasLight = tones.some(isLightTone);
+      const hasDark = tones.some(isDarkTone);
+
+      // Only held to what the pool could actually offer.
+      if (!hasLight && poolHasLight) {
+        warnings.push(
+          `Combination ${index} ("${obj.board_name}"): every tile in it is dark, and the catalog `
+          + 'offered a light one. Black & White needs a white or ivory TILE, not a white basin or wall.',
+        );
+      }
+      if (!hasDark && poolHasDark) {
+        warnings.push(
+          `Combination ${index} ("${obj.board_name}"): every tile in it is light, and the catalog `
+          + 'offered a dark one. Black & White needs a black or charcoal TILE to carry the contrast.',
+        );
+      }
+    }
+
     combinations.push({
       board_name: obj.board_name,
       tiles: validTiles,
@@ -490,7 +569,14 @@ export async function generateCombinations(input: GenerateBriefInput, actorId: s
 
   const consideredIds = new Set(tiles.map((t) => t.id));
   const typeByTileId = new Map(tiles.map((t) => [t.id, t.type]));
-  const { combinations, warnings } = validateCombinations(raw, consideredIds, typeByTileId);
+  // Name AND recorded colour: an unclassified row has no colour, and its
+  // name is the only thing that says what tone it is.
+  const toneByTileId = new Map(
+    tiles.map((t) => [t.id, `${t.name ?? ''} ${t.colorTone ?? ''}`]),
+  );
+  const { combinations, warnings } = validateCombinations(
+    raw, consideredIds, typeByTileId, toneByTileId, brief.style,
+  );
 
   // ONE SURFACE, ONE ROLE.
   //
