@@ -155,6 +155,12 @@
   .gen-shot { background:var(--sand); border-bottom:1px solid var(--line); cursor:zoom-in; aspect-ratio:4/3; }
   .gen-shot img { width:100%; height:100%; object-fit:cover; display:block; }
   .gen-missing { display:flex; align-items:center; justify-content:center; height:100%; padding:20px; text-align:center; font-size:10px; letter-spacing:.1em; line-height:1.6; color:var(--muted); }
+  /* The frame a scene has not arrived in yet. It holds the card's shape
+     so nothing reflows when the picture lands. */
+  .gen-shot-wait { display:block; width:100%; height:100%; background:linear-gradient(100deg, var(--sand) 38%, rgba(255,255,255,.55) 50%, var(--sand) 62%); background-size:220% 100%; animation:genShimmer 1.3s ease-in-out infinite; }
+  @keyframes genShimmer { from { background-position:150% 0; } to { background-position:-50% 0; } }
+  @media (prefers-reduced-motion: reduce) { .gen-shot-wait { animation:none; } }
+  .gen-more { height:1px; }
   .gen-body { padding:16px 18px 18px; display:flex; flex-direction:column; gap:8px; }
   .gen-name { font-size:15px; font-weight:500; line-height:1.3; }
   .gen-meta { font-size:9.5px; letter-spacing:.1em; color:var(--muted); line-height:1.7; }
@@ -331,9 +337,21 @@
   function cardHtml(gen) {
     const title = gen.combinationName || gen.productName || 'Bathroom scene';
     const bits = [gen.room, gen.style, gen.by].filter(Boolean).join(' · ');
+    // THE PICTURE IS FETCHED WHEN IT IS LOOKED AT, NOT BEFORE.
+    //
+    // A generated scene is kept as an inline data: URL of a megabyte or
+    // two. This card used to be written with those bytes inside its own
+    // HTML, for every generation on the page at once, which is why the
+    // page sat blank for so long before it drew anything.
+    //
+    // `imagePath` is a few dozen characters and the bytes come down only
+    // when the card is near the viewport. A row whose picture is a plain
+    // URL (a Drive link) still loads it directly, lazily.
     const shot = gen.imageUrl
-      ? '<div class="gen-shot" data-src="' + escapeHtml(gen.imageUrl) + '"><img src="' + escapeHtml(gen.imageUrl) + '" alt="' + escapeHtml(title) + '"></div>'
-      : '<div class="gen-shot" style="cursor:default"><span class="gen-missing mono">IMAGE NOT KEPT<br>' + escapeHtml(gen.imageSource || 'unknown') + '</span></div>';
+      ? '<div class="gen-shot"><img src="' + escapeHtml(gen.imageUrl) + '" alt="' + escapeHtml(title) + '" loading="lazy"></div>'
+      : gen.imagePath
+        ? '<div class="gen-shot" data-path="' + escapeHtml(gen.imagePath) + '" data-title="' + escapeHtml(title) + '"><span class="gen-shot-wait"></span></div>'
+        : '<div class="gen-shot" style="cursor:default"><span class="gen-missing mono">IMAGE NOT KEPT<br>' + escapeHtml(gen.imageSource || 'unknown') + '</span></div>';
 
     return '<article class="gen-card">' + shot +
       '<div class="gen-body">' +
@@ -354,6 +372,7 @@
         ? '<div class="gen-grid" id="genGrid"></div>'
         : '<div class="gen-empty"><h3 class="serif">Nothing generated yet</h3>' +
           '<p>Scenes appear here as soon as they are generated. Open a mood board and press the generate button — the render is kept here from that moment on. Scenes generated before this page existed were never recorded anywhere, so they cannot be shown.</p></div>') +
+      (generations.length ? '<div class="gen-more" id="genMore"></div>' : '') +
       (generations.length ? '<div class="gen-count mono" id="genCount"></div>' : '') +
       '</div>';
 
@@ -363,12 +382,53 @@
     appendCards(grid, generations);
   }
 
+  /** Pulls one stored scene down and puts it in its frame. */
+  async function loadShot(shot) {
+    const path = shot.dataset.path;
+    if (!path) return;
+    delete shot.dataset.path;
+    try {
+      const url = await CasaApi.ai.recentGenerationImage(path);
+      const img = document.createElement('img');
+      img.alt = shot.dataset.title || 'Generated scene';
+      img.src = url;
+      shot.replaceChildren(img);
+    } catch (err) {
+      shot.style.cursor = 'default';
+      shot.innerHTML = '<span class="gen-missing mono">COULD NOT LOAD THIS SCENE</span>';
+    }
+  }
+
+  // Loaded a little BEFORE the card reaches the screen, so scrolling
+  // does not wait on a request that could have been in flight already.
+  const shotWatcher = 'IntersectionObserver' in window
+    ? new IntersectionObserver((entries, obs) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        obs.unobserve(entry.target);
+        loadShot(entry.target);
+      });
+    }, { rootMargin: '600px 0px' })
+    : null;
+
   function appendCards(grid, generations) {
     const start = grid.children.length;
     grid.insertAdjacentHTML('beforeend', generations.map(cardHtml).join(''));
     Array.prototype.slice.call(grid.children, start).forEach((card) => {
-      const shot = card.querySelector('.gen-shot[data-src]');
-      if (shot) shot.addEventListener('click', () => openLightbox(shot.dataset.src));
+      const shot = card.querySelector('.gen-shot');
+      if (!shot) return;
+
+      // The lightbox shows whatever picture the frame is holding. It
+      // used to read a data- attribute carrying the whole data: URL,
+      // which no longer exists -- and the <img> is the truth anyway.
+      shot.addEventListener('click', () => {
+        const img = shot.querySelector('img');
+        if (img) openLightbox(img.src);
+      });
+
+      if (!shot.dataset.path) return;
+      if (shotWatcher) shotWatcher.observe(shot);
+      else loadShot(shot);
     });
   }
 
@@ -399,32 +459,67 @@
       location.href = 'login.html';
     });
 
-    // THE WHOLE HISTORY.
+    // THE WHOLE HISTORY, BUT NOT ALL AT ONCE.
     //
-    // This asked for one page and drew it, so with more generations than
-    // a page holds the rest were simply missing, with nothing on screen
-    // admitting it. It walks the cursor to the end now. The page cap is
-    // a guard against a runaway loop, not a limit on what is shown: when
-    // it is reached the count says how many of the total are on screen,
-    // rather than the page pretending it has them all.
+    // Everything generated is still reachable -- showing only the newest
+    // page and pretending that is all of it was a real bug and is not
+    // coming back. What changed is WHEN the rest is asked for: this used
+    // to walk the cursor to the very end before the page settled, so a
+    // studio with a long history paid for every page of it on arrival,
+    // whether or not anyone scrolled that far.
+    //
+    // Now the newest page is drawn and the next one is fetched when the
+    // bottom of the list comes near the screen. The count still says how
+    // many of the total are on screen, so the page never claims to hold
+    // more than it has. The page cap stays as a guard against a runaway
+    // loop.
     const MAX_PAGES = 40;
+    const PAGE_SIZE = 24;
 
     try {
-      const first = await CasaApi.ai.recentGenerationsPage({});
+      const first = await CasaApi.ai.recentGenerationsPage({ limit: PAGE_SIZE });
       render(first.generations);
       showCount(first.generations.length, first.total);
 
       const grid = document.getElementById('genGrid');
+      const sentinel = document.getElementById('genMore');
       let cursor = first.nextCursor;
       let shown = first.generations.length;
+      let pages = 1;
+      let busy = false;
 
-      for (let page = 1; grid && cursor && page < MAX_PAGES; page += 1) {
-        const next = await CasaApi.ai.recentGenerationsPage({ cursor });
-        if (!next.generations.length) break;
-        appendCards(grid, next.generations);
-        shown += next.generations.length;
-        showCount(shown, next.total);
-        cursor = next.nextCursor;
+      async function loadNextPage() {
+        if (busy || !cursor || !grid || pages >= MAX_PAGES) return;
+        busy = true;
+        try {
+          const next = await CasaApi.ai.recentGenerationsPage({ cursor, limit: PAGE_SIZE });
+          if (!next.generations.length) { cursor = null; return; }
+          appendCards(grid, next.generations);
+          shown += next.generations.length;
+          pages += 1;
+          showCount(shown, next.total);
+          cursor = next.nextCursor;
+        } finally {
+          busy = false;
+        }
+      }
+
+      if (sentinel && 'IntersectionObserver' in window) {
+        const pager = new IntersectionObserver((entries) => {
+          if (!entries.some((e) => e.isIntersecting)) return;
+          if (!cursor || pages >= MAX_PAGES) { pager.disconnect(); return; }
+          loadNextPage();
+        }, { rootMargin: '700px 0px' });
+        pager.observe(sentinel);
+      } else {
+        // No observer: behave as before and fetch the rest up front,
+        // because a browser that cannot watch the scroll must not be
+        // left showing a partial history with no way to see the rest.
+        while (cursor && pages < MAX_PAGES) {
+          const before = cursor;
+          await loadNextPage();
+          if (cursor === before) break;
+        }
       }
     } catch (err) {
       renderError((err && err.message) || '');

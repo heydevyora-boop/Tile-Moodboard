@@ -522,11 +522,33 @@ export function generationRow(
     ? [{ role: 'base', name: '', code: legacyCode, size: '', finish: '', imageUrl: '' }]
     : stored;
 
+  // THE SCENE'S BYTES ARE NOT PUT IN THE LIST.
+  //
+  // A generated scene is kept as an inline data: URL -- the only copy
+  // that survives, since Node and Python share no disk -- and one of
+  // them is 1.5-2.5MB of base64. The history asked for sixty rows at a
+  // time and inlined every one of those into the JSON and then into the
+  // page's HTML, so opening Recent Generations downloaded on the order
+  // of a hundred megabytes before it drew anything. That is the whole
+  // of the wait the catalog owner reported.
+  //
+  // The row carries a PATH to the picture instead. The card fetches it
+  // when it scrolls into view, so the page paints at once and only the
+  // scenes actually looked at are ever transferred.
+  //
+  // A Drive link is a URL and tiny, so it is still sent as one.
+  const storedImage = String(meta.imageUrl ?? '');
+  const inlineImage = storedImage.startsWith('data:');
+
   return {
     id: row.id,
     createdAt: row.createdAt,
     by: row.user?.name ?? '',
-    imageUrl: String(meta.imageUrl ?? ''),
+    imageUrl: inlineImage ? '' : storedImage,
+    /** Where to fetch the scene when it is wanted; empty for a plain URL. */
+    imagePath: inlineImage ? `/ai/visualizations/recent/${row.id}/image` : '',
+    /** Whether there is a picture at all, however it is reached. */
+    hasImage: Boolean(storedImage),
     imageSource: String(meta.imageSource ?? ''),
     productName: String(meta.productName ?? ''),
     room: String(meta.room ?? ''),
@@ -600,6 +622,62 @@ async function recordGeneration(
     req,
   });
 }
+
+// ============================================================
+// GET /visualizations/recent/:id/image
+// ============================================================
+//
+// One stored scene, as bytes.
+//
+// The list above sends a path here rather than the picture itself, so
+// this is where a card's scene actually comes from. It reads the one row
+// it is asked for, decodes the data: URL the generation recorded and
+// answers with the image, which is what the browser wanted in the first
+// place -- a data: URL inside JSON inside HTML is the same bytes carried
+// three times over.
+//
+// A generation's record never changes, so it is immutable for a year.
+// Private, because a studio's generated work is not public.
+// ============================================================
+
+/** The pieces of `data:<mime>;base64,<payload>`, or null if it is not one. */
+export function decodeDataUrl(value: string): { mime: string; bytes: Buffer } | null {
+  const match = /^data:([^;,]+);base64,(.+)$/s.exec(value.trim());
+  if (!match) return null;
+  const mime = match[1].trim();
+  if (!/^image\/[a-z0-9.+-]+$/i.test(mime)) return null;
+  const bytes = Buffer.from(match[2], 'base64');
+  return bytes.length > 0 ? { mime, bytes } : null;
+}
+
+router.get(
+  '/visualizations/recent/:id/image',
+  requirePermission('visualizations:write'),
+  async (req: Request, res: Response) => {
+    const row = await prisma.activityLog.findFirst({
+      where: { id: String(req.params.id ?? ''), action: GENERATION_ACTION },
+      select: { metadata: true },
+    });
+
+    const stored = String(
+      ((row?.metadata ?? {}) as Record<string, unknown>).imageUrl ?? '',
+    );
+
+    // A row whose picture is a plain URL is not served from here: the
+    // card has that URL already and loads it directly.
+    const decoded = stored.startsWith('data:') ? decodeDataUrl(stored) : null;
+    if (!decoded) {
+      return res.status(404).json({
+        success: false,
+        error: { type: 'NOT_FOUND', message: 'No stored image for this generation.' },
+      });
+    }
+
+    res.setHeader('Content-Type', decoded.mime);
+    res.setHeader('Cache-Control', 'private, max-age=31536000, immutable');
+    return res.status(200).end(decoded.bytes);
+  },
+);
 
 // ============================================================
 // GET /visualizations/recent

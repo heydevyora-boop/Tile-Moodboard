@@ -24,6 +24,7 @@
 
 import {
   GENERATION_PRODUCT_LIMIT,
+  decodeDataUrl,
   generationProducts,
   generationRow,
 } from '../src/routes/ai_visualization.routes';
@@ -342,6 +343,54 @@ function main(): number {
   check('37. a code no tile matches still shows as a product, by its code',
     unknown.products.length === 1 && unknown.products[0].code === 'GONE-1'
     && unknown.products[0].imageUrl === '', unknown.products[0]);
+
+  // ------------------------------------------------------------------
+  // THE SCENE'S BYTES ARE NOT IN THE LIST
+  //
+  // A generated scene is kept as an inline data: URL -- 1.5-2.5MB of
+  // base64 -- because Node and Python share no disk and it is the only
+  // copy that survives. The history sent sixty of those in one response
+  // and wrote every one into the page's HTML, which is the whole of why
+  // Recent Generations took so long to open. The row carries a path now.
+  // ------------------------------------------------------------------
+  const inlineScene = generationRow({
+    id: 'log-inline',
+    createdAt: '2026-10-30T02:40:00Z',
+    metadata: { imageUrl: 'data:image/png;base64,' + 'A'.repeat(200000), imageSource: 'inline' },
+  }) as Record<string, any>;
+  check('38. a scene kept as a data: URL is not sent in the row',
+    inlineScene.imageUrl === '', String(inlineScene.imageUrl).slice(0, 40));
+  check('39. ...and the row carries the path to it instead',
+    inlineScene.imagePath === '/ai/visualizations/recent/log-inline/image', inlineScene.imagePath);
+  check('40. ...and still says there IS a picture',
+    inlineScene.hasImage === true, inlineScene.hasImage);
+
+  const driveScene = generationRow({
+    id: 'log-drive',
+    createdAt: '2026-10-30T02:41:00Z',
+    metadata: { imageUrl: 'https://drive.example/scene.webp', imageSource: 'drive' },
+  }) as Record<string, any>;
+  check('41. a Drive link is small, so it is still sent as a URL',
+    driveScene.imageUrl === 'https://drive.example/scene.webp', driveScene.imageUrl);
+  check('42. ...with no path, because the card loads it directly',
+    driveScene.imagePath === '' && driveScene.hasImage === true, driveScene);
+
+  const noScene = generationRow({
+    id: 'log-none', createdAt: '2026-10-30T02:42:00Z', metadata: { imageSource: 'too-large' },
+  }) as Record<string, any>;
+  check('43. a generation whose picture was not kept has neither, and says so',
+    noScene.imageUrl === '' && noScene.imagePath === '' && noScene.hasImage === false, noScene);
+
+  // The endpoint that serves one of them.
+  const decoded = decodeDataUrl('data:image/webp;base64,' + Buffer.from('tiny').toString('base64'));
+  check('44. a data: URL decodes to its type and its bytes',
+    decoded?.mime === 'image/webp' && decoded?.bytes.toString() === 'tiny', decoded?.mime);
+  check('45. something that is not a data: URL is refused',
+    decodeDataUrl('https://drive.example/scene.webp') === null);
+  check('46. ...and so is a data: URL that is not an image',
+    decodeDataUrl('data:text/html;base64,' + Buffer.from('<b>no</b>').toString('base64')) === null);
+  check('47. ...and an empty payload is not served as an image',
+    decodeDataUrl('data:image/png;base64,') === null);
 
   let failures = 0;
   for (const [label, ok, detail] of results) {

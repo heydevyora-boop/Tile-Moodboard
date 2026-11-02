@@ -238,6 +238,15 @@
   .viz-note span { letter-spacing:.02em; font-size:10.5px; }
   .viz-note-h { font-weight:600; letter-spacing:.1em; font-size:9.5px; margin-top:5px; opacity:.85; }
   .viz-error { padding:14px 16px; background:var(--err-bg); border-radius:13px; font-size:12.5px; line-height:1.5; color:var(--err); }
+  /* WHILE A SCENE IS BEING GENERATED.
+     A thin bar under the button, left to right, with the share of the
+     usual wait that has passed. It is hidden until the wait is long
+     enough to be worth saying anything about. */
+  .viz-progress { display:flex; align-items:center; gap:10px; margin-top:-2px; }
+  .viz-progress[hidden] { display:none; }
+  .viz-progress-track { position:relative; flex:1 1 auto; height:4px; border-radius:99px; background:var(--line); overflow:hidden; }
+  .viz-progress-fill { position:absolute; inset:0 auto 0 0; width:0; border-radius:99px; background:linear-gradient(90deg, var(--gold), #B08D4E); transition:width .32s cubic-bezier(.4,0,.2,1); }
+  .viz-progress-pct { flex:0 0 auto; min-width:34px; text-align:right; font-size:9px; letter-spacing:.12em; color:var(--muted); font-variant-numeric:tabular-nums; }
   .viz-image-frame { border-radius:16px; overflow:hidden; background:var(--sand); border:1px solid var(--line); cursor:zoom-in; }
   .viz-image-frame img { width:100%; display:block; object-fit:cover; }
   .viz-lightbox { position:fixed; inset:0; background:rgba(26,21,18,.88); display:flex; align-items:center; justify-content:center; padding:clamp(16px,4vw,48px); z-index:100; cursor:zoom-out; animation:fadeIn .18s ease both; }
@@ -2134,7 +2143,11 @@
     const button = (cls, text, extra) => '<button class="' + cls + ' mono" data-generate-scene="' + index + '"' + (extra || '') + '>' + text + '</button>';
 
     if (v.status === 'loading') {
-      return label + button('btn-amber', 'GENERATING ' + sceneNounCaps() + '…', ' disabled');
+      return label + button('btn-amber', 'GENERATING ' + sceneNounCaps() + '…', ' disabled') +
+        '<div class="viz-progress" id="vizProgress-' + index + '" hidden>' +
+        '<span class="viz-progress-track"><span class="viz-progress-fill"></span></span>' +
+        '<span class="viz-progress-pct mono">0%</span>' +
+        '</div>';
     }
     if (v.status === 'error') {
       return label +
@@ -2189,6 +2202,107 @@
     // The mood board panel shows the same scene, so it follows the same
     // state. No-ops unless the panel is open on this combination.
     renderMoodBoardScene(index);
+  }
+
+  // ============================================================
+  // HOW LONG A SCENE TAKES, AND SAYING SO WHILE IT DOES
+  // ============================================================
+  //
+  // Generating a scene is two image calls to Gemini and one check of
+  // what came back. There is no progress to report from inside that --
+  // the model answers once, at the end -- so this bar measures the one
+  // thing that is honestly measurable: how much of the USUAL wait has
+  // passed. It is not a claim about the server's state, and it never
+  // shows 100% until the picture is actually in hand.
+  //
+  // "The usual wait" is this studio's own last successful generation,
+  // kept in the browser. The first one has nothing to go on and uses the
+  // default below; every one after that is calibrated to the machine,
+  // the catalog and the connection actually in use. Clamped either side,
+  // because one freak run should not set the expectation for the next.
+  //
+  // Nothing is shown for the first SHOW_AFTER_MS. A generation that
+  // comes back quickly gets no bar at all, which is the point: a
+  // progress bar for a wait nobody noticed is just one more thing
+  // flashing on the screen.
+  const SCENE_MS_KEY = 'casa_scene_ms';
+  const SCENE_MS_DEFAULT = 25000;
+  const SCENE_MS_MIN = 8000;
+  const SCENE_MS_MAX = 55000;
+  const SHOW_AFTER_MS = 700;
+  const SETTLE_MS = 180;
+
+  function expectedSceneMs() {
+    try {
+      const kept = Number(localStorage.getItem(SCENE_MS_KEY));
+      if (Number.isFinite(kept) && kept > 0) {
+        return Math.min(SCENE_MS_MAX, Math.max(SCENE_MS_MIN, kept));
+      }
+    } catch (err) { /* private browsing: fall back to the default */ }
+    return SCENE_MS_DEFAULT;
+  }
+
+  function rememberSceneMs(ms) {
+    if (!Number.isFinite(ms) || ms <= 0) return;
+    try {
+      // Averaged with what was there, so the expectation follows the
+      // real times rather than lurching to whatever the last run was.
+      const kept = Number(localStorage.getItem(SCENE_MS_KEY));
+      const next = Number.isFinite(kept) && kept > 0 ? (kept + ms) / 2 : ms;
+      localStorage.setItem(SCENE_MS_KEY, String(Math.round(next)));
+    } catch (err) { /* nothing to keep it in; the default still works */ }
+  }
+
+  /**
+   * Drives one card's bar. Returns a handle: `done()` fills it to 100
+   * and says whether it was ever on screen, `stop()` abandons it.
+   */
+  function startSceneProgress(index) {
+    const started = Date.now();
+    const expected = expectedSceneMs();
+    let shown = false;
+    let timer = 0;
+
+    const host = () => document.getElementById('vizProgress-' + index);
+
+    const paint = (pct) => {
+      const el = host();
+      if (!el) return;
+      const fill = el.querySelector('.viz-progress-fill');
+      const text = el.querySelector('.viz-progress-pct');
+      if (fill) fill.style.width = pct + '%';
+      if (text) text.textContent = pct + '%';
+    };
+
+    timer = window.setInterval(() => {
+      const el = host();
+      // The card was repainted or left; the interval has nothing to do.
+      if (!el) return;
+
+      const elapsed = Date.now() - started;
+      if (elapsed < SHOW_AFTER_MS) return;
+
+      if (!shown) { shown = true; el.hidden = false; }
+
+      // Ninety per cent over the usual wait, then a crawl. A run that
+      // takes longer than usual must still look like it is going
+      // somewhere, and must still not say it has finished.
+      const t = elapsed / expected;
+      const pct = t <= 1
+        ? Math.round(90 * t)
+        : Math.min(96, 90 + Math.round((t - 1) * 6));
+      paint(pct);
+    }, 160);
+
+    return {
+      wasShown: () => shown,
+      stop: () => { window.clearInterval(timer); },
+      done: () => {
+        window.clearInterval(timer);
+        if (shown) paint(100);
+        return shown;
+      },
+    };
   }
 
   async function generateBathroomScene(index) {
@@ -2250,6 +2364,12 @@
     state.visualizations[index] = { status: 'loading', imageUrl: null, error: null };
     renderVizSection(index);
 
+    // The bar is started AFTER the section is painted, because that is
+    // when its elements exist, and before the request, because the wait
+    // begins here.
+    const progress = startSceneProgress(index);
+    const startedAt = Date.now();
+
     try {
       const generated = await CasaApi.ai.generateScene({
         product_id: baseTile.tileId,
@@ -2265,7 +2385,16 @@
         themeCheck: generated.themeCheck || null,
         error: null,
       };
+      rememberSceneMs(Date.now() - startedAt);
+
+      // Let the bar read 100 before the image takes its place, but only
+      // if it was ever on screen. A generation fast enough that no bar
+      // appeared is not held back by a single millisecond.
+      if (progress.done()) {
+        await new Promise((resolve) => window.setTimeout(resolve, SETTLE_MS));
+      }
     } catch (err) {
+      progress.stop();
       state.visualizations[index] = { status: 'error', imageUrl: null, error: (err && err.message) || ('Something went wrong generating the ' + sceneNoun().toLowerCase() + '.') };
     }
     renderVizSection(index);

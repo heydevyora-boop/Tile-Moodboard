@@ -2939,6 +2939,40 @@ const ai = {
    * can say how many there are rather than implying the first screenful
    * is all of them.
    */
+  /**
+   * One stored scene, as something an <img> can show.
+   *
+   * The history list sends a PATH rather than the picture. A generated
+   * scene is kept as an inline data: URL of a megabyte or two, and sixty
+   * of those in one response is the whole of why Recent Generations took
+   * so long to open. The bytes sit behind the bearer token, which an
+   * `<img src>` cannot send, so they are fetched here and handed back as
+   * an object URL.
+   *
+   * One refresh-and-retry on 401, the same as every other call: a page
+   * left open past the access token's fifteen minutes should still be
+   * able to show a picture when it is scrolled.
+   */
+  async recentGenerationImage(path, _retried) {
+    const token = getAccessToken();
+
+    const res = await fetch(`${API_BASE}${path}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      credentials: 'include'
+    });
+
+    if (res.status === 401 && !_retried) {
+      await doRefresh();
+      return ai.recentGenerationImage(path, true);
+    }
+
+    if (!res.ok) {
+      throw new ApiError('Could not load this scene.', res.status);
+    }
+
+    return URL.createObjectURL(await res.blob());
+  },
+
   async recentGenerationsPage(
     options
   ) {
