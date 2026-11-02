@@ -39,7 +39,9 @@ from pathlib import Path
 from typing import List, Any, Dict, Optional
 
 import hashlib
+import os
 import re
+import time
 import urllib.parse
 
 from app.product_visualization_service import (
@@ -239,6 +241,35 @@ def _build_registry_record(
 # MAIN ORCHESTRATOR
 # ============================================================
 
+# ============================================================
+# A DRIVE THAT IS NOT WORKING
+# ============================================================
+#
+# See the comment at the Drive step below. Module level, so it lasts as
+# long as the process and no longer: a redeploy, or a cold container,
+# tries again from scratch.
+DRIVE_RETRY_SECONDS = float(
+    os.getenv("DRIVE_RETRY_SECONDS", "300")
+)
+
+_drive_failed_at: Optional[float] = None
+
+
+def _remember_drive_failed() -> None:
+    global _drive_failed_at
+    _drive_failed_at = time.monotonic()
+
+
+def _remember_drive_worked() -> None:
+    global _drive_failed_at
+    _drive_failed_at = None
+
+
+def clear_drive_backoff() -> None:
+    """Forget a remembered Drive failure. For tests, and a deliberate retry."""
+    _remember_drive_worked()
+
+
 def generate_and_persist_visualization(
     *,
     spreadsheet_id: str,
@@ -351,21 +382,59 @@ def generate_and_persist_visualization(
     # network/auth issue) should not turn an otherwise-successful
     # visualization into a hard error.
 
+    # AND A DRIVE THAT IS NOT GOING TO WORK IS NOT TRIED AGAIN AT ONCE.
+    #
+    # Getting here costs several Drive round trips -- find or create the
+    # scene folder, the product folder, the surface folder, upload the
+    # image, write and upload a metadata JSON -- and the client is
+    # waiting through all of them for an archive copy they are not
+    # looking at.
+    #
+    # On a host whose Google credential is a service account, the folder
+    # calls succeed and the file upload fails: a service account has no
+    # Drive storage of its own. That failure is permanent until somebody
+    # changes the configuration, and it was being paid for on every
+    # single generation.
+    #
+    # So a failure is remembered for DRIVE_RETRY_SECONDS and the step is
+    # skipped meanwhile. Nothing downstream changes: this is the same
+    # "upload failed" result the except branch already produced, and the
+    # record keeps its local image exactly as before. When the window
+    # passes it is tried again, so a configuration that gets fixed
+    # starts working on its own.
+    now = time.monotonic()
+    blocked = (
+        _drive_failed_at is not None
+        and now - _drive_failed_at < DRIVE_RETRY_SECONDS
+    )
+
     drive_upload_succeeded = True
 
-    try:
-        drive_result = (
-            upload_visualization_to_drive(
-                registry_record,
-                update_registry=True,
-            )
-        )
-    except Exception as drive_error:
+    if blocked:
         drive_upload_succeeded = False
         drive_result = {
             "success": False,
-            "error": str(drive_error),
+            "error": (
+                "skipped: the previous Drive upload failed and the "
+                f"retry window ({DRIVE_RETRY_SECONDS:.0f}s) has not passed"
+            ),
         }
+    else:
+        try:
+            drive_result = (
+                upload_visualization_to_drive(
+                    registry_record,
+                    update_registry=True,
+                )
+            )
+            _remember_drive_worked()
+        except Exception as drive_error:
+            _remember_drive_failed()
+            drive_upload_succeeded = False
+            drive_result = {
+                "success": False,
+                "error": str(drive_error),
+            }
 
     visualization_result[
         "drive_result"

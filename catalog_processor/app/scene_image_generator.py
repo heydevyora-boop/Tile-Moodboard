@@ -150,9 +150,28 @@ SUPPORTED_ANGLES = (
 OUTPUT_ASPECT_RATIO = "16:9"
 
 
+# THE ROOM THIS STEP DRAWS IS AN INTERMEDIATE, NOT THE DELIVERED IMAGE.
+#
+# The client is served STAGE 2's picture -- the room with the tiles
+# installed -- and stage 2 (tile_application_engine.apply_tile_to_scene)
+# passes no image_config at all, so its output takes the model's own
+# default size. Whatever this step renders at, that is where the
+# delivered image's resolution is decided, not here.
+#
+# This asked for 2K. An image generation's time scales with the pixels
+# it has to produce, and 2K is four times 1K, so the wait the catalog
+# owner reported was partly being spent on resolution that the second
+# step redraws from scratch.
+#
+# It is one environment variable: a deployment that wants the richer
+# intermediate back sets GEMINI_IMAGE_SIZE=2K and nothing else changes.
+# Worth knowing before doing so: if the model ever chooses to answer
+# stage 2 at its INPUT's resolution, the delivered image follows this
+# setting too. That is not something this repository can test without a
+# key, so it is written down rather than assumed either way.
 OUTPUT_IMAGE_SIZE = os.getenv(
     "GEMINI_IMAGE_SIZE",
-    "2K"
+    "1K"
 )
 
 
