@@ -946,6 +946,79 @@ def the_specification_reaches_the_prompt():
     return results
 
 
+def every_colour_has_a_source():
+    """
+    The Geometric kitchen came back with terracotta cabinetry filling
+    most of the frame while the two selected products were a blue and a
+    pink. Terracotta is not invented -- it is the third colour of that
+    theme's own palette. What the model dropped is the qualifier in the
+    same sentence, "where the catalog products allow it".
+
+    So the room's LARGE non-tile surfaces take the palette's neutrals,
+    and a chromatic one is used on them only where the theme's own
+    specification requires that finish -- which is what keeps British's
+    heritage-green cabinetry and Floral's painted joinery.
+    """
+    results = []
+    rooms = ("Bathroom", "Kitchen", "Bedroom", "Living Room", "Balcony")
+    for room in rooms:
+        prompt = build_room_scene_prompt(
+            "Geometrical", "A Board Name",
+            {"room": room, "surface": "WALL", "style": "Geometrical"},
+        )
+        results.append(check(
+            f"{room}: the room is told every colour must have a source",
+            "EVERY COLOUR ON THESE SURFACES MUST HAVE A SOURCE" in prompt))
+        results.append(check(
+            f"{room}: ...and which surfaces that means",
+            all(word in prompt for word in
+                ("cabinetry", "joinery", "islands", "wardrobes", "worktops")),
+            [w for w in ("cabinetry", "joinery", "islands", "wardrobes", "worktops")
+             if w not in prompt]))
+        results.append(check(
+            f"{room}: ...that they take a neutral from the theme's palette",
+            "is finished in a neutral drawn from this" in prompt
+            and "graphite" in prompt))
+        results.append(check(
+            f"{room}: ...and that a strong colour needs the specification to require it",
+            "ONLY where the theme specification below explicitly" in prompt
+            and "requires that finish" in prompt))
+        results.append(check(
+            f"{room}: ...and that nothing outside palette or product is invented",
+            "Invent no colour that is neither written in this theme" in prompt
+            and "nor present in a supplied product" in prompt))
+        results.append(check(
+            f"{room}: a living plant is still allowed to be green",
+            "Living plants keep their own natural green" in prompt))
+
+    # The rule must not carry the three words that mark a theme's own
+    # per-room styling block: the tests that prove one theme's furniture
+    # never reaches another look for exactly that phrase, and this file
+    # has been bitten by it once already.
+    plain = build_room_scene_prompt(
+        "Metallic", "X", {"room": "Kitchen", "surface": "WALL", "style": "Metallic"})
+    results.append(check(
+        "the rule does not collide with the per-room styling marker",
+        "IN THIS ROOM" not in plain and "MUST HAVE A SOURCE" in plain))
+
+    # And it reaches a room with no theme at all, where there is no
+    # palette to draw a colour from in the first place.
+    unknown = build_room_scene_prompt(
+        "Brutalist", "X", {"room": "Kitchen", "surface": "WALL", "style": "Brutalist"})
+    results.append(check(
+        "a room with no theme is still told not to invent colour",
+        "MUST HAVE A SOURCE" in unknown))
+
+    # The themes that DO write a coloured finish into their own rules
+    # still send those rules, so the exemption has something to point at.
+    british = build_room_scene_prompt(
+        "British", "X", {"room": "Bathroom", "surface": "WALL", "style": "British"})
+    results.append(check(
+        "British still asks for its heritage-green cabinetry",
+        "heritage-green" in british or "heritage green" in british))
+    return results
+
+
 def the_check_asks_only_what_a_picture_can_answer():
     """The verdict must name things that are either in the image or not.
 
@@ -1265,6 +1338,7 @@ def main():
          the_floral_living_room_is_furnished_and_controlled()),
         ("the check asks only what a picture can answer",
          the_check_asks_only_what_a_picture_can_answer()),
+        ("every colour has a source", every_colour_has_a_source()),
         ("the theme check is honest", the_theme_check_is_honest()),
         ("the check does not fail a good room",
          the_check_does_not_fail_a_good_room()),

@@ -356,6 +356,48 @@ def build_room_scene_prompt(
         "metal, glass, plaster, rattan, cane or the room's own tile "
         "instead. Painted mouldings are smooth painted wood-free joinery: "
         "flat colour, no grain drawn into them. "
+        # EVERY COLOUR IN THE ROOM HAS TO HAVE A SOURCE.
+        #
+        # The owner reported a Geometric kitchen whose cabinetry came
+        # back a strong terracotta, filling most of the frame, while the
+        # two selected products were a blue and a pink. Terracotta was
+        # not invented: it is the third colour of this theme's written
+        # palette ("Ivory, graphite, terracotta"). What the model
+        # dropped is the qualifier the same specification carries --
+        # "where the catalog products allow it" -- and these products
+        # did not allow it.
+        #
+        # So the rule is not "no colour". It is that the room's LARGE
+        # non-tile surfaces take the palette's neutral members, and a
+        # chromatic one is used there only where the theme's own
+        # specification requires it -- which is what keeps British's
+        # heritage-green cabinetry and Floral's painted joinery, both
+        # written into their own mandatory rules.
+        #
+        # The studio has to be able to answer "what is this orange?"
+        # with a product or a line of the specification. If it cannot,
+        # it should not be in the photograph.
+        # Deliberately NOT opening with "IN THIS ROOM": that exact phrase
+        # is the heading marker for a theme's per-room styling block, and
+        # the tests that prove one theme's furniture never reaches
+        # another look for it. This file has already been bitten once by
+        # writing those three words into a rule.
+        "EVERY COLOUR ON THESE SURFACES MUST HAVE A SOURCE THE STUDIO CAN NAME. "
+        "The client is buying tile, so the tiled surfaces are what carry "
+        "colour here. Every LARGE surface that is not tile -- cabinetry, "
+        "joinery, islands, wardrobes, worktops, large furniture, untiled "
+        "walls and ceilings -- is finished in a neutral drawn from this "
+        "theme's own palette: white, off-white, ivory, cream, stone, "
+        "greige, grey, graphite, charcoal, black, plaster, metal or glass. "
+        "A strong or saturated colour may be used on one of those large "
+        "surfaces ONLY where the theme specification below explicitly "
+        "requires that finish; where it does not, that colour appears "
+        "nowhere on them -- not as cabinetry, not as paint, not on a "
+        "worktop or an island. The theme's accent colours belong in small "
+        "accessories, textiles and metalwork, and in the tile itself. "
+        "Invent no colour that is neither written in this theme's palette "
+        "nor present in a supplied product. Living plants keep their own "
+        "natural green. "
         "This must look like an actual photograph of a real room — not an "
         "illustration, rendering, drawing, diagram, or CGI-looking image — "
         "and with no text, watermark or logo anywhere in the frame."
