@@ -1019,6 +1019,93 @@ def every_colour_has_a_source():
     return results
 
 
+def roman_touch_asks_for_its_architecture():
+    """
+    A Roman Touch bathroom came back as a competent modern bathroom with
+    arches, and with a brown-and-green leaf border under the ceiling.
+
+    The leaf tile was a real selected product and was drawn faithfully,
+    which is what the engine is told to do. What was missing was a rule
+    against choosing it: "tropical greenery as the dominant theme" does
+    not catch a trim course. And the theme asked for almost nothing to
+    build -- five mandatory rules and four visible ones, against
+    British's thirteen and twelve -- so pilasters, mouldings, a detailed
+    vanity and coordinated shower metalwork were nobody's requirement.
+    """
+    from app.theme_check import _question, theme_checklist
+
+    results = []
+    roman = describe_theme("Roman Touch")
+    prompt = build_room_scene_prompt(
+        "Roman Touch", "A Board Name",
+        {"room": "Bathroom", "surface": "WALL", "style": "Roman Touch"},
+    )
+
+    # 1. The motif, at any size, on anything.
+    leaves = (
+        "tropical, palm or botanical leaf motifs on any tile, border, panel, "
+        "trim course or surface, at any size -- this theme has no leaves in it"
+    )
+    results.append(check(
+        "leaves are forbidden on any surface, not only as the dominant theme",
+        leaves in roman["avoid"], [a[:40] for a in roman["avoid"]]))
+    results.append(check(
+        "...and that reaches the room prompt",
+        leaves in prompt))
+    results.append(check(
+        "...and the older, looser rule is still there beside it",
+        "tropical greenery as the dominant theme" in roman["avoid"]))
+
+    # 3. The architecture it never asked for.
+    for fragment in (
+        "fluted pilasters, engaged columns, stone mouldings",
+        "The vanity must read as a stone piece with classical detailing",
+        "coordinated with the stone",
+    ):
+        results.append(check(
+            f"Roman Touch now requires: {fragment[:44]}",
+            any(fragment in rule for rule in roman["mandatory"]),
+            [r[:40] for r in roman["mandatory"]]))
+        results.append(check(
+            f"...and it reaches the room prompt: {fragment[:30]}",
+            fragment in prompt))
+
+    # ...and the check has to actually look for them.
+    required = theme_checklist("Roman Touch")
+    asked = _question(roman, required, "Bathroom")
+    for fragment in (
+        "Classical detailing is built into the surfaces",
+        "The vanity is a stone piece with classical detailing",
+        "The shower's glass, frame and metalwork are coordinated",
+    ):
+        results.append(check(
+            f"the check asks about it: {fragment[:40]}",
+            fragment in asked))
+    results.append(check(
+        "the forbidden leaf motif is put to the check as well",
+        leaves in asked))
+
+    # The one thing editing `visible` could have broken.
+    results.append(check(
+        "identityCheck still points at the stone rule, not a new line",
+        required[roman["identityCheck"] - 1].startswith(
+            "Natural stone is a major visual component"),
+        required[roman["identityCheck"] - 1][:60]))
+    results.append(check(
+        "the theme has enough to build now, as British does",
+        len(roman["mandatory"]) >= 8 and len(roman["visible"]) >= 7,
+        {"mandatory": len(roman["mandatory"]), "visible": len(roman["visible"])}))
+
+    # And no other theme moved.
+    for other in ("British", "Floral", "Tropical", "Moroccan"):
+        spec = describe_theme(other)
+        results.append(check(
+            f"{other} is untouched by this",
+            leaves not in spec["avoid"]
+            and not any("fluted pilasters" in r for r in spec["mandatory"])))
+    return results
+
+
 def the_check_asks_only_what_a_picture_can_answer():
     """The verdict must name things that are either in the image or not.
 
@@ -1339,6 +1426,8 @@ def main():
         ("the check asks only what a picture can answer",
          the_check_asks_only_what_a_picture_can_answer()),
         ("every colour has a source", every_colour_has_a_source()),
+        ("roman touch asks for its architecture",
+         roman_touch_asks_for_its_architecture()),
         ("the theme check is honest", the_theme_check_is_honest()),
         ("the check does not fail a good room",
          the_check_does_not_fail_a_good_room()),

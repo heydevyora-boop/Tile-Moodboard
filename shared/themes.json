@@ -91,12 +91,16 @@
         "Arches, recessed niches, sculptural forms or other convincing architectural details must communicate classical influence.",
         "Terracotta stays an accent; it must not turn the design into a rustic clay bathroom.",
         "Surfaces should feel substantial, warm and architectural.",
+        "Classical detailing must be built into the surfaces themselves -- fluted pilasters, engaged columns, stone mouldings, a cornice, a plinth or a dado course -- not implied by one arch standing on its own.",
+        "The vanity must read as a stone piece with classical detailing: a substantial top, a plinth or recessed base, and a moulded, fluted or panelled front. A plain contemporary box faced in stone is not enough.",
+        "Where the room has a shower, its glass, frame, fittings and metalwork must be coordinated with the stone -- warm or aged metal, slim profiles -- so it belongs to the bathhouse instead of being a modern enclosure dropped into it.",
         "Never present a selected catalog tile as travertine if it is a different material."
       ],
       "avoid": [
         "generic white marble hotel bathrooms",
         "glossy modern colour-blocking",
         "tropical greenery as the dominant theme",
+        "tropical, palm or botanical leaf motifs on any tile, border, panel, trim course or surface, at any size -- this theme has no leaves in it",
         "excessive Moroccan ornamentation",
         "contemporary minimalism without classical character"
       ],
@@ -105,7 +109,10 @@
         "Natural stone is a major visual component of the room.",
         "Arches, recessed niches or sculptural stone forms communicate classical influence.",
         "Surfaces read as substantial, warm and architectural.",
-        "Terracotta is present as an accent rather than as the dominant material."
+        "Terracotta is present as an accent rather than as the dominant material.",
+        "Classical detailing is built into the surfaces -- fluted pilasters, engaged columns, stone mouldings, a cornice, plinth or dado course.",
+        "The vanity is a stone piece with classical detailing rather than a plain contemporary box.",
+        "The shower's glass, frame and metalwork are coordinated with the stone rather than reading as a modern enclosure."
       ],
       "identityCheck": 1
     },

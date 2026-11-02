@@ -243,6 +243,94 @@ function main() {
   check('33. An old-style call with no tones behaves exactly as before',
     legacyCall.warnings.length === 0 && legacyCall.combinations.length === 1);
 
+  // ──────────────────────────────────────────────────────────────────
+  // A MOTIF THE THEME ITSELF RULES OUT, NAMED RATHER THAN REMOVED.
+  //
+  // A Roman Touch bathroom came back with a brown-and-green leaf border
+  // under the ceiling and across the shower wall. The border was a REAL
+  // selected product, drawn faithfully -- the generator is told to keep
+  // a supplied product exactly as it is. It was CHOSEN: every stage that
+  // chooses is blind to what a pattern depicts, and a warm terracotta
+  // leaf decor is the best colour match this theme has.
+  //
+  // The product stays. What it gets is a line the studio can answer a
+  // client with.
+  // ──────────────────────────────────────────────────────────────────
+  const romanIds = new Set(['TRAV', 'LEAF', 'STONE_DEC']);
+  const romanTypes = new Map([
+    ['TRAV', 'BASE'], ['LEAF', 'BORDER'], ['STONE_DEC', 'HIGHLIGHTER'],
+  ]);
+  const romanNames = new Map([
+    ['TRAV', 'Travertine Classico Beige'],
+    ['LEAF', 'Tropical Leaf Decor Green'],
+    ['STONE_DEC', 'Limestone Fluted Decor'],
+  ]);
+  const romanBoard = (name: string, ids: string[], roles: string[]) => ({
+    board_name: name,
+    tiles: ids.map((id, i) => ({ role: roles[i], tileId: id, name: id })),
+    grout_recommendation: '', rooms_suitable: [], reason_for_selection: '',
+  });
+
+  const leafBoard = validateCombinations(
+    [romanBoard('A', ['TRAV', 'LEAF'], ['base', 'border'])],
+    romanIds, romanTypes, romanNames, 'Roman Touch',
+  );
+  check('34. A Roman Touch board carrying a leaf decor is flagged',
+    leafBoard.warnings.some((w) => w.includes('rules out a tropical or botanical leaf motif')),
+    leafBoard.warnings);
+  check('35. ...and the warning names the tile and the role it is in',
+    leafBoard.warnings.some((w) => w.includes('"Tropical Leaf Decor Green" as the border')),
+    leafBoard.warnings);
+  check('36. ...and says the product is KEPT, not substituted',
+    leafBoard.warnings.some((w) => w.includes('nothing has been substituted')),
+    leafBoard.warnings);
+  check('37. ...and the board is still returned',
+    leafBoard.combinations.length === 1 && leafBoard.combinations[0].tiles.length === 2,
+    leafBoard.combinations.length);
+  check('38. ...and it says the catalog had a decorated tile without the motif',
+    leafBoard.warnings.some((w) => w.includes('offered a decorated tile without it')),
+    leafBoard.warnings);
+
+  // When every decorated tile in the catalog carries the motif, the
+  // stock is the problem and the board is not told to pick something
+  // that does not exist.
+  const leafOnlyPool = validateCombinations(
+    [romanBoard('A', ['TRAV', 'LEAF'], ['base', 'border'])],
+    new Set(['TRAV', 'LEAF']),
+    new Map([['TRAV', 'BASE'], ['LEAF', 'BORDER']]),
+    new Map([['TRAV', 'Travertine Classico'], ['LEAF', 'Palm Leaf Border']]),
+    'Roman Touch',
+  );
+  check('39. A catalog whose every decor carries the motif is not told to pick another',
+    leafOnlyPool.warnings.some((w) => w.includes('the gap is in the stock, not the board'))
+    && !leafOnlyPool.warnings.some((w) => w.includes('offered a decorated tile without it')),
+    leafOnlyPool.warnings);
+
+  const stoneBoard = validateCombinations(
+    [romanBoard('A', ['TRAV', 'STONE_DEC'], ['base', 'highlight'])],
+    romanIds, romanTypes, romanNames, 'Roman Touch',
+  );
+  check('40. A Roman Touch board with a stone decor passes with no warning',
+    stoneBoard.warnings.length === 0 && stoneBoard.combinations.length === 1,
+    stoneBoard.warnings);
+
+  // Floral is the theme whose entire point is botanical. It must not
+  // inherit a rule written against leaves.
+  const floralBoard = validateCombinations(
+    [romanBoard('A', ['TRAV', 'LEAF'], ['base', 'border'])],
+    romanIds, romanTypes, romanNames, 'Floral',
+  );
+  check('41. No other theme picks up the motif rule — least of all Floral',
+    floralBoard.warnings.length === 0, floralBoard.warnings);
+
+  const romanLegacy = validateCombinations(
+    [romanBoard('A', ['TRAV', 'LEAF'], ['base', 'border'])],
+    romanIds, romanTypes, undefined, 'Roman Touch',
+  );
+  check('42. Without the name map an old-style call behaves exactly as before',
+    romanLegacy.warnings.length === 0 && romanLegacy.combinations.length === 1,
+    romanLegacy.warnings);
+
   // The ranking half: ivory is the first word of this theme's palette.
   const tone = (id: string, c: string): TileForRanking => ({
     id, name: 'N', brandName: 'B', size: '600x1200mm', finish: 'Polished',
@@ -253,9 +341,9 @@ function main() {
     { style: 'Black & White', room: 'BATHROOM' },
   );
   const scoreOf = (id: string) => scored.find((t) => t.id === id)!.score;
-  check('34. Ivory scores level with charcoal for Black & White, not 15 behind',
+  check('43. Ivory scores level with charcoal for Black & White, not 15 behind',
     scoreOf('i') === scoreOf('k'), { ivory: scoreOf('i'), charcoal: scoreOf('k') });
-  check('35. ...and level with white and grey too',
+  check('44. ...and level with white and grey too',
     scoreOf('i') === scoreOf('w') && scoreOf('i') === scoreOf('g'),
     scored.map((t) => [t.colorTone, t.score]));
 
