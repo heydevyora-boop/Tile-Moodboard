@@ -246,11 +246,113 @@ def an_accent_strip_has_a_real_geometry():
               # is matched rather than the joined line.
               "follow the room's own geometry" in text
               and "never at an arbitrary" in text),
-        check("the highlight prefers the shower feature wall",
-              "Prefer the shower feature wall" in text),
-        check("...but a room with no shower still gets a highlight",
-              "otherwise the wall behind the vanity" in text,
-              "a powder washroom has no shower -- see section 8A"),
+        # The highlight's placement used to name a shower wall and a
+        # vanity wall. A bedroom has neither, so the wording collapsed
+        # to its broadest option and a Moroccan bedroom came back with
+        # a floral panel the size of the wall behind the bed. It asks
+        # the room instead, which is answerable in any room.
+        check("the highlight goes on the plane the room itself makes its focus",
+              "this room's own layout already makes its focus" in text),
+        check("...and no bathroom fitting decides that any more",
+              "Prefer the shower feature wall" not in text
+              and "otherwise the wall behind the vanity" not in text),
+    ]
+
+
+def a_border_runs_in_one_place_only():
+    """
+    The reported Moroccan bedroom used its border tile TWICE: as the
+    horizontal course it was given, and again as a frame drawn around
+    the highlight panel. That frame is what turned an installed surface
+    into something hung on the wall.
+
+    The accent role has carried "do not invent a second border" since
+    the crooked-strip fixes. The border role did not.
+    """
+    border = engine.describe_material_role("border", "wall")
+    accent = engine.describe_material_role("accent", "wall")
+
+    return [
+        check("a border is told to run in one place only",
+              "Run it in ONE place only" in border, border[-90:]),
+        check("...and not to be drawn around another material's panel",
+              "do not draw it around another material's panel" in border),
+        check("...and not to invent a second border, as the accent already said",
+              "Do not invent a second border" in border
+              and "Do not invent a second border" in accent),
+        check("the border keeps the geometry it already had",
+              "whole number of its own tiles wide" in border
+              and "meeting the base on a grout line" in border),
+    ]
+
+
+def no_feature_wall_binds_the_highlight_itself():
+    """
+    The client's "No feature wall" was already in the prompt -- as a
+    line in USER-SELECTED REQUIREMENTS, several sections below the
+    sentence that tells the model what to do with IMAGE 3. It lost: a
+    concrete instruction sitting next to the picture beats a bullet
+    further up the page, so a board that asked for no feature wall came
+    back with a wall-sized floral panel.
+
+    The requirement is put where it cannot be outranked. The bullet
+    stays as well, and now the two agree.
+    """
+    supplied = [
+        {"role": "base", "image_path": "b.png", "product_id": "B-1", "name": "Base"},
+        {"role": "highlight", "image_path": "h.png", "product_id": "H-1", "name": "Highlight"},
+        {"role": "border", "image_path": "r.png", "product_id": "R-1", "name": "Border"},
+    ]
+
+    restrained = engine.build_tile_application_prompt(
+        surface="WALL",
+        materials=supplied,
+        requirements={"room": "Bedroom", "feature": "No feature wall"},
+    )
+    chosen = engine.build_tile_application_prompt(
+        surface="WALL",
+        materials=supplied,
+        requirements={"room": "Bedroom", "feature": "Feature wall on the headboard wall"},
+    )
+
+    return [
+        check("with no feature wall, the highlight's OWN line is the restrained one",
+              "a RESTRAINED decorative inset" in restrained),
+        check("...which says the base stays visible all around it",
+              "remain plainly visible around this inset on every side" in restrained),
+        check("...and that it is never a whole wall or the room's background",
+              "never a whole wall" in restrained
+              and "never the background" in restrained
+              and "never wallpaper" in restrained),
+        check("...and that nothing may be run around it as a frame",
+              "may be run around it as a frame or an outline" in restrained),
+        check("...and the requirements bullet still says the same thing",
+              "never a whole wall" in restrained
+              and "keep any HIGHLIGHT or ACCENT to a small detail" in restrained),
+        check("...so the two no longer contradict each other",
+              "ONE feature area" not in restrained, "the unbounded wording is gone"),
+
+        # A board that DID ask for a feature wall is untouched. Floral's
+        # own specification requires the opposite there -- a dominant
+        # surface running "the full height and width of a real plane" --
+        # and capping every highlight would have broken it.
+        check("with a feature wall chosen, the highlight reads as before",
+              "ONE feature area" in chosen
+              and "a RESTRAINED decorative inset" not in chosen),
+        check("...and that placement asks the room, not a bathroom fitting",
+              "this room's own layout already makes its focus" in chosen
+              and "shower feature wall" not in chosen),
+
+        # Only the highlight changes, and only in the restrained case.
+        check("the base's line is the same either way",
+              "must cover most of the tiled area" in restrained
+              and "must cover most of the tiled area" in chosen),
+        check("the border's line is the same either way",
+              "Run it in ONE place only" in restrained
+              and "Run it in ONE place only" in chosen),
+        check("describe_material_role still answers its old two arguments",
+              engine.describe_material_role("highlight", "wall")
+              == engine.describe_material_role("highlight", "wall", False)),
     ]
 
 
@@ -397,6 +499,9 @@ def main():
     groups = [
         ("all three materials are sent", all_three_materials_are_sent()),
         ("each role gets its own surfaces", each_role_gets_its_own_surfaces()),
+        ("a border runs in one place only", a_border_runs_in_one_place_only()),
+        ("no feature wall binds the highlight itself",
+         no_feature_wall_binds_the_highlight_itself()),
         ("an unrecognised role is not dropped", an_unknown_role_is_not_dropped()),
         ("an accent strip has a real geometry", an_accent_strip_has_a_real_geometry()),
         ("the room has to be buildable", the_room_has_to_be_buildable()),

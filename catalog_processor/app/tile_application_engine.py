@@ -224,16 +224,24 @@ MATERIAL_ROLE_SURFACES = {
         "the PRIMARY surfaces -- the main field of the {surface_description}. "
         "This is the dominant material and must cover most of the tiled area."
     ),
+    # WHERE THE HIGHLIGHT GOES, IN WHATEVER ROOM THIS IS.
+    #
+    # This named a shower wall and a vanity wall. A bedroom has
+    # neither, so the wording collapsed to its last and broadest
+    # option -- "a single feature wall" -- and a Moroccan bedroom came
+    # back with a floral panel the size of the wall behind the bed.
+    # The room's own layout already says where its focus is, and that
+    # is a judgement the model can make in any room; naming two
+    # bathroom fittings only made it unanswerable outside a bathroom.
     "highlight": (
         "the HIGHLIGHT surfaces -- ONE feature area within the "
-        "{surface_description}. Prefer the shower feature wall where the "
-        "room has a shower; otherwise the wall behind the vanity, or a "
-        "single feature wall. Secondary to the base, clearly visible, "
-        "but covering much less area than it. It must read as ONE "
-        "unbroken panel from end to end -- a single rectangular field "
-        "running corner to corner of the area it occupies, not split "
-        "into separate patches and not interrupted part-way by another "
-        "material."
+        "{surface_description}: the wall or plane this room's own "
+        "layout already makes its focus. Secondary to the base, "
+        "clearly visible, but covering much less area than it. It must "
+        "read as ONE unbroken panel from end to end -- a single "
+        "rectangular field running corner to corner of the area it "
+        "occupies, not split into separate patches and not interrupted "
+        "part-way by another material."
     ),
     "accent": (
         "the ACCENT surfaces -- decorative detail within the "
@@ -246,14 +254,56 @@ MATERIAL_ROLE_SURFACES = {
         "across the middle of a base tile. Do not invent a second "
         "border, an outline, or a frame that was not asked for."
     ),
+    # The last sentence is the accent's, which the border did not have.
+    # The reported Moroccan bedroom used its border tile TWICE: as the
+    # horizontal course it was given, and again as a frame drawn around
+    # the highlight panel. That frame is what turned an installed
+    # surface into something hung on the wall.
     "border": (
         "the BORDER surfaces -- a trim course or framing band within the "
         "{surface_description}, running between or around the other "
         "materials rather than filling an area. Same geometry as an "
         "accent strip: a whole number of its own tiles wide, level, "
-        "continuous, and meeting the base on a grout line."
+        "continuous, and meeting the base on a grout line. Run it in "
+        "ONE place only. Do not invent a second border, an outline, or "
+        "a frame that was not asked for, and do not draw it around "
+        "another material's panel."
     ),
 }
+
+# WHEN THE CLIENT ASKED FOR NO FEATURE WALL.
+#
+# That selection was already in the prompt, as a line in USER-SELECTED
+# REQUIREMENTS several sections below: "keep any HIGHLIGHT or ACCENT to
+# a small detail -- a border, strip or niche -- never a whole wall".
+#
+# It lost. The role wording above is attached to the material's own
+# image, in the sentence that tells the model what to do with IMAGE 3,
+# and a concrete instruction sitting next to the picture beats a bullet
+# further up the page. So the two said opposite things and the nearer
+# one won, which is how a board that asked for no feature wall came
+# back with a wall-sized panel.
+#
+# The requirement is put where it cannot be outranked: in the
+# highlight's own line. The bullet stays as well -- it also governs the
+# accent -- and now they agree.
+#
+# Deliberately NOT applied when a feature wall WAS chosen. A theme may
+# require the opposite there and one does: Floral's own specification
+# asks for a dominant surface that "runs the full height and width of a
+# real plane -- a whole wall, an alcove, a chimney breast". Capping
+# every highlight would have broken that. The restraint belongs to the
+# client's choice, not to every board.
+MATERIAL_ROLE_HIGHLIGHT_RESTRAINED = (
+    "a RESTRAINED decorative inset within the {surface_description} -- "
+    "a panel, a recess, a niche or a band set INTO one wall and clearly "
+    "smaller than that wall. The base material stays the field and must "
+    "remain plainly visible around this inset on every side. It is "
+    "never a whole wall, never floor to ceiling, never the background "
+    "of the room, and never wallpaper. It must still read as ONE "
+    "unbroken panel rather than separate patches, and no other material "
+    "may be run around it as a frame or an outline."
+)
 
 # Roles named in a combination that this file has no wording for still
 # have to appear in the room; they are described generically rather than
@@ -264,12 +314,24 @@ MATERIAL_ROLE_FALLBACK = (
 )
 
 
-def describe_material_role(role: str, surface_description: str) -> str:
-    """Says where one role's material belongs, in this room."""
-    template = MATERIAL_ROLE_SURFACES.get(
-        str(role or "").strip().lower(),
-        MATERIAL_ROLE_FALLBACK,
-    )
+def describe_material_role(
+    role: str,
+    surface_description: str,
+    no_feature_wall: bool = False,
+) -> str:
+    """Says where one role's material belongs, in this room.
+
+    `no_feature_wall` is the client's own selection. It changes the
+    HIGHLIGHT only, and only to make it restrained; every other role
+    and every other board reads exactly as before.
+    """
+    key = str(role or "").strip().lower()
+
+    if no_feature_wall and key == "highlight":
+        template = MATERIAL_ROLE_HIGHLIGHT_RESTRAINED
+    else:
+        template = MATERIAL_ROLE_SURFACES.get(key, MATERIAL_ROLE_FALLBACK)
+
     return template.format(surface_description=surface_description)
 
 
@@ -642,11 +704,18 @@ exactly the same as it would for any other angle of this same room.
     # materials, each in its own role", and the images have to be
     # enumerated because there are now more than two of them.
     if materials:
+        # The client's own answer, read once and given to every role.
+        no_feature_wall = wants_no_feature_wall(requirements.get("feature"))
+
         lines = []
         for position, material in enumerate(materials, start=2):
             role = str(material.get("role") or "").strip().lower()
             label = role.upper() or f"MATERIAL {position - 1}"
-            where = describe_material_role(role, surface_description)
+            where = describe_material_role(
+                role,
+                surface_description,
+                no_feature_wall=no_feature_wall,
+            )
 
             details = []
             if material.get("name"):
