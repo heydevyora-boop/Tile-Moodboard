@@ -67,7 +67,12 @@ const STYLE_PROFILES: Record<string, StyleProfile> = {
   METALLIC: { finishes: ['glossy', 'polished'], colorFamilies: ['gold', 'dark', 'cool-neutral'], types: ['HIGHLIGHTER', 'ACCENT'] },
   RUSTIC: { finishes: ['matte', 'textured'], colorFamilies: ['earth', 'warm-neutral'], types: ['BASE', 'BORDER'] },
   MOROCCAN: { finishes: ['glossy', 'textured'], colorFamilies: ['blue', 'green', 'gold'], types: ['HIGHLIGHTER', 'ACCENT', 'BORDER'] },
-  'BLACK & WHITE': { finishes: ['polished', 'matte'], colorFamilies: ['cool-neutral', 'dark'], types: ['BASE', 'HIGHLIGHTER'] },
+  // 'warm-neutral' is here for IVORY, which is the first word of this
+  // theme's own palette ("Ivory, ash, charcoal, black and white") and
+  // sits in that family, not in 'cool-neutral'. Without it an ivory tile
+  // scored 67 against a charcoal tile's 82 -- fifteen points behind, for
+  // being the colour the theme is named after. Measured, not assumed.
+  'BLACK & WHITE': { finishes: ['polished', 'matte'], colorFamilies: ['cool-neutral', 'warm-neutral', 'dark'], types: ['BASE', 'HIGHLIGHTER'] },
 };
 
 // ─────────────────────────────────────────────────────────────────────────

@@ -170,6 +170,95 @@ function main() {
   check('25. The right way round passes untouched',
     correct.combinations[0].tiles.length === 2 && correct.warnings.length === 0, correct);
 
+  // ──────────────────────────────────────────────────────────────────
+  // BLACK & WHITE: both ends of the palette have to be PRODUCTS.
+  //
+  // The owner's board came back with two all-charcoal combinations and a
+  // dark grey room. Nothing checked colour, so both passed validation --
+  // the theme asks for "a clear, intentional monochromatic composition",
+  // which a model can satisfy in its head with white walls and a white
+  // basin, neither of which this studio sells.
+  // ──────────────────────────────────────────────────────────────────
+  const bwIds = new Set(['L', 'D', 'DEC_D', 'DEC_L']);
+  const bwTypes = new Map([
+    ['L', 'BASE'], ['D', 'BASE'], ['DEC_D', 'HIGHLIGHTER'], ['DEC_L', 'HIGHLIGHTER'],
+  ]);
+  // Name AND colour, as the caller supplies it -- an unclassified row has
+  // no colour and only its name says what tone it is.
+  const bwTones = new Map([
+    ['L', 'Bianco Carrara White'], ['D', 'Nero Charcoal'],
+    ['DEC_D', 'Marquina Black Decor'], ['DEC_L', 'Statuario Ivory Decor'],
+  ]);
+  const board = (name: string, ids: string[]) => ({
+    board_name: name,
+    tiles: ids.map((id, i) => ({ role: i === 0 ? 'base' : 'highlight', tileId: id, name: id })),
+    grout_recommendation: '', rooms_suitable: [], reason_for_selection: '',
+  });
+
+  const allDark = validateCombinations(
+    [board('A', ['D', 'DEC_D']), board('B', ['D', 'DEC_D'])],
+    bwIds, bwTypes, bwTones, 'Black & White',
+  );
+  check('26. Both all-dark Black & White combinations are flagged, separately',
+    allDark.warnings.filter((w) => w.includes('every tile in it is dark')).length === 2,
+    allDark.warnings);
+  check('27. ...and the warning says a TILE is needed, not a basin or a wall',
+    allDark.warnings.some((w) => w.includes('not a white basin or wall')), allDark.warnings);
+  check('28. ...and both boards are still returned, not rejected',
+    allDark.combinations.length === 2, allDark.combinations.length);
+
+  const allLight = validateCombinations(
+    [board('A', ['L', 'DEC_L'])], bwIds, bwTypes, bwTones, 'Black & White',
+  );
+  check('29. An all-light combination is flagged too',
+    allLight.warnings.some((w) => w.includes('every tile in it is light')), allLight.warnings);
+
+  const contrasted = validateCombinations(
+    [board('A', ['L', 'DEC_D']), board('B', ['D', 'DEC_L'])],
+    bwIds, bwTypes, bwTones, 'Black & White',
+  );
+  check('30. A board carrying both ends passes with no warning at all',
+    contrasted.warnings.length === 0 && contrasted.combinations.length === 2,
+    contrasted.warnings);
+
+  // Held to what the pool could offer, not to an ideal.
+  const darkOnlyPool = new Map([['D', 'Nero Charcoal'], ['DEC_D', 'Marquina Black']]);
+  const noLightToHad = validateCombinations(
+    [board('A', ['D', 'DEC_D'])], new Set(['D', 'DEC_D']), bwTypes, darkOnlyPool, 'Black & White',
+  );
+  check('31. A catalog with no light tile at all is not blamed for not using one',
+    noLightToHad.warnings.length === 0, noLightToHad.warnings);
+
+  // Only this theme.
+  const otherTheme = validateCombinations(
+    [board('A', ['D', 'DEC_D'])], bwIds, bwTypes, bwTones, 'British',
+  );
+  check('32. No other theme is given a contrast rule',
+    otherTheme.warnings.length === 0, otherTheme.warnings);
+
+  // Absent the tone map, behaviour is exactly what it was.
+  const legacyCall = validateCombinations(
+    [board('A', ['D', 'DEC_D'])], bwIds, bwTypes,
+  );
+  check('33. An old-style call with no tones behaves exactly as before',
+    legacyCall.warnings.length === 0 && legacyCall.combinations.length === 1);
+
+  // The ranking half: ivory is the first word of this theme's palette.
+  const tone = (id: string, c: string): TileForRanking => ({
+    id, name: 'N', brandName: 'B', size: '600x1200mm', finish: 'Polished',
+    type: 'BASE', colorTone: c, bestRoom: 'BATHROOM',
+  } as TileForRanking);
+  const scored = rankTiles(
+    [tone('w', 'White'), tone('i', 'Ivory'), tone('k', 'Charcoal'), tone('g', 'Grey')],
+    { style: 'Black & White', room: 'BATHROOM' },
+  );
+  const scoreOf = (id: string) => scored.find((t) => t.id === id)!.score;
+  check('34. Ivory scores level with charcoal for Black & White, not 15 behind',
+    scoreOf('i') === scoreOf('k'), { ivory: scoreOf('i'), charcoal: scoreOf('k') });
+  check('35. ...and level with white and grey too',
+    scoreOf('i') === scoreOf('w') && scoreOf('i') === scoreOf('g'),
+    scored.map((t) => [t.colorTone, t.score]));
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 }
