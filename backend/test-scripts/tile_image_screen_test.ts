@@ -17,6 +17,7 @@ import { createCanvas, loadImage } from '@napi-rs/canvas';
 import {
   measureSplit,
   measureWordmark,
+  measureCrop,
   screenTileImage,
   screenSlate,
   clearScreenCache,
@@ -40,6 +41,7 @@ function check(label: string, ok: boolean, detail?: unknown) {
 const FIXTURES = path.join(__dirname, 'fixtures');
 const SAMPLE = 48;
 const FINE = 128;
+const CROP = 256;
 
 /** The wordmark measure reads at 128: a letter's stroke is gone at 48. */
 async function wordmarkOf(file: string) {
@@ -141,6 +143,60 @@ function band(file: string): string {
   const ctx = c.getContext('2d');
   ctx.fillStyle = '#E8DCC6'; ctx.fillRect(0, 0, 240, 240);
   ctx.fillStyle = '#B08D4E'; ctx.fillRect(0, 200, 240, 40);
+  fs.writeFileSync(file, c.toBuffer('image/png'));
+  return file;
+}
+
+/** The crop measure reads at 256: a grout joint is gone at 128. */
+async function cropOf(file: string) {
+  const image = await loadImage(file);
+  const canvas = createCanvas(CROP, CROP);
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(image, 0, 0, CROP, CROP);
+  return measureCrop(ctx.getImageData(0, 0, CROP, CROP).data as unknown as Uint8ClampedArray, CROP, CROP);
+}
+
+/** Tiles LAID UP and photographed together: one face per band, a joint between. */
+function laidUp(file: string, rows: number): string {
+  const c = createCanvas(600, 600);
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#DCD8D0'; ctx.fillRect(0, 0, 600, 600);
+  ctx.strokeStyle = '#B9B4AA';
+  ctx.lineWidth = 2;
+  for (let r = 1; r < rows; r += 1) {
+    const y = Math.round((600 * r) / rows);
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(600, y); ctx.stroke();
+  }
+  fs.writeFileSync(file, c.toBuffer('image/png'));
+  return file;
+}
+
+/** The SAME tile face, shot on its own: the control for laidUp. */
+function oneFace(file: string): string {
+  const c = createCanvas(600, 600);
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#DCD8D0'; ctx.fillRect(0, 0, 600, 600);
+  fs.writeFileSync(file, c.toBuffer('image/png'));
+  return file;
+}
+
+/** A tile whose OWN outline sits at the frame, where a joint never is. */
+function outlined(file: string): string {
+  const c = createCanvas(600, 600);
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#DCD8D0'; ctx.fillRect(0, 0, 600, 600);
+  ctx.strokeStyle = '#9A958B'; ctx.lineWidth = 3;
+  ctx.strokeRect(1.5, 1.5, 597, 597);
+  fs.writeFileSync(file, c.toBuffer('image/png'));
+  return file;
+}
+
+/** A crop that took some of the catalog page with it, on one side. */
+function withPage(file: string, share: number): string {
+  const c = createCanvas(600, 600);
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#F7F4EE'; ctx.fillRect(0, 0, 600, 600);
+  ctx.fillStyle = '#D3C9BF'; ctx.fillRect(Math.round(600 * share), 0, 600, 600);
   fs.writeFileSync(file, c.toBuffer('image/png'));
   return file;
 }
@@ -511,6 +567,96 @@ async function main() {
     && blindSlate.kept.some((t) => t.id === 'readable'), blindSlate.kept.map((t) => t.id));
   check('53. A product with no picture at all is not counted as unreadable',
     !blindSlate.unread.some((t) => t.id === 'no-url'), blindSlate.unread.map((t) => t.id));
+
+  // ── A CAPTURE THAT IS NOT ONE TILE'S FACE ───────────────────────
+  //
+  // Two more captures the owner reported, both of which hold ONE material
+  // and carry no printed word, so neither earlier screen had anything to
+  // say about them. They are the files below, cut from the boards they
+  // came back on.
+  const jointLines = await cropOf(path.join(FIXTURES, 'bad-joint-lines.png'));
+  const pageMargin = await cropOf(path.join(FIXTURES, 'bad-page-margin.png'));
+
+  check('54. The pale capture with lines across it has joints', jointLines.joints >= 1, jointLines);
+  check('55. ...both of them, not just the first', jointLines.joints === 2, jointLines);
+  check('56. The stone-pink capture has a page margin', pageMargin.margin > 0, pageMargin);
+  check('57. ...down its LEFT edge, which is the side it is on',
+    pageMargin.side === 'left', pageMargin);
+  check('58. ...about a twentieth of the width, which is what is there',
+    pageMargin.margin > 0.03 && pageMargin.margin < 0.1, pageMargin.margin);
+
+  // Why the earlier screens had to be added to rather than tuned.
+  const jointSplit = await verdictOf(path.join(FIXTURES, 'bad-joint-lines.png'));
+  const marginSplit = await verdictOf(path.join(FIXTURES, 'bad-page-margin.png'));
+  check('59. The split screen reads the joint capture as ONE material, correctly — it is',
+    jointSplit.ok && jointSplit.gap < 0.15, jointSplit);
+  check('60. ...and the page margin as too small to be a material, also correctly',
+    marginSplit.ok && marginSplit.minority < 0.08, marginSplit);
+
+  // And what must survive it.
+  for (const [label, file] of [
+    ['the plain colourbody', 'good-colorbody-0002.png'],
+    ['the plain black decor', 'good-decore-0004.png'],
+    ['the floral decor', 'decor-0005.png'],
+    ['the plain modulo base', 'twin-base-0015.png'],
+    ['the border tile', 'twin-border-0018.png'],
+    ['the plain pale tile', 'plain-pale-0015.png'],
+  ] as Array<[string, string]>) {
+    const clean = await cropOf(path.join(FIXTURES, file));
+    check(`61. No joint line and no margin on ${label}`,
+      clean.joints === 0 && clean.margin === 0, { file, ...clean });
+  }
+
+  // A controlled pair: the same face, with and without the joint.
+  const laid = await cropOf(laidUp(path.join(tmp, 'laid.png'), 3));
+  const face = await cropOf(oneFace(path.join(tmp, 'face.png')));
+  check('62. Three tile faces shot together read as two joints', laid.joints === 2, laid);
+  check('63. ...and that same face shot alone reads as none', face.joints === 0, face);
+
+  const ownOutline = await cropOf(outlined(path.join(tmp, 'outline.png')));
+  check('64. A tile\u2019s own outline at the frame is not a joint',
+    ownOutline.joints === 0, ownOutline);
+
+  const pageStrip = await cropOf(withPage(path.join(tmp, 'page.png'), 0.06));
+  const noStrip = await cropOf(withPage(path.join(tmp, 'nopage.png'), 0));
+  check('65. A crop holding a strip of page is caught', pageStrip.margin > 0, pageStrip);
+  check('66. ...and the same tile cropped properly is not', noStrip.margin === 0, noStrip);
+
+  // End to end, over HTTP, on the slate the model would have seen.
+  served['/joints.png'] = fs.readFileSync(path.join(FIXTURES, 'bad-joint-lines.png'));
+  served['/margin.png'] = fs.readFileSync(path.join(FIXTURES, 'bad-page-margin.png'));
+  clearScreenCache();
+  const cropSlate = await screenSlate([
+    { id: 'joints', imageUrl: `${base}/joints.png` },
+    { id: 'margin', imageUrl: `${base}/margin.png` },
+    { id: 'good-1', imageUrl: `${base}/good1.png` },
+    { id: 'good-2', imageUrl: `${base}/good2.png` },
+  ], 0);
+  check('67. Both captures are out of the slate',
+    !cropSlate.kept.some((t) => t.id === 'joints' || t.id === 'margin'), cropSlate.kept.map((t) => t.id));
+  check('68. ...and the clean swatches beside them stay',
+    cropSlate.kept.length === 2, cropSlate.kept.map((t) => t.id));
+  check('69. The joint capture is refused in the owner\u2019s terms',
+    /joint lines run across this capture/.test(
+      cropSlate.rejected.find((r) => r.tile.id === 'joints')?.reason ?? '',
+    ), cropSlate.rejected.map((r) => r.reason));
+  check('70. ...and says it is more than one tile, not a bad material',
+    /more than one tile in the shot/.test(
+      cropSlate.rejected.find((r) => r.tile.id === 'joints')?.reason ?? '',
+    ), cropSlate.rejected.map((r) => r.reason));
+  check('71. The page margin is refused in those terms too',
+    /the catalog page shows beside the tile/.test(
+      cropSlate.rejected.find((r) => r.tile.id === 'margin')?.reason ?? '',
+    ), cropSlate.rejected.map((r) => r.reason));
+
+  // And the floor still holds: a catalog of nothing but these returns one.
+  clearScreenCache();
+  const allCropped = await screenSlate([
+    { id: 'joints', imageUrl: `${base}/joints.png` },
+    { id: 'margin', imageUrl: `${base}/margin.png` },
+  ], 2);
+  check('72. A catalog of nothing but bad crops still returns a slate',
+    allCropped.kept.length === 2, allCropped.kept.map((t) => t.id));
 
   server.close();
   fs.rmSync(tmp, { recursive: true, force: true });

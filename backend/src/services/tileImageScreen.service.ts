@@ -63,6 +63,17 @@ const SAMPLE = 48;
 const FINE = 128;
 
 /**
+ * The crop screen reads higher again: a grout joint between two tiles is
+ * ONE pixel wide in the original, and at 128 it survives or vanishes
+ * depending on where the line happens to fall between two sample rows.
+ * Measured on the reported capture across nine crops of it: at 128 the
+ * two joint lines were found in seven and missed in two; at 192, 256 and
+ * 320 they were found in all nine, and no clean swatch grew a line at
+ * any of those sizes. 256 sits in the middle of what works.
+ */
+const CROP = 256;
+
+/**
  * A WORDMARK is three or more marks of similar height sitting on one
  * baseline, drawn with ONE stroke weight. That last part is what a
  * typeface is, and it is what separates a printed word from a repeating
@@ -91,6 +102,69 @@ const GAP_FLOOR = 0.15;
 /** A band runs the full length of one edge: one reach near 1, the other small. */
 const BAND_REACH = 0.25;
 const BAND_SPAN = 0.9;
+
+/**
+ * A JOINT LINE is a straight line running the full width or height of the
+ * capture, darker (or lighter) than the surface on both sides of it. One
+ * tile has none. A photograph of tiles LAID UP has one per joint, and
+ * that is the capture the catalog owner reported: a pale tile with two
+ * horizontal joints across it, which is three rows of tile in the shot,
+ * not a swatch.
+ *
+ * Measured at CROP over every fixture, as the count of such lines:
+ *
+ *   reported joint capture   2   REJECT
+ *   plain colourbody         0   keep
+ *   plain black decor        0   keep
+ *   floral decor             0   keep
+ *   plain modulo base        0   keep
+ *   plain pale, own outline  0   keep
+ *   border tile              0   keep
+ *   brand plate              0   keep (the wordmark screen has it)
+ *
+ * The line must clear the frame by JOINT_FRAME: a tile's OWN outline sits
+ * at the very edge of the capture and is not a joint.
+ *
+ * A ribbed or fluted tile is ribbed with lines like these and will be
+ * refused with them. That is the trade, taken deliberately: the owner
+ * asked for captures with lines across them gone.
+ */
+const JOINT_OFFSET = 3;
+const JOINT_CONTRAST = 3;
+const JOINT_SPAN = 0.9;
+const JOINT_FRAME = 0.06;
+
+/**
+ * A PAGE MARGIN is a strip of catalog paper left beside the tile by the
+ * crop -- the second capture reported: a stone-pink tile with a band of
+ * near-white page down its left edge. It is not a second material (far
+ * too narrow for that, which is why the split screen let it through) and
+ * not a border (a border belongs to the tile and shades with it).
+ *
+ * Three things have to hold at once, and the legitimate fixtures each
+ * fail at least two of them:
+ *
+ *                            width   step   flat
+ *   reported page margin     0.059  0.132  0.001  REJECT
+ *   plain pale, own outline    --   0.068  0.035  keep
+ *   floral decor               --   0.030    --   keep
+ *   plain colourbody           --   0.006    --   keep
+ *   border tile                --   0.012    --   keep
+ *
+ * `step` is the colour jump at the strip's inner boundary and `flat` how
+ * uniform the strip is along and across itself. Together they say "paper,
+ * ending abruptly" rather than "the tile, lit unevenly" -- a gradient has
+ * no step, and a tile's own dark outline is neither flat nor wide enough.
+ *
+ * Checked over nine crops of the reported capture: found in all nine, and
+ * no legitimate fixture registers a margin at any of them, at any
+ * threshold in STEP 0.05-0.06 by FLAT 0.010-0.020. The tightest that
+ * works is the one kept.
+ */
+const MARGIN_STEP = 0.05;
+const MARGIN_FLAT = 0.01;
+const MARGIN_MIN = 0.03;
+const MARGIN_MAX = 0.2;
 
 /**
  * HOW THE SCREEN WENT BLIND.
@@ -130,11 +204,15 @@ export interface ScreenVerdict {
   stroke: number;
   /** How evenly that stroke width is shared, 0 = one weight throughout. */
   evenness: number;
+  /** Straight lines running the full span of the capture, clear of its frame. */
+  joints: number;
+  /** Catalog paper left beside the tile, as a share of that side. */
+  margin: number;
 }
 
 const KEPT = (reason: string): ScreenVerdict => ({
   ok: true, reason, gap: 0, minority: 0, apart: 0, edge: 1, touches: false, band: false,
-  word: 0, stroke: 1, evenness: 1,
+  word: 0, stroke: 1, evenness: 1, joints: 0, margin: 0,
 });
 
 /** Everything this decides from, given the raw pixels of a square sample. */
@@ -240,11 +318,13 @@ export function measureSplit(data: Uint8ClampedArray, w: number, h: number): Scr
     edge,
     touches,
     band,
-    // Filled in by screen() below, which asks the wordmark question of
-    // the same picture. measureSplit answers only its own.
+    // Filled in by screen() below, which asks the wordmark and crop
+    // questions of the same picture. measureSplit answers only its own.
     word: 0,
     stroke: 1,
     evenness: 1,
+    joints: 0,
+    margin: 0,
   };
 }
 
@@ -411,6 +491,122 @@ export function measureWordmark(data: Uint8ClampedArray, w: number, h: number): 
   };
 }
 
+// ──────────────────────────────────────────────────────────────────────
+// A capture that is not one tile's face
+//
+// The owner reported two more boards, both built from captures that hold
+// one material and no printed word, so neither earlier screen had
+// anything to say about them:
+//
+//   a pale tile with two joint lines across it -- three rows of laid-up
+//   tile photographed together, not a swatch
+//
+//   a stone-pink tile with a strip of near-white catalog page down its
+//   left edge -- the crop took the tile and some of the page with it
+//
+// Both are failures of the CROP, not of the material, so they are
+// measured as such: the first as a straight line running the full span of
+// the picture clear of its frame, the second as a flat strip of a
+// different colour along one edge ending in a step.
+//
+// Each threshold above records what it was measured against.
+// ──────────────────────────────────────────────────────────────────────
+
+export interface CropReading {
+  joints: number; margin: number; side: string; step: number; flat: number;
+}
+
+export function measureCrop(data: Uint8ClampedArray, w: number, h: number): CropReading {
+  const n = w * h;
+  if (n === 0) return { joints: 0, margin: 0, side: '', step: 0, flat: 0 };
+
+  const lum = new Float32Array(n);
+  for (let i = 0; i < n; i += 1) {
+    lum[i] = data[i * 4] * 0.299 + data[i * 4 + 1] * 0.587 + data[i * 4 + 2] * 0.114;
+  }
+
+  // JOINT LINES. A row counts when nearly every pixel in it is darker --
+  // or nearly every pixel lighter -- than the surface a few pixels either
+  // side. Adjacent rows that both count are the same line seen twice, so
+  // they are collapsed before counting.
+  const straight = (across: number, along: number, read: (a: number, b: number) => number) => {
+    const frame = Math.round(across * JOINT_FRAME);
+    const found: number[] = [];
+    for (let p = frame + JOINT_OFFSET; p < across - frame - JOINT_OFFSET; p += 1) {
+      let darker = 0;
+      let lighter = 0;
+      for (let q = 0; q < along; q += 1) {
+        const here = read(p, q);
+        const before = read(p - JOINT_OFFSET, q);
+        const after = read(p + JOINT_OFFSET, q);
+        if (here + JOINT_CONTRAST < before && here + JOINT_CONTRAST < after) darker += 1;
+        if (here - JOINT_CONTRAST > before && here - JOINT_CONTRAST > after) lighter += 1;
+      }
+      if (Math.max(darker, lighter) / along >= JOINT_SPAN) found.push(p);
+    }
+    let lines = 0;
+    let last = -JOINT_OFFSET - 1;
+    for (const p of found) {
+      if (p - last > JOINT_OFFSET) lines += 1;
+      last = p;
+    }
+    return lines;
+  };
+  const joints = Math.max(
+    straight(h, w, (y, x) => lum[y * w + x]),
+    straight(w, h, (x, y) => lum[y * w + x]),
+  );
+
+  // A PAGE MARGIN. Every strip width from MARGIN_MIN to MARGIN_MAX is
+  // tried on each of the four sides, and the widest one that is flat
+  // along and across itself AND ends in a colour step is the margin.
+  const colour = (count: number, at: (j: number) => number) => {
+    const m = [0, 0, 0];
+    for (let j = 0; j < count; j += 1) for (let k = 0; k < 3; k += 1) m[k] += data[at(j) * 4 + k] / count;
+    return m;
+  };
+  const between = (a: number[], b: number[]) => Math.sqrt(
+    (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2,
+  ) / (255 * Math.sqrt(3));
+
+  let margin = 0;
+  let side = '';
+  let step = 0;
+  let flat = 0;
+  const edges: Array<[string, number, (i: number) => number[]]> = [
+    ['left', w, (x) => colour(h, (y) => y * w + x)],
+    ['right', w, (x) => colour(h, (y) => y * w + (w - 1 - x))],
+    ['top', h, (y) => colour(w, (x) => y * w + x)],
+    ['bottom', h, (y) => colour(w, (x) => (h - 1 - y) * w + x)],
+  ];
+  for (const [name, across, lineAt] of edges) {
+    const line: number[][] = [];
+    const upTo = Math.round(across * MARGIN_MAX);
+    for (let i = 0; i <= upTo; i += 1) line.push(lineAt(i));
+    for (let k = Math.max(2, Math.ceil(across * MARGIN_MIN)); k <= upTo; k += 1) {
+      // The boundary pixel itself is a blend of paper and tile and
+      // belongs to neither, so the strip is judged without it. Reading it
+      // as part of the paper is what made this measure miss the reported
+      // capture at one crop in nine: the blend alone put the strip's
+      // spread at 0.032 while the paper behind it sat at 0.002.
+      const strip = line.slice(0, k - 1);
+      const mean = [0, 1, 2].map((c) => strip.reduce((a, v) => a + v[c], 0) / strip.length);
+      const spread = Math.max(...strip.map((v) => between(v, mean)));
+      if (spread > MARGIN_FLAT) continue;
+      const jump = between(line[k - 1], line[k]);
+      if (jump < MARGIN_STEP) continue;
+      if (k / across > margin) {
+        margin = k / across;
+        side = name;
+        step = jump;
+        flat = spread;
+      }
+    }
+  }
+
+  return { joints, margin, side, step, flat };
+}
+
 // Per-process, because the same twenty products are looked at on every
 // generation and their pictures do not change between them.
 const verdicts = new Map<string, ScreenVerdict>();
@@ -418,15 +614,22 @@ const samples = new Map<string, Sample | null>();
 const signatures = new Map<string, TileSignature | null>();
 
 /**
- * One fetch, two sizes. The split screen and the fingerprint read the
- * coarse one; the wordmark screen needs the fine one, because a
- * letter's stroke is gone at 48px.
+ * One fetch, three sizes. The split screen and the fingerprint read the
+ * coarse one; the wordmark screen needs the fine one, because a letter's
+ * stroke is gone at 48px; and the crop screen needs the larger one again,
+ * because a grout joint is gone at 128.
  */
 interface Sample {
   data: Uint8ClampedArray;
   w: number;
   h: number;
   fine: { data: Uint8ClampedArray; w: number; h: number };
+  /**
+   * The crop READING, not its pixels. A 256-square sample is 256KB, it is
+   * wanted exactly once, and eighty of them would sit in the cache below
+   * for the life of the process for nothing.
+   */
+  crop: CropReading;
 }
 
 /** One attempt at the bytes. Null means "not this time", which may be worth retrying. */
@@ -483,7 +686,8 @@ async function decode(url: string): Promise<Sample | null> {
     };
 
     const coarse = draw(SAMPLE);
-    return { ...coarse, fine: draw(FINE) };
+    const cropped = draw(CROP);
+    return { ...coarse, fine: draw(FINE), crop: measureCrop(cropped.data, cropped.w, cropped.h) };
   } catch {
     return null;
   }
@@ -599,20 +803,47 @@ export async function lookalikeRoles<T extends { role: string; tileId: string }>
   return { duplicates, unread };
 }
 
-/** Both questions, asked of one decoded picture. */
+/** All three questions, asked of one decoded picture. */
 function screen(sample: Sample): ScreenVerdict {
   const split = measureSplit(sample.data, sample.w, sample.h);
   const mark = measureWordmark(sample.fine.data, sample.fine.w, sample.fine.h);
-  const verdict: ScreenVerdict = { ...split, word: mark.word, stroke: mark.stroke, evenness: mark.evenness };
+  const crop = sample.crop;
+  const verdict: ScreenVerdict = {
+    ...split,
+    word: mark.word,
+    stroke: mark.stroke,
+    evenness: mark.evenness,
+    joints: crop.joints,
+    margin: crop.margin,
+  };
 
   if (!verdict.ok) return verdict;
-  if (!mark.printed) return verdict;
 
-  return {
-    ...verdict,
-    ok: false,
-    reason: `a word is printed across this capture (${mark.word} marks, stroke ${mark.stroke.toFixed(2)}, evenness ${mark.evenness.toFixed(2)}) -- a brand plate, not a tile`,
-  };
+  if (mark.printed) {
+    return {
+      ...verdict,
+      ok: false,
+      reason: `a word is printed across this capture (${mark.word} marks, stroke ${mark.stroke.toFixed(2)}, evenness ${mark.evenness.toFixed(2)}) -- a brand plate, not a tile`,
+    };
+  }
+
+  if (crop.joints > 0) {
+    return {
+      ...verdict,
+      ok: false,
+      reason: `${crop.joints === 1 ? 'a joint line runs' : `${crop.joints} joint lines run`} across this capture -- more than one tile in the shot, not one tile's face`,
+    };
+  }
+
+  if (crop.margin > 0) {
+    return {
+      ...verdict,
+      ok: false,
+      reason: `the catalog page shows beside the tile (${crop.margin.toFixed(2)} of the ${crop.side} edge, step ${crop.step.toFixed(2)}, flat ${crop.flat.toFixed(2)}) -- the crop took the page with it`,
+    };
+  }
+
+  return verdict;
 }
 
 /** One picture's verdict. Anything unreadable is kept. */
