@@ -152,6 +152,42 @@
   .lib-empty { margin-top:clamp(20px,2.4vw,30px); background:var(--sand); border:1px solid var(--line); border-radius:20px; padding:clamp(22px,2.4vw,30px); }
   .lib-empty h3 { margin:0; font-size:clamp(19px,2vw,24px); }
   .lib-empty p { margin:10px 0 0; font-size:14px; line-height:1.6; color:var(--text2); max-width:62ch; }
+
+  .lib-themes { display:flex; flex-wrap:wrap; gap:8px; margin-top:20px; }
+  .lib-theme { display:inline-flex; align-items:center; gap:9px; padding:10px 15px; background:var(--card); border:1px solid var(--line); border-radius:99px; font-size:12.5px; cursor:pointer; color:var(--ink); }
+  .lib-theme:hover { border-color:var(--gold-light); }
+  .lib-theme.selected { background:var(--ink); border-color:var(--ink); color:#FBF6EC; }
+  .lib-theme .count { font-size:9px; letter-spacing:.12em; opacity:.7; }
+
+  .lib-actions { display:flex; flex-wrap:wrap; align-items:center; gap:14px; margin-top:18px; }
+  .lib-add { display:inline-flex; align-items:center; justify-content:center; min-height:46px; padding:0 20px; background:var(--gold); color:#FFF8EC; border-radius:13px; cursor:pointer; font-size:10.5px; letter-spacing:.14em; }
+  .lib-add:hover { background:#6E5228; }
+  .lib-hint { font-size:12px; color:var(--muted); }
+
+  .lib-queue { margin-top:18px; padding:16px 18px; background:var(--sand); border:1px solid var(--line); border-radius:16px; }
+  .lib-queue-head { display:flex; align-items:center; justify-content:space-between; gap:12px; font-size:9.5px; letter-spacing:.16em; color:var(--muted); }
+  .lib-cancel { background:none; border:none; padding:0; color:var(--err); font-size:9.5px; letter-spacing:.14em; cursor:pointer; text-decoration:underline; }
+  .lib-bar { position:relative; height:5px; margin:12px 0 10px; border-radius:99px; background:var(--line); overflow:hidden; }
+  .lib-bar span { position:absolute; inset:0 auto 0 0; border-radius:99px; background:linear-gradient(90deg, var(--gold), #B08D4E); transition:width .3s cubic-bezier(.4,0,.2,1); }
+  .lib-failed { font-size:9.5px; letter-spacing:.1em; color:var(--err); margin-bottom:8px; }
+  .lib-files { display:flex; flex-direction:column; gap:5px; max-height:210px; overflow:auto; }
+  .lib-file { display:grid; grid-template-columns:1fr auto; gap:4px 12px; align-items:center; font-size:12px; }
+  .lib-file-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .lib-file-state { font-size:9px; letter-spacing:.1em; color:var(--muted); }
+  .lib-file-done .lib-file-state { color:#4B7B52; }
+  .lib-file-failed .lib-file-state { color:var(--err); }
+  .lib-file-err { grid-column:1 / -1; font-size:10.5px; line-height:1.5; color:var(--err); }
+
+  .lib-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(230px, 1fr)); gap:16px; margin-top:20px; }
+  .lib-card { margin:0; background:var(--card); border:1px solid var(--line); border-radius:16px; overflow:hidden; display:flex; flex-direction:column; }
+  .lib-shot { aspect-ratio:4/3; background:var(--sand); border-bottom:1px solid var(--line); }
+  .lib-shot img { width:100%; height:100%; object-fit:cover; display:block; }
+  .lib-cap { padding:13px 15px 15px; display:flex; flex-direction:column; gap:6px; }
+  .lib-title { font-size:13.5px; line-height:1.3; }
+  .lib-meta { font-size:9px; letter-spacing:.1em; color:var(--muted); }
+  .lib-del { align-self:flex-start; margin-top:3px; background:none; border:none; padding:0; color:var(--muted); font-size:9px; letter-spacing:.14em; cursor:pointer; text-decoration:underline; }
+  .lib-del:hover:not(:disabled) { color:var(--err); }
+  .lib-del:disabled { opacity:.6; cursor:not-allowed; }
 </style>
 </head>
 <body>
@@ -185,24 +221,13 @@
 (function () {
   'use strict';
 
-  // DE'VYORA LIBRARY -- the shell.
-  //
-  // This chunk is foundation only: the menu item, the architecture and
-  // the table behind it. There is no upload here and no generation; the
-  // gallery, the tile matching and the scene are later chunks.
-  //
-  // What the page does today is name the themes a reference can belong
-  // to, read from the server's own theme list rather than a copy kept
-  // here, and say plainly that the library is empty until pictures are
-  // added. An empty page with no explanation reads as a broken one.
-
   const NAV_ITEMS = [
-    { id: 'dashboard', label: 'Dashboard', href: 'dashboard.html', ready: true },
-    { id: 'moodboard', label: 'Mood Board', href: 'mood-board.html', ready: true },
-    { id: 'generations', label: 'Recent Generations', href: 'recent-generations.html', ready: true },
-    { id: 'projects', label: 'Projects', href: 'projects.html', ready: true },
-    { id: 'catalog', label: 'Catalog', href: 'catalog.html', ready: true },
-    { id: 'library', label: 'De\u2019vyora Library', href: 'devyora-library.html', ready: true },
+    { id: 'dashboard', label: 'Dashboard', href: 'dashboard.html' },
+    { id: 'moodboard', label: 'Mood Board', href: 'mood-board.html' },
+    { id: 'generations', label: 'Recent Generations', href: 'recent-generations.html' },
+    { id: 'projects', label: 'Projects', href: 'projects.html' },
+    { id: 'catalog', label: 'Catalog', href: 'catalog.html' },
+    { id: 'library', label: 'De’vyora Library', href: 'devyora-library.html' },
   ];
 
   function renderNav() {
@@ -217,17 +242,273 @@
     });
   }
 
+  function escapeHtml(value) {
+    return String(value == null ? '' : value).replace(/[&<>"']/g, (c) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    })[c]);
+  }
+
+  const state = {
+    themes: [],
+    themeId: null,
+    references: [],
+    // The upload queue: one entry per file, each with its own state.
+    queue: [],
+    running: false,
+    aborter: null,
+  };
+
+  // AT MOST THIS MANY AT ONCE.
+  //
+  // A hundred simultaneous uploads is a hundred simultaneous Drive calls
+  // from one serverless function, which Google throttles and the browser
+  // queues anyway. Four keeps the pipe full without either.
+  const AT_ONCE = 4;
+
+  const selectedTheme = () => state.themes.find((t) => t.id === state.themeId) || null;
+
+  // ── rendering ─────────────────────────────────────────────────────
+
+  function themeBarHtml() {
+    return '<div class="lib-themes">' + state.themes.map((theme) =>
+      '<button type="button" class="lib-theme' + (theme.id === state.themeId ? ' selected' : '')
+      + '" data-theme="' + escapeHtml(theme.id) + '">'
+      + escapeHtml(theme.label)
+      + '<span class="count mono">' + theme.count + '</span></button>').join('') + '</div>';
+  }
+
+  function queueHtml() {
+    if (!state.queue.length) return '';
+    const done = state.queue.filter((f) => f.status === 'done').length;
+    const failed = state.queue.filter((f) => f.status === 'failed').length;
+    const total = state.queue.length;
+    const share = total ? Math.round(((done + failed) / total) * 100) : 0;
+
+    return '<div class="lib-queue" id="libQueue">'
+      + '<div class="lib-queue-head">'
+      + '<span class="mono">UPLOADING ' + (done + failed) + ' OF ' + total + '</span>'
+      + (state.running
+        ? '<button type="button" class="lib-cancel mono" id="libCancel">CANCEL</button>'
+        : '<button type="button" class="lib-cancel mono" id="libClear">CLEAR</button>')
+      + '</div>'
+      + '<div class="lib-bar"><span style="width:' + share + '%"></span></div>'
+      + (failed
+        ? '<div class="lib-failed mono">' + failed + ' could not be uploaded — see below</div>'
+        : '')
+      + '<div class="lib-files">' + state.queue.map((item) =>
+        '<div class="lib-file lib-file-' + item.status + '">'
+        + '<span class="lib-file-name">' + escapeHtml(item.file.name) + '</span>'
+        + '<span class="lib-file-state mono">' + escapeHtml(
+          item.status === 'waiting' ? 'WAITING'
+            : item.status === 'uploading' ? Math.round(item.progress * 100) + '%'
+              : item.status === 'done' ? 'DONE' : 'FAILED'
+        ) + '</span>'
+        + (item.error ? '<span class="lib-file-err">' + escapeHtml(item.error) + '</span>' : '')
+        + '</div>').join('') + '</div></div>';
+  }
+
+  function galleryHtml() {
+    if (!state.themeId) {
+      return '<div class="lib-empty"><h3 class="serif">Choose a theme</h3>'
+        + '<p>Every reference room belongs to one theme. Pick one above to see what is in it '
+        + 'and to add more.</p></div>';
+    }
+    if (!state.references.length) {
+      return '<div class="lib-empty"><h3 class="serif">Nothing in this theme yet</h3>'
+        + '<p>Add reference rooms with the button above. They are stored in the studio’s '
+        + 'Google Drive.</p></div>';
+    }
+    return '<div class="lib-grid">' + state.references.map((ref) =>
+      '<figure class="lib-card" data-id="' + escapeHtml(ref.id) + '">'
+      + '<div class="lib-shot"><img src="' + escapeHtml(ref.imageUrl) + '" alt="'
+      + escapeHtml(ref.title) + '" loading="lazy"></div>'
+      + '<figcaption class="lib-cap">'
+      + '<span class="lib-title">' + escapeHtml(ref.title) + '</span>'
+      + '<span class="lib-meta mono">' + escapeHtml(
+        [ref.room, ref.uploadedBy && ref.uploadedBy.name].filter(Boolean).join(' · ')
+      ) + '</span>'
+      + '<button type="button" class="lib-del mono" data-delete="' + escapeHtml(ref.id) + '">REMOVE</button>'
+      + '</figcaption></figure>').join('') + '</div>';
+  }
+
   function render() {
+    const theme = selectedTheme();
     document.getElementById('mainContent').innerHTML =
       '<div class="stage">'
       + '<div class="mono" style="font-size:10px; letter-spacing:.18em; color:var(--muted)">REFERENCE ROOMS</div>'
-      + '<h1 class="step-h1 serif">De\u2019vyora Library</h1>'
+      + '<h1 class="step-h1 serif">De’vyora Library</h1>'
       + '<p class="step-sub">Rooms the studio has chosen, kept by theme. Picking one finds the '
       + 'catalog tiles that match it, and the scene is then generated from that same picture.</p>'
-      + '<div class="lib-empty"><h3 class="serif">Nothing in the library yet</h3>'
-      + '<p>Reference rooms appear here once they are added. Each one belongs to a theme and is '
-      + 'stored in the studio\u2019s Google Drive.</p>'
-      + '</div></div>';
+      + themeBarHtml()
+      + (theme
+        ? '<div class="lib-actions">'
+          + '<label class="lib-add mono" for="libFiles">ADD IMAGES TO ' + escapeHtml(theme.label.toUpperCase()) + '</label>'
+          + '<input type="file" id="libFiles" accept="image/jpeg,image/png,image/webp" multiple hidden>'
+          + '<span class="lib-hint">Pick as many as you like — they go up a few at a time.</span>'
+          + '</div>'
+        : '')
+      + '<div class="alert" id="libAlert" style="display:none"></div>'
+      + queueHtml()
+      + galleryHtml()
+      + '</div>';
+    wire();
+  }
+
+  function repaintQueue() {
+    const host = document.getElementById('libQueue');
+    if (!host) { render(); return; }
+    host.outerHTML = queueHtml();
+    wireQueue();
+  }
+
+  function showAlert(message) {
+    const el = document.getElementById('libAlert');
+    if (!el) return;
+    el.textContent = message;
+    el.style.display = message ? 'flex' : 'none';
+  }
+
+  // ── the queue ─────────────────────────────────────────────────────
+
+  async function runQueue() {
+    if (state.running) return;
+    state.running = true;
+    state.aborter = new AbortController();
+    repaintQueue();
+
+    const theme = state.themeId;
+    let next = 0;
+
+    const worker = async () => {
+      for (let i = next++; i < state.queue.length; i = next++) {
+        if (state.aborter.signal.aborted) return;
+        const item = state.queue[i];
+        item.status = 'uploading';
+        item.progress = 0;
+        repaintQueue();
+
+        try {
+          const saved = await CasaApi.library.upload(item.file, { themeId: theme }, {
+            signal: state.aborter.signal,
+            onProgress: (share) => {
+              item.progress = share;
+              const cell = document.querySelectorAll('.lib-file')[i];
+              const label = cell && cell.querySelector('.lib-file-state');
+              if (label) label.textContent = Math.round(share * 100) + '%';
+            },
+          });
+          item.status = 'done';
+          // Shown at once rather than after the whole batch: on a
+          // hundred files, waiting to the end is a blank page for
+          // minutes.
+          if (saved && state.themeId === theme) state.references.unshift(saved);
+        } catch (err) {
+          item.status = 'failed';
+          item.error = (err && err.message) || 'Upload failed.';
+        }
+        repaintQueue();
+      }
+    };
+
+    await Promise.all(
+      Array.from({ length: Math.min(AT_ONCE, state.queue.length) }, worker)
+    );
+
+    state.running = false;
+    const failed = state.queue.filter((f) => f.status === 'failed').length;
+    const done = state.queue.filter((f) => f.status === 'done').length;
+
+    // The counts on the theme bar are now wrong by `done`.
+    const theirTheme = state.themes.find((t) => t.id === theme);
+    if (theirTheme) theirTheme.count += done;
+
+    render();
+    if (failed) {
+      showAlert(failed + ' of ' + state.queue.length + ' could not be uploaded. '
+        + 'The rest are in the library.');
+    }
+  }
+
+  function enqueue(files) {
+    if (!state.themeId) return;
+    state.queue = Array.from(files).map((file) => ({
+      file, status: 'waiting', progress: 0, error: null,
+    }));
+    showAlert('');
+    runQueue();
+  }
+
+  // ── wiring ────────────────────────────────────────────────────────
+
+  function wireQueue() {
+    const cancel = document.getElementById('libCancel');
+    if (cancel) {
+      cancel.addEventListener('click', () => {
+        if (state.aborter) state.aborter.abort();
+      });
+    }
+    const clear = document.getElementById('libClear');
+    if (clear) {
+      clear.addEventListener('click', () => { state.queue = []; render(); });
+    }
+  }
+
+  function wire() {
+    document.querySelectorAll('[data-theme]').forEach((btn) => {
+      btn.addEventListener('click', () => selectTheme(btn.dataset.theme));
+    });
+
+    const files = document.getElementById('libFiles');
+    if (files) {
+      files.addEventListener('change', () => {
+        if (files.files && files.files.length) enqueue(files.files);
+        files.value = '';
+      });
+    }
+
+    document.querySelectorAll('[data-delete]').forEach((btn) => {
+      btn.addEventListener('click', () => remove(btn.dataset.delete, btn));
+    });
+
+    wireQueue();
+  }
+
+  async function remove(id, btn) {
+    const ref = state.references.find((r) => r.id === id);
+    if (!window.confirm('Remove "' + ((ref && ref.title) || 'this reference') + '" from the '
+      + 'library? It is deleted from Google Drive too.')) return;
+
+    btn.disabled = true;
+    btn.textContent = 'REMOVING…';
+    try {
+      const result = await CasaApi.library.remove(id);
+      state.references = state.references.filter((r) => r.id !== id);
+      const theme = selectedTheme();
+      if (theme && theme.count > 0) theme.count -= 1;
+      render();
+      if (result && result.driveDeleted === false) {
+        showAlert('Removed from the library, but the file could not be deleted from Drive: '
+          + (result.driveError || 'unknown error'));
+      }
+    } catch (err) {
+      btn.disabled = false;
+      btn.textContent = 'REMOVE';
+      showAlert((err && err.message) || 'That could not be removed.');
+    }
+  }
+
+  async function selectTheme(themeId) {
+    if (state.running) return;
+    state.themeId = themeId;
+    state.references = [];
+    state.queue = [];
+    render();
+    try {
+      state.references = await CasaApi.library.references(themeId);
+    } catch (err) {
+      showAlert((err && err.message) || 'The library could not be read.');
+    }
+    render();
   }
 
   async function init() {
@@ -243,13 +524,16 @@
       location.href = 'login.html';
     });
 
-    // No theme list is read here yet, and none is copied into this page.
-    // The gallery is a later chunk, and when it needs the themes it will
-    // take them from the server reading shared/themes.json -- the one
-    // list the prompts, the theme check and the tile ranking are already
-    // written against. There is no such endpoint today; adding one
-    // belongs to the chunk that needs it, not to this one.
+    // The themes come from the server, which reads shared/themes.json --
+    // the one list the prompts, the theme check and the tile ranking are
+    // written against. A copy kept in this page would drift from it.
+    try {
+      state.themes = await CasaApi.library.themes();
+    } catch (err) {
+      state.themes = [];
+    }
     render();
+    if (!state.themes.length) showAlert('The theme list could not be read.');
   }
 
   init();

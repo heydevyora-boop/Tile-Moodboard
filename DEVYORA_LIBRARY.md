@@ -133,14 +133,43 @@ Migration: `backend/prisma/migrations/20261103113735_add_devyora_library`.
 cd backend && npx prisma migrate deploy
 ```
 
+## Adding pictures — "bulk" is many requests, not one
+
+```
+GET    /library/themes                 the nine themes, with their counts
+GET    /library/references?themeId=    a theme's rooms
+POST   /library/references             ONE picture (multipart)
+DELETE /library/references/:id         removes the row AND the Drive file
+```
+
+One picture per request, four at a time from the browser. This deploys
+to a serverless function with a sixty-second limit and a few megabytes
+of request body — one POST could not carry fifty photographs and could
+not finish if it did. The useful consequence is that one bad file fails
+on its own and the other ninety-nine still land.
+
+Progress is per file and per byte (`XMLHttpRequest.upload`, the only
+thing that reports how much has actually gone up), with an overall bar,
+a cancel while it runs, and the reason beside any file that failed.
+
+**No fallback.** `referenceImages.service` tries Vercel Blob, then Drive,
+then local disk, because that table serves an internal flow that must
+keep working on a laptop. This one does not: a library picture that is
+not in the studio's Drive is not in the library, and a Drive refusal is
+reported in Google's own words rather than hidden behind a copy on a
+disk that serverless throws away.
+
+Permissions are the existing `reference_images:read` / `:write` rather
+than new `library:*` ones. New permissions would have to be added to
+every role that should hold them, and a role-seeding mistake locks the
+owner out of their own feature.
+
 ## What the later chunks still have to decide
 
-- **How a reference is added**: uploaded through the app, or a Drive link
-  pasted in. The quota note above decides this.
 - **What "matching tiles" means**: by the theme's own palette and rules,
   by reading the picture with Gemini, or both.
 - **Where the chosen reference enters generation**: the room step takes a
   theme's reference photographs today, and the chosen picture has to
   reach that call without displacing the theme's own.
 
-None of that is settled here.
+Neither is settled here.

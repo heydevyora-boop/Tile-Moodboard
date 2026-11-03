@@ -70,6 +70,13 @@ function main() {
       requireAuth: async () => ({ name: 'Priya Sharma', role: 'STAFF', email: 'p@x.test' }),
       initials: (n) => String(n || '?').split(/\s+/).map((p) => p[0]).join('').toUpperCase(),
       auth: { logout: async () => {} },
+      library: {
+        themes: async () => [
+          { id: 'british', label: 'British', palette: 'Heritage green', count: 0 },
+          { id: 'floral', label: 'Floral', palette: 'Blush pink', count: 0 },
+        ],
+        references: async () => [],
+      },
     };
     const start = html.lastIndexOf('<script>');
     const end = html.indexOf('</script>', start);
@@ -83,22 +90,22 @@ function main() {
       check('5. ...with De’vyora Library as the active item',
         /Library/.test((doc.querySelector('.nav-item.active') || {}).textContent || ''),
         (doc.querySelector('.nav-item.active') || {}).textContent);
-      check('6. the page says the library is empty rather than showing nothing',
-        /Nothing in the library yet/.test(doc.body.textContent));
-      check('7. ...and says a reference belongs to a theme and lives in Drive',
-        /belongs to a theme/.test(doc.body.textContent)
-        && /Google Drive/.test(doc.body.textContent));
+      check('6. the page asks for a theme before anything else',
+        /Choose a theme/.test(doc.body.textContent));
+      check('7. ...and says every reference belongs to one',
+        /belongs to one theme/.test(doc.body.textContent));
+      check('7b. ...offering the themes the server gave it',
+        doc.querySelectorAll('.lib-theme').length === 2,
+        doc.querySelectorAll('.lib-theme').length);
       // Controls, not prose: the page's own sentence explains that a
       // chosen reference is what the scene is generated from, and the
       // sidebar has Recent Generations in it. Neither is a control.
       const controls = Array.prototype.slice
         .call(doc.querySelectorAll('button, input, form, a[href]'))
         .filter((el) => !el.classList.contains('nav-item') && el.id !== 'logoutBtn');
-      check('8. there is no upload control in this chunk',
-        !doc.querySelector('input[type="file"]')
-        && !doc.querySelector('form')
-        && !controls.some((el) => /upload|add|new/i.test(el.textContent || '')),
-        controls.map((el) => (el.textContent || '').trim()).filter(Boolean));
+      check('8. no upload control until a theme is chosen',
+        !doc.querySelector('input[type="file"]'),
+        doc.querySelectorAll('input[type="file"]').length);
       check('9. ...and nothing that generates anything',
         !controls.some((el) => /generate/i.test(el.textContent || '')),
         controls.map((el) => (el.textContent || '').trim()).filter(Boolean));

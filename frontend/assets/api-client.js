@@ -678,6 +678,97 @@
   };
 
   // ============================================================
+  // DE'VYORA LIBRARY
+  // ============================================================
+  //
+  // ONE PICTURE PER REQUEST. "Bulk" is a hundred requests, not one with
+  // a hundred files in it: the API is a serverless function with a
+  // sixty-second limit and a few megabytes of request body. The page
+  // sends a few at a time and reports each one, so one bad file fails on
+  // its own and the rest still land.
+  //
+  // upload() uses XMLHttpRequest rather than fetch because it is the
+  // only one that reports how much of a file has actually gone up. A
+  // hundred photographs is a real wait, and a bar that only moves when a
+  // file finishes is not a progress bar.
+
+  const library = {
+    themes() {
+      return apiFetch('/library/themes').then((r) => r.data.themes);
+    },
+
+    references(themeId) {
+      const query = themeId ? '?themeId=' + encodeURIComponent(themeId) : '';
+      return apiFetch('/library/references' + query).then((r) => r.data.references);
+    },
+
+    remove(id) {
+      return apiFetch('/library/references/' + encodeURIComponent(id), {
+        method: 'DELETE'
+      }).then((r) => r.data);
+    },
+
+    /**
+     * Uploads ONE picture.
+     *
+     * `onProgress` is called with 0..1 as the bytes go up. `signal` is an
+     * AbortSignal, so a page that is left can stop a queue of ninety.
+     */
+    upload(file, fields, options) {
+      const settings = options || {};
+      return new Promise((resolve, reject) => {
+        const form = new FormData();
+        form.append('file', file);
+        Object.keys(fields || {}).forEach((key) => {
+          if (fields[key] !== undefined && fields[key] !== null && fields[key] !== '') {
+            form.append(key, fields[key]);
+          }
+        });
+
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', API_BASE + '/library/references');
+        xhr.withCredentials = true;
+
+        const token = getAccessToken();
+        if (token) xhr.setRequestHeader('Authorization', 'Bearer ' + token);
+
+        if (settings.signal) {
+          settings.signal.addEventListener('abort', () => xhr.abort(), { once: true });
+        }
+
+        if (xhr.upload && typeof settings.onProgress === 'function') {
+          xhr.upload.addEventListener('progress', (event) => {
+            if (event.lengthComputable) settings.onProgress(event.loaded / event.total);
+          });
+        }
+
+        xhr.addEventListener('load', () => {
+          let body = {};
+          try { body = JSON.parse(xhr.responseText || '{}'); } catch (err) { body = {}; }
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve(body.data && body.data.reference);
+            return;
+          }
+          reject(new ApiError(
+            (body && body.message) || 'That picture could not be uploaded.',
+            xhr.status,
+            body && body.errors
+          ));
+        });
+
+        xhr.addEventListener('error', () => {
+          reject(new ApiError('The connection dropped while uploading.', 0));
+        });
+        xhr.addEventListener('abort', () => {
+          reject(new ApiError('Upload cancelled.', 0));
+        });
+
+        xhr.send(form);
+      });
+    }
+  };
+
+  // ============================================================
   // USERS
   // ============================================================
 
@@ -3524,6 +3615,8 @@ const ai = {
     auth,
 
     passkeys,
+
+    library,
 
     users,
 
