@@ -692,7 +692,61 @@
   // hundred photographs is a real wait, and a bar that only moves when a
   // file finishes is not a progress bar.
 
+  // THE CHOSEN REFERENCE, CARRIED FORWARD.
+  //
+  // A client picks one picture in the library and then walks to the
+  // mood board to generate from it. Those are two pages, so the choice
+  // has to survive the walk.
+  //
+  // It is kept in localStorage, not in the URL and not in the database:
+  // the URL would be lost the moment they click anything else, and a
+  // column nobody has specified yet would be a schema change made on a
+  // guess. What is stored is the whole small record -- id, theme, title
+  // and the Drive link -- so the page that generates can show what was
+  // chosen without fetching it again, and can send the id the generator
+  // will resolve server-side.
+  //
+  // This is the carrier the generation chunk reads. If the choice ever
+  // has to outlive a browser, that is a column and a migration, and the
+  // shape here is already the shape it would take.
+  const LIBRARY_SELECTION_KEY = 'casa_library_selection';
+
   const library = {
+    /** The reference the client has chosen, or null. */
+    selection() {
+      try {
+        const raw = localStorage.getItem(LIBRARY_SELECTION_KEY);
+        const value = raw ? JSON.parse(raw) : null;
+        return value && typeof value.id === 'string' && typeof value.imageUrl === 'string'
+          ? value
+          : null;
+      } catch (err) {
+        return null;
+      }
+    },
+
+    select(reference) {
+      if (!reference || !reference.id) return null;
+      const kept = {
+        id: reference.id,
+        themeId: reference.themeId || '',
+        title: reference.title || '',
+        imageUrl: reference.imageUrl || '',
+        room: reference.room || '',
+        chosenAt: new Date().toISOString(),
+      };
+      try {
+        localStorage.setItem(LIBRARY_SELECTION_KEY, JSON.stringify(kept));
+      } catch (err) { /* private mode: the choice lasts this page only */ }
+      return kept;
+    },
+
+    clearSelection() {
+      try {
+        localStorage.removeItem(LIBRARY_SELECTION_KEY);
+      } catch (err) { /* ignore */ }
+    },
+
     themes() {
       return apiFetch('/library/themes').then((r) => r.data.themes);
     },

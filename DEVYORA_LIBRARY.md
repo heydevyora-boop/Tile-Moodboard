@@ -164,6 +164,42 @@ than new `library:*` ones. New permissions would have to be added to
 every role that should hold them, and a role-seeding mistake locks the
 owner out of their own feature.
 
+## Browsing, and choosing the reference
+
+Two views on one page, no router and no second page:
+
+```
+themes   every theme as a card: its own preview art, its palette,
+         and how many reference rooms it holds
+   │  click
+   ▼
+theme    that theme's rooms in a grid, loaded from their Drive links
+   │  click a room
+   ▼
+chosen   stated at the top of BOTH views, with the room's name and the
+         theme it came from, and a CLEAR beside it
+```
+
+The chosen reference is kept in `localStorage`, under
+`casa_library_selection`, as the whole small record — id, theme, title,
+room and the Drive link. **This is the carrier the generation chunk
+reads.** It is not the URL, which is lost at the next click, and not a
+database column, which nobody has specified yet; if the choice ever has
+to outlive a browser, that is a column and a migration, and the shape
+stored is already the shape it would take.
+
+There is only ever one. Choosing another replaces it. Removing the room
+that is currently chosen clears the choice with it, so a selection can
+never point at something that no longer exists.
+
+Adding and removing pictures is the studio's work, so the upload button
+and REMOVE are shown only to a user holding `reference_images:write`.
+The server refuses everyone else either way; this only decides what is
+worth putting on the screen.
+
+Waiting states are skeleton cards in the shape of the real ones, so the
+grid does not jump when the pictures arrive.
+
 ## What the later chunks still have to decide
 
 - **What "matching tiles" means**: by the theme's own palette and rules,

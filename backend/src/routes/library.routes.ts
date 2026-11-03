@@ -37,6 +37,9 @@ router.get(
       .map((theme) => ({
         id: theme.id,
         label: theme.label,
+        // The gallery shows each theme's existing preview art, which is
+        // named by slug in frontend/img/themes.
+        slug: theme.slug,
         palette: theme.palette,
         count: counts[theme.id] ?? 0,
       }))

@@ -128,7 +128,7 @@ async function main() {
 
   const openLibrary = async () => {
     await page.goto(`${base}/devyora-library.html`, { waitUntil: 'domcontentloaded' });
-    await page.waitForSelector('.lib-theme', { timeout: 20000 });
+    await page.waitForSelector('.lib-theme-card', { timeout: 20000 });
   };
 
   /** Hands the real <input type=file> a set of in-memory files. */
@@ -141,8 +141,8 @@ async function main() {
   console.log('\n1. the themes, and choosing one');
   await openLibrary();
   check('1a. every theme is offered, read from the server',
-    await page.locator('.lib-theme').count() === 9,
-    await page.locator('.lib-theme').count());
+    await page.locator('.lib-theme-card').count() === 9,
+    await page.locator('.lib-theme-card').count());
   check('1b. no upload control until a theme is chosen',
     await page.locator('#libFiles').count() === 0);
 
@@ -196,9 +196,13 @@ async function main() {
     check('2k. the gallery shows them without a reload',
       await page.locator('.lib-card').count() === 60,
       await page.locator('.lib-card').count());
-    check('2l. ...and the theme count is updated',
-      /60/.test(await page.locator('.lib-theme.selected').textContent() || ''),
-      await page.locator('.lib-theme.selected').textContent());
+    await page.click('#libBack');
+    await page.waitForSelector('.lib-theme-card', { timeout: 10000 });
+    check('2l. ...and the theme card shows the new count',
+      /60 REFERENCES/.test(
+        await page.locator('.lib-theme-card[data-theme="british"]').textContent() || ''
+      ),
+      await page.locator('.lib-theme-card[data-theme="british"]').textContent());
   }
 
   // ════════════════════════════════════════════════════════════════
@@ -250,9 +254,13 @@ async function main() {
     const after = await prisma.libraryReference.count({ where: { themeId: 'floral' } });
     check('4a. the row is gone', after === before - 1, { before, after });
     check('4b. ...and so is the file on Drive', driveState.files.size === 61, driveState.files.size);
-    check('4c. ...and the theme count follows',
-      /1/.test(await page.locator('.lib-theme.selected').textContent() || ''),
-      await page.locator('.lib-theme.selected').textContent());
+    await page.click('#libBack');
+    await page.waitForSelector('.lib-theme-card', { timeout: 10000 });
+    check('4c. ...and the theme card count follows',
+      /1 REFERENCE\b/.test(
+        await page.locator('.lib-theme-card[data-theme="floral"]').textContent() || ''
+      ),
+      await page.locator('.lib-theme-card[data-theme="floral"]').textContent());
   }
 
   // ════════════════════════════════════════════════════════════════

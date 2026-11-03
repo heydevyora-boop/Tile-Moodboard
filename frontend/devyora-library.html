@@ -147,18 +147,64 @@
 </style>
 
 <style>
-  /* De'vyora Library. Nothing new is invented here: the gallery reuses
-     the card, line and sand tokens every other page already uses. */
+  /* De'vyora Library. Nothing new is invented here: the cards, lines and
+     sand tones are the tokens every other page already uses. */
   .lib-empty { margin-top:clamp(20px,2.4vw,30px); background:var(--sand); border:1px solid var(--line); border-radius:20px; padding:clamp(22px,2.4vw,30px); }
   .lib-empty h3 { margin:0; font-size:clamp(19px,2vw,24px); }
   .lib-empty p { margin:10px 0 0; font-size:14px; line-height:1.6; color:var(--text2); max-width:62ch; }
 
-  .lib-themes { display:flex; flex-wrap:wrap; gap:8px; margin-top:20px; }
-  .lib-theme { display:inline-flex; align-items:center; gap:9px; padding:10px 15px; background:var(--card); border:1px solid var(--line); border-radius:99px; font-size:12.5px; cursor:pointer; color:var(--ink); }
-  .lib-theme:hover { border-color:var(--gold-light); }
-  .lib-theme.selected { background:var(--ink); border-color:var(--ink); color:#FBF6EC; }
-  .lib-theme .count { font-size:9px; letter-spacing:.12em; opacity:.7; }
+  /* ── the chosen reference, said at the top of every view ── */
+  .lib-active { display:flex; align-items:center; gap:14px; margin-top:18px; padding:12px 14px; background:var(--card); border:1px solid var(--gold-light); border-radius:16px; }
+  .lib-active-shot { flex:0 0 auto; width:62px; height:46px; border-radius:10px; overflow:hidden; background:var(--sand); border:1px solid var(--line); }
+  .lib-active-shot img { width:100%; height:100%; object-fit:cover; display:block; }
+  .lib-active-text { min-width:0; display:flex; flex-direction:column; gap:3px; }
+  .lib-active-lbl { font-size:8.5px; letter-spacing:.18em; color:var(--gold); }
+  .lib-active-name { font-size:13.5px; line-height:1.3; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .lib-active-meta { font-size:9px; letter-spacing:.1em; color:var(--muted); }
+  .lib-active-clear { margin-left:auto; flex:0 0 auto; background:none; border:none; padding:0; color:var(--muted); font-size:9px; letter-spacing:.14em; cursor:pointer; text-decoration:underline; }
+  .lib-active-clear:hover { color:var(--err); }
 
+  /* ── the themes ── */
+  .lib-theme-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(215px, 1fr)); gap:16px; margin-top:20px; }
+  .lib-theme-card { display:flex; flex-direction:column; text-align:left; padding:0; background:var(--card); border:1px solid var(--line); border-radius:16px; overflow:hidden; cursor:pointer; color:var(--ink); }
+  .lib-theme-card:hover { border-color:var(--gold-light); }
+  .lib-theme-art { aspect-ratio:16/9; background:var(--sand); border-bottom:1px solid var(--line); }
+  .lib-theme-art img { width:100%; height:100%; object-fit:cover; display:block; }
+  .lib-theme-body { padding:13px 15px 15px; display:flex; flex-direction:column; gap:5px; }
+  .lib-theme-name { font-size:14.5px; }
+  .lib-theme-pal { font-size:11px; line-height:1.45; color:var(--muted); }
+  .lib-theme-count { margin-top:3px; font-size:8.5px; letter-spacing:.16em; color:var(--gold); }
+
+  /* ── one theme's rooms ── */
+  .lib-back { display:inline-flex; align-items:center; gap:7px; margin-top:16px; background:none; border:none; padding:0; color:var(--muted); font-size:9.5px; letter-spacing:.14em; cursor:pointer; }
+  .lib-back:hover { color:var(--ink); }
+  .lib-head { display:flex; flex-wrap:wrap; align-items:baseline; gap:12px; margin-top:10px; }
+
+  .lib-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(230px, 1fr)); gap:16px; margin-top:20px; }
+  .lib-card { margin:0; background:var(--card); border:1px solid var(--line); border-radius:16px; overflow:hidden; display:flex; flex-direction:column; cursor:pointer; position:relative; }
+  .lib-card:hover { border-color:var(--gold-light); }
+  .lib-card.chosen { border-color:var(--gold); box-shadow:0 0 0 1px var(--gold); }
+  .lib-shot { aspect-ratio:4/3; background:var(--sand); border-bottom:1px solid var(--line); }
+  .lib-shot img { width:100%; height:100%; object-fit:cover; display:block; }
+  .lib-chosen-flag { position:absolute; top:10px; left:10px; padding:5px 9px; border-radius:99px; background:var(--gold); color:#FFF8EC; font-size:8px; letter-spacing:.16em; }
+  .lib-cap { padding:13px 15px 15px; display:flex; flex-direction:column; gap:6px; }
+  .lib-title { font-size:13.5px; line-height:1.3; }
+  .lib-meta { font-size:9px; letter-spacing:.1em; color:var(--muted); }
+  .lib-del { align-self:flex-start; margin-top:3px; background:none; border:none; padding:0; color:var(--muted); font-size:9px; letter-spacing:.14em; cursor:pointer; text-decoration:underline; }
+  .lib-del:hover:not(:disabled) { color:var(--err); }
+  .lib-del:disabled { opacity:.6; cursor:not-allowed; }
+
+  /* ── waiting ── */
+  .lib-skeleton { background:linear-gradient(100deg, var(--sand) 38%, rgba(255,255,255,.55) 50%, var(--sand) 62%); background-size:220% 100%; animation:libShimmer 1.3s ease-in-out infinite; }
+  @keyframes libShimmer { from { background-position:150% 0; } to { background-position:-50% 0; } }
+  @media (prefers-reduced-motion: reduce) { .lib-skeleton { animation:none; } }
+  .lib-skel-card { border:1px solid var(--line); border-radius:16px; overflow:hidden; }
+  .lib-skel-art { aspect-ratio:4/3; }
+  .lib-skel-lines { padding:13px 15px 15px; display:flex; flex-direction:column; gap:7px; }
+  .lib-skel-line { height:10px; border-radius:99px; }
+  .lib-skel-line.short { width:55%; }
+
+  /* ── adding pictures (staff) ── */
   .lib-actions { display:flex; flex-wrap:wrap; align-items:center; gap:14px; margin-top:18px; }
   .lib-add { display:inline-flex; align-items:center; justify-content:center; min-height:46px; padding:0 20px; background:var(--gold); color:#FFF8EC; border-radius:13px; cursor:pointer; font-size:10.5px; letter-spacing:.14em; }
   .lib-add:hover { background:#6E5228; }
@@ -178,16 +224,11 @@
   .lib-file-failed .lib-file-state { color:var(--err); }
   .lib-file-err { grid-column:1 / -1; font-size:10.5px; line-height:1.5; color:var(--err); }
 
-  .lib-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(230px, 1fr)); gap:16px; margin-top:20px; }
-  .lib-card { margin:0; background:var(--card); border:1px solid var(--line); border-radius:16px; overflow:hidden; display:flex; flex-direction:column; }
-  .lib-shot { aspect-ratio:4/3; background:var(--sand); border-bottom:1px solid var(--line); }
-  .lib-shot img { width:100%; height:100%; object-fit:cover; display:block; }
-  .lib-cap { padding:13px 15px 15px; display:flex; flex-direction:column; gap:6px; }
-  .lib-title { font-size:13.5px; line-height:1.3; }
-  .lib-meta { font-size:9px; letter-spacing:.1em; color:var(--muted); }
-  .lib-del { align-self:flex-start; margin-top:3px; background:none; border:none; padding:0; color:var(--muted); font-size:9px; letter-spacing:.14em; cursor:pointer; text-decoration:underline; }
-  .lib-del:hover:not(:disabled) { color:var(--err); }
-  .lib-del:disabled { opacity:.6; cursor:not-allowed; }
+  @media (max-width: 560px) {
+    .lib-theme-grid, .lib-grid { grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:12px; }
+    .lib-active { flex-wrap:wrap; }
+    .lib-active-clear { margin-left:0; }
+  }
 </style>
 </head>
 <body>
@@ -248,33 +289,76 @@
     })[c]);
   }
 
+  // TWO VIEWS, ONE PAGE.
+  //
+  //   themes  every theme, as a card with its own preview art
+  //   theme   one theme's reference rooms, to look at and to choose from
+  //
+  // `view` is the whole of the navigation. There is no router here and
+  // no second page: the client goes in and comes back out, and the
+  // chosen reference is stated at the top of both views so it is never
+  // a question what is currently selected.
   const state = {
+    view: 'themes',
     themes: [],
     themeId: null,
     references: [],
-    // The upload queue: one entry per file, each with its own state.
+    loading: true,
+    chosen: null,
+    canAdd: false,
     queue: [],
     running: false,
     aborter: null,
   };
 
-  // AT MOST THIS MANY AT ONCE.
-  //
-  // A hundred simultaneous uploads is a hundred simultaneous Drive calls
-  // from one serverless function, which Google throttles and the browser
-  // queues anyway. Four keeps the pipe full without either.
   const AT_ONCE = 4;
+  const theme = (id) => state.themes.find((t) => t.id === (id || state.themeId)) || null;
 
-  const selectedTheme = () => state.themes.find((t) => t.id === state.themeId) || null;
+  // ── pieces ────────────────────────────────────────────────────────
 
-  // ── rendering ─────────────────────────────────────────────────────
+  function activeHtml() {
+    if (!state.chosen) return '';
+    const where = theme(state.chosen.themeId);
+    return '<div class="lib-active" id="libActive">'
+      + '<span class="lib-active-shot"><img src="' + escapeHtml(state.chosen.imageUrl)
+      + '" alt="" loading="lazy"></span>'
+      + '<span class="lib-active-text">'
+      + '<span class="lib-active-lbl mono">ACTIVE REFERENCE IMAGE</span>'
+      + '<span class="lib-active-name">' + escapeHtml(state.chosen.title || 'Untitled') + '</span>'
+      + '<span class="lib-active-meta mono">' + escapeHtml(
+        [where ? where.label : state.chosen.themeId, state.chosen.room].filter(Boolean).join(' · ')
+      ) + '</span></span>'
+      + '<button type="button" class="lib-active-clear mono" id="libClearChoice">CLEAR</button>'
+      + '</div>';
+  }
 
-  function themeBarHtml() {
-    return '<div class="lib-themes">' + state.themes.map((theme) =>
-      '<button type="button" class="lib-theme' + (theme.id === state.themeId ? ' selected' : '')
-      + '" data-theme="' + escapeHtml(theme.id) + '">'
-      + escapeHtml(theme.label)
-      + '<span class="count mono">' + theme.count + '</span></button>').join('') + '</div>';
+  function skeletonsHtml(count) {
+    return '<div class="lib-grid">' + Array.from({ length: count }, () =>
+      '<div class="lib-skel-card">'
+      + '<div class="lib-skel-art lib-skeleton"></div>'
+      + '<div class="lib-skel-lines">'
+      + '<span class="lib-skel-line lib-skeleton"></span>'
+      + '<span class="lib-skel-line short lib-skeleton"></span>'
+      + '</div></div>').join('') + '</div>';
+  }
+
+  function themesHtml() {
+    if (state.loading) return skeletonsHtml(6);
+    if (!state.themes.length) {
+      return '<div class="lib-empty"><h3 class="serif">No themes to show</h3>'
+        + '<p>The theme list could not be read. Reload the page, and if it keeps happening the '
+        + 'studio’s theme file could not be loaded by the server.</p></div>';
+    }
+    return '<div class="lib-theme-grid">' + state.themes.map((t) =>
+      '<button type="button" class="lib-theme-card" data-theme="' + escapeHtml(t.id) + '">'
+      + '<span class="lib-theme-art"><img src="img/themes/' + escapeHtml(t.slug)
+      + '.svg" alt="" loading="lazy"></span>'
+      + '<span class="lib-theme-body">'
+      + '<span class="lib-theme-name serif">' + escapeHtml(t.label) + '</span>'
+      + '<span class="lib-theme-pal">' + escapeHtml(t.palette) + '</span>'
+      + '<span class="lib-theme-count mono">' + t.count
+      + (t.count === 1 ? ' REFERENCE' : ' REFERENCES') + '</span>'
+      + '</span></button>').join('') + '</div>';
   }
 
   function queueHtml() {
@@ -292,9 +376,7 @@
         : '<button type="button" class="lib-cancel mono" id="libClear">CLEAR</button>')
       + '</div>'
       + '<div class="lib-bar"><span style="width:' + share + '%"></span></div>'
-      + (failed
-        ? '<div class="lib-failed mono">' + failed + ' could not be uploaded — see below</div>'
-        : '')
+      + (failed ? '<div class="lib-failed mono">' + failed + ' could not be uploaded</div>' : '')
       + '<div class="lib-files">' + state.queue.map((item) =>
         '<div class="lib-file lib-file-' + item.status + '">'
         + '<span class="lib-file-name">' + escapeHtml(item.file.name) + '</span>'
@@ -307,49 +389,64 @@
         + '</div>').join('') + '</div></div>';
   }
 
-  function galleryHtml() {
-    if (!state.themeId) {
-      return '<div class="lib-empty"><h3 class="serif">Choose a theme</h3>'
-        + '<p>Every reference room belongs to one theme. Pick one above to see what is in it '
-        + 'and to add more.</p></div>';
-    }
+  function referencesHtml() {
+    if (state.loading) return skeletonsHtml(8);
     if (!state.references.length) {
       return '<div class="lib-empty"><h3 class="serif">Nothing in this theme yet</h3>'
-        + '<p>Add reference rooms with the button above. They are stored in the studio’s '
-        + 'Google Drive.</p></div>';
+        + '<p>Reference rooms appear here once they are added. They are stored in the '
+        + 'studio’s Google Drive.</p></div>';
     }
-    return '<div class="lib-grid">' + state.references.map((ref) =>
-      '<figure class="lib-card" data-id="' + escapeHtml(ref.id) + '">'
-      + '<div class="lib-shot"><img src="' + escapeHtml(ref.imageUrl) + '" alt="'
-      + escapeHtml(ref.title) + '" loading="lazy"></div>'
-      + '<figcaption class="lib-cap">'
-      + '<span class="lib-title">' + escapeHtml(ref.title) + '</span>'
-      + '<span class="lib-meta mono">' + escapeHtml(
-        [ref.room, ref.uploadedBy && ref.uploadedBy.name].filter(Boolean).join(' · ')
-      ) + '</span>'
-      + '<button type="button" class="lib-del mono" data-delete="' + escapeHtml(ref.id) + '">REMOVE</button>'
-      + '</figcaption></figure>').join('') + '</div>';
+    return '<div class="lib-grid">' + state.references.map((ref) => {
+      const chosen = state.chosen && state.chosen.id === ref.id;
+      return '<figure class="lib-card' + (chosen ? ' chosen' : '') + '" data-choose="'
+        + escapeHtml(ref.id) + '" tabindex="0" role="button" aria-pressed="' + (chosen ? 'true' : 'false') + '">'
+        + '<div class="lib-shot"><img src="' + escapeHtml(ref.imageUrl) + '" alt="'
+        + escapeHtml(ref.title) + '" loading="lazy"></div>'
+        + (chosen ? '<span class="lib-chosen-flag mono">SELECTED</span>' : '')
+        + '<figcaption class="lib-cap">'
+        + '<span class="lib-title">' + escapeHtml(ref.title) + '</span>'
+        + '<span class="lib-meta mono">' + escapeHtml(
+          [ref.room, ref.uploadedBy && ref.uploadedBy.name].filter(Boolean).join(' · ')
+        ) + '</span>'
+        + (state.canAdd
+          ? '<button type="button" class="lib-del mono" data-delete="' + escapeHtml(ref.id) + '">REMOVE</button>'
+          : '')
+        + '</figcaption></figure>';
+    }).join('') + '</div>';
   }
 
   function render() {
-    const theme = selectedTheme();
+    const current = theme();
+    const head = '<div class="mono" style="font-size:10px; letter-spacing:.18em; color:var(--muted)">REFERENCE ROOMS</div>';
+
     document.getElementById('mainContent').innerHTML =
       '<div class="stage">'
-      + '<div class="mono" style="font-size:10px; letter-spacing:.18em; color:var(--muted)">REFERENCE ROOMS</div>'
-      + '<h1 class="step-h1 serif">De’vyora Library</h1>'
-      + '<p class="step-sub">Rooms the studio has chosen, kept by theme. Picking one finds the '
-      + 'catalog tiles that match it, and the scene is then generated from that same picture.</p>'
-      + themeBarHtml()
-      + (theme
-        ? '<div class="lib-actions">'
-          + '<label class="lib-add mono" for="libFiles">ADD IMAGES TO ' + escapeHtml(theme.label.toUpperCase()) + '</label>'
-          + '<input type="file" id="libFiles" accept="image/jpeg,image/png,image/webp" multiple hidden>'
-          + '<span class="lib-hint">Pick as many as you like — they go up a few at a time.</span>'
+      + (state.view === 'themes'
+        ? head
+          + '<h1 class="step-h1 serif">De’vyora Library</h1>'
+          + '<p class="step-sub">Rooms the studio has chosen, kept by theme. Pick one and it '
+          + 'becomes the reference: the catalog is searched for the tiles that match it, and '
+          + 'the scene is generated from that same picture.</p>'
+          + activeHtml()
+          + themesHtml()
+        : '<button type="button" class="lib-back mono" id="libBack">← ALL THEMES</button>'
+          + '<div class="lib-head">'
+          + '<h1 class="step-h1 serif" style="margin:0">' + escapeHtml(current ? current.label : '') + '</h1>'
+          + '<span class="lib-meta mono">' + escapeHtml(current ? current.palette : '') + '</span>'
           + '</div>'
-        : '')
-      + '<div class="alert" id="libAlert" style="display:none"></div>'
-      + queueHtml()
-      + galleryHtml()
+          + '<p class="step-sub">Tap a room to make it the reference image.</p>'
+          + activeHtml()
+          + (state.canAdd && current
+            ? '<div class="lib-actions">'
+              + '<label class="lib-add mono" for="libFiles">ADD IMAGES TO '
+              + escapeHtml(current.label.toUpperCase()) + '</label>'
+              + '<input type="file" id="libFiles" accept="image/jpeg,image/png,image/webp" multiple hidden>'
+              + '<span class="lib-hint">Pick as many as you like — they go up a few at a time.</span>'
+              + '</div>'
+            : '')
+          + '<div class="alert" id="libAlert" style="display:none"></div>'
+          + queueHtml()
+          + referencesHtml())
       + '</div>';
     wire();
   }
@@ -368,7 +465,26 @@
     el.style.display = message ? 'flex' : 'none';
   }
 
-  // ── the queue ─────────────────────────────────────────────────────
+  // ── choosing ──────────────────────────────────────────────────────
+  //
+  // The whole point of the library. The choice is kept by the API
+  // client, which is what the generation step will read -- see the note
+  // beside LIBRARY_SELECTION_KEY there.
+
+  function choose(id) {
+    const ref = state.references.find((r) => r.id === id);
+    if (!ref) return;
+    state.chosen = CasaApi.library.select(ref);
+    render();
+  }
+
+  function clearChoice() {
+    CasaApi.library.clearSelection();
+    state.chosen = null;
+    render();
+  }
+
+  // ── adding (staff) ────────────────────────────────────────────────
 
   async function runQueue() {
     if (state.running) return;
@@ -376,7 +492,7 @@
     state.aborter = new AbortController();
     repaintQueue();
 
-    const theme = state.themeId;
+    const into = state.themeId;
     let next = 0;
 
     const worker = async () => {
@@ -386,9 +502,8 @@
         item.status = 'uploading';
         item.progress = 0;
         repaintQueue();
-
         try {
-          const saved = await CasaApi.library.upload(item.file, { themeId: theme }, {
+          const saved = await CasaApi.library.upload(item.file, { themeId: into }, {
             signal: state.aborter.signal,
             onProgress: (share) => {
               item.progress = share;
@@ -398,10 +513,7 @@
             },
           });
           item.status = 'done';
-          // Shown at once rather than after the whole batch: on a
-          // hundred files, waiting to the end is a blank page for
-          // minutes.
-          if (saved && state.themeId === theme) state.references.unshift(saved);
+          if (saved && state.themeId === into) state.references.unshift(saved);
         } catch (err) {
           item.status = 'failed';
           item.error = (err && err.message) || 'Upload failed.';
@@ -410,17 +522,13 @@
       }
     };
 
-    await Promise.all(
-      Array.from({ length: Math.min(AT_ONCE, state.queue.length) }, worker)
-    );
+    await Promise.all(Array.from({ length: Math.min(AT_ONCE, state.queue.length) }, worker));
 
     state.running = false;
     const failed = state.queue.filter((f) => f.status === 'failed').length;
     const done = state.queue.filter((f) => f.status === 'done').length;
-
-    // The counts on the theme bar are now wrong by `done`.
-    const theirTheme = state.themes.find((t) => t.id === theme);
-    if (theirTheme) theirTheme.count += done;
+    const theirs = theme(into);
+    if (theirs) theirs.count += done;
 
     render();
     if (failed) {
@@ -438,41 +546,6 @@
     runQueue();
   }
 
-  // ── wiring ────────────────────────────────────────────────────────
-
-  function wireQueue() {
-    const cancel = document.getElementById('libCancel');
-    if (cancel) {
-      cancel.addEventListener('click', () => {
-        if (state.aborter) state.aborter.abort();
-      });
-    }
-    const clear = document.getElementById('libClear');
-    if (clear) {
-      clear.addEventListener('click', () => { state.queue = []; render(); });
-    }
-  }
-
-  function wire() {
-    document.querySelectorAll('[data-theme]').forEach((btn) => {
-      btn.addEventListener('click', () => selectTheme(btn.dataset.theme));
-    });
-
-    const files = document.getElementById('libFiles');
-    if (files) {
-      files.addEventListener('change', () => {
-        if (files.files && files.files.length) enqueue(files.files);
-        files.value = '';
-      });
-    }
-
-    document.querySelectorAll('[data-delete]').forEach((btn) => {
-      btn.addEventListener('click', () => remove(btn.dataset.delete, btn));
-    });
-
-    wireQueue();
-  }
-
   async function remove(id, btn) {
     const ref = state.references.find((r) => r.id === id);
     if (!window.confirm('Remove "' + ((ref && ref.title) || 'this reference') + '" from the '
@@ -483,8 +556,13 @@
     try {
       const result = await CasaApi.library.remove(id);
       state.references = state.references.filter((r) => r.id !== id);
-      const theme = selectedTheme();
-      if (theme && theme.count > 0) theme.count -= 1;
+      // A reference that no longer exists must not stay selected.
+      if (state.chosen && state.chosen.id === id) {
+        CasaApi.library.clearSelection();
+        state.chosen = null;
+      }
+      const current = theme();
+      if (current && current.count > 0) current.count -= 1;
       render();
       if (result && result.driveDeleted === false) {
         showAlert('Removed from the library, but the file could not be deleted from Drive: '
@@ -497,17 +575,83 @@
     }
   }
 
-  async function selectTheme(themeId) {
+  // ── wiring ────────────────────────────────────────────────────────
+
+  function wireQueue() {
+    const cancel = document.getElementById('libCancel');
+    if (cancel) cancel.addEventListener('click', () => { if (state.aborter) state.aborter.abort(); });
+    const clear = document.getElementById('libClear');
+    if (clear) clear.addEventListener('click', () => { state.queue = []; render(); });
+  }
+
+  function wire() {
+    document.querySelectorAll('[data-theme]').forEach((btn) => {
+      btn.addEventListener('click', () => openTheme(btn.dataset.theme));
+    });
+
+    const back = document.getElementById('libBack');
+    if (back) back.addEventListener('click', openThemes);
+
+    const clear = document.getElementById('libClearChoice');
+    if (clear) clear.addEventListener('click', clearChoice);
+
+    document.querySelectorAll('[data-choose]').forEach((card) => {
+      card.addEventListener('click', (event) => {
+        // REMOVE sits inside the card; a click on it is not a choice.
+        if (event.target.closest('[data-delete]')) return;
+        choose(card.dataset.choose);
+      });
+      card.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          choose(card.dataset.choose);
+        }
+      });
+    });
+
+    document.querySelectorAll('[data-delete]').forEach((btn) => {
+      btn.addEventListener('click', () => remove(btn.dataset.delete, btn));
+    });
+
+    const files = document.getElementById('libFiles');
+    if (files) {
+      files.addEventListener('change', () => {
+        if (files.files && files.files.length) enqueue(files.files);
+        files.value = '';
+      });
+    }
+
+    wireQueue();
+  }
+
+  // ── navigation ────────────────────────────────────────────────────
+
+  function openThemes() {
     if (state.running) return;
+    state.view = 'themes';
+    state.themeId = null;
+    state.references = [];
+    state.queue = [];
+    state.loading = false;
+    render();
+  }
+
+  async function openTheme(themeId) {
+    state.view = 'theme';
     state.themeId = themeId;
     state.references = [];
     state.queue = [];
+    state.loading = true;
     render();
     try {
       state.references = await CasaApi.library.references(themeId);
     } catch (err) {
+      state.loading = false;
+      render();
       showAlert((err && err.message) || 'The library could not be read.');
+      return;
     }
+    state.loading = false;
     render();
   }
 
@@ -524,16 +668,22 @@
       location.href = 'login.html';
     });
 
-    // The themes come from the server, which reads shared/themes.json --
-    // the one list the prompts, the theme check and the tile ranking are
-    // written against. A copy kept in this page would drift from it.
+    // Adding pictures is the studio's job, not the client's. The button
+    // is shown to whoever may actually use it; the server refuses the
+    // rest either way, so this only decides what is worth showing.
+    state.canAdd = Array.isArray(user.permissions)
+      && user.permissions.indexOf('reference_images:write') !== -1;
+
+    state.chosen = CasaApi.library.selection();
+
+    render();
     try {
       state.themes = await CasaApi.library.themes();
     } catch (err) {
       state.themes = [];
     }
+    state.loading = false;
     render();
-    if (!state.themes.length) showAlert('The theme list could not be read.');
   }
 
   init();

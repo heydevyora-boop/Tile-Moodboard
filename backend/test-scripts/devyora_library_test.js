@@ -72,10 +72,13 @@ function main() {
       auth: { logout: async () => {} },
       library: {
         themes: async () => [
-          { id: 'british', label: 'British', palette: 'Heritage green', count: 0 },
-          { id: 'floral', label: 'Floral', palette: 'Blush pink', count: 0 },
+          { id: 'british', label: 'British', slug: 'british', palette: 'Heritage green', count: 0 },
+          { id: 'floral', label: 'Floral', slug: 'floral', palette: 'Blush pink', count: 0 },
         ],
         references: async () => [],
+        selection: () => null,
+        select: (r) => r,
+        clearSelection: () => {},
       },
     };
     const start = html.lastIndexOf('<script>');
@@ -90,13 +93,11 @@ function main() {
       check('5. ...with De’vyora Library as the active item',
         /Library/.test((doc.querySelector('.nav-item.active') || {}).textContent || ''),
         (doc.querySelector('.nav-item.active') || {}).textContent);
-      check('6. the page asks for a theme before anything else',
-        /Choose a theme/.test(doc.body.textContent));
-      check('7. ...and says every reference belongs to one',
-        /belongs to one theme/.test(doc.body.textContent));
-      check('7b. ...offering the themes the server gave it',
-        doc.querySelectorAll('.lib-theme').length === 2,
-        doc.querySelectorAll('.lib-theme').length);
+      check('6. the themes are the first thing shown',
+        doc.querySelectorAll('.lib-theme-card').length === 2,
+        doc.querySelectorAll('.lib-theme-card').length);
+      check('7. ...and the page says what choosing one is for',
+        /the scene is generated from that same picture/.test(doc.body.textContent));
       // Controls, not prose: the page's own sentence explains that a
       // chosen reference is what the scene is generated from, and the
       // sidebar has Recent Generations in it. Neither is a control.
