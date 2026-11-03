@@ -186,6 +186,48 @@ export class GoogleDriveClient {
     return this.createFolder(name, parentFolderId);
   }
 
+  /**
+   * One folder, by id, or null when this credential cannot see it.
+   *
+   * findFolder searches by NAME inside a parent, which cannot answer
+   * "is this id a real folder I can write to?" -- and that is the
+   * question a configured folder id raises. Without it, a wrong or
+   * unshared id fails at the moment of upload with Google's own
+   * generic error and nothing to say which setting is at fault.
+   *
+   * It returns null for "not found or not visible" rather than
+   * throwing, because for this caller those are the same answer and
+   * both have the same remedy: share the folder with the service
+   * account, or correct the id.
+   */
+  async getFolderById(folderId: string): Promise<DriveFile | null> {
+    if (!this.isConfigured()) throw AppError.internal('Google Drive is not configured');
+    const drive = this.getDrive();
+
+    try {
+      const res = await this.withRetry(() =>
+        drive.files.get({
+          fileId: folderId,
+          fields: 'id,name,mimeType,trashed',
+          // A folder on a Shared Drive is invisible without this, and a
+          // Shared Drive is exactly where a service account's files can
+          // live -- so omitting it would reject the very configuration
+          // that makes uploads work at all.
+          supportsAllDrives: true,
+        }),
+      );
+
+      const file = res.data;
+      if (!file?.id) return null;
+      if (file.trashed) return null;
+      if (file.mimeType !== 'application/vnd.google-apps.folder') return null;
+
+      return { id: file.id, name: file.name ?? '(untitled)' };
+    } catch {
+      return null;
+    }
+  }
+
   async listFolderContents(folderId: string): Promise<DriveFile[]> {
     if (!this.isConfigured()) throw AppError.internal('Google Drive is not configured');
     const drive = this.getDrive();

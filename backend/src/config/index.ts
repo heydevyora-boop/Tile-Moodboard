@@ -130,6 +130,17 @@ export const config = {
 
     driveRootFolder:
       env.GOOGLE_DRIVE_ROOT_FOLDER,
+
+    /**
+     * The studio's "Reference Images" folder, as a link or a bare id.
+     * De'vyora Library uploads straight into it. Empty when unset,
+     * which the library treats as "not configured" rather than as
+     * "use the root".
+     */
+    driveLibraryFolder:
+      env.GOOGLE_DRIVE_LIBRARY_FOLDER
+      || env.GOOGLE_DRIVE_REFERENCE_IMAGES_FOLDER
+      || '',
   },
 
   // ============================================================

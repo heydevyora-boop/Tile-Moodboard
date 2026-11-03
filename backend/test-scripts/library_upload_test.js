@@ -35,6 +35,10 @@ Object.assign(process.env, {
   LOG_LEVEL: 'error',
   RATE_LIMIT_MAX: '100000',
   GOOGLE_DRIVE_ROOT_FOLDER: 'TestDriveRoot',
+  // The studio's own "Reference Images" folder, given as a LINK -- which
+  // is what Google's "Copy link" puts on the clipboard, and therefore
+  // what an owner will actually paste into the environment.
+  GOOGLE_DRIVE_LIBRARY_FOLDER: 'https://drive.google.com/drive/folders/1RefImagesFolderId?usp=sharing',
 });
 
 let pass = 0;
@@ -71,8 +75,18 @@ async function main() {
   const client = drive.googleDriveClient;
   client.isConfigured = () => true;
   client.getOrCreateFolder = async (name, parent) => {
+    // Recorded so the test can assert this is NEVER reached any more:
+    // the library uploads into the configured folder and must not
+    // find-or-create one of its own under the Drive root.
     driveState.folders.push({ name, parent });
     return { id: 'folder-' + name, name };
+  };
+  driveState.lookedUp = [];
+  client.getFolderById = async (id) => {
+    driveState.lookedUp.push(id);
+    return id === '1RefImagesFolderId'
+      ? { id, name: 'Reference Images' }
+      : null;
   };
   client.uploadFile = async (input) => {
     driveState.uploads += 1;
@@ -180,10 +194,11 @@ async function main() {
 
     const rows = await prisma.libraryReference.count({ where: { themeId: 'british' } });
     check('2d. ...and sixty rows are saved under the theme', rows === 60, rows);
-    check('2e. ...each one on Drive, in the library folder',
+    check('2e. ...each one on Drive, in the studio\u2019s Reference Images folder',
       driveState.files.size === 60
-      && [...driveState.files.values()].every((f) => f.parent === 'folder-devyora-library'),
-      { onDrive: driveState.files.size });
+      && [...driveState.files.values()].every((f) => f.parent === '1RefImagesFolderId'),
+      { onDrive: driveState.files.size,
+        parents: [...new Set([...driveState.files.values()].map((f) => f.parent))] });
     check('2f. ...and every one made readable by link, or generation could not fetch it',
       driveState.publicised.length === 60, driveState.publicised.length);
 
@@ -208,6 +223,23 @@ async function main() {
         await page.locator('.lib-theme-card[data-theme="british"]').textContent() || ''
       ),
       await page.locator('.lib-theme-card[data-theme="british"]').textContent());
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  console.log('\n2m. every picture went into the studio\u2019s own folder');
+  {
+    // THE POINT OF THE SETTING. Not the Drive root, and not a folder
+    // this code invented -- the one the studio created and named.
+    const parents = new Set([...driveState.files.values()].map((f) => f.parent));
+    check('2m. all sixty landed in one folder', parents.size === 1, [...parents]);
+    check('2n. ...the one the link in the environment named',
+      parents.has('1RefImagesFolderId'), [...parents]);
+    check('2o. ...read out of a pasted Drive LINK, not a bare id',
+      driveState.lookedUp.includes('1RefImagesFolderId'), driveState.lookedUp);
+    check('2p. ...checked once for sixty uploads, not sixty times',
+      driveState.lookedUp.length === 1, driveState.lookedUp.length);
+    check('2q. and no folder was created under the Drive root',
+      driveState.folders.length === 0, driveState.folders);
   }
 
   // ════════════════════════════════════════════════════════════════
