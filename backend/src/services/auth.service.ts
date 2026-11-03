@@ -103,6 +103,38 @@ export async function login(email: string, password: string, req?: Request) {
   return { user: toSafeUser(user), accessToken, refreshToken };
 }
 
+/**
+ * The session a user gets once their identity is established.
+ *
+ * This is the tail of login() -- everything after the password matched --
+ * lifted out so a passkey sign-in can issue EXACTLY the same thing: the
+ * same access token, the same refresh token and cookie, the same
+ * lastLoginAt, the same login-attempt and activity rows. There is one
+ * place that mints a session, and this is it.
+ *
+ * `method` only changes what the activity log calls it. Nothing about
+ * the session itself differs, which is the point.
+ */
+export async function sessionFor(
+  user: UserWithRole,
+  req?: Request,
+  method: 'password' | 'passkey' = 'password',
+) {
+  const { accessToken, refreshToken } = await issueTokenPair(user, req);
+
+  await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+  await recordLoginAttempt({ email: user.email, userId: user.id, success: true, req });
+  await logActivity({
+    userId: user.id,
+    action: method === 'passkey' ? 'user.login_passkey' : 'user.login',
+    entityType: 'User',
+    entityId: user.id,
+    req,
+  });
+
+  return { user: toSafeUser(user), accessToken, refreshToken };
+}
+
 export async function logout(rawRefreshToken: string | undefined, userId?: string, req?: Request): Promise<void> {
   if (rawRefreshToken) {
     await revokeRefreshToken(rawRefreshToken);

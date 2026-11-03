@@ -116,6 +116,7 @@ model User {
   printBoardsCreated         PrintBoard[]         @relation("PrintBoardCreatedBy")
   referenceImages            ReferenceImage[]     @relation("ReferenceImageUploadedBy")
   refreshTokens              RefreshToken[]
+  webauthnCredentials        WebAuthnCredential[]
   ruleVersionsCreated        RuleVersion[]        @relation("RuleVersionCreatedBy")
   settingsUpdated            Setting[]            @relation("SettingUpdatedBy")
   role                       Role                 @relation(fields: [roleId], references: [id])
@@ -435,6 +436,64 @@ model ActivityLog {
   @@index([entityType, entityId])
   @@index([createdAt])
   @@map("activity_logs")
+}
+
+/// A passkey: one device's Face ID or fingerprint, enrolled for one user.
+///
+/// Enrolment only ever happens behind a normal email + password sign-in,
+/// and a successful assertion issues the SAME session a password login
+/// issues -- this table adds a way IN, never a second kind of session.
+///
+/// `rpId` is recorded because a credential is bound to the hostname it
+/// was created on. A Vercel preview and the production domain are
+/// different relying parties, so the same phone legitimately holds a
+/// separate credential per host and a login must only consider the ones
+/// belonging to the host being asked.
+///
+/// `passwordTag` is a short hash tag of the user's password hash at the
+/// moment of enrolment. Changing the password changes the hash, the tag
+/// stops matching, and the passkey is refused with a message telling the
+/// owner to set it up again -- so a stolen phone does not outlive a
+/// password reset.
+model WebAuthnCredential {
+  id           String    @id @default(cuid())
+  userId       String
+  /// Base64url credential id, as the authenticator reports it.
+  credentialId String    @unique
+  /// Base64url COSE public key. Verification only; nothing secret here.
+  publicKey    String
+  counter      BigInt    @default(0)
+  /// "internal", "hybrid", ... as reported at registration.
+  transports   String[]  @default([])
+  rpId         String
+  passwordTag  String
+  /// What the owner will recognise this device as, in their own words.
+  label        String?
+  createdAt    DateTime  @default(now())
+  lastUsedAt   DateTime?
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([rpId])
+}
+
+/// A WebAuthn challenge that has already been spent.
+///
+/// Challenges are signed and carry their own five-minute expiry, which
+/// stops a forged one but not a REPLAYED one: a captured sign-in could
+/// be sent twice inside that window. Every challenge that verifies is
+/// written here first, and a second use of the same one is refused.
+///
+/// Rows older than the expiry window are dead weight and are swept on
+/// use rather than by a job -- there is no scheduler on this deployment.
+model WebAuthnChallenge {
+  id        String   @id @default(cuid())
+  /// The challenge itself, base64url, exactly as it was signed.
+  challenge String   @unique
+  usedAt    DateTime @default(now())
+  expiresAt DateTime
+
+  @@index([expiresAt])
 }
 
 model Setting {

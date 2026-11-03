@@ -26,6 +26,13 @@
   const ACCESS_TOKEN_KEY = 'casa_access_token';
   const USER_KEY = 'casa_user';
 
+  // Which accounts have enrolled a passkey ON THIS DEVICE, and the tab
+  // flag that says the visitor has just signed out. Both are per-device
+  // conveniences for the login page; neither is a credential, and losing
+  // either costs nothing but a tap.
+  const PASSKEY_ACCOUNTS_KEY = 'casa_passkey_accounts';
+  const SIGNED_OUT_KEY = 'casa_signed_out';
+
   // ============================================================
   // SESSION STORAGE
   // ============================================================
@@ -393,6 +400,15 @@
         );
       } finally {
         clearSession();
+        // SO THE LOGIN PAGE DOES NOT ASK FOR A FINGERPRINT AT ONCE.
+        //
+        // On an enrolled device the login page starts the Face ID prompt
+        // by itself. Pressing Sign out and being asked to sign straight
+        // back in is the one place where that is wrong, so the act of
+        // signing out is recorded for this tab and the page reads it.
+        try {
+          sessionStorage.setItem(SIGNED_OUT_KEY, '1');
+        } catch (err) { /* private mode: the prompt is a convenience */ }
         location.href =
           'login.html';
       }
@@ -445,6 +461,219 @@
         clearSession();
         return null;
       }
+    }
+  };
+
+  // ============================================================
+  // FACE ID / FINGERPRINT
+  // ============================================================
+  //
+  // A second way in to the SAME session: passkeys.login below ends in
+  // setSession with exactly what /auth/login returns, and the server
+  // sets the same refresh cookie at the same path with the same
+  // lifetime. Nothing here is a different kind of sign-in.
+  //
+  // All the WebAuthn work is @simplewebauthn/browser's, loaded as that
+  // library's own UMD bundle (window.SimpleWebAuthnBrowser). This file
+  // does no crypto and never touches a key.
+
+  function webauthn() {
+    return (typeof window !== 'undefined' && window.SimpleWebAuthnBrowser) || null;
+  }
+
+  /** The accounts this device has enrolled: [{ email, name }]. */
+  function enrolledAccounts() {
+    try {
+      const raw = localStorage.getItem(PASSKEY_ACCOUNTS_KEY);
+      const list = raw ? JSON.parse(raw) : [];
+      return Array.isArray(list)
+        ? list.filter((a) => a && typeof a.email === 'string')
+        : [];
+    } catch (err) {
+      return [];
+    }
+  }
+
+  function rememberEnrolment(email, name) {
+    const typed = String(email || '').trim().toLowerCase();
+    if (!typed) return;
+    try {
+      const list = enrolledAccounts().filter((a) => a.email !== typed);
+      list.unshift({ email: typed, name: String(name || '').trim() || typed });
+      localStorage.setItem(PASSKEY_ACCOUNTS_KEY, JSON.stringify(list.slice(0, 8)));
+    } catch (err) { /* nothing to remember it in; the offer simply repeats */ }
+  }
+
+  function forgetEnrolment(email) {
+    const typed = String(email || '').trim().toLowerCase();
+    try {
+      localStorage.setItem(
+        PASSKEY_ACCOUNTS_KEY,
+        JSON.stringify(enrolledAccounts().filter((a) => a.email !== typed))
+      );
+    } catch (err) { /* ignore */ }
+  }
+
+  const passkeys = {
+    supported() {
+      const lib = webauthn();
+      return !!lib && lib.browserSupportsWebAuthn();
+    },
+
+    accounts: enrolledAccounts,
+    remember: rememberEnrolment,
+    forget: forgetEnrolment,
+
+    justSignedOut() {
+      try {
+        return sessionStorage.getItem(SIGNED_OUT_KEY) === '1';
+      } catch (err) {
+        return false;
+      }
+    },
+
+    clearSignedOut() {
+      try {
+        sessionStorage.removeItem(SIGNED_OUT_KEY);
+      } catch (err) { /* ignore */ }
+    },
+
+    /** A phone or a tablet, including an iPad that calls itself a Mac. */
+    isMobile() {
+      const ua = navigator.userAgent || '';
+      if (/Android|iPhone|iPod|iPad/i.test(ua)) return true;
+      // iPadOS reports Macintosh; a Mac has no touch screen.
+      return /Macintosh/i.test(ua) && (navigator.maxTouchPoints || 0) > 1;
+    },
+
+    /**
+     * WHETHER THIS DEVICE CAN DO FACE ID OR A FINGERPRINT.
+     *
+     * isUserVerifyingPlatformAuthenticatorAvailable() is not enough on
+     * its own: some Android phones answer "no" although they have a
+     * working fingerprint, and keying off it alone hid the feature
+     * completely on those handsets. So:
+     *
+     *   a phone or tablet that supports WebAuthn -> available
+     *   a computer -> available when isUVPAA says yes, OR when
+     *                 getClientCapabilities reports a platform or passkey
+     *                 authenticator (Chrome's own password manager, with
+     *                 no Windows Hello)
+     *   anything else -> not available, and the page shows nothing extra
+     *
+     * Never by browser name. Every normal mobile browser -- Chrome,
+     * Safari, Samsung Internet, Firefox, Edge, Opera, Brave -- takes the
+     * first branch, because what decides it is the device.
+     */
+    async available() {
+      if (!passkeys.supported()) return false;
+      if (passkeys.isMobile()) return true;
+
+      try {
+        if (await window.PublicKeyCredential
+          .isUserVerifyingPlatformAuthenticatorAvailable()) {
+          return true;
+        }
+      } catch (err) { /* fall through to capabilities */ }
+
+      try {
+        if (typeof window.PublicKeyCredential.getClientCapabilities === 'function') {
+          const caps = await window.PublicKeyCredential.getClientCapabilities();
+          if (caps && (caps.userVerifyingPlatformAuthenticator
+            || caps.passkeyPlatformAuthenticator)) {
+            return true;
+          }
+        }
+      } catch (err) { /* no capabilities API: not available */ }
+
+      return false;
+    },
+
+    /**
+     * A browser that cannot do passkeys at all: an app's built-in one.
+     * Those visitors are told where to go rather than shown nothing.
+     */
+    inAppBrowser() {
+      const ua = navigator.userAgent || '';
+      return /; wv\)|FBAN|FBAV|Instagram|Line\/|Snapchat|Twitter|MicroMessenger|GSA\//i.test(ua);
+    },
+
+    async registerOptions() {
+      const body = await apiFetch('/auth/passkey/register-options', { method: 'POST' });
+      return body.data.options;
+    },
+
+    /** Enrols THIS device for the account that is already signed in. */
+    async register(label) {
+      const lib = webauthn();
+      if (!lib) throw new ApiError('Face ID and fingerprint are not available here.', 0);
+
+      const options = await passkeys.registerOptions();
+      const response = await lib.startRegistration({ optionsJSON: options });
+
+      const body = await apiFetch('/auth/passkey/register', {
+        method: 'POST',
+        body: { response, label: label || undefined }
+      });
+      rememberEnrolment(body.data.email, body.data.name);
+      return body.data;
+    },
+
+    async loginOptions(email) {
+      const body = await apiFetch('/auth/passkey/login-options', {
+        method: 'POST',
+        body: { email: email || undefined },
+        skipAuth: true
+      });
+      return body.data.options;
+    },
+
+    /**
+     * Signs in with Face ID or a fingerprint.
+     *
+     * With no email it asks for ANY passkey this site holds on the
+     * device, so a key synced from another phone signs straight in.
+     *
+     * `conditional` is the browser's own autofill flow: the request waits
+     * quietly behind the email field until the visitor picks a passkey
+     * from it.
+     */
+    async login(email, options) {
+      const lib = webauthn();
+      if (!lib) throw new ApiError('Face ID and fingerprint are not available here.', 0);
+
+      const settings = options || {};
+      const requestOptions = await passkeys.loginOptions(email);
+      const response = await lib.startAuthentication({
+        optionsJSON: requestOptions,
+        useBrowserAutofill: !!settings.conditional
+      });
+
+      const body = await apiFetch('/auth/passkey/login', {
+        method: 'POST',
+        body: { response },
+        skipAuth: true
+      });
+
+      setSession(body.data.accessToken, body.data.user);
+      passkeys.clearSignedOut();
+      rememberEnrolment(body.data.user.email, body.data.user.name);
+      return body.data.user;
+    },
+
+    /** Does the server hold a key for this account, on this host? */
+    async status(email) {
+      if (!email) return false;
+      const body = await apiFetch(
+        '/auth/passkey/status?email=' + encodeURIComponent(email),
+        { skipAuth: true }
+      );
+      return !!body.data.enrolled;
+    },
+
+    supportsAutofill() {
+      const lib = webauthn();
+      return !!lib && lib.browserSupportsWebAuthnAutofill();
     }
   };
 
@@ -3293,6 +3522,8 @@ const ai = {
     ApiError,
 
     auth,
+
+    passkeys,
 
     users,
 

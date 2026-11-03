@@ -42,6 +42,27 @@
   .spinner { width:14px; height:14px; border-radius:50%; border:2px solid rgba(251,246,236,.35); border-top-color:#FBF6EC; animation:spin .7s linear infinite; }
 
   .checking { text-align:center; padding:40px 0; color:var(--muted); font-size:13px; }
+
+  /* FACE ID / FINGERPRINT. The same ink, type and radius as the form. */
+  .bio-lead { display:none; flex-direction:column; gap:14px; }
+  .bio-btn { display:flex; align-items:center; justify-content:center; gap:10px; width:100%; min-height:54px; padding:0 18px; background:#3D3024; color:#FBF6EC; border:none; border-radius:13px; cursor:pointer; font-size:11px; letter-spacing:.14em; }
+  .bio-btn:hover:not(:disabled) { background:#33291F; }
+  .bio-btn:disabled { opacity:.65; cursor:not-allowed; }
+  .bio-btn svg { flex:0 0 auto; }
+  .bio-as { text-align:center; font-size:12.5px; color:var(--muted); line-height:1.5; }
+  .bio-alt { display:block; width:100%; text-align:center; background:none; border:none; padding:6px 0; color:var(--muted); font-size:11px; letter-spacing:.12em; cursor:pointer; text-decoration:underline; }
+  .bio-alt:hover { color:var(--ink); }
+  .bio-or { display:flex; align-items:center; gap:10px; margin:4px 0 2px; color:var(--muted); font-size:9.5px; letter-spacing:.18em; }
+  .bio-or::before, .bio-or::after { content:''; flex:1 1 auto; height:1px; background:var(--line); }
+  .bio-note { margin-top:14px; padding-top:14px; border-top:1px solid var(--line); display:flex; flex-direction:column; gap:10px; font-size:12px; line-height:1.6; color:var(--muted); }
+  .bio-note a { display:flex; align-items:center; justify-content:center; min-height:46px; background:#3D3024; color:#FBF6EC; border-radius:12px; text-decoration:none; font-size:10.5px; letter-spacing:.14em; }
+
+  /* The offer, after a password sign-in on a device that is not enrolled. */
+  .bio-ask { position:fixed; inset:0; background:rgba(26,21,18,.55); display:flex; align-items:center; justify-content:center; padding:20px; z-index:50; }
+  .bio-ask-card { width:100%; max-width:340px; background:var(--card, #FFFDF9); border:1px solid var(--line); border-radius:18px; padding:22px; display:flex; flex-direction:column; gap:12px; animation:fadeIn .18s ease both; }
+  .bio-ask-card h2 { margin:0; font-size:19px; line-height:1.3; }
+  .bio-ask-card p { margin:0; font-size:13px; line-height:1.6; color:var(--muted); }
+  .bio-ask-row { display:flex; flex-direction:column; gap:8px; margin-top:4px; }
 </style>
 </head>
 <body>
@@ -55,8 +76,20 @@
   <div class="card" id="cardWrap">
     <div class="checking mono" id="checkingState">CHECKING SESSION…</div>
 
-    <form id="loginForm" style="display:none">
+    <div class="bio-lead" id="bioLead">
       <h1 class="serif">Sign in</h1>
+      <p class="bio-as" id="bioAs"></p>
+      <button type="button" class="bio-btn mono" id="bioBtn">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M12 3c-2 0-3.8.7-5.2 1.9M19.2 4.9A8.9 8.9 0 0 0 12 3M3.5 9A9 9 0 0 1 5 6.4M3 13.5V12c0-.9.1-1.7.4-2.5M12 7a5 5 0 0 0-5 5v2.5M12 7a5 5 0 0 1 5 5v3c0 1-.2 2-.5 3M9 19.5c.6-1.1.9-2.3.9-3.5V12a2.1 2.1 0 0 1 4.2 0v3M5.5 18c.6-.9 1-2 1-3.2V12M20.5 16.5c.2-1 .3-2 .3-3"></path></svg>
+        <span id="bioLabel">SIGN IN WITH FACE ID / FINGERPRINT</span>
+      </button>
+      <div class="alert" id="bioAlert" style="display:none"></div>
+      <button type="button" class="bio-alt mono" id="bioAlt">USE EMAIL AND PASSWORD INSTEAD</button>
+      <div class="bio-or mono" id="bioOr" style="display:none">OR</div>
+    </div>
+
+    <form id="loginForm" style="display:none">
+      <h1 class="serif" id="formHeading">Sign in</h1>
       <p class="sub">Enter your showroom credentials to access the workspace.</p>
 
       <div class="alert" id="formAlert" style="display:none"></div>
@@ -76,10 +109,13 @@
       <button type="submit" class="submit-btn" id="submitBtn">
         <span id="submitLabel">SIGN IN</span>
       </button>
+
+      <div class="bio-note" id="bioNote" style="display:none"></div>
     </form>
   </div>
 </div>
 
+<script src="assets/simplewebauthn-browser.umd.min.js"></script>
 <script src="assets/api-client.js"></script>
 <script>
 (function () {
@@ -153,6 +189,243 @@
     return isValidEmail(value) || /^[^\s@]+$/.test(value);
   }
 
+  // ══════════════════════════════════════════════════════════════════
+  // FACE ID / FINGERPRINT
+  // ══════════════════════════════════════════════════════════════════
+  //
+  // Three things decide what this page shows:
+  //
+  //   can this DEVICE do it          CasaApi.passkeys.available()
+  //   has this device enrolled, and for whom   localStorage
+  //   did the visitor just press Sign out      sessionStorage
+  //
+  // The device check is asynchronous, and a visitor can press Sign in
+  // before it finishes. `deviceReady` is that promise, and handleSubmit
+  // waits on it -- otherwise a fast typist would never be offered the
+  // feature at all.
+
+  const bio = {
+    available: false,
+    ready: null,
+    account: null,
+    prompting: false,
+    autofill: null
+  };
+
+  function bioAlert(message) {
+    const el = document.getElementById('bioAlert');
+    if (!el) return;
+    if (!message) {
+      el.style.display = 'none';
+      el.textContent = '';
+      return;
+    }
+    el.textContent = message;
+    el.style.display = 'flex';
+  }
+
+  function setBioLoading(loading) {
+    const btn = document.getElementById('bioBtn');
+    const label = document.getElementById('bioLabel');
+    if (!btn || !label) return;
+    btn.disabled = loading;
+    label.innerHTML = loading
+      ? '<span class="spinner"></span> WAITING FOR YOUR DEVICE…'
+      : 'SIGN IN WITH FACE ID / FINGERPRINT';
+  }
+
+  /** A cancelled prompt the page started by itself says nothing. */
+  function bioError(err, silent) {
+    const name = (err && err.name) || '';
+    const cancelled = name === 'NotAllowedError' || name === 'AbortError';
+    if (silent && cancelled) return;
+    if (cancelled) {
+      bioAlert('Face ID / fingerprint was cancelled.');
+      return;
+    }
+    const code = err && err.errors && err.errors.code;
+    if (code === 'PASSKEY_STALE' || code === 'PASSKEY_UNKNOWN') {
+      if (bio.account) CasaApi.passkeys.forget(bio.account.email);
+      bioAlert((err && err.message) || 'Set this device up again with your password.');
+      showForm();
+      return;
+    }
+    bioAlert((err && err.message) || 'That did not work. Use your email and password.');
+  }
+
+  function showForm() {
+    document.getElementById('checkingState').style.display = 'none';
+    document.getElementById('loginForm').style.display = 'block';
+    const lead = document.getElementById('bioLead');
+    if (lead) lead.style.display = 'none';
+  }
+
+  function showBioLead() {
+    document.getElementById('checkingState').style.display = 'none';
+    document.getElementById('loginForm').style.display = 'none';
+    const lead = document.getElementById('bioLead');
+    if (lead) lead.style.display = 'flex';
+  }
+
+  /**
+   * Signs in with the device.
+   *
+   * With a remembered account it asks for that account's keys. Without
+   * one it asks for ANY passkey this site holds here, so a key synced
+   * from another device still works -- and when there is none, the
+   * browser says so and the visitor is told what to do about it.
+   */
+  async function signInWithDevice(options) {
+    const settings = options || {};
+    if (bio.prompting) return;
+    bio.prompting = true;
+    cancelAutofill();
+    bioAlert('');
+    setBioLoading(true);
+
+    try {
+      const user = await CasaApi.passkeys.login(
+        bio.account ? bio.account.email : undefined
+      );
+      if (user) {
+        location.href = getRedirectTarget();
+        return;
+      }
+    } catch (err) {
+      setBioLoading(false);
+      const name = (err && err.name) || '';
+      // Nothing on the device for this site at all. The browser answers
+      // this the same way as a cancelled prompt, so it is told apart by
+      // there being no remembered account to ask for.
+      if (!bio.account && (name === 'NotAllowedError' || name === 'AbortError')) {
+        bioAlert('Face ID / fingerprint is not set up on this phone yet. Sign in once '
+          + 'with your email and password, and you will be asked to turn it on.');
+      } else {
+        bioError(err, settings.silent);
+      }
+    } finally {
+      bio.prompting = false;
+      setBioLoading(false);
+    }
+  }
+
+  // ── the offer, after a password sign-in on a device that is not enrolled ──
+  //
+  // The redirect waits for an answer. "Not now" continues exactly as
+  // before, which is what makes this safe to show.
+  function offerEnrolment(user) {
+    return new Promise((resolve) => {
+      const wrap = document.createElement('div');
+      wrap.className = 'bio-ask';
+      wrap.id = 'bioAsk';
+      wrap.innerHTML = '<div class="bio-ask-card">'
+        + '<h2 class="serif">Sign in faster next time?</h2>'
+        + '<p>Use Face ID or your fingerprint on this device instead of typing your '
+        + 'password. You can still use your password whenever you want.</p>'
+        + '<div class="bio-ask-row">'
+        + '<button type="button" class="bio-btn mono" id="bioEnable">'
+        + '<span id="bioEnableLabel">ENABLE FACE ID / FINGERPRINT</span></button>'
+        + '<button type="button" class="bio-alt mono" id="bioLater">NOT NOW</button>'
+        + '</div>'
+        + '<div class="alert" id="bioAskAlert" style="display:none"></div>'
+        + '</div>';
+      document.body.appendChild(wrap);
+
+      const close = () => { wrap.remove(); resolve(); };
+
+      document.getElementById('bioLater').addEventListener('click', close);
+      document.getElementById('bioEnable').addEventListener('click', async () => {
+        const btn = document.getElementById('bioEnable');
+        const label = document.getElementById('bioEnableLabel');
+        btn.disabled = true;
+        label.innerHTML = '<span class="spinner"></span> WAITING FOR YOUR DEVICE…';
+        try {
+          await CasaApi.passkeys.register(navigator.userAgent.slice(0, 80));
+          close();
+        } catch (err) {
+          btn.disabled = false;
+          label.textContent = 'ENABLE FACE ID / FINGERPRINT';
+          const alertEl = document.getElementById('bioAskAlert');
+          const name = (err && err.name) || '';
+          alertEl.textContent = (name === 'NotAllowedError' || name === 'AbortError')
+            ? 'Face ID / fingerprint was cancelled.'
+            : ((err && err.message) || 'That device could not be set up.');
+          alertEl.style.display = 'flex';
+          // The account is signed in either way; a failed enrolment must
+          // never strand the visitor on the login page.
+          if (user) CasaApi.passkeys.forget(user.email);
+        }
+      });
+    });
+  }
+
+  // ── the browser's own autofill flow ──
+  //
+  // Sits quietly behind the email field until the visitor picks a
+  // passkey from it. Cancelled whenever another request starts, and on
+  // unload, because two WebAuthn requests cannot be open at once.
+  function cancelAutofill() {
+    if (!bio.autofill) return;
+    try { bio.autofill.abort(); } catch (err) { /* already gone */ }
+    bio.autofill = null;
+  }
+
+  async function startAutofill() {
+    if (!bio.available || !CasaApi.passkeys.supportsAutofill()) return;
+    const controller = new AbortController();
+    bio.autofill = controller;
+    try {
+      const user = await CasaApi.passkeys.login(undefined, { conditional: true });
+      if (user) location.href = getRedirectTarget();
+    } catch (err) {
+      // A conditional request that is cancelled -- by us, or by the
+      // visitor typing a password instead -- is the normal case.
+      void err;
+    }
+  }
+
+  function wireBio() {
+    const btn = document.getElementById('bioBtn');
+    if (btn) btn.addEventListener('click', () => signInWithDevice());
+
+    const alt = document.getElementById('bioAlt');
+    if (alt) {
+      alt.addEventListener('click', () => {
+        cancelAutofill();
+        showForm();
+        document.getElementById('formAlert').style.display = 'none';
+        document.getElementById('email').focus();
+      });
+    }
+
+    window.addEventListener('pagehide', cancelAutofill);
+  }
+
+  /**
+   * A browser that cannot do passkeys says where to go, instead of
+   * quietly showing nothing. Android gets an intent: link, which opens
+   * the phone's DEFAULT browser rather than Chrome specifically.
+   */
+  function showUnsupportedNote() {
+    const note = document.getElementById('bioNote');
+    if (!note) return;
+    const ua = navigator.userAgent || '';
+    const apple = /iPhone|iPod|iPad/i.test(ua);
+
+    if (apple) {
+      note.innerHTML = '<span>Open this page in Safari, Chrome or another browser '
+        + 'to use Face ID.</span>';
+    } else {
+      const target = 'intent://' + location.host + location.pathname + location.search
+        + '#Intent;scheme=https;end';
+      note.innerHTML = '<a class="mono" id="bioOpenBrowser" href="' + target + '">'
+        + 'OPEN IN YOUR BROWSER FOR FACE ID / FINGERPRINT</a>'
+        + '<span>Open this page in Chrome, Samsung Internet, Firefox, Edge or another '
+        + 'browser.</span>';
+    }
+    note.style.display = 'flex';
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
     hideAlert();
@@ -175,7 +448,26 @@
     setLoading(true);
 
     try {
-      await CasaApi.auth.login(email, password);
+      const user = await CasaApi.auth.login(email, password);
+
+      // THE OFFER, BEFORE THE REDIRECT.
+      //
+      // The device check may still be running -- a visitor can type and
+      // submit faster than it resolves -- so it is waited on here rather
+      // than skipped, which is how the offer used to be missed entirely.
+      //
+      // Several accounts may share a device, so what is checked is
+      // whether THIS account has a key here: a second person signing in
+      // on an enrolled phone is offered their own.
+      if (bio.ready) await bio.ready;
+      if (bio.available && !CasaApi.passkeys.inAppBrowser()) {
+        const mine = CasaApi.passkeys.accounts()
+          .some((a) => a.email === String(user.email || '').toLowerCase());
+        if (!mine) {
+          await offerEnrolment(user);
+        }
+      }
+
       location.href = getRedirectTarget();
     } catch (err) {
       setLoading(false);
@@ -203,9 +495,67 @@
       return;
     }
 
-    document.getElementById('checkingState').style.display = 'none';
-    document.getElementById('loginForm').style.display = 'block';
     document.getElementById('loginForm').addEventListener('submit', handleSubmit);
+    wireBio();
+
+    // The device answer is a promise from here on, so handleSubmit can
+    // wait for it instead of racing it.
+    bio.ready = CasaApi.passkeys.available().then((yes) => {
+      bio.available = yes;
+      return yes;
+    });
+
+    const justSignedOut = CasaApi.passkeys.justSignedOut();
+    CasaApi.passkeys.clearSignedOut();
+
+    const available = await bio.ready;
+
+    // A browser that cannot do passkeys at all -- an app's built-in one,
+    // or anything without WebAuthn. The form works; the note says where
+    // Face ID would work. No enable offer is made there.
+    if (!available || CasaApi.passkeys.inAppBrowser()) {
+      showForm();
+      if (!CasaApi.passkeys.supported() || CasaApi.passkeys.inAppBrowser()) {
+        showUnsupportedNote();
+      }
+      return;
+    }
+
+    const accounts = CasaApi.passkeys.accounts();
+    bio.account = accounts.length ? accounts[0] : null;
+
+    // An enrolled device leads with the big button and names who it is
+    // for; the form is one link away.
+    if (bio.account) {
+      document.getElementById('bioAs').textContent = 'as ' + bio.account.name;
+      showBioLead();
+      // ...and starts the prompt by itself -- except straight after Sign
+      // out, where being asked to sign back in is wrong.
+      if (!justSignedOut) {
+        signInWithDevice({ silent: true });
+      }
+      return;
+    }
+
+    // A capable phone this browser has no enrolment for still gets the
+    // button: with no email the request asks for any passkey this site
+    // holds, so one synced from another device signs straight in.
+    showForm();
+    if (CasaApi.passkeys.isMobile()) {
+      const lead = document.getElementById('bioLead');
+      const heading = document.getElementById('formHeading');
+      if (lead && heading) {
+        document.getElementById('bioAs').textContent = '';
+        document.getElementById('bioAlt').style.display = 'none';
+        document.getElementById('bioOr').style.display = 'flex';
+        heading.style.display = 'none';
+        lead.style.display = 'flex';
+      }
+    }
+
+    // The browser's own autofill flow, behind the email field.
+    document.getElementById('email').setAttribute('autocomplete', 'username webauthn');
+    startAutofill();
   }
 
   init();
