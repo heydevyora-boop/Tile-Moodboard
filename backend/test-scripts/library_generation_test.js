@@ -618,6 +618,129 @@ async function main() {
       newest.libraryReference === '', newest.libraryReference);
   }
 
+  // ════════════════════════════════════════════════════════════════
+  console.log('\n11. a STARTER room needs no database and no vision call');
+  {
+    // The rooms that ship with the application. They exist so a studio
+    // that has uploaded nothing -- and whose migration has not been run
+    // -- still has a library to choose from and generate with.
+    reset();
+    const out = await call('/mood-boards/generate', {
+      ...BRIEF, libraryReferenceId: 'starter:moroccan-1',
+    });
+
+    check('11a. a board can be built on one', out.status === 200
+      && out.body.data.combinations.length === 1, out.body);
+    check('11b. ...reported as matched', out.body.data.libraryReference.matched === true,
+      out.body.data.libraryReference);
+    check('11c. ...WITHOUT a vision call, because its reading ships with it',
+      geminiCalls.every((c) => !(c.contents[0].parts || []).some((p) => p.inlineData)),
+      geminiCalls.length);
+    check('11d. ...and without fetching anything',
+      driveCalls.length === 0, driveCalls);
+
+    const prompt = geminiCalls[0].contents[0].parts[0].text;
+    check('11e. the shipped reading is what the prompt carries',
+      prompt.includes('cobalt blue')
+      && prompt.includes('zellige glazed ceramic')
+      && prompt.includes('eight-point star'),
+      prompt.slice(prompt.indexOf('LIBRARY'), prompt.indexOf('LIBRARY') + 500));
+    check('11f. ...including which surface carries what, so roles can be told apart',
+      /floor carries: warm ivory squares/i.test(prompt)
+      && /walls carry: cobalt and saffron eight-point stars/i.test(prompt)
+      && /to dado height, warm ivory, unpatterned above/i.test(prompt),
+      prompt.slice(prompt.indexOf('floor carries'), prompt.indexOf('floor carries') + 260));
+    check('11g. ...and the colour the catalog was searched with',
+      out.body.data.libraryReference.dominantColour === 'cobalt blue',
+      out.body.data.libraryReference);
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  console.log('\n12. ...and the image is built on the file this server hosts');
+  {
+    reset();
+    // A real public host, which is what a deployment sends. From a
+    // loopback host python-ai.service deliberately rewrites the origin
+    // to BACKEND_PUBLIC_URL, so this is the case that proves the URL is
+    // built from the REQUEST rather than from a setting that goes stale
+    // on every Vercel deploy.
+    // Raw http, not fetch: undici forbids setting a Host header, and
+    // the Host is the whole point here -- a loopback one is rewritten
+    // to BACKEND_PUBLIC_URL downstream (correctly), so only a real
+    // public Host shows whether the URL is built from the REQUEST or
+    // from a setting that goes stale on every Vercel deploy.
+    const body = JSON.stringify({
+      product_id: tiles.TILE_BASE.id,
+      surface: 'WALL',
+      library_reference_id: 'starter:moroccan-1',
+      materials: [{ role: 'base', tile_id: tiles.TILE_BASE.id }],
+      requirements: { room: 'BATHROOM', style: 'Moroccan' },
+    });
+
+    const res = await new Promise((resolve, reject) => {
+      const request = http.request({
+        host: '127.0.0.1',
+        port: server.address().port,
+        path: '/api/v1/ai/visualizations',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(body),
+          Authorization: `Bearer ${token}`,
+          Host: 'casa-de-aurum.example.test',
+        },
+      }, (response) => {
+        let text = '';
+        response.on('data', (chunk) => { text += chunk; });
+        response.on('end', () => resolve({ status: response.statusCode, text }));
+      });
+      request.on('error', reject);
+      request.end(body);
+    });
+
+    check('12a. the scene is generated', res.status === 200, res.text && res.text.slice(0, 200));
+    const sent = pythonCalls[0];
+    check('12b. the scene image is an absolute URL',
+      /^https?:\/\/[^/]+\/static\/library-starters\/moroccan-1\.png$/.test(
+        (sent && sent.scene_image_url) || ''),
+      sent && sent.scene_image_url);
+    check('12c. ...built from the host the request actually arrived on',
+      String((sent || {}).scene_image_url || '').includes('casa-de-aurum.example.test'),
+      sent && sent.scene_image_url);
+    check('12d. ...and the room-inventing step does not run',
+      sent && sent.generate_random_scene === false);
+    check('12e. the generator is told whose room it is',
+      sent && String(sent.requirements.reference_room).includes('Cobalt Zellige'),
+      sent && sent.requirements.reference_room);
+
+    // And it must actually be servable, or the URL is a promise this
+    // server cannot keep.
+    const origin = base.replace(/\/api\/v1$/, '');
+    const file = await realFetch(`${origin}/static/library-starters/moroccan-1.png`);
+    const bytes = Buffer.from(await file.arrayBuffer());
+    check('12f. that URL really serves a PNG from this server',
+      file.status === 200 && bytes.slice(0, 8).toString('hex') === '89504e470d0a1a0a',
+      [file.status, bytes.length]);
+
+    // Pillow opens PNG; it cannot open SVG, so a starter had to be
+    // raster or it would be choosable and then fail in Python.
+    check('12g. ...which is what the Python side can actually open',
+      file.headers.get('content-type') === 'image/png',
+      file.headers.get('content-type'));
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  console.log('\n13. a starter cannot be deleted, and says why');
+  {
+    const res = await realFetch(`${base}/library/references/starter:moroccan-1`, {
+      method: 'DELETE', headers: { Authorization: `Bearer ${token}` },
+    });
+    const body = await res.json();
+    check('13a. it is refused', res.status === 400, res.status);
+    check('13b. ...because it ships with the application, not the studio',
+      /ships with De/.test(body.message || ''), body);
+  }
+
   server.close();
   await prisma.$disconnect();
 

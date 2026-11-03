@@ -96,6 +96,43 @@ that id.
 > the studio put in Drive by hand sidesteps it; uploading through the app
 > does not.
 
+#### One folder, named by the studio
+
+Every library picture is uploaded **directly into one folder**, whose
+link or id is `GOOGLE_DRIVE_LIBRARY_FOLDER`:
+
+```bash
+# either form — this is what "Copy link" puts on the clipboard
+GOOGLE_DRIVE_LIBRARY_FOLDER=https://drive.google.com/drive/folders/1AbCdEf...
+GOOGLE_DRIVE_LIBRARY_FOLDER=1AbCdEf...
+```
+
+The studio creates that folder (they called it **Reference Images**),
+shares it with the service account as an **Editor**, and sets this. The
+same value is also read from `GOOGLE_DRIVE_REFERENCE_IMAGES_FOLDER`, so
+whichever of the two names is typed into the environment, the pictures
+land in the right place.
+
+This replaced finding-or-creating a `devyora-library` folder under the
+Drive root. That was wrong twice over: it put the studio's pictures
+somewhere the studio had not chosen, and on a service account it wrote
+into a My Drive with no storage quota at all — which is most of why
+uploads failed. **A folder the studio creates and shares is the
+configuration that actually works**, and it is also the fix for the
+quota blocker above when that folder lives on a Shared Drive.
+
+**Unset is a refusal, not a fallback.** With no folder configured the
+library will not upload at all, because uploading to the root is
+precisely what this setting exists to prevent — and it would do it
+silently. The message names the variable; so do the messages for a value
+that is a folder *name* rather than a link, and for an id the credential
+cannot open.
+
+The folder is checked **once per process**, not once per picture: a
+hundred uploads would otherwise each pay for the same lookup, and a
+wrong id would surface a hundred identical failures with nothing to say
+which setting was at fault.
+
 ### 4. The schema
 
 ```prisma
@@ -349,12 +386,20 @@ one after its first use, not more expensive.
 | browsing and choosing | `backend/test-scripts/library_browse_test.js` |
 | bulk upload | `backend/test-scripts/library_upload_test.js` |
 | the page, the menu, the schema | `backend/test-scripts/devyora_library_test.js` |
+| the Drive folder: links, ids, and every way it can be misconfigured | `backend/test-scripts/library_drive_folder_test.js` |
+| the page on a database with no library table | `backend/test-scripts/library_unmigrated_test.js` |
 
 ## Still outstanding, and not code
 
+- **The Drive folder.** `GOOGLE_DRIVE_LIBRARY_FOLDER` must hold the link
+  or the id of the studio's "Reference Images" folder, shared with the
+  service account as an Editor. Without it the library refuses to upload
+  rather than putting pictures in the Drive root; see *One folder, named
+  by the studio* above.
 - **The Drive quota.** A plain service account owns no Drive storage, so
-  uploads fail with Google's own words until a Shared Drive or OAuth
-  delegation is configured. Nothing here hides that.
+  uploads fail with Google's own words until that folder lives on a
+  **Shared Drive** the service account belongs to, or the credential is
+  changed to OAuth delegation. Nothing here hides that.
 - **The migrations.** `prisma migrate deploy` is not run by this
   project's build (`vercel.json`'s `buildCommand` is `prisma generate`
   alone), so `20261103113735_add_devyora_library` and

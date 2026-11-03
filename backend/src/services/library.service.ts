@@ -10,6 +10,13 @@
  * rather than hiding it behind a copy on a disk that serverless throws
  * away.
  *
+ * AND ONE FOLDER, NAMED BY THE STUDIO. Every picture is uploaded
+ * directly into the Drive folder GOOGLE_DRIVE_LIBRARY_FOLDER names --
+ * the studio's own "Reference Images" folder -- never into the Drive
+ * root and never into a sub-folder this code invents for itself. With
+ * that setting empty the library refuses to upload rather than quietly
+ * putting the studio's pictures somewhere they did not choose.
+ *
  * ONE PICTURE PER REQUEST. "Bulk" is a hundred requests, not one with a
  * hundred files in it: this deploys to a serverless function with a
  * sixty-second limit and a few megabytes of request body, so one big
@@ -29,15 +36,90 @@ import { buildStoredFilename } from '@middlewares/uploadReferenceImage';
 import { isRealImageBuffer } from '@utils/fileSignature';
 import { toDriveDownloadUrl } from './referenceImages.service';
 
-/** The folder inside the studio's Drive root that holds the library. */
-const DRIVE_FOLDER = 'devyora-library';
+/**
+ * THE ONE FOLDER EVERY LIBRARY PICTURE GOES INTO.
+ *
+ * The studio's own "Reference Images" folder, named by
+ * GOOGLE_DRIVE_LIBRARY_FOLDER (or GOOGLE_DRIVE_REFERENCE_IMAGES_FOLDER
+ * -- either name is read). Pictures are uploaded DIRECTLY inside it.
+ *
+ * This replaces finding-or-creating a `devyora-library` folder under
+ * the Drive root. Two reasons that was wrong: it put the studio's
+ * pictures somewhere the studio did not choose, and on a service
+ * account it wrote into a My Drive that has no storage quota at all.
+ * A folder the studio creates and shares is the configuration that
+ * actually works.
+ *
+ * UNSET IS A REFUSAL, NOT A FALLBACK. Uploading to the root instead
+ * would be exactly what this setting exists to prevent, and it would
+ * do it silently.
+ */
+
+/** "https://drive.google.com/drive/folders/<id>?usp=..." -> "<id>". */
+export function driveFolderIdFrom(value: string): string {
+  const text = String(value || '').trim();
+  if (!text) return '';
+
+  // A link, in any of the shapes Google's own "Copy link" produces.
+  const fromPath = /\/folders\/([A-Za-z0-9_-]+)/.exec(text);
+  if (fromPath) return fromPath[1];
+
+  const fromQuery = /[?&]id=([A-Za-z0-9_-]+)/.exec(text);
+  if (fromQuery) return fromQuery[1];
+
+  // Already a bare id. Anything with a slash or a space is not one, and
+  // passing it to Drive as a file id would produce a confusing 404
+  // rather than the clear message below.
+  if (/^[A-Za-z0-9_-]{10,}$/.test(text)) return text;
+
+  return '';
+}
 
 let cachedFolderId: string | null = null;
 
+/** Forgets the verified folder -- for tests, and after a config change. */
+export function clearLibraryFolderCache(): void {
+  cachedFolderId = null;
+}
+
 async function libraryFolderId(): Promise<string> {
   if (cachedFolderId) return cachedFolderId;
-  const root = await googleDriveClient.getOrCreateFolder(config.google.driveRootFolder);
-  const folder = await googleDriveClient.getOrCreateFolder(DRIVE_FOLDER, root.id);
+
+  const configured = config.google.driveLibraryFolder;
+
+  if (!configured) {
+    throw AppError.badRequest(
+      'The De\u2019vyora Library has no Google Drive folder configured, and it will not '
+      + 'upload anywhere else. Create a folder in the studio\u2019s Drive (for example '
+      + '"Reference Images"), share it with the service account as an Editor, and set '
+      + 'GOOGLE_DRIVE_LIBRARY_FOLDER to its link or its id.',
+    );
+  }
+
+  const folderId = driveFolderIdFrom(configured);
+
+  if (!folderId) {
+    throw AppError.badRequest(
+      `GOOGLE_DRIVE_LIBRARY_FOLDER is set to "${configured}", which is neither a Google `
+      + 'Drive folder link nor a folder id. Paste the folder\u2019s link '
+      + '(https://drive.google.com/drive/folders/...) or just the id from the end of it.',
+    );
+  }
+
+  // CHECKED ONCE, BEFORE ANYTHING IS SENT. A wrong id, or one the
+  // service account was never given access to, otherwise surfaces as a
+  // generic Drive failure on every single upload of a hundred, with
+  // nothing to say which setting is at fault.
+  const folder = await googleDriveClient.getFolderById(folderId);
+
+  if (!folder) {
+    throw AppError.badRequest(
+      `The Google Drive folder ${folderId} could not be opened. Either the id in `
+      + 'GOOGLE_DRIVE_LIBRARY_FOLDER is wrong, the folder is in the bin, or it has not been '
+      + 'shared with this deployment\u2019s service account \u2014 share it as an Editor.',
+    );
+  }
+
   cachedFolderId = folder.id;
   return folder.id;
 }
@@ -87,7 +169,8 @@ export async function addReference(
   if (!googleDriveClient.isConfigured()) {
     throw AppError.badRequest(
       'Google Drive is not configured, and the library is stored in Drive only. '
-      + 'Set GOOGLE_SERVICE_ACCOUNT_JSON and GOOGLE_DRIVE_ROOT_FOLDER first.',
+      + 'Set GOOGLE_SERVICE_ACCOUNT_JSON (the credential) and GOOGLE_DRIVE_LIBRARY_FOLDER '
+      + '(the folder every library picture goes into) first.',
     );
   }
 

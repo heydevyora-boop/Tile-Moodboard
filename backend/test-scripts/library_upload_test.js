@@ -35,6 +35,10 @@ Object.assign(process.env, {
   LOG_LEVEL: 'error',
   RATE_LIMIT_MAX: '100000',
   GOOGLE_DRIVE_ROOT_FOLDER: 'TestDriveRoot',
+  // The studio's own "Reference Images" folder, given as a LINK -- which
+  // is what Google's "Copy link" puts on the clipboard, and therefore
+  // what an owner will actually paste into the environment.
+  GOOGLE_DRIVE_LIBRARY_FOLDER: 'https://drive.google.com/drive/folders/1RefImagesFolderId?usp=sharing',
 });
 
 let pass = 0;
@@ -71,8 +75,18 @@ async function main() {
   const client = drive.googleDriveClient;
   client.isConfigured = () => true;
   client.getOrCreateFolder = async (name, parent) => {
+    // Recorded so the test can assert this is NEVER reached any more:
+    // the library uploads into the configured folder and must not
+    // find-or-create one of its own under the Drive root.
     driveState.folders.push({ name, parent });
     return { id: 'folder-' + name, name };
+  };
+  driveState.lookedUp = [];
+  client.getFolderById = async (id) => {
+    driveState.lookedUp.push(id);
+    return id === '1RefImagesFolderId'
+      ? { id, name: 'Reference Images' }
+      : null;
   };
   client.uploadFile = async (input) => {
     driveState.uploads += 1;
@@ -151,8 +165,13 @@ async function main() {
   check('1c. choosing a theme offers the upload',
     /ADD IMAGES TO BRITISH/.test(await page.locator('.lib-add').textContent() || ''),
     await page.locator('.lib-add').textContent());
-  check('1d. ...and says the theme is empty rather than showing nothing',
-    /Nothing in this theme yet/.test(await page.locator('#mainContent').textContent()));
+  // A theme is never truly empty any more: two starter rooms ship with
+  // the application, which is what stops a fresh deployment looking
+  // like a feature that was never built.
+  check('1d. ...and the theme already holds the starters that ship with the app',
+    await page.locator('.lib-card').count() === 2
+    && await page.locator('.lib-starter-flag').count() === 2,
+    await page.locator('.lib-card').count());
 
   // ════════════════════════════════════════════════════════════════
   console.log('\n2. a bulk upload of sixty pictures');
@@ -175,10 +194,11 @@ async function main() {
 
     const rows = await prisma.libraryReference.count({ where: { themeId: 'british' } });
     check('2d. ...and sixty rows are saved under the theme', rows === 60, rows);
-    check('2e. ...each one on Drive, in the library folder',
+    check('2e. ...each one on Drive, in the studio\u2019s Reference Images folder',
       driveState.files.size === 60
-      && [...driveState.files.values()].every((f) => f.parent === 'folder-devyora-library'),
-      { onDrive: driveState.files.size });
+      && [...driveState.files.values()].every((f) => f.parent === '1RefImagesFolderId'),
+      { onDrive: driveState.files.size,
+        parents: [...new Set([...driveState.files.values()].map((f) => f.parent))] });
     check('2f. ...and every one made readable by link, or generation could not fetch it',
       driveState.publicised.length === 60, driveState.publicised.length);
 
@@ -194,15 +214,32 @@ async function main() {
 
     await page.waitForSelector('.lib-card', { timeout: 20000 });
     check('2k. the gallery shows them without a reload',
-      await page.locator('.lib-card').count() === 60,
+      await page.locator('.lib-card').count() === 62,   // 60 uploaded + 2 starters
       await page.locator('.lib-card').count());
     await page.click('#libBack');
     await page.waitForSelector('.lib-theme-card', { timeout: 10000 });
     check('2l. ...and the theme card shows the new count',
-      /60 REFERENCES/.test(
+      /62 ROOMS/.test(
         await page.locator('.lib-theme-card[data-theme="british"]').textContent() || ''
       ),
       await page.locator('.lib-theme-card[data-theme="british"]').textContent());
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  console.log('\n2m. every picture went into the studio\u2019s own folder');
+  {
+    // THE POINT OF THE SETTING. Not the Drive root, and not a folder
+    // this code invented -- the one the studio created and named.
+    const parents = new Set([...driveState.files.values()].map((f) => f.parent));
+    check('2m. all sixty landed in one folder', parents.size === 1, [...parents]);
+    check('2n. ...the one the link in the environment named',
+      parents.has('1RefImagesFolderId'), [...parents]);
+    check('2o. ...read out of a pasted Drive LINK, not a bare id',
+      driveState.lookedUp.includes('1RefImagesFolderId'), driveState.lookedUp);
+    check('2p. ...checked once for sixty uploads, not sixty times',
+      driveState.lookedUp.length === 1, driveState.lookedUp.length);
+    check('2q. and no folder was created under the Drive root',
+      driveState.folders.length === 0, driveState.folders);
   }
 
   // ════════════════════════════════════════════════════════════════
@@ -244,12 +281,15 @@ async function main() {
   // ════════════════════════════════════════════════════════════════
   console.log('\n4. removing one');
   {
+    // The grid holds the uploaded rooms AND the two starters, so the
+    // count to wait for is the uploaded count plus those.
     const before = await prisma.libraryReference.count({ where: { themeId: 'floral' } });
+    const STARTERS = 2;
     page.on('dialog', (d) => d.accept());
-    await page.click('.lib-card [data-delete]');
+    await page.click('.lib-card:not(:has(.lib-starter-flag)) [data-delete]');
     await page.waitForFunction(
-      (n) => document.querySelectorAll('.lib-card').length === n - 1,
-      before, { timeout: 20000 },
+      (n) => document.querySelectorAll('.lib-card').length === n,
+      before - 1 + STARTERS, { timeout: 20000 },
     );
     const after = await prisma.libraryReference.count({ where: { themeId: 'floral' } });
     check('4a. the row is gone', after === before - 1, { before, after });
@@ -257,7 +297,7 @@ async function main() {
     await page.click('#libBack');
     await page.waitForSelector('.lib-theme-card', { timeout: 10000 });
     check('4c. ...and the theme card count follows',
-      /1 REFERENCE\b/.test(
+      /3 ROOMS/.test(
         await page.locator('.lib-theme-card[data-theme="floral"]').textContent() || ''
       ),
       await page.locator('.lib-theme-card[data-theme="floral"]').textContent());
@@ -302,7 +342,7 @@ async function main() {
     await openLibrary();
     await page.click('[data-theme="british"]');
     await page.waitForSelector('.lib-card', { timeout: 20000 });
-    check('6a. a reader sees the library', await page.locator('.lib-card').count() === 60,
+    check('6a. a reader sees the library', await page.locator('.lib-card').count() === 62,
       await page.locator('.lib-card').count());
 
     const token = await page.evaluate(() => localStorage.getItem('casa_access_token'));

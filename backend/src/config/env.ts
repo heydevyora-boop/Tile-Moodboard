@@ -249,6 +249,38 @@ const envSchema = z.object({
       'CasaDeAurum',
     ),
 
+  /*
+   * THE DRIVE FOLDER DE'VYORA LIBRARY UPLOADS INTO.
+   *
+   * The studio's own "Reference Images" folder. Every library picture
+   * goes directly inside it -- never into the Drive root, and never
+   * into a sub-folder this code invents.
+   *
+   * A LINK OR AN ID. Google shows a folder as
+   * https://drive.google.com/drive/folders/<id>, which is what the
+   * right-click "Copy link" puts on the clipboard, so that is accepted
+   * as readily as the bare id. library.service unwraps it.
+   *
+   * No default on purpose. Falling back to the root folder would be
+   * exactly the behaviour this setting exists to stop, and it would do
+   * it silently; unset, the library refuses to upload and says which
+   * variable to set.
+   */
+  GOOGLE_DRIVE_LIBRARY_FOLDER: z
+    .string()
+    .optional(),
+
+  /*
+   * The same setting under the name the folder itself has. Accepted so
+   * that whichever of the two names gets typed into the environment,
+   * the pictures land in the right place -- a mismatch here would mean
+   * uploads silently going somewhere else, which is the one outcome
+   * worth two lines of code to prevent.
+   */
+  GOOGLE_DRIVE_REFERENCE_IMAGES_FOLDER: z
+    .string()
+    .optional(),
+
   // ==========================================================
   // GEMINI AI
   // ==========================================================

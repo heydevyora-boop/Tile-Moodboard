@@ -7,6 +7,8 @@ import {
 import { prisma } from '@db/connection';
 import { logActivity } from '@services/activityLog.service';
 import { normalizeDriveImageUrl } from '@services/referenceImages.service';
+import { isStarterId, starterById, STARTER_PATH } from '@services/libraryStarters';
+import { config } from '@config/index';
 
 import { authenticate, requirePermission } from '@middlewares/auth';
 
@@ -254,13 +256,65 @@ router.post(
       let libraryScene: { id: string; title: string; imageUrl: string; room: string | null } | null = null;
 
       if (typeof library_reference_id === 'string' && library_reference_id.trim()) {
-        const row =
-          await prisma.libraryReference.findFirst({
-            where: { id: library_reference_id.trim(), isActive: true },
+        const wanted = library_reference_id.trim();
+
+        // A STARTER ROOM IS A FILE THIS SERVER ITSELF SERVES.
+        //
+        // Python fetches the scene over the public internet from its own
+        // function, so a relative path is no use to it -- the URL has to
+        // be absolute and reachable. The configured public URL is
+        // preferred; failing that the origin is taken from this request,
+        // which on a Vercel deployment is the real deployment host and
+        // needs no environment variable set.
+        //
+        // Only the ORIGIN comes from the header. The path is fixed here,
+        // so a forged Host cannot point the fetcher at a file of the
+        // caller's choosing -- it can only make the fetch fail.
+        if (isStarterId(wanted)) {
+          const starter = starterById(wanted);
+
+          if (!starter) {
+            return res.status(404).json({
+              success: false,
+              error: {
+                type: 'NOT_FOUND',
+                message:
+                  'That starter room is not one this version of De\u2019vyora ships. '
+                  + 'Choose a reference again from the Library.',
+              },
+            });
+          }
+
+          // THE REQUEST'S OWN ORIGIN FIRST, not the configured one.
+          //
+          // On Vercel every deployment has its own hostname, so a
+          // BACKEND_PUBLIC_URL set once is stale by the next deploy --
+          // and a stale one here does not degrade, it hands Python an
+          // address it cannot reach. The incoming request always knows
+          // the host it actually arrived on, in every environment
+          // including a developer's laptop. The configured value is
+          // kept only for the case where there is no Host header at all.
+          const host = req.get('host');
+          const origin = host
+            ? `${req.protocol}://${host}`
+            : (config.backend.publicUrl || '').replace(/\/+$/, '');
+
+          libraryScene = {
+            id: starter.id,
+            title: starter.title,
+            imageUrl: `${origin}${STARTER_PATH}/${starter.file}`,
+            room: starter.room,
+          };
+        }
+
+        const row = libraryScene
+          ? null
+          : await prisma.libraryReference.findFirst({
+            where: { id: wanted, isActive: true },
             select: { id: true, title: true, imageUrl: true, room: true },
           });
 
-        if (!row) {
+        if (!libraryScene && !row) {
           return res.status(404).json({
             success: false,
 
@@ -275,7 +329,7 @@ router.post(
           });
         }
 
-        libraryScene = row;
+        if (row) libraryScene = row;
       }
 
       // How the reference is named to the generator. Built from the row,
