@@ -71,10 +71,16 @@ function main() {
       initials: (n) => String(n || '?').split(/\s+/).map((p) => p[0]).join('').toUpperCase(),
       auth: { logout: async () => {} },
       library: {
-        themes: async () => [
-          { id: 'british', label: 'British', slug: 'british', palette: 'Heritage green', count: 0 },
-          { id: 'floral', label: 'Floral', slug: 'floral', palette: 'Blush pink', count: 0 },
-        ],
+        // {themes, storage}, not a bare array: the endpoint reports
+        // separately whether the counts could be read, so a database
+        // without the library table still lists the studio's themes.
+        themes: async () => ({
+          themes: [
+            { id: 'british', label: 'British', slug: 'british', palette: 'Heritage green', count: 0 },
+            { id: 'floral', label: 'Floral', slug: 'floral', palette: 'Blush pink', count: 0 },
+          ],
+          storage: { ok: true, reason: '' },
+        }),
         references: async () => [],
         selection: () => null,
         select: (r) => r,
