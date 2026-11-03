@@ -657,6 +657,66 @@ def build_tile_application_prompt(
         else ""
     )
 
+    # ────────────────────────────────────────────────────────────────
+    # THE CLIENT CHOSE THIS ROOM OUT OF THE DE'VYORA LIBRARY.
+    # ────────────────────────────────────────────────────────────────
+    #
+    # IMAGE 1 is normally a room this system generated a moment ago --
+    # Stage 1 drew it from the theme, so being "true to the theme" and
+    # being true to IMAGE 1 are the same thing and nothing has to say
+    # which wins.
+    #
+    # A library reference is different. It is a photograph the client
+    # pointed at and said "that one", and it may well not look like the
+    # theme's usual idea of itself: a Moroccan reference can be cream and
+    # terracotta while the theme section above asks for blue and green.
+    # That section is several hundred words long and emphatic, so without
+    # this one the model reconciles the two by drifting the room towards
+    # the theme -- which is exactly the client's choice being overruled.
+    #
+    # So this says it outright, and it sits immediately above the
+    # requirements it takes precedence over. It is present ONLY for a
+    # library generation (the Node route sets `reference_room` from the
+    # library row, never the browser), so every other caller's prompt is
+    # unchanged to the character.
+    reference_room = text(requirements.get("reference_room"))
+
+    reference_section = (
+        f"""
+THE CLIENT'S CHOSEN REFERENCE ROOM:
+
+IMAGE 1 is not a room this system designed. It is a photograph the
+client chose from the De'vyora Library -- {reference_room} -- and it is
+the PRIMARY VISUAL GUIDE for this image. The finished picture must read
+as that same room, photographed again after the materials below were
+installed in it.
+
+Keep ALL of it exactly as supplied:
+- its composition and framing -- what is in shot, and where
+- its camera position, lens and perspective, and every vanishing point
+- its light: the direction, the colour temperature, the hardness, the
+  time of day it reads as, and every shadow and reflection that follows
+  from them
+- its proportions, its architecture and its fittings
+- its overall mood and the way it feels to stand in
+
+Change ONE thing and nothing else: the material on the surfaces named
+below. The materials supplied are the ones the studio matched TO this
+photograph, so they belong in it -- install them at the scale and in the
+layout this room's own surfaces call for.
+
+Where this photograph and the theme description disagree, THIS
+PHOTOGRAPH WINS. Do not restyle the room towards the theme, do not
+correct its colours towards the theme's palette, and do not add,
+remove or move anything in it to make it look more like the theme. The
+theme governs how the supplied materials are laid, cut and grouted --
+nothing about the room itself.
+""".strip()
+        + "\n"
+        if reference_room
+        else ""
+    )
+
     # Angle handling is intentionally an either/or against the room's
     # camera: most callers (single-shot generation elsewhere in the app)
     # never pass an angle and get the original "camera stays exactly as
@@ -779,6 +839,7 @@ border crosses in FRONT of the base field; it must not cut the
 highlight panel into pieces.
 
 {identity}
+{reference_section}
 {selections_section}
 {camera_section}
 REFERENCE PRIORITY:
@@ -860,6 +921,7 @@ Apply the EXACT tile shown in IMAGE 2 to the {surface_description}
 of IMAGE 1.
 
 {identity}
+{reference_section}
 {selections_section}
 {camera_section}
 REFERENCE PRIORITY:

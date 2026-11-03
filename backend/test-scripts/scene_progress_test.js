@@ -65,6 +65,17 @@ function loadBoard(generateScene) {
       tiles: async () => BOARD.combinations[0].tiles.map((t) => ({ id: t.tileId, name: t.name, imageUrl: '' })),
     },
     ai: { generateScene },
+    // A saved board must not pick up a reference chosen afterwards, so
+    // this returns one and the page is expected to ignore it -- which
+    // is checked below.
+    library: {
+      selection: () => ({
+        id: 'ref-1', themeId: 'moroccan', themeLabel: 'Moroccan',
+        title: 'Cobalt Hammam', imageUrl: '', room: 'Bathroom',
+        chosenAt: new Date().toISOString(),
+      }),
+      clearSelection: () => {},
+    },
   };
 
   const start = html.lastIndexOf('<script>');
@@ -95,6 +106,13 @@ async function main() {
   check('1. the card offers to generate before anything is asked of it',
     /GENERATE/.test((doc.querySelector('[data-generate-scene]') || {}).textContent || ''),
     (doc.querySelector('[data-generate-scene]') || {}).textContent);
+
+  // This board was opened by ?boardId=. It was built with whatever
+  // reference was chosen on the day -- which is not whatever is chosen
+  // now. Showing today's choice on it would state, on the client's own
+  // screen, that the board was matched to a room it has never seen.
+  check('1b. a saved project does not wear a reference chosen afterwards',
+    doc.querySelectorAll('.libref').length === 0);
 
   clickGenerate(dom);
   await wait(300);

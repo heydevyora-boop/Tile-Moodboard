@@ -13,6 +13,15 @@ export const generateBriefSchema = z.object({
   budget: z.string().trim().max(800).optional(),
   brandId: z.string().optional(),
   combinationCount: z.coerce.number().int().min(1).max(6).optional(),
+  /**
+   * The De'vyora Library room the client chose, if they chose one.
+   *
+   * A cuid, so the length cap is generous rather than tight. Optional:
+   * every board built before the library existed, and every board built
+   * without a reference, sends nothing here and behaves exactly as it
+   * did.
+   */
+  libraryReferenceId: z.string().trim().max(60).optional(),
 });
 
 export type GenerateBriefInput = z.infer<typeof generateBriefSchema>;

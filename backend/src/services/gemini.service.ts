@@ -23,12 +23,37 @@ export class GeminiError extends AppError {
   }
 }
 
+/**
+ * A picture sent along with the prompt.
+ *
+ * WHY THIS EXISTS. De'vyora Library lets a client choose a reference
+ * room, and the tiles in the generated image have to be chosen FROM
+ * that picture -- its palette, its patterns, its materials. Nothing can
+ * choose from a picture it has not seen, and until now every call this
+ * client made was text and nothing but text.
+ *
+ * `data` is base64 WITHOUT a data: prefix, which is what the API wants.
+ */
+export interface GeminiImage {
+  mimeType: string;
+  /** Base64, no `data:...;base64,` prefix. */
+  data: string;
+}
+
 export interface GenerateContentOptions {
   temperature?: number;
   maxOutputTokens?: number;
   /** 'application/json' asks Gemini to constrain output to valid JSON — used by generateJSON(). */
   responseMimeType?: 'text/plain' | 'application/json';
   systemInstruction?: string;
+  /**
+   * Pictures the model should look at, sent after the prompt text.
+   *
+   * Omitted (the case for every caller that existed before this), the
+   * request body is byte-for-byte what it always was -- one text part --
+   * so no existing behaviour moves.
+   */
+  images?: GeminiImage[];
 }
 
 export interface GeminiUsage {
@@ -120,7 +145,18 @@ export class GeminiClient {
         headers: { 'Content-Type': 'application/json' },
         signal: controller.signal,
         body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          contents: [{
+            role: 'user',
+            parts: [
+              { text: prompt },
+              // The prompt first, then what it is talking about. An
+              // image part before the text it belongs to reads as an
+              // image with no instructions attached.
+              ...(options.images ?? []).map((image) => ({
+                inlineData: { mimeType: image.mimeType, data: image.data },
+              })),
+            ],
+          }],
           generationConfig: {
             temperature: options.temperature ?? config.gemini.temperature,
             maxOutputTokens: options.maxOutputTokens ?? config.gemini.maxOutputTokens,

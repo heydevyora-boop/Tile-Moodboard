@@ -117,6 +117,7 @@ model User {
   referenceImages            ReferenceImage[]     @relation("ReferenceImageUploadedBy")
   refreshTokens              RefreshToken[]
   webauthnCredentials        WebAuthnCredential[]
+  libraryReferences          LibraryReference[]   @relation("LibraryReferenceUploadedBy")
   ruleVersionsCreated        RuleVersion[]        @relation("RuleVersionCreatedBy")
   settingsUpdated            Setting[]            @relation("SettingUpdatedBy")
   role                       Role                 @relation(fields: [roleId], references: [id])
@@ -277,6 +278,74 @@ model ReferenceImage {
   @@index([style])
   @@index([room])
   @@map("reference_images")
+}
+
+/// DE'VYORA LIBRARY: one curated reference room, under one theme.
+///
+/// WHAT IT IS FOR, and why it is not the existing ReferenceImage table.
+///
+/// A client browses this library, picks ONE picture, and that exact
+/// picture then does two jobs: the catalog is searched for the tiles
+/// that match it, and the scene is generated FROM it. It is a published
+/// gallery with a name on each piece.
+///
+/// `reference_images` is a different thing with a similar name: staff
+/// inspiration tagged by style and room, used to seed a theme's own
+/// photographs, with no title and nothing published to a client. Putting
+/// the two in one table would put every internal upload in front of a
+/// customer, so they stay apart. Neither touches the other.
+///
+/// THE THEME IS NOT A TABLE. The nine themes live in shared/themes.json,
+/// which Node and Python both read and which the prompts, the theme
+/// check and the tile ranking are all written against. A themes table
+/// would be a second source of truth for the same nine rows, and the two
+/// would drift. `themeId` holds a theme's own id from that file, and is
+/// validated against it on write rather than by a foreign key.
+///
+/// GOOGLE DRIVE IS THE ONLY STORE. `driveFileId` is required, so a row
+/// cannot exist for a picture that is anywhere else -- there is no local
+/// path and no blob key in this table to hold one. `imageUrl` is the
+/// browser-ready Drive link derived from that id.
+model LibraryReference {
+  id           String   @id @default(cuid())
+  /// A theme id from shared/themes.json: "british", "roman_touch", ...
+  themeId      String
+  /// What the client sees this room called.
+  title        String
+  /// Drive link, browser-ready. Derived from driveFileId, never a local path.
+  imageUrl     String
+  /// The Drive file itself. Required: Drive is the only store there is.
+  driveFileId  String   @unique
+  /// Which room this is a reference FOR, when it is only right for one.
+  room         String?
+  description  String?
+  /// Unpublished rows stay out of the client's gallery without being deleted.
+  isActive     Boolean  @default(true)
+  /// The order the studio wants them shown in, within a theme.
+  sortOrder    Int      @default(0)
+  uploadedById String?
+  /// WHAT THE STUDIO'S EYE READ IN THIS PICTURE.
+  ///
+  /// A LibraryVisualProfile (backend/src/services/libraryMatch.service.ts):
+  /// the palette, the materials, the patterns, the finishes and the mood
+  /// one Gemini vision pass found here. It is what the tile-matching step
+  /// searches the catalog WITH, so it is read once and kept -- the
+  /// picture never changes, so neither does the reading, and a client
+  /// generating from the same room twice should not pay for it twice.
+  ///
+  /// Null means "not read yet", which is not an error: the matcher reads
+  /// it on first use. Nothing fails when this column is missing either
+  /// (an un-migrated database), it is simply read fresh each time.
+  visualProfile Json?
+  /// When that reading was taken, so a stale one can be told apart.
+  visualReadAt DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  uploadedBy   User?    @relation("LibraryReferenceUploadedBy", fields: [uploadedById], references: [id])
+
+  @@index([themeId])
+  @@index([themeId, isActive])
+  @@index([room])
 }
 
 model Customer {

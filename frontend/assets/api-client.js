@@ -678,6 +678,165 @@
   };
 
   // ============================================================
+  // DE'VYORA LIBRARY
+  // ============================================================
+  //
+  // ONE PICTURE PER REQUEST. "Bulk" is a hundred requests, not one with
+  // a hundred files in it: the API is a serverless function with a
+  // sixty-second limit and a few megabytes of request body. The page
+  // sends a few at a time and reports each one, so one bad file fails on
+  // its own and the rest still land.
+  //
+  // upload() uses XMLHttpRequest rather than fetch because it is the
+  // only one that reports how much of a file has actually gone up. A
+  // hundred photographs is a real wait, and a bar that only moves when a
+  // file finishes is not a progress bar.
+
+  // THE CHOSEN REFERENCE, CARRIED FORWARD.
+  //
+  // A client picks one picture in the library and then walks to the
+  // mood board to generate from it. Those are two pages, so the choice
+  // has to survive the walk.
+  //
+  // It is kept in localStorage, not in the URL and not in the database:
+  // the URL would be lost the moment they click anything else, and a
+  // column nobody has specified yet would be a schema change made on a
+  // guess. What is stored is the whole small record -- id, theme, title
+  // and the Drive link -- so the page that generates can show what was
+  // chosen without fetching it again, and can send the id the generator
+  // will resolve server-side.
+  //
+  // This is the carrier the generation chunk reads. If the choice ever
+  // has to outlive a browser, that is a column and a migration, and the
+  // shape here is already the shape it would take.
+  const LIBRARY_SELECTION_KEY = 'casa_library_selection';
+
+  const library = {
+    /** The reference the client has chosen, or null. */
+    selection() {
+      try {
+        const raw = localStorage.getItem(LIBRARY_SELECTION_KEY);
+        const value = raw ? JSON.parse(raw) : null;
+        return value && typeof value.id === 'string' && typeof value.imageUrl === 'string'
+          ? value
+          : null;
+      } catch (err) {
+        return null;
+      }
+    },
+
+    select(reference) {
+      if (!reference || !reference.id) return null;
+      const kept = {
+        id: reference.id,
+        themeId: reference.themeId || '',
+        /**
+         * The theme's own label, as the wizard spells it ("Roman
+         * Touch", "Black & White").
+         *
+         * Carried as well as the id because the mood-board wizard
+         * works in labels, and deriving one from an id cannot be done
+         * reliably -- "black_white" is "Black & White", not "Black
+         * White". The Library page has the label in hand when the
+         * client clicks, so it travels from there rather than being
+         * guessed at the other end. Empty for a selection made before
+         * this existed, which the wizard treats as "no theme to
+         * pre-select".
+         */
+        themeLabel: reference.themeLabel || '',
+        title: reference.title || '',
+        imageUrl: reference.imageUrl || '',
+        room: reference.room || '',
+        chosenAt: new Date().toISOString(),
+      };
+      try {
+        localStorage.setItem(LIBRARY_SELECTION_KEY, JSON.stringify(kept));
+      } catch (err) { /* private mode: the choice lasts this page only */ }
+      return kept;
+    },
+
+    clearSelection() {
+      try {
+        localStorage.removeItem(LIBRARY_SELECTION_KEY);
+      } catch (err) { /* ignore */ }
+    },
+
+    themes() {
+      return apiFetch('/library/themes').then((r) => r.data.themes);
+    },
+
+    references(themeId) {
+      const query = themeId ? '?themeId=' + encodeURIComponent(themeId) : '';
+      return apiFetch('/library/references' + query).then((r) => r.data.references);
+    },
+
+    remove(id) {
+      return apiFetch('/library/references/' + encodeURIComponent(id), {
+        method: 'DELETE'
+      }).then((r) => r.data);
+    },
+
+    /**
+     * Uploads ONE picture.
+     *
+     * `onProgress` is called with 0..1 as the bytes go up. `signal` is an
+     * AbortSignal, so a page that is left can stop a queue of ninety.
+     */
+    upload(file, fields, options) {
+      const settings = options || {};
+      return new Promise((resolve, reject) => {
+        const form = new FormData();
+        form.append('file', file);
+        Object.keys(fields || {}).forEach((key) => {
+          if (fields[key] !== undefined && fields[key] !== null && fields[key] !== '') {
+            form.append(key, fields[key]);
+          }
+        });
+
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', API_BASE + '/library/references');
+        xhr.withCredentials = true;
+
+        const token = getAccessToken();
+        if (token) xhr.setRequestHeader('Authorization', 'Bearer ' + token);
+
+        if (settings.signal) {
+          settings.signal.addEventListener('abort', () => xhr.abort(), { once: true });
+        }
+
+        if (xhr.upload && typeof settings.onProgress === 'function') {
+          xhr.upload.addEventListener('progress', (event) => {
+            if (event.lengthComputable) settings.onProgress(event.loaded / event.total);
+          });
+        }
+
+        xhr.addEventListener('load', () => {
+          let body = {};
+          try { body = JSON.parse(xhr.responseText || '{}'); } catch (err) { body = {}; }
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve(body.data && body.data.reference);
+            return;
+          }
+          reject(new ApiError(
+            (body && body.message) || 'That picture could not be uploaded.',
+            xhr.status,
+            body && body.errors
+          ));
+        });
+
+        xhr.addEventListener('error', () => {
+          reject(new ApiError('The connection dropped while uploading.', 0));
+        });
+        xhr.addEventListener('abort', () => {
+          reject(new ApiError('Upload cancelled.', 0));
+        });
+
+        xhr.send(form);
+      });
+    }
+  };
+
+  // ============================================================
   // USERS
   // ============================================================
 
@@ -2818,6 +2977,27 @@ const ai = {
     }
 
     /*
+     * THE CLIENT'S CHOSEN DE'VYORA LIBRARY ROOM.
+     *
+     * Its ID and nothing else. The server reads that row and uses the
+     * URL IT holds as the scene image -- deliberately not a URL from
+     * here, which would let this page tell the server's own fetcher
+     * where to go.
+     *
+     * When this is set, scene_image_mode and generate_random_scene
+     * above are both overridden server-side: the chosen photograph IS
+     * the room, so the step that invents one does not run.
+     */
+    if (
+      typeof payload.library_reference_id ===
+        'string' &&
+      payload.library_reference_id.trim()
+    ) {
+      normalizedPayload.library_reference_id =
+        payload.library_reference_id.trim();
+    }
+
+    /*
      * THE REST OF THE MOOD-BOARD COMBINATION.
      *
      * product_id above is the BASE tile only. A board also carries a
@@ -3524,6 +3704,8 @@ const ai = {
     auth,
 
     passkeys,
+
+    library,
 
     users,
 

@@ -227,6 +227,31 @@
   .stock-yes { color:#6E5228; }
   .stock-no { color:var(--err); }
 
+  /* ---- THE CLIENT'S CHOSEN DE'VYORA LIBRARY ROOM ----
+     On screen from the first step to the last, because every choice
+     after it is made against it. Quiet enough not to compete with the
+     step it sits above; never silent, because a reference the client
+     cannot see is a reference they cannot tell is wrong. */
+  .libref { display:flex; align-items:center; gap:13px; padding:11px 14px; margin:0 0 16px;
+            border:1px solid var(--line); border-radius:14px; background:var(--card); }
+  .libref-thumb { width:52px; height:52px; flex:none; border-radius:10px; overflow:hidden;
+                  background:var(--line); }
+  .libref-thumb img { width:100%; height:100%; object-fit:cover; display:block; }
+  .libref-body { flex:1; min-width:0; }
+  .libref-k { display:block; font-size:9px; letter-spacing:.18em; color:var(--muted); }
+  .libref-t { display:block; font-size:13.5px; margin-top:3px; overflow:hidden;
+              text-overflow:ellipsis; white-space:nowrap; }
+  .libref-n { display:block; font-size:10px; letter-spacing:.04em; color:var(--text2); margin-top:3px; }
+  .libref-acts { display:flex; gap:7px; flex:none; }
+  .libref-acts a, .libref-acts button { font-size:9px; letter-spacing:.12em; padding:6px 10px;
+            border:1px solid var(--line); border-radius:8px; background:transparent;
+            color:var(--text2); cursor:pointer; text-decoration:none; }
+  .libref-acts a:hover, .libref-acts button:hover { color:var(--text); border-color:var(--muted); }
+  @media (max-width:520px) {
+    .libref { flex-wrap:wrap; }
+    .libref-acts { width:100%; }
+  }
+
   /* ---- bathroom scene visualization (same tokens as the rest of this page) ---- */
   .btn-amber:disabled { opacity:.55; cursor:not-allowed; }
   .viz-section { display:flex; flex-direction:column; gap:10px; }
@@ -383,6 +408,7 @@
     { id: 'generations', label: 'Recent Generations', href: 'recent-generations.html', ready: true },
     { id: 'projects', label: 'Projects', href: 'projects.html', ready: true },
     { id: 'catalog', label: 'Catalog', href: 'catalog.html', ready: true },
+    { id: 'library', label: "De\u2019vyora Library", href: 'devyora-library.html', ready: true },
   ];
 
   function notReady() {
@@ -787,6 +813,27 @@
     view: VIEW_ELEVATION.label,
     combinations: [],
     warnings: [],
+    /**
+     * THE REFERENCE ROOM THE CLIENT CHOSE IN THE DE'VYORA LIBRARY.
+     *
+     * Read once at init from CasaApi.library.selection(), which is
+     * where the Library page left it. Null when they did not choose
+     * one, and then every path below behaves exactly as it did before
+     * the library existed.
+     *
+     * { id, themeId, title, imageUrl, room, chosenAt }
+     */
+    libraryRef: null,
+    /**
+     * What the server said it actually did with that reference --
+     * { id, title, imageUrl, room, matched, dominantColour }.
+     *
+     * `matched` false means the picture could not be read, so the tiles
+     * were chosen from the theme alone. The page must say so: a board
+     * that looks reference-matched and is not is the one outcome this
+     * feature must never produce.
+     */
+    libraryUsed: null,
     tilesById: {},
     errorMessage: null,
     // The combination whose mood board panel is open, or null.
@@ -811,6 +858,59 @@
     loadedBoard: null,
     pendingBoardId: null,
   };
+
+  // ============================================================
+  // THE CHOSEN REFERENCE ROOM
+  // ============================================================
+
+  /**
+   * The banner, or '' when no reference is in play.
+   *
+   * Shown on the wizard and on the results, because it governs both:
+   * the wizard's brief is matched against it, and the generated image
+   * is built on it.
+   */
+  function librefHtml() {
+    const ref = state.libraryRef;
+    if (!ref) return '';
+
+    // After a generation the server's own account of what it did
+    // replaces the client's: it is the only one of the two that knows
+    // whether the picture could actually be read.
+    const used = state.libraryUsed;
+    const note = used
+      ? (used.matched
+        ? 'TILES MATCHED TO THIS ROOM' + (used.dominantColour ? ' \u00b7 ' + escapeHtml(used.dominantColour.toUpperCase()) : '')
+        : 'COULD NOT BE READ \u2014 TILES CHOSEN FROM THE THEME; THE IMAGE STILL USES THIS ROOM')
+      : 'THE TILES AND THE IMAGE WILL BOTH BE MATCHED TO THIS ROOM';
+
+    return '<div class="libref">'
+      + (ref.imageUrl
+        ? '<span class="libref-thumb"><img src="' + escapeHtml(CasaApi.resolveBackendImageUrl(ref.imageUrl)) + '" alt="" loading="lazy" decoding="async"></span>'
+        : '')
+      + '<span class="libref-body">'
+      + '<span class="libref-k mono">DE\u2019VYORA LIBRARY REFERENCE</span>'
+      + '<span class="libref-t serif">' + escapeHtml(ref.title || 'Untitled room') + (ref.room ? ' \u00b7 ' + escapeHtml(ref.room) : '') + '</span>'
+      + '<span class="libref-n mono">' + note + '</span>'
+      + '</span>'
+      + '<span class="libref-acts mono">'
+      + '<a href="devyora-library.html">CHANGE</a>'
+      + '<button type="button" id="librefClear">CLEAR</button>'
+      + '</span>'
+      + '</div>';
+  }
+
+  /** Wires the banner's CLEAR, wherever it was just painted. */
+  function wireLibref() {
+    const btn = document.getElementById('librefClear');
+    if (!btn) return;
+    btn.addEventListener('click', () => {
+      CasaApi.library.clearSelection();
+      state.libraryRef = null;
+      state.libraryUsed = null;
+      render();
+    });
+  }
 
   function render() {
     // The panel lives in modalHost, outside the stage that render()
@@ -855,6 +955,7 @@
 
     main.innerHTML =
       '<div class="stage">' +
+      librefHtml() +
       '<div class="step-head"><div class="eyebrow mono"><span class="dot"></span>STEP ' + state.step + ' OF 7 · ' + meta.key + '</div><span class="pct mono">' + pct + '% Complete</span></div>' +
       '<div class="progress-track"><div class="progress-fill" style="width:' + pct + '%"></div></div>' +
       '<div class="step-tabs">' + tabs + '</div>' +
@@ -869,6 +970,7 @@
       '</div>';
 
     renderStepBody();
+    wireLibref();
 
     document.querySelectorAll('[data-goto-step]').forEach((btn) => {
       btn.addEventListener('click', () => { state.step = parseInt(btn.dataset.gotoStep, 10); render(); });
@@ -1298,6 +1400,15 @@
         ['FINISH', state.finish], ['BUDGET', budgetText()],
         ['THEME', state.theme], ['GROUT', state.grout], ['CAMERA', state.view],
       ];
+      // The reference belongs in the review, because it outranks every
+      // other line in it. Last, so it reads as the thing all of them
+      // are measured against.
+      if (state.libraryRef) {
+        summary.push([
+          'LIBRARY REFERENCE',
+          state.libraryRef.title + (state.libraryRef.room ? ' · ' + state.libraryRef.room : ''),
+        ]);
+      }
       body.innerHTML = '<div class="summary-card" style="margin-top:clamp(18px,2vw,26px)">' +
         summary.map(([k, v]) => '<div class="summary-row"><span class="k mono">' + k + '</span><span class="v">' + v + '</span></div>').join('') +
         '</div>';
@@ -1341,9 +1452,17 @@
         style: state.theme,
         budget: budgetBrief(),
         combinationCount: boardCount(),
+        // THE CHOSEN REFERENCE ROOM. The id alone -- the server reads
+        // the row and the picture itself, so nothing here can point it
+        // at a reference the client never chose.
+        ...(state.libraryRef ? { libraryReferenceId: state.libraryRef.id } : {}),
       };
       const result = await CasaApi.moodBoards.generate(payload);
       state.combinations = result.combinations || [];
+      // What the server actually did with the reference, which is not
+      // the same question as what the client chose: it knows whether
+      // the picture could be read, and the banner says so.
+      state.libraryUsed = result.libraryReference || null;
       // Index 0 now means a different board than it did a moment ago.
       state.visualizations = {};
       state.expandedProducts = {};
@@ -1493,6 +1612,7 @@
       '<div style="display:flex; align-items:flex-start; justify-content:space-between; gap:14px; flex-wrap:wrap">' +
       '<div class="mono" style="font-size:10px; letter-spacing:.18em; color:var(--muted)">' + (state.viewOnly ? 'SAVED MOOD BOARD' : 'MOOD BOARD RESULT') + '</div>' +
       '</div>' +
+      librefHtml() +
       '<h1 class="step-h1 serif">' + state.combinations.length + ' Curated Mood Board' + (state.combinations.length === 1 ? '' : 's') + '</h1>' +
       '<p class="step-sub">' + escapeHtml(specLine) + '</p>' +
       (state.warnings.length ? '<p class="step-sub" style="color:var(--err)">' + state.warnings.length + ' note(s) from generation — see console for detail.</p>' : '') +
@@ -1502,6 +1622,8 @@
       '</div>';
 
     if (state.warnings.length) console.warn('Mood board generation warnings:', state.warnings);
+
+    wireLibref();
 
     const grid = document.getElementById('boardsGrid');
     state.combinations.forEach((combo, i) => {
@@ -2378,6 +2500,18 @@
         surface: 'WALL',
         materials,
         requirements,
+        // THE PICTURE THE CLIENT CHOSE *IS* THE ROOM.
+        //
+        // With this set, the server fetches that reference's own Drive
+        // file and hands it to the generator as the scene, so the
+        // materials above are installed into the client's photograph --
+        // its composition, its camera, its light and its perspective
+        // survive because they are the real thing, not because a prompt
+        // asked for them. The step that invents a room does not run.
+        //
+        // The id and nothing else: the URL that gets fetched is read
+        // from the database, not from here.
+        ...(state.libraryRef ? { library_reference_id: state.libraryRef.id } : {}),
       });
       state.visualizations[index] = {
         status: 'success',
@@ -2411,13 +2545,37 @@
     document.getElementById('profileName').textContent = user.name || user.email;
     document.getElementById('profileRole').textContent = (user.role || '').toUpperCase();
 
+    const boardId = new URLSearchParams(location.search).get('boardId');
+
+    // THE REFERENCE THE CLIENT LEFT THE LIBRARY WITH.
+    //
+    // Read before the first paint, because it changes what the wizard
+    // shows and -- when its theme is known -- which theme the wizard
+    // starts on. Pre-selecting that theme is a DEFAULT, not a lock: the
+    // client may still pick another, and the reference outranks the
+    // theme either way (see referenceBriefBlock server-side). What it
+    // prevents is the common accident of a Moroccan reference arriving
+    // on a wizard that silently says "British".
+    //
+    // NOT FOR A SAVED PROJECT. A board opened by ?boardId= was built
+    // with whatever reference was chosen on the day, which is not
+    // whatever happens to be chosen now -- showing today's choice on
+    // it would state, on the client's own screen, that the board was
+    // matched to a room it has never seen.
+    if (!boardId) {
+      state.libraryRef = CasaApi.library.selection();
+      if (state.libraryRef && state.libraryRef.themeLabel) {
+        const match = THEMES.find((t) => t.label === state.libraryRef.themeLabel);
+        if (match) state.theme = match.label;
+      }
+    }
+
     renderNav();
     document.getElementById('logoutBtn').addEventListener('click', async () => {
       await CasaApi.auth.logout();
       location.href = 'login.html';
     });
 
-    const boardId = new URLSearchParams(location.search).get('boardId');
     if (boardId) {
       loadBoardFromId(boardId);
     } else {

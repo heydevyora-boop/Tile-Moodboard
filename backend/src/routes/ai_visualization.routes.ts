@@ -48,6 +48,7 @@ router.post(
         theme,
         requirements,
         materials,
+        library_reference_id,
       } = req.body;
 
       // ========================================================
@@ -229,6 +230,62 @@ router.post(
       }
 
       // ========================================================
+      // THE CLIENT'S CHOSEN DE'VYORA LIBRARY ROOM
+      // ========================================================
+      // When a reference was chosen, THAT PHOTOGRAPH IS THE SCENE. It
+      // goes to Python as the scene image, so Stage 2 applies the
+      // materials onto the client's own picture and its composition,
+      // camera, light and perspective survive by construction rather
+      // than by instruction. Stage 1 -- the step that invents a room --
+      // does not run at all, because the room already exists.
+      //
+      // THE ROW IS THE AUTHORITY, NOT THE BROWSER. Only the reference's
+      // id is accepted; the URL that is fetched and the words that
+      // describe it are read from the database here, exactly as each
+      // tile's image is resolved above rather than trusted from the
+      // page. A browser that could name its own scene URL could point
+      // this server's fetcher anywhere.
+      //
+      // A reference that has been deleted or unpublished since the
+      // client chose it FAILS, and says so. Quietly generating an
+      // invented room instead would hand them a picture that is not of
+      // the room they asked for, with nothing on it to say so.
+
+      let libraryScene: { id: string; title: string; imageUrl: string; room: string | null } | null = null;
+
+      if (typeof library_reference_id === 'string' && library_reference_id.trim()) {
+        const row =
+          await prisma.libraryReference.findFirst({
+            where: { id: library_reference_id.trim(), isActive: true },
+            select: { id: true, title: true, imageUrl: true, room: true },
+          });
+
+        if (!row) {
+          return res.status(404).json({
+            success: false,
+
+            error: {
+              type: 'NOT_FOUND',
+
+              message:
+                'That reference room is no longer in the De\u2019vyora Library, '
+                + 'so the image cannot be built on it. Choose a reference again '
+                + 'from the Library.',
+            },
+          });
+        }
+
+        libraryScene = row;
+      }
+
+      // How the reference is named to the generator. Built from the row,
+      // and only the row.
+      const referenceRoomText =
+        libraryScene
+          ? `"${libraryScene.title}"${libraryScene.room ? ` (${libraryScene.room})` : ''}`
+          : '';
+
+      // ========================================================
       // NODE → PYTHON
       // ========================================================
 
@@ -242,25 +299,36 @@ router.post(
               .trim()
               .toUpperCase(),
 
+          // The library reference wins over whatever the page sent:
+          // it is the only one of these this server has verified.
           scene_image_path:
-            typeof scene_image_path ===
-            'string'
-              ? scene_image_path.trim()
-              : undefined,
+            libraryScene
+              ? undefined
+              : typeof scene_image_path ===
+                'string'
+                ? scene_image_path.trim()
+                : undefined,
 
           scene_image_url:
-            typeof scene_image_url ===
-            'string'
-              ? scene_image_url.trim()
-              : undefined,
+            libraryScene
+              ? libraryScene.imageUrl
+              : typeof scene_image_url ===
+                'string'
+                ? scene_image_url.trim()
+                : undefined,
 
           scene_image_mode:
-            typeof scene_image_mode ===
-            'string'
-              ? scene_image_mode.trim()
-              : undefined,
+            libraryScene
+              ? 'reference'
+              : typeof scene_image_mode ===
+                'string'
+                ? scene_image_mode.trim()
+                : undefined,
 
+          // Never, with a reference: a generated room would replace the
+          // one the client chose.
           generate_random_scene:
+            !libraryScene &&
             generate_random_scene ===
             true,
 
@@ -299,6 +367,15 @@ router.post(
               : {}),
             ...(tile.size ? { tile_size: tile.size } : {}),
             ...(tile.finish ? { tile_finish: tile.finish } : {}),
+            // tile_application_engine.build_tile_application_prompt
+            // reads this and, only when it is set, tells the model that
+            // IMAGE 1 is the client's own chosen photograph and
+            // outranks the theme. `requirements` is already threaded
+            // end to end, which is why this needs no new parameter on
+            // any of the five layers in between.
+            ...(referenceRoomText
+              ? { reference_room: referenceRoomText }
+              : {}),
           },
 
           // The tile's own extracted catalog image, sent as a safety
@@ -360,7 +437,7 @@ router.post(
       // another container that will be gone by the next request. A
       // data URL is megabytes, so one that is implausibly large is
       // recorded without its image rather than bloating the table.
-      await recordGeneration(req, result, resolvedMaterials);
+      await recordGeneration(req, result, resolvedMaterials, libraryScene);
 
       return res.status(200).json({
         success: true,
@@ -606,6 +683,14 @@ export function generationRow(
     room: String(meta.room ?? ''),
     style: String(meta.style ?? ''),
     combinationName: String(meta.combinationName ?? ''),
+    /**
+     * The De'vyora Library room this scene was built on. Empty for a
+     * scene generated from the theme alone, which is every scene made
+     * before the library existed -- so the card shows the line only
+     * when there is one, rather than printing "no reference".
+     */
+    libraryReference: String(meta.libraryReferenceTitle ?? ''),
+    libraryReferenceId: String(meta.libraryReferenceId ?? ''),
     // True when only the base survives, so the card does not present one
     // tile as if it were the whole combination.
     productsPartial: partial,
@@ -651,6 +736,12 @@ async function recordGeneration(
     size?: string;
     finish?: string;
   }> = [],
+  // The De'vyora Library room this scene was built on, when there was
+  // one. Kept so the history can say WHICH reference produced a picture
+  // -- without it, a reference-built scene and an invented one are
+  // indistinguishable in the record, and "is this really based on the
+  // room I chose?" has no answer.
+  libraryScene: { id: string; title: string } | null = null,
 ): Promise<void> {
   const { url, source } = durableImageUrl(result);
   const body = req.body as Record<string, unknown>;
@@ -671,6 +762,12 @@ async function recordGeneration(
       combinationName: String(requirements.combination_name ?? ''),
       products: generationProducts(materials),
       themeCheck: generationVerdict(result.theme_check),
+      ...(libraryScene
+        ? {
+          libraryReferenceId: libraryScene.id,
+          libraryReferenceTitle: libraryScene.title,
+        }
+        : {}),
     },
     req,
   });

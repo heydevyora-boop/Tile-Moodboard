@@ -62,6 +62,11 @@ export const generate = catchAsync(async (req: Request, res: Response) => {
       combinations: result.combinations,
       warnings: result.warnings,
       tilesConsidered: result.tilesConsidered,
+      // What the board was matched to, when the client chose a room from
+      // the De'vyora Library. Present only then, and carrying `matched`
+      // so the page states what actually happened rather than assuming
+      // the match worked.
+      ...(result.libraryReference ? { libraryReference: result.libraryReference } : {}),
     },
   });
 });
