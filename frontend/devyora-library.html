@@ -161,7 +161,13 @@
   .lib-active-lbl { font-size:8.5px; letter-spacing:.18em; color:var(--gold); }
   .lib-active-name { font-size:13.5px; line-height:1.3; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .lib-active-meta { font-size:9px; letter-spacing:.1em; color:var(--muted); }
-  .lib-active-clear { margin-left:auto; flex:0 0 auto; background:none; border:none; padding:0; color:var(--muted); font-size:9px; letter-spacing:.14em; cursor:pointer; text-decoration:underline; }
+  /* The two things to do with a chosen room: spend it, or drop it.
+     Pushed to the end of the banner together, so the name beside it
+     stays the thing the eye lands on. */
+  .lib-active-acts { margin-left:auto; flex:0 0 auto; display:flex; align-items:center; gap:14px; }
+  .lib-active-go { flex:0 0 auto; font-size:9px; letter-spacing:.14em; color:var(--gold); text-decoration:none; border:1px solid var(--gold-light); border-radius:9px; padding:7px 11px; white-space:nowrap; }
+  .lib-active-go:hover { color:var(--ink); border-color:var(--gold); }
+  .lib-active-clear { flex:0 0 auto; background:none; border:none; padding:0; color:var(--muted); font-size:9px; letter-spacing:.14em; cursor:pointer; text-decoration:underline; }
   .lib-active-clear:hover { color:var(--err); }
 
   /* ── the themes ── */
@@ -227,7 +233,7 @@
   @media (max-width: 560px) {
     .lib-theme-grid, .lib-grid { grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:12px; }
     .lib-active { flex-wrap:wrap; }
-    .lib-active-clear { margin-left:0; }
+    .lib-active-acts { margin-left:0; width:100%; }
   }
 </style>
 </head>
@@ -328,7 +334,17 @@
       + '<span class="lib-active-meta mono">' + escapeHtml(
         [where ? where.label : state.chosen.themeId, state.chosen.room].filter(Boolean).join(' · ')
       ) + '</span></span>'
+      // WHERE THE CHOICE IS ACTUALLY USED.
+      //
+      // Choosing a room here and then finding the way to generate from
+      // it was the one step the client had to work out on their own:
+      // this page keeps the choice, the mood board spends it. The link
+      // closes that gap, and the wizard picks the choice up from the
+      // same place whether they arrive through it or not.
+      + '<span class="lib-active-acts">'
+      + '<a class="lib-active-go mono" href="mood-board.html">USE IN A MOOD BOARD \u2192</a>'
       + '<button type="button" class="lib-active-clear mono" id="libClearChoice">CLEAR</button>'
+      + '</span>'
       + '</div>';
   }
 
@@ -474,7 +490,14 @@
   function choose(id) {
     const ref = state.references.find((r) => r.id === id);
     if (!ref) return;
-    state.chosen = CasaApi.library.select(ref);
+    // The theme's LABEL travels with the choice, not only its id. The
+    // mood-board wizard pre-selects its theme from this, and it works
+    // in labels -- see the note beside themeLabel in the API client.
+    const where = theme(ref.themeId);
+    state.chosen = CasaApi.library.select({
+      ...ref,
+      themeLabel: where ? where.label : '',
+    });
     render();
   }
 

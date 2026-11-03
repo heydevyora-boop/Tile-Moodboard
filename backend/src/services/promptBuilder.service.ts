@@ -7,6 +7,13 @@ import { getRecommendedTiles } from './tileRecommendation.service';
 import { screenSlate, lookalikeRoles } from './tileImageScreen.service';
 import { themeBrief } from './themes.service';
 import { GenerateBriefInput } from '@validators/moodBoard.validators';
+import {
+  loadReference,
+  readVisualProfile,
+  referenceBriefBlock,
+  unreadWarning,
+  LibraryVisualProfile,
+} from './libraryMatch.service';
 import { getSettings } from './settings.service';
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -83,7 +90,7 @@ const MAX_TILES_IN_PROMPT = 80;
  * rather than failing outright because no tile has an exact room tag.
  */
 export async function getAvailableTiles(
-  filter: { brandId?: string; room?: string; style?: string; varietySeed?: number },
+  filter: { brandId?: string; room?: string; style?: string; varietySeed?: number; colorTone?: string },
 ): Promise<TileSummary[]> {
   const ranked = await getRecommendedTiles(prisma, {
     brandId: filter.brandId,
@@ -91,6 +98,16 @@ export async function getAvailableTiles(
     style: filter.style,
     limit: MAX_TILES_IN_PROMPT,
     varietySeed: filter.varietySeed,
+    // HOW A CHOSEN REFERENCE ROOM REACHES THE POOL ITSELF.
+    //
+    // The prompt below can only choose between the eighty rows this
+    // ranking returns, so a reference whose colour reached the prompt
+    // but not the ranking would be matched against whatever the theme
+    // happened to surface. The engine already scores a tile against a
+    // requested colour and its family (scoreColor in
+    // tileRecommendation.service.ts) -- this is that existing door,
+    // which the mood-board path simply never used.
+    colorTone: filter.colorTone,
   });
 
   // A capture holding two materials -- a tile with its neighbour caught
@@ -269,6 +286,14 @@ export function buildPrompt(
   tiles: TileSummary[],
   brief: ClientBriefContext,
   combinationCount: number,
+  /**
+   * What the client's chosen De'vyora Library room holds, already
+   * written out by libraryMatch.referenceBriefBlock.
+   *
+   * Omitted for every board built without one, which leaves this prompt
+   * exactly as it was.
+   */
+  referenceBlock?: string,
 ): BuiltPrompt {
   const systemInstruction = [
     'You are the in-house design assistant for De’vyora, a tile and stone retailer.',
@@ -309,7 +334,17 @@ export function buildPrompt(
 
   const tileList = tiles.length > 0 ? tiles.map(formatTileForPrompt).join('\n') : '(no tiles currently in stock match this brief)';
 
+  // WHERE THE REFERENCE GOES, AND WHY HERE.
+  //
+  // FIRST, above the brief and above the theme. The theme block is
+  // several hundred words of mandatory rules and prohibitions; a
+  // reference tucked in underneath it reads as a footnote to the theme
+  // rather than as the thing the client actually pointed at. Its own
+  // text states the precedence as well (see referenceBriefBlock) --
+  // position and wording both, because this is the rule the whole
+  // feature rests on.
   const userPrompt = [
+    ...(referenceBlock ? [referenceBlock, ''] : []),
     briefLines.join('\n'),
     '',
     `Generate exactly ${combinationCount} distinct tile combinations for this brief, chosen only from the tiles below:`,
@@ -618,6 +653,25 @@ export interface GenerateResult {
   combinations: GeneratedCombination[];
   warnings: string[];
   tilesConsidered: number;
+  /**
+   * The De'vyora Library room this board was matched to, when the client
+   * chose one.
+   *
+   * Echoed back so the page can show WHAT was used rather than claiming
+   * it: `matched` is false when the picture could not be read, and the
+   * board was then composed from the theme alone (the warning says so
+   * too). Absent entirely for a board built without a reference.
+   */
+  libraryReference?: {
+    id: string;
+    title: string;
+    imageUrl: string;
+    room: string | null;
+    /** True when the picture's own reading drove the tile choice. */
+    matched: boolean;
+    /** The colour the catalog was searched with. Empty when unread. */
+    dominantColour: string;
+  };
 }
 
 /** Orchestrates all five steps: read rules, read tiles, read brief, build prompt, call Gemini, validate. */
@@ -628,6 +682,40 @@ export async function generateCombinations(input: GenerateBriefInput, actorId: s
     resolveBriefContext(input, { defaultRoomType: rulesSettings.defaultRoomType, defaultStyleTag: rulesSettings.defaultStyleTag }),
   ]);
   const combinationCount = input.combinationCount ?? rulesSettings.defaultMaxCombinations;
+
+  // ── THE CLIENT'S CHOSEN REFERENCE ROOM ──────────────────────────────
+  //
+  // Loaded before the pool is drawn, because its colour is one of the
+  // inputs to the draw. See libraryMatch.service.ts for why the picture
+  // is read into words at all.
+  //
+  // A reference that has been deleted or unpublished since the client
+  // chose it is NOT a failure: the board is still worth building, and
+  // saying so is better than refusing. Every other failure mode is a
+  // warning too, for the same reason -- but never a silent one, because
+  // a board that looks reference-matched and is not is the one outcome
+  // this feature must never produce.
+  const earlyWarnings: string[] = [];
+  let chosen: Awaited<ReturnType<typeof loadReference>> = null;
+  let referenceProfile: LibraryVisualProfile | null = null;
+
+  if (input.libraryReferenceId) {
+    chosen = await loadReference(input.libraryReferenceId);
+
+    if (!chosen) {
+      earlyWarnings.push(
+        'The reference room this board was started from is no longer in the De\u2019vyora '
+        + 'Library, so the products were chosen from the theme alone. Pick a reference again '
+        + 'from the Library if you want the board matched to one.',
+      );
+    } else {
+      const reading = await readVisualProfile(chosen.reference, chosen.stored);
+      referenceProfile = reading.profile;
+      if (!reading.profile) {
+        earlyWarnings.push(unreadWarning(chosen.reference, reading.error ?? 'the reason was not recorded'));
+      }
+    }
+  }
 
   // A DIFFERENT DRAW EACH TIME, FROM THE SAME CATALOG.
   //
@@ -646,12 +734,23 @@ export async function generateCombinations(input: GenerateBriefInput, actorId: s
     room: brief.room,
     style: brief.style,
     varietySeed: Date.now() ^ Math.floor(Math.random() * 0xffffffff),
+    // The reference's own ground colour, when there is one. Undefined
+    // otherwise, which is the value this call has always passed.
+    colorTone: referenceProfile?.dominantColour || undefined,
   });
   if (tiles.length === 0) {
     throw AppError.badRequest('No in-stock tiles are available for this request — check that this brand has tiles in stock, or add tiles to the catalog first.');
   }
 
-  const prompt = buildPrompt(designRulesText, tiles, brief, combinationCount);
+  const prompt = buildPrompt(
+    designRulesText,
+    tiles,
+    brief,
+    combinationCount,
+    chosen && referenceProfile
+      ? referenceBriefBlock(chosen.reference, referenceProfile)
+      : undefined,
+  );
 
   const raw = await geminiClient.generateJSON<unknown>(prompt.userPrompt, { systemInstruction: prompt.systemInstruction });
 
@@ -665,6 +764,10 @@ export async function generateCombinations(input: GenerateBriefInput, actorId: s
   const { combinations, warnings } = validateCombinations(
     raw, consideredIds, typeByTileId, toneByTileId, brief.style,
   );
+
+  // The reference's own notes go first: they are about the whole board,
+  // not about one dropped role.
+  warnings.unshift(...earlyWarnings);
 
   // ONE SURFACE, ONE ROLE.
   //
@@ -764,9 +867,41 @@ export async function generateCombinations(input: GenerateBriefInput, actorId: s
     userId: actorId,
     action: 'mood_board.prompt_generated',
     entityType: 'MoodBoard',
-    metadata: { briefText: input.text, tilesConsidered: tiles.length, combinationsReturned: combinations.length, warnings },
+    metadata: {
+      briefText: input.text,
+      tilesConsidered: tiles.length,
+      combinationsReturned: combinations.length,
+      warnings,
+      // Which library room drove this board, if any -- so the showroom
+      // can answer "what was this matched to?" months later.
+      ...(chosen
+        ? {
+          libraryReferenceId: chosen.reference.id,
+          libraryReferenceTitle: chosen.reference.title,
+          libraryReferenceMatched: referenceProfile !== null,
+          ...(referenceProfile ? { libraryReferenceColour: referenceProfile.dominantColour } : {}),
+        }
+        : {}),
+    },
     req,
   });
 
-  return { prompt, combinations, warnings, tilesConsidered: tiles.length };
+  return {
+    prompt,
+    combinations,
+    warnings,
+    tilesConsidered: tiles.length,
+    ...(chosen
+      ? {
+        libraryReference: {
+          id: chosen.reference.id,
+          title: chosen.reference.title,
+          imageUrl: chosen.reference.imageUrl,
+          room: chosen.reference.room,
+          matched: referenceProfile !== null,
+          dominantColour: referenceProfile?.dominantColour ?? '',
+        },
+      }
+      : {}),
+  };
 }

@@ -324,6 +324,21 @@ model LibraryReference {
   /// The order the studio wants them shown in, within a theme.
   sortOrder    Int      @default(0)
   uploadedById String?
+  /// WHAT THE STUDIO'S EYE READ IN THIS PICTURE.
+  ///
+  /// A LibraryVisualProfile (backend/src/services/libraryMatch.service.ts):
+  /// the palette, the materials, the patterns, the finishes and the mood
+  /// one Gemini vision pass found here. It is what the tile-matching step
+  /// searches the catalog WITH, so it is read once and kept -- the
+  /// picture never changes, so neither does the reading, and a client
+  /// generating from the same room twice should not pay for it twice.
+  ///
+  /// Null means "not read yet", which is not an error: the matcher reads
+  /// it on first use. Nothing fails when this column is missing either
+  /// (an un-migrated database), it is simply read fresh each time.
+  visualProfile Json?
+  /// When that reading was taken, so a stale one can be told apart.
+  visualReadAt DateTime?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   uploadedBy   User?    @relation("LibraryReferenceUploadedBy", fields: [uploadedById], references: [id])

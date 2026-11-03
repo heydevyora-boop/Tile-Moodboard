@@ -417,6 +417,16 @@
       '<div class="gen-body">' +
       '<span class="gen-name">' + escapeHtml(title) + '</span>' +
       '<span class="gen-meta mono">' + escapeHtml(whenText(gen.createdAt)) + (bits ? ' — ' + escapeHtml(bits) : '') + '</span>' +
+      // WHICH LIBRARY ROOM THIS WAS BUILT ON.
+      //
+      // Only when there was one. Without this line a scene built on a
+      // client's chosen reference and a scene built on a room the
+      // system invented look identical in the history, and "is this
+      // really based on the room they picked?" has no answer months
+      // later.
+      (gen.libraryReference
+        ? '<span class="gen-meta mono">ON LIBRARY REFERENCE — ' + escapeHtml(gen.libraryReference) + '</span>'
+        : '') +
       productsHtml(gen) +
       verdictHtml(gen) +
       '</div></article>';

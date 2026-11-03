@@ -730,6 +730,20 @@
       const kept = {
         id: reference.id,
         themeId: reference.themeId || '',
+        /**
+         * The theme's own label, as the wizard spells it ("Roman
+         * Touch", "Black & White").
+         *
+         * Carried as well as the id because the mood-board wizard
+         * works in labels, and deriving one from an id cannot be done
+         * reliably -- "black_white" is "Black & White", not "Black
+         * White". The Library page has the label in hand when the
+         * client clicks, so it travels from there rather than being
+         * guessed at the other end. Empty for a selection made before
+         * this existed, which the wizard treats as "no theme to
+         * pre-select".
+         */
+        themeLabel: reference.themeLabel || '',
         title: reference.title || '',
         imageUrl: reference.imageUrl || '',
         room: reference.room || '',
@@ -2960,6 +2974,27 @@ const ai = {
     ) {
       normalizedPayload.combination =
         payload.combination;
+    }
+
+    /*
+     * THE CLIENT'S CHOSEN DE'VYORA LIBRARY ROOM.
+     *
+     * Its ID and nothing else. The server reads that row and uses the
+     * URL IT holds as the scene image -- deliberately not a URL from
+     * here, which would let this page tell the server's own fetcher
+     * where to go.
+     *
+     * When this is set, scene_image_mode and generate_random_scene
+     * above are both overridden server-side: the chosen photograph IS
+     * the room, so the step that invents one does not run.
+     */
+    if (
+      typeof payload.library_reference_id ===
+        'string' &&
+      payload.library_reference_id.trim()
+    ) {
+      normalizedPayload.library_reference_id =
+        payload.library_reference_id.trim();
     }
 
     /*

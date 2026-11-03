@@ -110,6 +110,11 @@ model LibraryReference {
   isActive     Boolean  @default(true)   // unpublished without deleting
   sortOrder    Int      @default(0)
   uploadedById String?
+  // What the studio's eye read in this picture -- one Gemini vision
+  // pass, kept because the picture never changes. See "Generating from
+  // the chosen reference" below; nullable, and nothing fails without it.
+  visualProfile Json?
+  visualReadAt  DateTime?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   uploadedBy   User?    @relation("LibraryReferenceUploadedBy", ...)
@@ -125,8 +130,9 @@ and a powder room both, and the generator is already room-aware; pinning
 every picture to exactly one room would be a restriction nobody asked
 for.
 
-Migration: `backend/prisma/migrations/20261103113735_add_devyora_library`.
-**It has to be applied by hand** — Vercel's `buildCommand` is
+Migrations: `20261103113735_add_devyora_library` (the table) and
+`20261103210000_add_library_visual_profile` (the two reading columns).
+**Both have to be applied by hand** — Vercel's `buildCommand` is
 `prisma generate` and does not migrate:
 
 ```bash
@@ -200,12 +206,157 @@ worth putting on the screen.
 Waiting states are skeleton cards in the shape of the real ones, so the
 grid does not jump when the pictures arrive.
 
-## What the later chunks still have to decide
+## Generating from the chosen reference
 
-- **What "matching tiles" means**: by the theme's own palette and rules,
-  by reading the picture with Gemini, or both.
-- **Where the chosen reference enters generation**: the room step takes a
-  theme's reference photographs today, and the chosen picture has to
-  reach that call without displacing the theme's own.
+This is the part the whole feature exists for, and it is **two separate
+claims**, not one. A build that only does the second is a handsome room
+with the wrong tiles in it; a build that only does the first is the
+right tiles in a room nobody asked for.
 
-Neither is settled here.
+```
+the client chooses a room in the Library
+        │   casa_library_selection -> { id, ... }
+        ▼
+┌─ CLAIM 1: THE TILES ──────────────────────────────────────────┐
+│  the picture is READ once         libraryMatch.service.ts     │
+│     one Gemini vision pass -> a palette, materials, patterns, │
+│     finishes, formats, mood, and what each surface carries    │
+│                                                               │
+│  its ground colour  ->  the ranking engine, as `colorTone`    │
+│       so the eighty rows offered to the model are already     │
+│       drawn towards the reference                             │
+│                                                               │
+│  the whole reading  ->  the combination prompt, ABOVE the     │
+│       theme, stating that the reference outranks it           │
+└───────────────────────────────────────────────────────────────┘
+        │   the combination: base + highlight + accent
+        ▼
+┌─ CLAIM 2: THE IMAGE ──────────────────────────────────────────┐
+│  the photograph ITSELF is the scene                           │
+│     ai_visualization.routes.ts reads the row and sends that   │
+│     Drive file as scene_image_url, mode "reference"           │
+│                                                               │
+│  Stage 1 -- the step that INVENTS a room -- does not run      │
+│  Stage 2 installs the materials into the client's own picture │
+└───────────────────────────────────────────────────────────────┘
+```
+
+### Why the picture is turned into words for the tile step
+
+The tiles are **text** in that prompt — up to eighty catalog rows — and
+they will stay text: eighty photographs will not fit in one request, let
+alone inside the sixty seconds this deployment allows. So the match is
+text against text whichever way round it is done, and the only question
+is whether the picture is read once and kept, or re-sent on every
+generation.
+
+Once, kept. A library row's Drive file never changes, so the reading
+cannot go stale; a client generating twice from the same room does not
+pay for it twice; and the reading is something a person can read back
+and check, which "we sent the model a JPEG" is not.
+
+It is kept on the row, in `visualProfile` and `visualReadAt`. Both
+nullable, both best-effort in each direction: **a database that has not
+had the migration applied still generates correctly**, it simply re-reads
+the picture each time, and `readVisualProfile` logs that once so the
+cause is findable.
+
+### Why the reading has to reach the pool, not just the prompt
+
+The prompt can only choose between the rows the ranking engine returned.
+A reference whose colour reached the prompt but not the ranking would be
+matched against whatever the *theme* happened to surface — the right
+instructions over the wrong shortlist.
+
+So the reading's `dominantColour` is passed as `colorTone`, which
+`tileRecommendation.service.ts` has always scored against (`scoreColor`,
+exact match and colour family). The mood-board path simply never used
+that door. **Nothing in the ranking engine changed.**
+
+It stays a ranking and never becomes a filter: a tile that does not match
+the reference's colour is still offered, just lower. A catalog with
+nothing in that colour must still produce a board.
+
+### Why the reference outranks the theme, out loud, twice
+
+A client can choose a Moroccan reference that is cream and terracotta
+while the Moroccan theme specification in the same prompt asks for blue
+and green. That specification is several hundred words of mandatory
+rules and prohibitions. A reference tucked in underneath it reads as a
+footnote to the theme, and a model reconciling the two will pick the
+theme — it is longer, more detailed and more emphatic.
+
+So the precedence is stated in **both** prompts, and in both it is
+placed above the theme rather than below it:
+
+- the combination prompt (`libraryMatch.referenceBriefBlock`): *"Where
+  the reference and the theme description disagree, THE REFERENCE WINS."*
+- the image prompt (`tile_application_engine`, only when
+  `requirements.reference_room` is set): *"Where this photograph and the
+  theme description disagree, THIS PHOTOGRAPH WINS."*
+
+The theme is not discarded. It still governs how the chosen materials
+are **laid, cut and grouted** — the decisions this step actually makes —
+and nothing about the room.
+
+### The row is the authority, not the browser
+
+Only the reference's **id** travels from the page. The URL that gets
+fetched and the words that describe the room are both read from the
+database server-side, exactly as each tile's image already is.
+
+A page that could name its own `scene_image_url` would be pointing this
+server's own fetcher at an address of its choosing, so a library
+generation overrides whatever the page sent — including
+`generate_random_scene`, which would otherwise let a page replace the
+client's chosen room with an invented one.
+
+### What happens when it goes wrong
+
+| what failed | the tiles | the image | what the client is told |
+| --- | --- | --- | --- |
+| the picture cannot be fetched or read | from the theme alone | still built on the picture | the banner says **COULD NOT BE READ**, and that the image still uses the room |
+| the reference was deleted since choosing it | from the theme alone | a generated room | a warning naming it, on the board |
+| the reference was deleted, at image time | — | **refused, 404** | *"no longer in the De'vyora Library ... choose a reference again"* |
+
+The failure mode this feature must never have is a board that **looks**
+reference-matched and is not. So the response carries `matched` as its
+own field, the banner reads from that rather than from the client's own
+choice, and the history row keeps `libraryReferenceId` — which is what
+lets "was this really built on the room I picked?" be answered months
+later instead of guessed at.
+
+### What costs what
+
+One generation from a library reference costs:
+
+- **one Gemini vision call**, the first time that picture is ever used,
+  and never again
+- **one Gemini text call** for the combination — unchanged
+- **one Gemini image call** instead of two, because the room already
+  exists and Stage 1 does not run
+
+So a reference-built scene is **cheaper and faster** than a generated
+one after its first use, not more expensive.
+
+## Covered by
+
+| what | where |
+| --- | --- |
+| the reading, the pool, the prompt, the route, the history | `backend/test-scripts/library_generation_test.js` |
+| the choice surviving the trip from one page to the other | `backend/test-scripts/library_moodboard_test.js` |
+| the image prompt's reference paragraph | `catalog_processor/app/test_library_reference_prompt.py` |
+| browsing and choosing | `backend/test-scripts/library_browse_test.js` |
+| bulk upload | `backend/test-scripts/library_upload_test.js` |
+| the page, the menu, the schema | `backend/test-scripts/devyora_library_test.js` |
+
+## Still outstanding, and not code
+
+- **The Drive quota.** A plain service account owns no Drive storage, so
+  uploads fail with Google's own words until a Shared Drive or OAuth
+  delegation is configured. Nothing here hides that.
+- **The migrations.** `prisma migrate deploy` is not run by this
+  project's build (`vercel.json`'s `buildCommand` is `prisma generate`
+  alone), so `20261103113735_add_devyora_library` and
+  `20261103210000_add_library_visual_profile` have to be applied by hand.
+  The feature degrades rather than breaking without the second one.
