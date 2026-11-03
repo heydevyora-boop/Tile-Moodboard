@@ -24,6 +24,12 @@ import { authenticate, requirePermission } from '@middlewares/auth';
 import { uploadReferenceImage } from '@middlewares/uploadReferenceImage';
 import * as library from '@services/library.service';
 import { THEMES } from '@services/themes.service';
+import {
+  starterCounts,
+  startersForTheme,
+  asReference,
+  isStarterId,
+} from '@services/libraryStarters';
 
 const router = Router();
 
@@ -75,6 +81,8 @@ router.get(
       console.error(`[library] the reference counts could not be read: ${storageError}`);
     }
 
+    const starters = starterCounts();
+
     const themes = Object.values(THEMES)
       .map((theme) => ({
         id: theme.id,
@@ -83,10 +91,14 @@ router.get(
         // named by slug in frontend/img/themes.
         slug: theme.slug,
         palette: theme.palette,
-        // Null, not 0, when the count could not be read. "0 REFERENCES"
-        // beside a theme that may well hold forty is a lie the page
-        // would have no way to spot.
-        count: storageError ? null : (counts[theme.id] ?? 0),
+        // The starters count too -- they are rooms a client can open,
+        // choose and generate from, so a theme that holds two of them
+        // is not an empty theme. And because they need no database,
+        // this number is real even when the uploaded ones cannot be
+        // counted, which is why it is never null any more.
+        count: (storageError ? 0 : (counts[theme.id] ?? 0)) + (starters[theme.id] ?? 0),
+        /** How many of that count ship with the app. */
+        starterCount: starters[theme.id] ?? 0,
       }))
       // Stable, and the same order the file lists them in.
       .filter((theme, index, all) => all.findIndex((t) => t.id === theme.id) === index);
@@ -108,18 +120,37 @@ router.get(
     const themeId = typeof req.query.themeId === 'string' && req.query.themeId
       ? req.query.themeId
       : undefined;
-    // Unlike the theme list, this one genuinely cannot work without the
-    // table -- so it fails. What it must not do is fail with Prisma's
-    // own "Database request error (P2021)", which says nothing about
-    // the one action that fixes it.
-    let references;
+    // THE STARTERS COME FIRST, AND THEY COME WITHOUT A DATABASE.
+    //
+    // They are files that ship with the application, so a theme always
+    // has something in it -- which is the whole point of them. The
+    // uploaded rooms are added after, and a database that cannot answer
+    // costs only those: the page still shows the starters and says, in
+    // `storage`, why the rest are missing.
+    //
+    // This is the difference from before. This endpoint used to fail
+    // outright, so a theme opened to nothing at all.
+    const starters = (themeId
+      ? startersForTheme(library.resolveThemeId(themeId))
+      : []
+    ).map(asReference);
+
+    let uploaded: unknown[] = [];
+    let storageError = '';
+
     try {
-      references = await library.listReferences(themeId);
+      uploaded = await library.listReferences(themeId);
     } catch (error) {
-      throw AppError.badRequest(library.describeStorageFailure(error));
+      storageError = library.describeStorageFailure(error);
     }
 
-    res.status(200).json({ success: true, data: { references } });
+    res.status(200).json({
+      success: true,
+      data: {
+        references: [...starters, ...uploaded],
+        storage: { ok: !storageError, reason: storageError },
+      },
+    });
   }),
 );
 
@@ -148,6 +179,16 @@ router.delete(
   '/references/:id',
   requirePermission('reference_images:write'),
   catchAsync(async (req: Request, res: Response) => {
+    // A starter is part of the application, not of the studio's own
+    // library. Saying so beats a confusing "not found" from a lookup
+    // that was never going to match a database row.
+    if (isStarterId(req.params.id)) {
+      throw AppError.badRequest(
+        'That is one of the starter rooms that ships with De\u2019vyora, so it cannot be '
+        + 'removed from here. Upload the studio\u2019s own rooms and use those instead.',
+      );
+    }
+
     let result;
     try {
       result = await library.deleteReference(String(req.params.id), req.user!.id, req);

@@ -159,12 +159,16 @@ async function main() {
   }
 
   // ════════════════════════════════════════════════════════════════
-  console.log('\n2. a count that cannot be read is never shown as zero');
+  console.log('\n2. the count is real, because the starters are files');
   {
+    // The starters need no database, so even here the number beside a
+    // theme is true rather than unavailable -- and no theme reads as
+    // empty, which was the whole complaint.
     const first = await page.locator('.lib-theme-card').first().textContent() || '';
-    check('2a. it says the count is unavailable', /COUNT UNAVAILABLE/.test(first), first);
-    check('2b. ...and does not claim the theme is empty',
-      !/0 REFERENCES/.test(await page.locator('.lib-theme-grid').textContent() || ''));
+    check('2a. every theme shows its two starter rooms', /2 ROOMS/.test(first), first);
+    check('2b. ...and none claims to be empty',
+      !/0 ROOMS/.test(await page.locator('.lib-theme-grid').textContent() || '')
+      && !/COUNT UNAVAILABLE/.test(await page.locator('.lib-theme-grid').textContent() || ''));
   }
 
   // ════════════════════════════════════════════════════════════════
@@ -187,7 +191,7 @@ async function main() {
     const adding = notes.find((t) => /ADDING ROOMS/.test(t)) || '';
     check('4a. the page says adding rooms is a thing that exists', Boolean(adding), notes);
     check('4b. ...that this account cannot do',
-      /not add them/.test(adding), adding);
+      /Adding the studio/.test(adding) && /Staff does not/.test(adding), adding);
     check('4c. ...naming the permission it needs',
       /reference_images:write/.test(adding), adding);
     check('4d. ...and who has it',
@@ -205,7 +209,7 @@ async function main() {
     const adding = notes.find((t) => /ADDING ROOMS/.test(t)) || '';
     check('5a. the first screen says where the upload is', Boolean(adding), notes);
     check('5b. ...which is inside a theme',
-      /Open the theme/.test(adding), adding);
+      /open a theme and the upload is at the top of it/.test(adding), adding);
     check('5c. ...and that it takes many at once',
       /fifty or a hundred/.test(adding), adding);
   }
@@ -231,16 +235,18 @@ async function main() {
     check('6a. no storage warning is shown',
       await page.locator('.lib-note-bad').count() === 0);
     const grid = await page.locator('.lib-theme-grid').textContent() || '';
-    check('6b. real counts come back', /0 REFERENCES/.test(grid) && !/COUNT UNAVAILABLE/.test(grid));
+    check('6b. the counts are unchanged, since nothing was uploaded',
+      /2 ROOMS/.test(grid) && !/COUNT UNAVAILABLE/.test(grid), grid.slice(0, 160));
     check('6c. ...and the upload is where the hint said it was',
       await (async () => {
         await page.locator('.lib-theme-card').first().click();
-        await page.waitForSelector('.lib-empty, .lib-card', { timeout: 20000 });
+        await page.waitForSelector('.lib-card', { timeout: 20000 });
         return await page.locator('#libFiles').count() === 1;
       })());
-    check('6d. an empty theme tells the studio to use it',
-      /Use ADD IMAGES above/.test(await page.locator('.lib-empty').textContent() || ''),
-      await page.locator('.lib-empty').textContent());
+    check('6d. ...and the theme opens on its starters, not on an empty grid',
+      await page.locator('.lib-card').count() === 2
+      && await page.locator('.lib-empty').count() === 0,
+      await page.locator('.lib-card').count());
   }
 
   await browser.close();

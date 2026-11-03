@@ -40,6 +40,7 @@ import { geminiClient } from './gemini.service';
 import { logger } from '@utils/logger';
 import { isRealImageBuffer } from '@utils/fileSignature';
 import { driveFileIdFromUrl } from './referenceImages.service';
+import { isStarterId, starterById, STARTER_PATH } from './libraryStarters';
 
 // ─────────────────────────────────────────────────────────────────────────
 // What one reading holds
@@ -427,6 +428,29 @@ export async function loadReference(id: string): Promise<{
   reference: ChosenReference;
   stored: unknown;
 } | null> {
+  // A STARTER NEEDS NO DATABASE AND NO VISION CALL.
+  //
+  // It ships with the application, and it was drawn to a palette and a
+  // pattern that are written down in libraryStarters.ts -- so its
+  // reading is handed over already done. Two consequences worth
+  // stating: tile matching from a starter works on a deployment with no
+  // Gemini key at all, and it works before the migration has been run.
+  if (isStarterId(id)) {
+    const starter = starterById(id);
+    if (!starter) return null;
+    return {
+      reference: {
+        id: starter.id,
+        themeId: starter.themeId,
+        title: starter.title,
+        imageUrl: `${STARTER_PATH}/${starter.file}`,
+        room: starter.room,
+        description: starter.description,
+      },
+      stored: starter.profile,
+    };
+  }
+
   // THE COLUMN MAY NOT BE THERE.
   //
   // visualProfile arrived in a later migration, and migrations are not

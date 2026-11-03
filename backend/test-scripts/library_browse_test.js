@@ -155,15 +155,20 @@ async function main() {
     check('1b. every theme is listed', await page.locator('.lib-theme-card').count() === 9,
       await page.locator('.lib-theme-card').count());
     const british = page.locator('.lib-theme-card[data-theme="british"]');
+    // FOUR UPLOADED PLUS THE TWO STARTERS THAT SHIP WITH THE APP.
+    // A starter is a room a client can open, choose and generate from,
+    // so it counts -- which is also why no theme reads as empty any
+    // more, and why the page is never the blank grid that was reported.
     check('1c. ...named, with its palette and how many rooms it holds',
       /British/.test(await british.textContent() || '')
       && /Heritage green/.test(await british.textContent() || '')
-      && /4 REFERENCES/.test(await british.textContent() || ''),
+      && /6 ROOMS/.test(await british.textContent() || ''),
       await british.textContent());
-    check('1d. ...and a theme with none says none',
-      /0 REFERENCES/.test(
+    check('1d. ...and a theme nobody has uploaded to still offers its starters',
+      /2 ROOMS/.test(
         await page.locator('.lib-theme-card[data-theme="rustic"]').textContent() || ''
-      ));
+      ),
+      await page.locator('.lib-theme-card[data-theme="rustic"]').textContent());
     check('1e. a client is not offered the studio’s upload button',
       await page.locator('#libFiles').count() === 0);
   }
@@ -173,15 +178,23 @@ async function main() {
   {
     await page.click('[data-theme="british"]');
     await page.waitForSelector('.lib-card', { timeout: 20000 });
-    check('2a. the theme’s rooms are shown', await page.locator('.lib-card').count() === 4,
+    check('2a. the theme’s rooms are shown -- the two starters, then the four uploaded',
+      await page.locator('.lib-card').count() === 6
+      && await page.locator('.lib-card .lib-starter-flag').count() === 2,
       await page.locator('.lib-card').count());
     check('2b. ...under the theme’s own name',
       /British/.test(await page.locator('.lib-head').textContent() || ''));
     check('2c. ...each picture loaded from its Drive link',
       driveRequests >= 4, driveRequests);
-    const src = await page.locator('.lib-card img').first().getAttribute('src');
-    check('2d. ...which is a Drive URL, not a local copy',
-      /^https:\/\/drive\.google\.com\//.test(src || ''), src);
+    // The uploaded ones, specifically: a starter is a file this server
+    // hosts, so only the studio's own rooms should come from Drive.
+    const uploaded = page.locator('.lib-card:not(:has(.lib-starter-flag)) img').first();
+    check('2d. an uploaded room loads from Drive, not from a local copy',
+      /^https:\/\/drive\.google\.com\//.test(await uploaded.getAttribute('src') || ''),
+      await uploaded.getAttribute('src'));
+    check('2d2. ...and a starter from this server',
+      /\/static\/library-starters\//.test(
+        await page.locator('.lib-card:has(.lib-starter-flag) img').first().getAttribute('src') || ''));
     check('2e. there is a way back to the themes',
       await page.locator('#libBack').count() === 1);
 
@@ -192,7 +205,7 @@ async function main() {
     await page.click('[data-theme="moroccan"]');
     await page.waitForSelector('.lib-card', { timeout: 20000 });
     check('2g. another theme shows its own rooms, not the first one’s',
-      await page.locator('.lib-card').count() === 2,
+      await page.locator('.lib-card').count() === 4,
       await page.locator('.lib-card').count());
   }
 
@@ -218,10 +231,16 @@ async function main() {
       await page.locator('.lib-card.chosen').getAttribute('aria-pressed') === 'true');
 
     const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('casa_library_selection') || 'null'));
+    // The first card in a theme is a STARTER, so this is the record for
+    // one of those: its picture is served by this backend rather than
+    // by Drive, and its id is prefixed so nothing downstream can
+    // mistake it for a database row.
     check('3f. the choice is the whole record the generator will need',
       stored && stored.themeId === 'moroccan' && stored.title === firstTitle
-      && !!stored.id
-      && /^https:\/\/drive\.google\.com\//.test(stored.imageUrl || ''), stored);
+      && !!stored.id && stored.themeLabel === 'Moroccan'
+      && /^\/static\/library-starters\//.test(stored.imageUrl || ''), stored);
+    check('3f2. ...and a starter is marked as one by its id',
+      stored.id.startsWith('starter:'), stored.id);
 
     // Choosing another replaces it; there is only ever one.
     const secondTitle = (await page.locator('.lib-card .lib-title').nth(1).textContent() || '').trim();
@@ -280,17 +299,23 @@ async function main() {
     await page.click('[data-theme="british"]');
     await page.waitForSelector('.lib-card', { timeout: 20000 });
     check('5a. the studio is offered the upload', await page.locator('#libFiles').count() === 1);
-    check('5b. ...and can remove a room', await page.locator('[data-delete]').count() === 4,
+    // FOUR, not six: the two starters ship with the application and
+    // there is nothing for the studio to remove, so they carry no
+    // REMOVE at all. The server refuses one too.
+    check('5b. ...and can remove a room it uploaded', await page.locator('[data-delete]').count() === 4,
       await page.locator('[data-delete]').count());
+    check('5b2. ...but not a starter, which is not the studio\u2019s to remove',
+      await page.locator('.lib-card:has(.lib-starter-flag) [data-delete]').count() === 0);
 
     // Removing the one that is currently chosen must not leave a
     // selection pointing at something that no longer exists.
-    await page.locator('.lib-card').first().click();
+    const own = page.locator('.lib-card:not(:has(.lib-starter-flag))').first();
+    await own.click();
     await page.waitForSelector('#libActive', { timeout: 10000 });
     page.on('dialog', (d) => d.accept());
     await page.locator('.lib-card.chosen [data-delete]').click();
     await page.waitForFunction(
-      () => document.querySelectorAll('.lib-card').length === 3, { timeout: 20000 },
+      () => document.querySelectorAll('.lib-card').length === 5, { timeout: 20000 },
     );
     check('5c. removing the chosen room clears the choice with it',
       await page.locator('#libActive').count() === 0

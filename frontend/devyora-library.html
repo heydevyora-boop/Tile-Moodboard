@@ -171,36 +171,84 @@
   .lib-active-clear:hover { color:var(--err); }
 
   /* ── a line that explains something, rather than leaving a gap ── */
-  .lib-note { display:flex; flex-direction:column; gap:6px; padding:14px 16px; margin:18px 0 0;
-              border:1px solid var(--line); border-radius:14px; background:var(--card);
-              font-size:12.5px; line-height:1.55; color:var(--ink); }
-  .lib-note-k { font-size:8.5px; letter-spacing:.18em; color:var(--gold); }
+  /* Informative, deliberately not loud. These used to be two tall boxes
+     that pushed the rooms below the fold -- and the rooms are the page. */
+  .lib-note { display:flex; flex-direction:column; gap:4px; padding:10px 13px; margin:14px 0 0;
+              border:1px solid var(--line); border-radius:12px; background:var(--card);
+              font-size:11.5px; line-height:1.5; color:var(--text2); }
+  .lib-note-k { font-size:8px; letter-spacing:.18em; color:var(--gold); }
   .lib-note code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11.5px;
                    background:var(--sand); padding:1px 5px; border-radius:5px; }
   .lib-note-bad { border-color:var(--err); }
   .lib-note-bad .lib-note-k { color:var(--err); }
 
-  /* ── the themes ── */
-  .lib-theme-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(215px, 1fr)); gap:16px; margin-top:20px; }
-  .lib-theme-card { display:flex; flex-direction:column; text-align:left; padding:0; background:var(--card); border:1px solid var(--line); border-radius:16px; overflow:hidden; cursor:pointer; color:var(--ink); }
-  .lib-theme-card:hover { border-color:var(--gold-light); }
-  .lib-theme-art { aspect-ratio:16/9; background:var(--sand); border-bottom:1px solid var(--line); }
-  .lib-theme-art img { width:100%; height:100%; object-fit:cover; display:block; }
-  .lib-theme-body { padding:13px 15px 15px; display:flex; flex-direction:column; gap:5px; }
-  .lib-theme-name { font-size:14.5px; }
-  .lib-theme-pal { font-size:11px; line-height:1.45; color:var(--muted); }
-  .lib-theme-count { margin-top:3px; font-size:8.5px; letter-spacing:.16em; color:var(--gold); }
+  /* ── the themes ──
+     A theme card now shows a ROOM, not a swatch: the first starter in
+     that theme, which is what the client is actually going to pick
+     between. The pattern art stays as a small plate on top of it, so
+     the surface the theme is built on is still legible at a glance. */
+  .lib-theme-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(268px, 1fr)); gap:20px; margin-top:22px; }
+  .lib-theme-card { position:relative; display:flex; flex-direction:column; text-align:left; padding:0;
+                    background:var(--card); border:1px solid var(--line); border-radius:18px; overflow:hidden;
+                    cursor:pointer; color:var(--ink); box-shadow:0 1px 2px rgba(26,21,18,.04);
+                    transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease; }
+  .lib-theme-card:hover { transform:translateY(-3px); border-color:var(--gold-light);
+                          box-shadow:0 14px 30px -14px rgba(26,21,18,.28); }
+  .lib-theme-card:focus-visible { outline:2px solid var(--gold); outline-offset:3px; }
+  .lib-theme-art { position:relative; aspect-ratio:4/3; background:var(--sand); overflow:hidden; }
+  .lib-theme-art > img { width:100%; height:100%; object-fit:cover; display:block;
+                         transition:transform .5s cubic-bezier(.2,.7,.3,1); }
+  .lib-theme-card:hover .lib-theme-art > img { transform:scale(1.045); }
+  /* The bottom of the picture is where the text sits, so it is darkened
+     to keep the name readable whatever the room behind it is doing. */
+  .lib-theme-art::after { content:''; position:absolute; inset:auto 0 0 0; height:58%;
+                          background:linear-gradient(to top, rgba(26,21,18,.74), rgba(26,21,18,0)); }
+  .lib-theme-plate { position:absolute; top:12px; left:12px; width:52px; height:52px; border-radius:11px;
+                     overflow:hidden; border:1px solid rgba(255,255,255,.5);
+                     box-shadow:0 3px 10px rgba(26,21,18,.3); }
+  .lib-theme-plate img { width:100%; height:100%; object-fit:cover; display:block; }
+  .lib-theme-over { position:absolute; inset:auto 0 0 0; z-index:1; padding:14px 16px 13px;
+                    display:flex; flex-direction:column; gap:3px; }
+  .lib-theme-name { font-size:17px; color:#FFF8EC; line-height:1.25; }
+  .lib-theme-pal { font-size:10.5px; line-height:1.4; color:rgba(255,248,236,.78);
+                   overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .lib-theme-foot { display:flex; align-items:center; justify-content:space-between; gap:10px;
+                    padding:11px 16px 12px; }
+  .lib-theme-count { font-size:8.5px; letter-spacing:.16em; color:var(--gold); }
+  .lib-theme-go { font-size:8.5px; letter-spacing:.16em; color:var(--muted); }
+  .lib-theme-card:hover .lib-theme-go { color:var(--ink); }
+
+  /* ── a room that ships with the app ── */
+  .lib-starter-flag { position:absolute; top:10px; right:10px; padding:5px 9px; border-radius:99px;
+                      background:rgba(26,21,18,.62); color:#FFF8EC; font-size:7.5px; letter-spacing:.16em;
+                      backdrop-filter:blur(3px); }
+
+  /* ── the opening line ── */
+  .lib-hero { display:flex; flex-wrap:wrap; align-items:flex-end; justify-content:space-between;
+              gap:16px; margin-top:4px; }
+  .lib-hero-sub { max-width:62ch; }
+  .lib-stat { display:flex; gap:26px; flex:none; }
+  .lib-stat-n { display:block; font-size:25px; line-height:1; }
+  .lib-stat-k { display:block; margin-top:5px; font-size:8px; letter-spacing:.17em; color:var(--muted); }
 
   /* ── one theme's rooms ── */
   .lib-back { display:inline-flex; align-items:center; gap:7px; margin-top:16px; background:none; border:none; padding:0; color:var(--muted); font-size:9.5px; letter-spacing:.14em; cursor:pointer; }
   .lib-back:hover { color:var(--ink); }
   .lib-head { display:flex; flex-wrap:wrap; align-items:baseline; gap:12px; margin-top:10px; }
 
-  .lib-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(230px, 1fr)); gap:16px; margin-top:20px; }
-  .lib-card { margin:0; background:var(--card); border:1px solid var(--line); border-radius:16px; overflow:hidden; display:flex; flex-direction:column; cursor:pointer; position:relative; }
-  .lib-card:hover { border-color:var(--gold-light); }
-  .lib-card.chosen { border-color:var(--gold); box-shadow:0 0 0 1px var(--gold); }
-  .lib-shot { aspect-ratio:4/3; background:var(--sand); border-bottom:1px solid var(--line); }
+  .lib-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(258px, 1fr)); gap:20px; margin-top:22px; }
+  .lib-card { margin:0; background:var(--card); border:1px solid var(--line); border-radius:18px; overflow:hidden;
+              display:flex; flex-direction:column; cursor:pointer; position:relative;
+              box-shadow:0 1px 2px rgba(26,21,18,.04);
+              transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease; }
+  .lib-card:hover { transform:translateY(-3px); border-color:var(--gold-light);
+                    box-shadow:0 14px 30px -14px rgba(26,21,18,.28); }
+  .lib-card:focus-visible { outline:2px solid var(--gold); outline-offset:3px; }
+  .lib-card.chosen { border-color:var(--gold); box-shadow:0 0 0 2px var(--gold), 0 14px 30px -16px rgba(26,21,18,.3); }
+  .lib-card.chosen:hover { transform:none; }
+  .lib-shot { aspect-ratio:4/3; background:var(--sand); border-bottom:1px solid var(--line); overflow:hidden; }
+  .lib-shot img { transition:transform .5s cubic-bezier(.2,.7,.3,1); }
+  .lib-card:hover .lib-shot img { transform:scale(1.045); }
   .lib-shot img { width:100%; height:100%; object-fit:cover; display:block; }
   .lib-chosen-flag { position:absolute; top:10px; left:10px; padding:5px 9px; border-radius:99px; background:var(--gold); color:#FFF8EC; font-size:8px; letter-spacing:.16em; }
   .lib-cap { padding:13px 15px 15px; display:flex; flex-direction:column; gap:6px; }
@@ -397,17 +445,40 @@
     if (!state.canAdd) {
       return '<div class="lib-note">'
         + '<span class="lib-note-k mono">ADDING ROOMS</span>'
-        + '<span>This account can browse and choose reference rooms, but not add them — '
-        + 'that needs the <code>reference_images:write</code> permission, which the Owner and '
-        + 'Admin roles carry and Staff does not. Sign in with one of those to upload.</span>'
+        + '<span>Every theme opens with two starter rooms that ship with De’vyora, and this '
+        + 'account can browse and choose any of them. Adding the studio’s own needs the '
+        + '<code>reference_images:write</code> permission, which the Owner and Admin roles '
+        + 'carry and Staff does not — sign in with one of those to upload.</span>'
         + '</div>';
     }
 
     return '<div class="lib-note">'
       + '<span class="lib-note-k mono">ADDING ROOMS</span>'
-      + '<span>Open the theme a room belongs to, and the upload is at the top of it — '
-      + 'pick fifty or a hundred pictures at once. They are stored in the studio’s '
-      + 'Google Drive, under that theme.</span>'
+      + '<span>Every theme opens with two starter rooms that ship with De’vyora — '
+      + 'enough to choose one and generate from it today. To add the studio’s own, open a '
+      + 'theme and the upload is at the top of it: pick fifty or a hundred pictures at once, '
+      + 'and they go to the studio’s Google Drive under that theme.</span>'
+      + '</div>';
+  }
+
+  /**
+   * How much there is to choose from, said as a number.
+   *
+   * Nine themes and a room count is the whole shape of the page in two
+   * figures, and it is the first thing that tells a studio the library
+   * is not empty.
+   */
+  function totalsHtml() {
+    if (state.loading || !state.themes.length) return '';
+    const known = state.themes.filter((t) => typeof t.count === 'number');
+    const rooms = known.reduce((n, t) => n + t.count, 0);
+    return '<div class="lib-stat">'
+      + '<span><span class="lib-stat-n serif">' + state.themes.length + '</span>'
+      + '<span class="lib-stat-k mono">THEMES</span></span>'
+      + (known.length
+        ? '<span><span class="lib-stat-n serif">' + rooms + '</span>'
+          + '<span class="lib-stat-k mono">' + (rooms === 1 ? 'ROOM' : 'ROOMS') + '</span></span>'
+        : '')
       + '</div>';
   }
 
@@ -416,9 +487,9 @@
     if (!state.storageError) return '';
     return '<div class="lib-note lib-note-bad">'
       + '<span class="lib-note-k mono">THE LIBRARY’S STORAGE IS NOT READY</span>'
-      + '<span>' + escapeHtml(state.storageError) + '</span>'
-      + '<span>The themes below are the studio’s own and are listed either way, but their '
-      + 'rooms cannot be counted, opened or added to until this is done.</span>'
+      + '<span>' + escapeHtml(state.storageError) + ' The starter rooms are files and work '
+      + 'either way — choose one and generate from it today. Only the studio’s own '
+      + 'uploaded rooms are unavailable until this is done.</span>'
       + '</div>';
   }
 
@@ -433,20 +504,31 @@
             + 'file could not be loaded by it.')
         + '</p></div>';
     }
-    return '<div class="lib-theme-grid">' + state.themes.map((t) =>
-      '<button type="button" class="lib-theme-card" data-theme="' + escapeHtml(t.id) + '">'
-      + '<span class="lib-theme-art"><img src="img/themes/' + escapeHtml(t.slug)
-      + '.svg" alt="" loading="lazy"></span>'
-      + '<span class="lib-theme-body">'
-      + '<span class="lib-theme-name serif">' + escapeHtml(t.label) + '</span>'
-      + '<span class="lib-theme-pal">' + escapeHtml(t.palette) + '</span>'
-      // A null count means it could not be read. "0 REFERENCES" there
-      // would be a lie about a theme that may well hold forty.
-      + '<span class="lib-theme-count mono">' + (t.count === null || t.count === undefined
-        ? 'COUNT UNAVAILABLE'
-        : t.count + (t.count === 1 ? ' REFERENCE' : ' REFERENCES'))
-      + '</span>'
-      + '</span></button>').join('') + '</div>';
+    return '<div class="lib-theme-grid">' + state.themes.map((t) => {
+      const n = t.count === null || t.count === undefined ? null : t.count;
+      return '<button type="button" class="lib-theme-card" data-theme="' + escapeHtml(t.id) + '">'
+        // A ROOM, not a swatch. The theme's first starter is what the
+        // client is actually going to be choosing between, so it is
+        // what the card shows -- the page used to lead with an abstract
+        // pattern plate and looked like a palette chooser.
+        + '<span class="lib-theme-art">'
+        + '<img src="' + escapeHtml(CasaApi.resolveBackendImageUrl(
+          '/static/library-starters/' + t.slug + '-1.png')) + '" alt="" loading="lazy" decoding="async">'
+        // ...with the pattern plate kept as a small inset, because the
+        // surface is still the thing being chosen.
+        + '<span class="lib-theme-plate"><img src="img/themes/' + escapeHtml(t.slug)
+        + '.svg" alt="" loading="lazy"></span>'
+        + '<span class="lib-theme-over">'
+        + '<span class="lib-theme-name serif">' + escapeHtml(t.label) + '</span>'
+        + '<span class="lib-theme-pal">' + escapeHtml(t.palette) + '</span>'
+        + '</span></span>'
+        + '<span class="lib-theme-foot">'
+        + '<span class="lib-theme-count mono">'
+        + (n === null ? 'COUNT UNAVAILABLE' : n + (n === 1 ? ' ROOM' : ' ROOMS'))
+        + '</span>'
+        + '<span class="lib-theme-go mono">OPEN \u2192</span>'
+        + '</span></button>';
+    }).join('') + '</div>';
   }
 
   function queueHtml() {
@@ -495,12 +577,17 @@
         + '<div class="lib-shot"><img src="' + escapeHtml(ref.imageUrl) + '" alt="'
         + escapeHtml(ref.title) + '" loading="lazy"></div>'
         + (chosen ? '<span class="lib-chosen-flag mono">SELECTED</span>' : '')
+        // Said plainly, because it is a drawing and not a photograph of
+        // a room this studio built.
+        + (ref.isStarter ? '<span class="lib-starter-flag mono">STARTER</span>' : '')
         + '<figcaption class="lib-cap">'
         + '<span class="lib-title">' + escapeHtml(ref.title) + '</span>'
         + '<span class="lib-meta mono">' + escapeHtml(
           [ref.room, ref.uploadedBy && ref.uploadedBy.name].filter(Boolean).join(' · ')
         ) + '</span>'
-        + (state.canAdd
+        // A starter ships with the application, so there is nothing for
+        // the studio to remove -- the server refuses it too.
+        + (state.canAdd && !ref.isStarter
           ? '<button type="button" class="lib-del mono" data-delete="' + escapeHtml(ref.id) + '">REMOVE</button>'
           : '')
         + '</figcaption></figure>';
@@ -515,10 +602,15 @@
       '<div class="stage">'
       + (state.view === 'themes'
         ? head
-          + '<h1 class="step-h1 serif">De’vyora Library</h1>'
-          + '<p class="step-sub">Rooms the studio has chosen, kept by theme. Pick one and it '
+          + '<div class="lib-hero">'
+          + '<div class="lib-hero-sub">'
+          + '<h1 class="step-h1 serif" style="margin:0">De’vyora Library</h1>'
+          + '<p class="step-sub" style="margin-top:9px">Rooms kept by theme. Pick one and it '
           + 'becomes the reference: the catalog is searched for the tiles that match it, and '
           + 'the scene is generated from that same picture.</p>'
+          + '</div>'
+          + totalsHtml()
+          + '</div>'
           + activeHtml()
           + storageHtml()
           + addHintHtml()
@@ -754,13 +846,14 @@
     state.loading = true;
     render();
     try {
-      state.references = await CasaApi.library.references(themeId);
-      state.storageError = '';
+      const answer = await CasaApi.library.references(themeId);
+      state.references = answer.references;
+      // The starters are files and always arrive; only the studio's own
+      // uploads need the database, so this now costs those alone rather
+      // than emptying the theme.
+      state.storageError = answer.storage.ok ? '' : answer.storage.reason;
     } catch (err) {
-      // The server's own words, which now name the one action that
-      // fixes a missing table rather than reporting a Prisma code.
-      // Kept on the state as well as in the alert, so the explanation
-      // is still on screen after the alert has been read past.
+      state.references = [];
       state.storageError = (err && err.message) || '';
       state.loading = false;
       render();

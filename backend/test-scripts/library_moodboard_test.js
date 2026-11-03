@@ -229,16 +229,23 @@ async function main() {
     await page.waitForSelector('.lib-theme-card', { timeout: 20000 });
     await page.click('[data-theme="moroccan"]');
     await page.waitForSelector('.lib-card', { timeout: 20000 });
+    // The first card in a theme is now one of the STARTER rooms that
+    // ship with the application, and that is deliberately what this
+    // walks: it is the path a studio with nothing uploaded takes, and
+    // the one that has to work on a deployment with no Drive and no
+    // migration.
     await page.locator('.lib-card').first().click();
     await page.waitForSelector('#libActive', { timeout: 10000 });
 
     check('1a. the chosen room is shown as the active reference',
-      /Cobalt Hammam/.test(await page.locator('#libActive').textContent() || ''));
+      /Cobalt Zellige/.test(await page.locator('#libActive').textContent() || ''),
+      await page.locator('#libActive').textContent());
     check('1b. ...with a way to go and use it',
       await page.locator('.lib-active-go').count() === 1);
 
     const kept = await page.evaluate(() => JSON.parse(localStorage.getItem('casa_library_selection')));
-    check('1c. the choice carries the reference’s id', kept.id === moroccan.id);
+    check('1c. the choice carries the reference’s id',
+      kept.id === 'starter:moroccan-1', kept.id);
     check('1d. ...and its theme’s LABEL, which is what the wizard works in',
       kept.themeLabel === 'Moroccan', kept);
 
@@ -254,15 +261,16 @@ async function main() {
     check('2a. the reference is on screen from the first step',
       await page.locator('.libref').count() === 1);
     const banner = await page.locator('.libref').textContent() || '';
-    check('2b. ...named', /Cobalt Hammam/.test(banner) && /Bathroom/.test(banner), banner);
+    check('2b. ...named', /Cobalt Zellige/.test(banner) && /Bathroom/.test(banner), banner);
     check('2c. ...saying what it will be used for',
       /TILES AND THE IMAGE WILL BOTH BE MATCHED/.test(banner), banner);
     check('2d. ...with a way to change it and a way to drop it',
       await page.locator('.libref-acts a[href="devyora-library.html"]').count() === 1
       && await page.locator('#librefClear').count() === 1);
-    check('2e. the picture itself is shown, from its Drive link',
-      /^https:\/\/drive\.google\.com\//.test(
-        await page.locator('.libref-thumb img').getAttribute('src') || ''));
+    check('2e. the picture itself is shown on the banner',
+      /library-starters\/moroccan-1\.png$/.test(
+        await page.locator('.libref-thumb img').getAttribute('src') || ''),
+      await page.locator('.libref-thumb img').getAttribute('src'));
 
     // The reference belongs to Moroccan; the wizard must not silently
     // open on British, which is its first theme.
@@ -277,7 +285,7 @@ async function main() {
     await page.waitForSelector('.summary-card', { timeout: 10000 });
     check('2g. the review lists it with the rest of the specification',
       /LIBRARY REFERENCE/.test(await page.locator('.summary-card').textContent() || '')
-      && /Cobalt Hammam/.test(await page.locator('.summary-card').textContent() || ''),
+      && /Cobalt Zellige/.test(await page.locator('.summary-card').textContent() || ''),
       await page.locator('.summary-card').textContent());
   }
 
@@ -294,8 +302,8 @@ async function main() {
 
     check('3a. the board is generated', await page.locator('.board-card').count() === 1);
     check('3b. ...and the request carried the reference’s id',
-      sentBodies.generate && sentBodies.generate.libraryReferenceId === moroccan.id,
-      sentBodies.generate);
+      sentBodies.generate && sentBodies.generate.libraryReferenceId === 'starter:moroccan-1',
+      sentBodies.generate && sentBodies.generate.libraryReferenceId);
     check('3c. ...the id ALONE -- not a URL this page could choose',
       sentBodies.generate && !JSON.stringify(sentBodies.generate).includes('drive.google.com'),
       sentBodies.generate);
@@ -303,8 +311,11 @@ async function main() {
     const banner = await page.locator('.libref').textContent() || '';
     check('3d. the results say the tiles were matched to the room',
       /TILES MATCHED TO THIS ROOM/.test(banner), banner);
+    // A STARTER'S READING SHIPS WITH IT. libraryStarters.ts writes down
+    // the palette each one was drawn to, so no vision call is spent and
+    // matching works on a deployment with no Gemini key at all.
     check('3e. ...and the colour the catalog was searched with',
-      /DEEP COBALT BLUE/.test(banner), banner);
+      /COBALT BLUE/.test(banner), banner);
   }
 
   // ════════════════════════════════════════════════════════════════
@@ -315,15 +326,26 @@ async function main() {
     await page.waitForSelector('.viz-image-frame img, .viz-error', { timeout: 60000 });
 
     check('4a. the scene request carried the reference’s id',
-      sentBodies.scene && sentBodies.scene.library_reference_id === moroccan.id,
-      sentBodies.scene);
-    check('4b. ...and the server turned it into the picture itself',
-      pythonCalls[0] && pythonCalls[0].scene_image_url === moroccan.imageUrl,
+      sentBodies.scene && sentBodies.scene.library_reference_id === 'starter:moroccan-1',
+      sentBodies.scene && sentBodies.scene.library_reference_id);
+    // A starter is a file this server hosts, so Python -- a separate
+    // function fetching over the public internet -- needs it as an
+    // ABSOLUTE url. A relative path would be choosable and then fail
+    // at the one moment it mattered.
+    check('4b. ...and the server turned it into an absolute URL Python can fetch',
+      /^https?:\/\/[^/]+\/static\/library-starters\/moroccan-1\.png$/.test(
+        (pythonCalls[0] && pythonCalls[0].scene_image_url) || ''),
       pythonCalls[0] && pythonCalls[0].scene_image_url);
+    // Which HOST that absolute URL carries is checked in
+    // library_generation_test, where the request headers can be set:
+    // from a browser on localhost, python-ai.service deliberately
+    // rewrites a loopback origin to BACKEND_PUBLIC_URL, and that is
+    // correct -- Python is a different process and there is nothing on
+    // this test server's port for it.
     check('4c. ...with the room-inventing step switched off',
       pythonCalls[0] && pythonCalls[0].generate_random_scene === false);
     check('4d. ...and the generator told the room is the client’s own',
-      pythonCalls[0] && String(pythonCalls[0].requirements.reference_room).includes('Cobalt Hammam'),
+      pythonCalls[0] && String(pythonCalls[0].requirements.reference_room).includes('Cobalt Zellige'),
       pythonCalls[0] && pythonCalls[0].requirements.reference_room);
   }
 

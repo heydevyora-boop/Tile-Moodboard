@@ -69,6 +69,9 @@ function main() {
     dom.window.CasaApi = {
       requireAuth: async () => ({ name: 'Priya Sharma', role: 'STAFF', email: 'p@x.test' }),
       initials: (n) => String(n || '?').split(/\s+/).map((p) => p[0]).join('').toUpperCase(),
+      // The theme cards lead with a starter ROOM now, resolved through
+      // the API client the way every other backend-hosted image is.
+      resolveBackendImageUrl: (v) => v || '',
       auth: { logout: async () => {} },
       library: {
         // {themes, storage}, not a bare array: the endpoint reports

@@ -776,9 +776,20 @@
       }));
     },
 
+    /**
+     * A theme's rooms: the starters that ship with the app first, then
+     * the studio's own uploads.
+     *
+     * `storage.ok` is false when the uploaded ones could not be read --
+     * the starters are files and are returned either way, which is what
+     * stops a theme opening to nothing.
+     */
     references(themeId) {
       const query = themeId ? '?themeId=' + encodeURIComponent(themeId) : '';
-      return apiFetch('/library/references' + query).then((r) => r.data.references);
+      return apiFetch('/library/references' + query).then((r) => ({
+        references: r.data.references || [],
+        storage: r.data.storage || { ok: true, reason: '' },
+      }));
     },
 
     remove(id) {

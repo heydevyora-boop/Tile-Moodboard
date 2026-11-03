@@ -9,6 +9,7 @@ import rateLimit from 'express-rate-limit';
 import swaggerUi from 'swagger-ui-express';
 
 import { config } from '@config/index';
+import { STARTER_PATH } from '@services/libraryStarters';
 import { requestLogger } from '@middlewares/requestLogger';
 import { notFoundHandler } from '@middlewares/notFound';
 import { globalErrorHandler } from '@middlewares/errorHandler';
@@ -172,6 +173,37 @@ export function createApp(): Application {
     staticAssetHeaders,
     express.static(
       config.printBoards.uploadsDir,
+    ),
+  );
+
+  // ============================================================
+  // DE'VYORA LIBRARY STARTER ROOMS
+  // ============================================================
+  // Two reference rooms per theme, shipped with the application so a
+  // studio that has uploaded nothing still has a library to look at and
+  // generate from. See services/libraryStarters.ts.
+  //
+  // Served from HERE rather than left to the static frontend because
+  // the Python generator has to fetch one over the public internet when
+  // it is chosen as the scene, and this path is the same in every
+  // deployment -- vercel.json already routes /static/* to this function.
+  // The files ride along in that function's bundle via includeFiles.
+  app.use(
+    STARTER_PATH,
+    staticAssetHeaders,
+    express.static(
+      path.resolve(__dirname, '..', '..', 'frontend', 'img', 'library'),
+      { fallthrough: true },
+    ),
+  );
+  // The repository layout differs between running from src/ and from a
+  // bundle, so the sibling location is tried too rather than leaving a
+  // deployment with silently missing pictures.
+  app.use(
+    STARTER_PATH,
+    staticAssetHeaders,
+    express.static(
+      path.resolve(process.cwd(), '..', 'frontend', 'img', 'library'),
     ),
   );
 
