@@ -170,6 +170,16 @@
   .lib-active-clear { flex:0 0 auto; background:none; border:none; padding:0; color:var(--muted); font-size:9px; letter-spacing:.14em; cursor:pointer; text-decoration:underline; }
   .lib-active-clear:hover { color:var(--err); }
 
+  /* ── a line that explains something, rather than leaving a gap ── */
+  .lib-note { display:flex; flex-direction:column; gap:6px; padding:14px 16px; margin:18px 0 0;
+              border:1px solid var(--line); border-radius:14px; background:var(--card);
+              font-size:12.5px; line-height:1.55; color:var(--ink); }
+  .lib-note-k { font-size:8.5px; letter-spacing:.18em; color:var(--gold); }
+  .lib-note code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11.5px;
+                   background:var(--sand); padding:1px 5px; border-radius:5px; }
+  .lib-note-bad { border-color:var(--err); }
+  .lib-note-bad .lib-note-k { color:var(--err); }
+
   /* ── the themes ── */
   .lib-theme-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(215px, 1fr)); gap:16px; margin-top:20px; }
   .lib-theme-card { display:flex; flex-direction:column; text-align:left; padding:0; background:var(--card); border:1px solid var(--line); border-radius:16px; overflow:hidden; cursor:pointer; color:var(--ink); }
@@ -312,6 +322,17 @@
     loading: true,
     chosen: null,
     canAdd: false,
+    /**
+     * Why the library's own storage is not answering, when it is not.
+     *
+     * Empty is the normal case. Non-empty means the themes are listed
+     * (they come from the studio's theme file) but their counts, their
+     * rooms and any upload cannot work until it is fixed -- and it
+     * says, in the words the server used, exactly what to do.
+     */
+    storageError: '',
+    /** True once the theme request has actually come back. */
+    loadFailed: false,
     queue: [],
     running: false,
     aborter: null,
@@ -358,12 +379,59 @@
       + '</div></div>').join('') + '</div>';
   }
 
+  /**
+   * WHERE THE PICTURES GO -- said on the first screen, not discovered.
+   *
+   * Uploading happens inside a theme, which is right (a picture has to
+   * belong to one) and was also invisible: this screen showed nine
+   * cards and nothing that said a room could be added at all, so the
+   * studio had no way of knowing the feature was one click away.
+   *
+   * It also answers the other question out loud. An account without
+   * `reference_images:write` used to simply never see the button, which
+   * is indistinguishable from the feature not existing.
+   */
+  function addHintHtml() {
+    if (state.loading || !state.themes.length) return '';
+
+    if (!state.canAdd) {
+      return '<div class="lib-note">'
+        + '<span class="lib-note-k mono">ADDING ROOMS</span>'
+        + '<span>This account can browse and choose reference rooms, but not add them — '
+        + 'that needs the <code>reference_images:write</code> permission, which the Owner and '
+        + 'Admin roles carry and Staff does not. Sign in with one of those to upload.</span>'
+        + '</div>';
+    }
+
+    return '<div class="lib-note">'
+      + '<span class="lib-note-k mono">ADDING ROOMS</span>'
+      + '<span>Open the theme a room belongs to, and the upload is at the top of it — '
+      + 'pick fifty or a hundred pictures at once. They are stored in the studio’s '
+      + 'Google Drive, under that theme.</span>'
+      + '</div>';
+  }
+
+  /** The library's storage, when it is not answering. */
+  function storageHtml() {
+    if (!state.storageError) return '';
+    return '<div class="lib-note lib-note-bad">'
+      + '<span class="lib-note-k mono">THE LIBRARY’S STORAGE IS NOT READY</span>'
+      + '<span>' + escapeHtml(state.storageError) + '</span>'
+      + '<span>The themes below are the studio’s own and are listed either way, but their '
+      + 'rooms cannot be counted, opened or added to until this is done.</span>'
+      + '</div>';
+  }
+
   function themesHtml() {
     if (state.loading) return skeletonsHtml(6);
     if (!state.themes.length) {
       return '<div class="lib-empty"><h3 class="serif">No themes to show</h3>'
-        + '<p>The theme list could not be read. Reload the page, and if it keeps happening the '
-        + 'studio’s theme file could not be loaded by the server.</p></div>';
+        + '<p>' + (state.loadFailed
+          ? 'The theme list could not be fetched from the server. Reload the page; if it keeps '
+            + 'happening, the server is not answering.'
+          : 'The server answered with no themes at all, which means the studio’s theme '
+            + 'file could not be loaded by it.')
+        + '</p></div>';
     }
     return '<div class="lib-theme-grid">' + state.themes.map((t) =>
       '<button type="button" class="lib-theme-card" data-theme="' + escapeHtml(t.id) + '">'
@@ -372,8 +440,12 @@
       + '<span class="lib-theme-body">'
       + '<span class="lib-theme-name serif">' + escapeHtml(t.label) + '</span>'
       + '<span class="lib-theme-pal">' + escapeHtml(t.palette) + '</span>'
-      + '<span class="lib-theme-count mono">' + t.count
-      + (t.count === 1 ? ' REFERENCE' : ' REFERENCES') + '</span>'
+      // A null count means it could not be read. "0 REFERENCES" there
+      // would be a lie about a theme that may well hold forty.
+      + '<span class="lib-theme-count mono">' + (t.count === null || t.count === undefined
+        ? 'COUNT UNAVAILABLE'
+        : t.count + (t.count === 1 ? ' REFERENCE' : ' REFERENCES'))
+      + '</span>'
       + '</span></button>').join('') + '</div>';
   }
 
@@ -409,8 +481,12 @@
     if (state.loading) return skeletonsHtml(8);
     if (!state.references.length) {
       return '<div class="lib-empty"><h3 class="serif">Nothing in this theme yet</h3>'
-        + '<p>Reference rooms appear here once they are added. They are stored in the '
-        + 'studio’s Google Drive.</p></div>';
+        + '<p>' + (state.canAdd
+          ? 'Use ADD IMAGES above to put the first rooms in. They are stored in the '
+            + 'studio’s Google Drive, under this theme.'
+          : 'Reference rooms appear here once the studio adds them. They are stored in the '
+            + 'studio’s Google Drive.')
+        + '</p></div>';
     }
     return '<div class="lib-grid">' + state.references.map((ref) => {
       const chosen = state.chosen && state.chosen.id === ref.id;
@@ -444,6 +520,8 @@
           + 'becomes the reference: the catalog is searched for the tiles that match it, and '
           + 'the scene is generated from that same picture.</p>'
           + activeHtml()
+          + storageHtml()
+          + addHintHtml()
           + themesHtml()
         : '<button type="button" class="lib-back mono" id="libBack">← ALL THEMES</button>'
           + '<div class="lib-head">'
@@ -452,6 +530,7 @@
           + '</div>'
           + '<p class="step-sub">Tap a room to make it the reference image.</p>'
           + activeHtml()
+          + storageHtml()
           + (state.canAdd && current
             ? '<div class="lib-actions">'
               + '<label class="lib-add mono" for="libFiles">ADD IMAGES TO '
@@ -459,7 +538,15 @@
               + '<input type="file" id="libFiles" accept="image/jpeg,image/png,image/webp" multiple hidden>'
               + '<span class="lib-hint">Pick as many as you like — they go up a few at a time.</span>'
               + '</div>'
-            : '')
+            // Saying why there is no button beats leaving a blank where
+            // one would be: an account that cannot upload looked exactly
+            // like a feature that cannot upload.
+            : '<div class="lib-note">'
+              + '<span class="lib-note-k mono">ADDING ROOMS</span>'
+              + '<span>This account can browse and choose, but not add — that needs the '
+              + '<code>reference_images:write</code> permission, which Owner and Admin carry '
+              + 'and Staff does not.</span>'
+              + '</div>')
           + '<div class="alert" id="libAlert" style="display:none"></div>'
           + queueHtml()
           + referencesHtml())
@@ -668,7 +755,13 @@
     render();
     try {
       state.references = await CasaApi.library.references(themeId);
+      state.storageError = '';
     } catch (err) {
+      // The server's own words, which now name the one action that
+      // fixes a missing table rather than reporting a Prisma code.
+      // Kept on the state as well as in the alert, so the explanation
+      // is still on screen after the alert has been read past.
+      state.storageError = (err && err.message) || '';
       state.loading = false;
       render();
       showAlert((err && err.message) || 'The library could not be read.');
@@ -701,9 +794,16 @@
 
     render();
     try {
-      state.themes = await CasaApi.library.themes();
+      const answer = await CasaApi.library.themes();
+      state.themes = answer.themes;
+      state.storageError = answer.storage.ok ? '' : answer.storage.reason;
     } catch (err) {
+      // The request itself failed -- not the same thing as the server
+      // answering with no themes, and the page says so rather than
+      // blaming the theme file for a network error.
       state.themes = [];
+      state.loadFailed = true;
+      state.storageError = (err && err.message) || '';
     }
     state.loading = false;
     render();

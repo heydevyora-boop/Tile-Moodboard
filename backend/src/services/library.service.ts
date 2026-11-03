@@ -155,7 +155,39 @@ export async function listReferences(themeId?: unknown, includeInactive = false)
   return references;
 }
 
-/** How many each theme holds, for the gallery's theme list. */
+/**
+ * Why a library storage call failed, in words a studio can act on.
+ *
+ * P2021 is Prisma's "the table does not exist", and on this deployment
+ * it has exactly one cause: `prisma migrate deploy` has not been run.
+ * vercel.json's buildCommand is `prisma generate` alone, so a deploy
+ * ships the code without the table and every library call fails --
+ * which reached the screen as "Database request error (P2021)" and told
+ * the owner nothing about what to do.
+ */
+export function describeStorageFailure(error: unknown): string {
+  const code = (error as { code?: string } | null)?.code;
+
+  if (code === 'P2021' || code === 'P2022') {
+    return (
+      'The library’s database table has not been created yet. Run '
+      + '`cd backend && npx prisma migrate deploy` against this database — '
+      + 'this project’s build runs `prisma generate` only, so a deployment '
+      + 'does not create it.'
+    );
+  }
+
+  return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * How many each theme holds, for the gallery's theme list.
+ *
+ * The CALLER decides what a failure means. The nine themes come from
+ * shared/themes.json and need no table at all; only these counts do, so
+ * a missing table must cost the counts and nothing else. See the themes
+ * route.
+ */
 export async function countByTheme(): Promise<Record<string, number>> {
   const rows = await prisma.libraryReference.groupBy({
     by: ['themeId'],

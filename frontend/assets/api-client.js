@@ -761,8 +761,19 @@
       } catch (err) { /* ignore */ }
     },
 
+    /**
+     * The nine themes, and whether their counts could be read.
+     *
+     * `storage.ok` is false when the library's table is missing --
+     * the themes themselves come from the studio's theme file and are
+     * listed either way, which is what stops an un-migrated database
+     * showing an empty page with no way in.
+     */
     themes() {
-      return apiFetch('/library/themes').then((r) => r.data.themes);
+      return apiFetch('/library/themes').then((r) => ({
+        themes: r.data.themes || [],
+        storage: r.data.storage || { ok: true, reason: '' },
+      }));
     },
 
     references(themeId) {
