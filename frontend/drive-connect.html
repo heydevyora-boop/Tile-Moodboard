@@ -127,6 +127,27 @@
       + row('Callback URL', '<code>' + esc(s.redirectUri || '(set BACKEND_PUBLIC_URL)') + '</code>')
       + '</div>';
 
+    // THE VERCEL TRAP. Every deployment gets its own hostname, and
+    // Google will only send the owner back to the one URL registered
+    // in the console -- which is whatever BACKEND_PUBLIC_URL says.
+    // Opening this page on a deployment-specific URL still works, but
+    // if BACKEND_PUBLIC_URL is that throwaway hostname rather than the
+    // stable production one, every connection attempt dies on
+    // redirect_uri_mismatch the next time the app is deployed.
+    let callbackOrigin = '';
+    try { callbackOrigin = new URL(s.redirectUri).origin; } catch { /* unset */ }
+    if (s.configured && callbackOrigin && callbackOrigin !== window.location.origin) {
+      html += '<div class="warn"><strong>This page and the callback are on different '
+        + 'addresses.</strong><p class="note">You are on <code>' + esc(window.location.origin)
+        + '</code>; Google is told to come back to <code>' + esc(callbackOrigin) + '</code>. '
+        + 'Connecting still works — you will land on that address — but '
+        + '<code>BACKEND_PUBLIC_URL</code> must be the <strong>stable production</strong> '
+        + 'domain, and the Authorized redirect URI in the Google Cloud console must be that '
+        + 'host plus <code>' + esc(s.callbackPath || '/api/v1/integrations/google/callback')
+        + '</code>, character for character. A per-deployment Vercel hostname there means '
+        + '<code>redirect_uri_mismatch</code> on the next deploy.</p></div>';
+    }
+
     if (!s.configured) {
       html += '<div class="warn"><strong>The OAuth client is not configured yet.</strong>'
         + '<ol class="steps">'
@@ -136,6 +157,17 @@
         + esc(s.redirectUri || ('<BACKEND_PUBLIC_URL>' + (s.callbackPath || ''))) + '</code></li>'
         + '<li>Set <code>GOOGLE_OAUTH_CLIENT_ID</code> and <code>GOOGLE_OAUTH_CLIENT_SECRET</code>, '
         + 'then redeploy.</li></ol></div>';
+    }
+
+    // Configured but nobody has signed in: that is the whole of what
+    // is left to do, and it is one button. Say so, because setting the
+    // variables feels like finishing and is not.
+    if (s.configured && !connected) {
+      html += '<div class="warn" style="border-left-color:var(--gold)">'
+        + '<strong>Everything is set up except the sign-in itself.</strong>'
+        + '<p class="note">The client id and secret are in place. Nothing is connected until '
+        + 'somebody presses the button below and lets Google ask this studio\u2019s Google '
+        + 'account for permission — setting the variables does not do it.</p></div>';
     }
 
     html += '<div class="actions">'

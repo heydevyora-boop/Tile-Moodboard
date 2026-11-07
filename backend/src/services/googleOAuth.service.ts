@@ -190,8 +190,44 @@ export async function completeAuthorization(code: string, userId: string): Promi
     );
   }
 
-  await storeRefreshToken(tokens.refresh_token, userId);
+  // GOOGLE SAID YES AND THE TOKEN STILL HAS NOWHERE TO GO.
+  //
+  // It is kept in the api_keys table, so a database that has not had
+  // its migrations applied loses the authorization at the last step --
+  // and Google will not hand out a second refresh token without the
+  // owner revoking the app first. Said plainly here, because the
+  // generic "could not be completed" sent somebody looking at Google.
+  try {
+    await storeRefreshToken(tokens.refresh_token, userId);
+  } catch (err) {
+    throw AppError.badRequest(describeTokenStoreFailure(err));
+  }
+
   return { scope: tokens.scope || oauthScopes().join(' ') };
+}
+
+/**
+ * Why the authorization could not be kept, in words that name the
+ * remedy.
+ *
+ * This is the worst moment for a vague error: Google has already said
+ * yes, and it will not issue a second refresh token until the owner
+ * removes the app from their account -- so "could not be completed"
+ * sends somebody back to Google, which is not where the problem is.
+ */
+export function describeTokenStoreFailure(err: unknown): string {
+  const code = (err as { code?: string } | null)?.code;
+
+  if (code === 'P2021' || code === 'P2022') {
+    return 'Google granted access, but this deployment could not store the authorization: '
+      + 'its database has no api_keys table. Run `cd backend && npx prisma migrate deploy` '
+      + 'against the database this deployment reads, then remove the app at '
+      + 'https://myaccount.google.com/permissions and connect again — Google issues a '
+      + 'refresh token only on a first authorization.';
+  }
+
+  return 'Google granted access, but this deployment could not store the authorization: '
+    + `${err instanceof Error ? err.message : String(err)}`;
 }
 
 export async function storeRefreshToken(refreshToken: string, userId?: string): Promise<void> {

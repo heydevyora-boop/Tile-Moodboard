@@ -33,6 +33,7 @@ import { logActivity } from './activityLog.service';
 import { describeTheme } from './themes.service';
 import { describeRoom, storableRoomId, resolveRoomId, UNSORTED_ROOM } from './rooms.service';
 import { googleDriveClient, SERVICE_ACCOUNT_NO_QUOTA, DriveFile } from './googleDrive.service';
+import { isOAuthConfigured } from './googleOAuth.service';
 import { buildStoredFilename } from '@middlewares/uploadReferenceImage';
 import { isRealImageBuffer } from '@utils/fileSignature';
 import { toDriveDownloadUrl } from './referenceImages.service';
@@ -205,6 +206,18 @@ export async function describeLibraryFolder(): Promise<LibraryFolderStatus> {
     || !!config.google.driveImpersonateUser;
 
   /*
+   * THE HALF-FINISHED CASE, which reads as a flat refusal otherwise.
+   *
+   * Setting the OAuth client id and secret does not connect anything:
+   * somebody still has to press Connect once and let Google ask them.
+   * A deployment in that state was being told the whole essay about
+   * shared drives and domain-wide delegation -- true, and useless,
+   * because the answer is one button on a page it is already linked
+   * to. So it says that instead.
+   */
+  const awaitingConsent = !actsAsAPerson && isOAuthConfigured();
+
+  /*
    * THE FOLDER OPENS AND STILL NOTHING CAN BE PUT IN IT.
    *
    * This is the state the studio was left in: the folder exists, the
@@ -227,11 +240,17 @@ export async function describeLibraryFolder(): Promise<LibraryFolderStatus> {
       folderId: folder.id,
       name: folder.name,
       sharedDrive: false,
-      reason:
-        `“${folder.name}” opens, but it is a folder in somebody’s My Drive, and `
-        + `${SERVICE_ACCOUNT_NO_QUOTA} On a personal Google account the second of those is the `
-        + 'only one available: connect the studio’s own Google account from the owner’s '
-        + 'Drive settings, and the library uploads as them.',
+      reason: awaitingConsent
+        ? `“${folder.name}” opens, and this deployment has a Google sign-in set up — `
+          + 'but nobody has signed in with it yet, so the library can still only act as the '
+          + 'service account, which owns no Drive storage and therefore cannot create a file '
+          + 'in a My Drive folder at all. Open the studio’s Drive settings and press '
+          + 'Connect once: Google will ask this studio’s own account for permission, and '
+          + 'from then on the pictures are uploaded as — and owned by — that account.'
+        : `“${folder.name}” opens, but it is a folder in somebody’s My Drive, and `
+          + `${SERVICE_ACCOUNT_NO_QUOTA} On a personal Google account the second of those is the `
+          + 'only one available: connect the studio’s own Google account from the owner’s '
+          + 'Drive settings, and the library uploads as them.',
     };
   }
 
