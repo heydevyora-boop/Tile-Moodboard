@@ -31,6 +31,7 @@ import { config } from '@config/index';
 import { AppError } from '@utils/AppError';
 import { logActivity } from './activityLog.service';
 import { describeTheme } from './themes.service';
+import { describeRoom, storableRoomId, resolveRoomId, UNSORTED_ROOM } from './rooms.service';
 import { googleDriveClient } from './googleDrive.service';
 import { buildStoredFilename } from '@middlewares/uploadReferenceImage';
 import { isRealImageBuffer } from '@utils/fileSignature';
@@ -77,12 +78,7 @@ export function driveFolderIdFrom(value: string): string {
 
 let cachedFolderId: string | null = null;
 
-/** Forgets the verified folder -- for tests, and after a config change. */
-export function clearLibraryFolderCache(): void {
-  cachedFolderId = null;
-}
-
-async function libraryFolderId(): Promise<string> {
+async function libraryRootId(): Promise<string> {
   if (cachedFolderId) return cachedFolderId;
 
   const configured = config.google.driveLibraryFolder;
@@ -125,6 +121,52 @@ async function libraryFolderId(): Promise<string> {
 }
 
 /**
+ * THE FOLDER A PICTURE ACTUALLY LANDS IN:
+ *
+ *   <the studio's Reference Images folder>
+ *     └── British
+ *           └── Bathroom
+ *                 └── the picture
+ *
+ * Found or created under the configured folder, never above it. The
+ * studio asked for this shape on Drive and not only in the database,
+ * so that the folder they open by hand reads the same way the gallery
+ * does.
+ *
+ * CACHED PER THEME AND ROOM. Without it a hundred-picture upload pays
+ * for two Drive lookups per picture -- two hundred round trips for the
+ * same handful of folders, inside a sixty-second function.
+ */
+const cachedSubfolders = new Map<string, string>();
+
+/** Forgets the folder tree -- for tests, and after a config change. */
+export function clearLibraryFolderCache(): void {
+  cachedFolderId = null;
+  cachedSubfolders.clear();
+}
+
+async function folderForUpload(themeId: string, roomId: string | null): Promise<string> {
+  const theme = describeTheme(themeId);
+  const room = roomId ? describeRoom(roomId) : null;
+
+  // The labels, not the ids: these are folders a person opens in Drive,
+  // so they read "British / Bathroom", not "british / bathroom".
+  const themeName = theme?.label || themeId;
+  const roomName = room?.label || 'Unsorted';
+
+  const key = `${themeName}/${roomName}`;
+  const cached = cachedSubfolders.get(key);
+  if (cached) return cached;
+
+  const root = await libraryRootId();
+  const themeFolder = await googleDriveClient.getOrCreateFolder(themeName, root);
+  const roomFolder = await googleDriveClient.getOrCreateFolder(roomName, themeFolder.id);
+
+  cachedSubfolders.set(key, roomFolder.id);
+  return roomFolder.id;
+}
+
+/**
  * The theme this picture belongs to, as shared/themes.json spells it.
  *
  * Checked here rather than by a foreign key, because the themes are that
@@ -144,8 +186,16 @@ export function resolveThemeId(value: unknown): string {
 
 export interface AddReferenceInput {
   themeId: unknown;
-  title?: string;
+  /**
+   * The room type, as the second level of the hierarchy. A room id,
+   * label, or any of the aliases in shared/rooms.json -- the upload
+   * form sends an id, but an API caller need not know that.
+   *
+   * Optional, and an unrecognised value is refused rather than stored:
+   * writing one would create a sixth category nobody can browse to.
+   */
   room?: string;
+  title?: string;
   description?: string;
 }
 
@@ -158,6 +208,23 @@ export async function addReference(
   if (!file) throw AppError.badRequest('No image was sent.');
 
   const themeId = resolveThemeId(input.themeId);
+
+  // THE SECOND LEVEL OF THE HIERARCHY.
+  //
+  // Refused rather than quietly stored when it names nothing, for the
+  // same reason an unknown theme is: a picture filed under a room that
+  // does not exist is invisible in the gallery and impossible to
+  // generate from. Omitted entirely is still allowed -- that is the
+  // "Unsorted" bucket, and it is what every row written before this
+  // hierarchy carries.
+  const roomId = storableRoomId(input.room);
+
+  if (input.room && !roomId) {
+    throw AppError.badRequest(
+      `"${String(input.room)}" is not one of the studio\u2019s room types. `
+      + 'Choose Bathroom, Bedroom, Drawing Room, Powder Room or Kitchen.',
+    );
+  }
 
   // The declared mime type is the browser's claim; this reads the bytes.
   if (!isRealImageBuffer(file.buffer)) {
@@ -182,7 +249,8 @@ export async function addReference(
       name: filename,
       mimeType: file.mimetype,
       content: file.buffer,
-      parentFolderId: await libraryFolderId(),
+      // <Reference Images>/<Theme>/<Room> -- see folderForUpload.
+      parentFolderId: await folderForUpload(themeId, roomId),
     });
     // The Python visualization service fetches this URL unauthenticated,
     // so a private file would 403 at generation time rather than here.
@@ -204,7 +272,7 @@ export async function addReference(
       title: (input.title || '').trim() || file.originalname.replace(/\.[^.]+$/, ''),
       imageUrl: toDriveDownloadUrl(uploaded.id),
       driveFileId: uploaded.id,
-      room: (input.room || '').trim() || null,
+      room: roomId,
       description: (input.description || '').trim() || null,
       uploadedById: userId,
     },
@@ -216,24 +284,69 @@ export async function addReference(
     action: 'library_reference.uploaded',
     entityType: 'LibraryReference',
     entityId: created.id,
-    metadata: { themeId, title: created.title, driveFileId: created.driveFileId },
+    metadata: { themeId, room: roomId, title: created.title, driveFileId: created.driveFileId },
     req,
   });
 
   return created;
 }
 
-export async function listReferences(themeId?: unknown, includeInactive = false) {
-  const where = {
-    ...(themeId ? { themeId: resolveThemeId(themeId) } : {}),
-    ...(includeInactive ? {} : { isActive: true }),
-  };
+export async function listReferences(
+  themeId?: unknown,
+  /**
+   * The second level of the hierarchy. Omitted means every room in the
+   * theme, which is what the theme's own overview shows.
+   *
+   * UNSORTED_ROOM selects the rows whose room is null or unrecognised --
+   * everything uploaded before this hierarchy existed. Those are not
+   * reachable by any room id, so without this they would be browsable
+   * from nowhere.
+   */
+  roomId?: unknown,
+  includeInactive = false,
+) {
+  const wanted = roomId ? String(roomId).trim() : '';
+  const known = wanted && wanted !== UNSORTED_ROOM ? describeRoom(wanted) : null;
+
+  if (wanted && wanted !== UNSORTED_ROOM && !known) {
+    throw AppError.badRequest(`"${wanted}" is not one of the studio\u2019s room types.`);
+  }
 
   const references = await prisma.libraryReference.findMany({
-    where,
+    where: {
+      ...(themeId ? { themeId: resolveThemeId(themeId) } : {}),
+      ...(includeInactive ? {} : { isActive: true }),
+    },
     include: { uploadedBy: { select: { id: true, name: true } } },
     orderBy: [{ themeId: 'asc' }, { sortOrder: 'asc' }, { createdAt: 'desc' }],
   });
+
+  // WHICH ROOM A PICTURE IS IN IS DECIDED HERE, NOT IN SQL.
+  //
+  // `room = 'bathroom'` looks obvious and is wrong: a row written
+  // before the hierarchy existed carries free text -- "Bathroom", or
+  // "ensuite" -- and an equality test misses every one of them. The
+  // theme's own COUNT resolves those aliases, so the two disagreed: a
+  // room card said two pictures and opening it showed one.
+  //
+  // resolveRoomId is the single definition of "which room is this in",
+  // and using it for both the list and the counts is what keeps them
+  // telling the same story. It also gives the unsorted bucket its
+  // meaning -- "null, or a name this list does not know" -- which is
+  // not a condition a query can express at all.
+  //
+  // The cost is filtering one theme's rows in memory rather than in
+  // Postgres. A theme holds hundreds of pictures, not millions, and
+  // the query is still narrowed by the indexed themeId + isActive. If
+  // a library ever grows past that, the fix is a one-off backfill of
+  // `room` to canonical ids and an equality test here -- not a second
+  // definition of what a room is.
+  if (wanted) {
+    const target = known ? known.id : UNSORTED_ROOM;
+    return references.filter(
+      (row: { room: string | null }) => resolveRoomId(row.room) === target,
+    );
+  }
 
   return references;
 }
@@ -264,25 +377,47 @@ export function describeStorageFailure(error: unknown): string {
 }
 
 /**
- * How many each theme holds, for the gallery's theme list.
+ * How many each theme holds, and how those break down by room.
+ *
+ * BOTH IN ONE PASS. The gallery needs the theme totals for its first
+ * screen and the per-room numbers for its second, and asking twice
+ * would be two scans of the same rows.
  *
  * The CALLER decides what a failure means. The nine themes come from
  * shared/themes.json and need no table at all; only these counts do, so
  * a missing table must cost the counts and nothing else. See the themes
  * route.
  */
-export async function countByTheme(): Promise<Record<string, number>> {
+export interface LibraryCounts {
+  /** themeId -> total pictures. */
+  byTheme: Record<string, number>;
+  /** themeId -> roomId -> pictures. Unrecognised rooms fold into "unsorted". */
+  byRoom: Record<string, Record<string, number>>;
+}
+
+export async function countByTheme(): Promise<LibraryCounts> {
   const rows = await prisma.libraryReference.groupBy({
-    by: ['themeId'],
+    by: ['themeId', 'room'],
     where: { isActive: true },
     _count: { _all: true },
   });
 
-  const counts: Record<string, number> = {};
-  rows.forEach((row: { themeId: string; _count: { _all: number } }) => {
-    counts[row.themeId] = row._count._all;
+  const byTheme: Record<string, number> = {};
+  const byRoom: Record<string, Record<string, number>> = {};
+
+  rows.forEach((row: { themeId: string; room: string | null; _count: { _all: number } }) => {
+    const n = row._count._all;
+    byTheme[row.themeId] = (byTheme[row.themeId] ?? 0) + n;
+
+    // Resolved rather than taken raw, so an older row's free text lands
+    // in the room it names and anything unrecognised folds into the
+    // unsorted bucket instead of inventing a sixth category.
+    const room = resolveRoomId(row.room);
+    byRoom[row.themeId] = byRoom[row.themeId] ?? {};
+    byRoom[row.themeId][room] = (byRoom[row.themeId][room] ?? 0) + n;
   });
-  return counts;
+
+  return { byTheme, byRoom };
 }
 
 /**

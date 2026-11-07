@@ -24,8 +24,10 @@ import { authenticate, requirePermission } from '@middlewares/auth';
 import { uploadReferenceImage } from '@middlewares/uploadReferenceImage';
 import * as library from '@services/library.service';
 import { THEMES } from '@services/themes.service';
+import { ROOM_LIST, UNSORTED_ROOM } from '@services/rooms.service';
 import {
   starterCounts,
+  starterRoomCounts,
   startersForTheme,
   asReference,
   isStarterId,
@@ -55,6 +57,75 @@ async function addOrExplain(
   }
 }
 
+/**
+ * One theme's rooms, with how many pictures each holds.
+ *
+ * Every room is listed whether or not it holds anything, because an
+ * empty Kitchen is a real answer -- "nothing here yet" -- and hiding it
+ * would leave the studio with no way to see that a room exists at all,
+ * let alone upload into it. The same reasoning as the theme grid, which
+ * lists all nine themes however empty.
+ *
+ * The unsorted bucket appears ONLY when it holds something: it is not a
+ * room the studio can choose, just somewhere older pictures sit until
+ * they are filed.
+ */
+function roomBreakdown(
+  themeId: string,
+  uploaded: Record<string, number>,
+): Array<{ id: string; label: string; slug: string; blurb: string; count: number; starterCount: number }> {
+  const starters = starterRoomCounts(themeId);
+
+  const rooms = ROOM_LIST.map((room) => ({
+    id: room.id,
+    label: room.label,
+    slug: room.slug,
+    blurb: room.blurb,
+    count: (uploaded[room.id] ?? 0) + (starters[room.id] ?? 0),
+    starterCount: starters[room.id] ?? 0,
+  }));
+
+  const orphans = uploaded[UNSORTED_ROOM] ?? 0;
+  if (orphans > 0) {
+    rooms.push({
+      id: UNSORTED_ROOM,
+      label: 'Unsorted',
+      slug: UNSORTED_ROOM,
+      blurb: 'Uploaded before rooms existed, or filed under a name this list does not know.',
+      count: orphans,
+      starterCount: 0,
+    });
+  }
+
+  return rooms;
+}
+
+// ============================================================
+// GET /library/rooms
+// ============================================================
+// The room types themselves, for the upload form's dropdown. Served
+// rather than hard-coded in the page so the page and the server cannot
+// disagree about what a room is -- the same reason /themes exists.
+router.get(
+  '/rooms',
+  requirePermission('reference_images:read'),
+  catchAsync(async (_req: Request, res: Response) => {
+    res.status(200).json({
+      success: true,
+      data: {
+        rooms: ROOM_LIST.map((room) => ({
+          id: room.id,
+          label: room.label,
+          slug: room.slug,
+          blurb: room.blurb,
+          /** The mood-board wizard's own name, so a choice can pre-select it. */
+          wizard: room.wizard,
+        })),
+      },
+    });
+  }),
+);
+
 router.get(
   '/themes',
   requirePermission('reference_images:read'),
@@ -71,7 +142,7 @@ router.get(
     // So the counts are allowed to fail on their own. The themes are
     // always listed, and `storage` says plainly why the counts are
     // absent so the page can show it rather than a shrug.
-    let counts: Record<string, number> = {};
+    let counts: library.LibraryCounts = { byTheme: {}, byRoom: {} };
     let storageError = '';
 
     try {
@@ -96,9 +167,15 @@ router.get(
         // is not an empty theme. And because they need no database,
         // this number is real even when the uploaded ones cannot be
         // counted, which is why it is never null any more.
-        count: (storageError ? 0 : (counts[theme.id] ?? 0)) + (starters[theme.id] ?? 0),
+        count: (storageError ? 0 : (counts.byTheme[theme.id] ?? 0)) + (starters[theme.id] ?? 0),
         /** How many of that count ship with the app. */
         starterCount: starters[theme.id] ?? 0,
+        /**
+         * THE SECOND LEVEL, counted. roomId -> pictures, uploaded and
+         * starter together, so the theme's own screen can show which of
+         * its rooms actually hold anything before the client opens one.
+         */
+        rooms: roomBreakdown(theme.id, storageError ? {} : (counts.byRoom[theme.id] ?? {})),
       }))
       // Stable, and the same order the file lists them in.
       .filter((theme, index, all) => all.findIndex((t) => t.id === theme.id) === index);
@@ -130,8 +207,12 @@ router.get(
     //
     // This is the difference from before. This endpoint used to fail
     // outright, so a theme opened to nothing at all.
+    const roomId = typeof req.query.roomId === 'string' && req.query.roomId
+      ? req.query.roomId
+      : undefined;
+
     const starters = (themeId
-      ? startersForTheme(library.resolveThemeId(themeId))
+      ? startersForTheme(library.resolveThemeId(themeId), roomId)
       : []
     ).map(asReference);
 
@@ -139,7 +220,7 @@ router.get(
     let storageError = '';
 
     try {
-      uploaded = await library.listReferences(themeId);
+      uploaded = await library.listReferences(themeId, roomId);
     } catch (error) {
       storageError = library.describeStorageFailure(error);
     }
@@ -159,13 +240,18 @@ router.post(
   requirePermission('reference_images:write'),
   uploadReferenceImage,
   catchAsync(async (req: Request, res: Response) => {
-    const body = req.body as { themeId?: string; title?: string; room?: string; description?: string };
+    const body = req.body as {
+      themeId?: string; roomId?: string; room?: string; title?: string; description?: string;
+    };
     const created = await addOrExplain(
       req.file,
       {
         themeId: body.themeId,
+        // `roomId` is what the form sends; `room` is accepted too so an
+        // API caller that knows the label rather than the id still
+        // files the picture correctly.
+        room: body.roomId || body.room,
         title: body.title,
-        room: body.room,
         description: body.description,
       },
       req.user!.id,

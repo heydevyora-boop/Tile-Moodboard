@@ -316,7 +316,20 @@ model LibraryReference {
   imageUrl     String
   /// The Drive file itself. Required: Drive is the only store there is.
   driveFileId  String   @unique
-  /// Which room this is a reference FOR, when it is only right for one.
+  /// THE ROOM TYPE, as the second level of the library's hierarchy:
+  /// a room id from shared/rooms.json -- "bathroom", "bedroom",
+  /// "drawing_room", "powder_room", "kitchen".
+  ///
+  /// Still `room`, still nullable, and needing no migration. Every row
+  /// written before the hierarchy existed has NULL here -- the upload
+  /// form only ever sent themeId -- so there is nothing to backfill and
+  /// no second column to keep in step with this one.
+  ///
+  /// Free text an older row happens to carry is resolved by alias at
+  /// read time (rooms.service.describeRoom), and anything unrecognised
+  /// shows under "Unsorted" rather than being dropped: a picture the
+  /// studio uploaded must never become invisible because a category was
+  /// added after it.
   room         String?
   description  String?
   /// Unpublished rows stay out of the client's gallery without being deleted.

@@ -127,6 +127,21 @@ async function main() {
     await page.waitForURL('**/dashboard.html', { timeout: 20000 });
   };
 
+
+  /**
+   * Theme -> Room -> pictures.
+   *
+   * The library is a hierarchy now, so reaching a picture is two clicks,
+   * not one. Everything below goes through here so the walk is written
+   * once.
+   */
+  const openThemeRoom = async (themeId, roomId) => {
+    await page.click('[data-theme="' + themeId + '"]');
+    await page.waitForSelector('[data-room]', { timeout: 20000 });
+    await page.click('[data-room="' + roomId + '"]');
+    await page.waitForSelector('.lib-card, .lib-empty', { timeout: 20000 });
+  };
+
   const openLibrary = async () => {
     await page.goto(`${base}/devyora-library.html`, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('.lib-theme-card', { timeout: 20000 });
@@ -159,13 +174,15 @@ async function main() {
     // A starter is a room a client can open, choose and generate from,
     // so it counts -- which is also why no theme reads as empty any
     // more, and why the page is never the blank grid that was reported.
-    check('1c. ...named, with its palette and how many rooms it holds',
+    // Four uploaded plus five starters -- one per room type, which is
+    // what makes every cell of the Theme x Room grid non-empty.
+    check('1c. ...named, with its palette and how many pictures it holds',
       /British/.test(await british.textContent() || '')
       && /Heritage green/.test(await british.textContent() || '')
-      && /6 ROOMS/.test(await british.textContent() || ''),
+      && /9 PICTURES/.test(await british.textContent() || ''),
       await british.textContent());
     check('1d. ...and a theme nobody has uploaded to still offers its starters',
-      /2 ROOMS/.test(
+      /5 PICTURES/.test(
         await page.locator('.lib-theme-card[data-theme="rustic"]').textContent() || ''
       ),
       await page.locator('.lib-theme-card[data-theme="rustic"]').textContent());
@@ -174,38 +191,62 @@ async function main() {
   }
 
   // ════════════════════════════════════════════════════════════════
-  console.log('\n2. one theme’s rooms');
+  console.log('\n2. a theme opens its ROOMS, and a room its pictures');
   {
     await page.click('[data-theme="british"]');
-    await page.waitForSelector('.lib-card', { timeout: 20000 });
-    check('2a. the theme’s rooms are shown -- the two starters, then the four uploaded',
-      await page.locator('.lib-card').count() === 6
-      && await page.locator('.lib-card .lib-starter-flag').count() === 2,
-      await page.locator('.lib-card').count());
-    check('2b. ...under the theme’s own name',
+    await page.waitForSelector('[data-room]', { timeout: 20000 });
+
+    // Five room types, plus Unsorted -- three of the four uploaded
+    // fixtures carry no room, and a picture the studio uploaded must
+    // never become unreachable because a category arrived after it.
+    check('2a. every room type is offered, even the empty ones',
+      await page.locator('[data-room="bathroom"]').count() === 1
+      && await page.locator('[data-room="kitchen"]').count() === 1
+      && await page.locator('[data-room="drawing_room"]').count() === 1,
+      await page.locator('[data-room]').count());
+    check('2a2. ...and the older pictures are reachable under Unsorted',
+      await page.locator('[data-room="unsorted"]').count() === 1
+      && /3 PICTURES/.test(await page.locator('[data-room="unsorted"]').textContent() || ''),
+      await page.locator('[data-room="unsorted"]').textContent());
+    check('2b. ...under the theme\u2019s own name',
       /British/.test(await page.locator('.lib-head').textContent() || ''));
-    check('2c. ...each picture loaded from its Drive link',
-      driveRequests >= 4, driveRequests);
-    // The uploaded ones, specifically: a starter is a file this server
-    // hosts, so only the studio's own rooms should come from Drive.
+    check('2b2. a room nobody has uploaded to still shows its starter',
+      /1 PICTURE/.test(await page.locator('[data-room="kitchen"]').textContent() || ''),
+      await page.locator('[data-room="kitchen"]').textContent());
+
+    await page.click('[data-room="bathroom"]');
+    await page.waitForSelector('.lib-card', { timeout: 20000 });
+    check('2c. the room holds its starter and the uploaded picture filed there',
+      await page.locator('.lib-card').count() === 2
+      && await page.locator('.lib-card .lib-starter-flag').count() === 1,
+      await page.locator('.lib-card').count());
+    check('2c2. ...each picture loaded from its Drive link', driveRequests >= 1, driveRequests);
+
+    // A starter is a file this server hosts; only the studio's own
+    // pictures should come from Drive.
     const uploaded = page.locator('.lib-card:not(:has(.lib-starter-flag)) img').first();
-    check('2d. an uploaded room loads from Drive, not from a local copy',
+    check('2d. an uploaded picture loads from Drive, not from a local copy',
       /^https:\/\/drive\.google\.com\//.test(await uploaded.getAttribute('src') || ''),
       await uploaded.getAttribute('src'));
     check('2d2. ...and a starter from this server',
       /\/static\/library-starters\//.test(
         await page.locator('.lib-card:has(.lib-starter-flag) img').first().getAttribute('src') || ''));
-    check('2e. there is a way back to the themes',
-      await page.locator('#libBack').count() === 1);
 
-    await page.click('[data-theme="moroccan"]'.replace('[data-theme="moroccan"]', '#libBack'));
+    // Back goes up ONE level, which is what a hierarchy needs.
+    check('2e. there is a way back', await page.locator('#libBack').count() === 1);
+    await page.click('#libBack');
+    await page.waitForSelector('[data-room]', { timeout: 10000 });
+    check('2f. ...to the theme\u2019s rooms, not out to the themes',
+      await page.locator('[data-room]').count() >= 5
+      && await page.locator('.lib-card').count() === 0);
+    await page.click('#libBack');
     await page.waitForSelector('.lib-theme-card', { timeout: 10000 });
-    check('2f. ...and it goes back', await page.locator('.lib-card').count() === 0);
+    check('2f2. ...and from there out to the themes',
+      await page.locator('[data-room]').count() === 0);
 
-    await page.click('[data-theme="moroccan"]');
-    await page.waitForSelector('.lib-card', { timeout: 20000 });
-    check('2g. another theme shows its own rooms, not the first one’s',
-      await page.locator('.lib-card').count() === 4,
+    await openThemeRoom('moroccan', 'bathroom');
+    check('2g. another theme shows its own pictures, not the first one\u2019s',
+      await page.locator('.lib-card').count() === 2,
       await page.locator('.lib-card').count());
   }
 
@@ -296,13 +337,24 @@ async function main() {
     await context.clearCookies();
     await signIn('priya@example.test');
     await openLibrary();
-    await page.click('[data-theme="british"]');
-    await page.waitForSelector('.lib-card', { timeout: 20000 });
+    // The upload lives in a ROOM now, because a picture is filed under
+    // a theme and a room -- not a theme alone.
+    check('5a0. the themes view offers no upload, since nothing is filed there',
+      await page.locator('#libFiles').count() === 0);
+    await openThemeRoom('british', 'unsorted');
     check('5a. the studio is offered the upload', await page.locator('#libFiles').count() === 1);
+    check('5a2. ...with a theme and a room to file under',
+      await page.locator('#libTheme').count() === 1
+      && await page.locator('#libRoom').count() === 1);
+    check('5a3. ...both already set to where the studio is standing',
+      await page.locator('#libTheme').inputValue() === 'british',
+      await page.locator('#libTheme').inputValue());
     // FOUR, not six: the two starters ship with the application and
     // there is nothing for the studio to remove, so they carry no
     // REMOVE at all. The server refuses one too.
-    check('5b. ...and can remove a room it uploaded', await page.locator('[data-delete]').count() === 4,
+    // The three fixtures that carry no room sit here, under Unsorted.
+    check('5b. ...and can remove a picture it uploaded',
+      await page.locator('[data-delete]').count() === 3,
       await page.locator('[data-delete]').count());
     check('5b2. ...but not a starter, which is not the studio\u2019s to remove',
       await page.locator('.lib-card:has(.lib-starter-flag) [data-delete]').count() === 0);
@@ -315,7 +367,7 @@ async function main() {
     page.on('dialog', (d) => d.accept());
     await page.locator('.lib-card.chosen [data-delete]').click();
     await page.waitForFunction(
-      () => document.querySelectorAll('.lib-card').length === 5, { timeout: 20000 },
+      () => document.querySelectorAll('.lib-card').length === 2, { timeout: 20000 },
     );
     check('5c. removing the chosen room clears the choice with it',
       await page.locator('#libActive').count() === 0

@@ -131,6 +131,15 @@ async function main() {
     await page.waitForURL('**/dashboard.html', { timeout: 20000 });
   };
 
+
+  /** Theme -> Room -> pictures: reaching a picture is two clicks now. */
+  const openThemeRoom = async (themeId, roomId) => {
+    await page.click('[data-theme="' + themeId + '"]');
+    await page.waitForSelector('[data-room]', { timeout: 20000 });
+    await page.click('[data-room="' + roomId + '"]');
+    await page.waitForSelector('.lib-card, .lib-empty', { timeout: 20000 });
+  };
+
   const openLibrary = async () => {
     await page.goto(`${base}/devyora-library.html`, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('.lib-theme-grid, .lib-empty', { timeout: 20000 });
@@ -164,10 +173,13 @@ async function main() {
     // The starters need no database, so even here the number beside a
     // theme is true rather than unavailable -- and no theme reads as
     // empty, which was the whole complaint.
+    // One starter per room type, so the Theme x Room grid has no empty
+    // cell at all -- which is the blank-page complaint, one level down.
     const first = await page.locator('.lib-theme-card').first().textContent() || '';
-    check('2a. every theme shows its two starter rooms', /2 ROOMS/.test(first), first);
+    check('2a. every theme shows a starter for each of its five rooms',
+      /5 PICTURES/.test(first), first);
     check('2b. ...and none claims to be empty',
-      !/0 ROOMS/.test(await page.locator('.lib-theme-grid').textContent() || '')
+      !/0 PICTURES/.test(await page.locator('.lib-theme-grid').textContent() || '')
       && !/COUNT UNAVAILABLE/.test(await page.locator('.lib-theme-grid').textContent() || ''));
   }
 
@@ -175,10 +187,10 @@ async function main() {
   console.log('\n3. opening a theme explains itself too');
   {
     page.on('dialog', (d) => d.accept());
-    await page.locator('.lib-theme-card').first().click();
+    await openThemeRoom('british', 'bathroom');
     await page.waitForSelector('.lib-note-bad', { timeout: 20000 });
     const note = await page.locator('.lib-note-bad').textContent() || '';
-    check('3a. the same explanation is on the theme view',
+    check('3a. the same explanation follows into the theme and the room',
       /prisma migrate deploy/.test(note), note);
     await page.goto(`${base}/devyora-library.html`, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('.lib-theme-card', { timeout: 20000 });
@@ -236,15 +248,15 @@ async function main() {
       await page.locator('.lib-note-bad').count() === 0);
     const grid = await page.locator('.lib-theme-grid').textContent() || '';
     check('6b. the counts are unchanged, since nothing was uploaded',
-      /2 ROOMS/.test(grid) && !/COUNT UNAVAILABLE/.test(grid), grid.slice(0, 160));
+      /5 PICTURES/.test(grid) && !/COUNT UNAVAILABLE/.test(grid), grid.slice(0, 160));
     check('6c. ...and the upload is where the hint said it was',
       await (async () => {
-        await page.locator('.lib-theme-card').first().click();
-        await page.waitForSelector('.lib-card', { timeout: 20000 });
-        return await page.locator('#libFiles').count() === 1;
+        await openThemeRoom('british', 'kitchen');
+        return await page.locator('#libFiles').count() === 1
+          && await page.locator('#libRoom').count() === 1;
       })());
-    check('6d. ...and the theme opens on its starters, not on an empty grid',
-      await page.locator('.lib-card').count() === 2
+    check('6d. ...and the room opens on its starter, not on an empty grid',
+      await page.locator('.lib-card').count() === 1
       && await page.locator('.lib-empty').count() === 0,
       await page.locator('.lib-card').count());
   }

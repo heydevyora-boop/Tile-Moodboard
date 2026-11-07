@@ -218,6 +218,25 @@
   .lib-theme-go { font-size:8.5px; letter-spacing:.16em; color:var(--muted); }
   .lib-theme-card:hover .lib-theme-go { color:var(--ink); }
 
+  /* ── which of a theme's five rooms hold anything ── */
+  .lib-theme-rooms { display:flex; gap:4px; }
+  .lib-room-dot { width:17px; height:17px; border-radius:5px; display:grid; place-items:center;
+                  font-size:8px; letter-spacing:0; color:var(--muted);
+                  background:var(--sand); border:1px solid var(--line); }
+  .lib-room-dot.has { background:var(--gold); border-color:var(--gold); color:#FFF8EC; }
+
+  /* ── the upload, with the two things a picture is filed under ── */
+  .lib-upload { margin-top:18px; padding:15px 16px 16px; border:1px solid var(--line);
+                border-radius:16px; background:var(--card); display:flex; flex-direction:column;
+                gap:12px; align-items:flex-start; }
+  .lib-upload-fields { display:flex; gap:14px; flex-wrap:wrap; width:100%; }
+  .lib-field { display:flex; flex-direction:column; gap:5px; flex:1 1 180px; min-width:0; }
+  .lib-field-k { font-size:8px; letter-spacing:.18em; color:var(--muted); }
+  .lib-select { appearance:none; width:100%; padding:9px 30px 9px 11px; font:inherit; font-size:13px;
+                color:var(--ink); background:var(--paper) url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath fill='%238B8177' d='M1 1l5 5 5-5'/%3E%3C/svg%3E") no-repeat right 11px center/10px 7px;
+                border:1px solid var(--line); border-radius:10px; cursor:pointer; }
+  .lib-select:focus-visible { outline:2px solid var(--gold); outline-offset:2px; }
+
   /* ── a room that ships with the app ── */
   .lib-starter-flag { position:absolute; top:10px; right:10px; padding:5px 9px; border-radius:99px;
                       background:rgba(26,21,18,.62); color:#FFF8EC; font-size:7.5px; letter-spacing:.16em;
@@ -363,9 +382,14 @@
   // chosen reference is stated at the top of both views so it is never
   // a question what is currently selected.
   const state = {
+    // themes -> rooms -> pictures. Three levels, because the library
+    // is a Theme -> Room hierarchy: a theme card opens that theme's
+    // rooms, and a room card opens its pictures.
     view: 'themes',
     themes: [],
     themeId: null,
+    rooms: [],
+    roomId: null,
     references: [],
     loading: true,
     chosen: null,
@@ -388,6 +412,8 @@
 
   const AT_ONCE = 4;
   const theme = (id) => state.themes.find((t) => t.id === (id || state.themeId)) || null;
+  const roomsOf = (id) => (theme(id) || {}).rooms || [];
+  const room = (id) => roomsOf().find((r) => r.id === (id || state.roomId)) || null;
 
   // ── pieces ────────────────────────────────────────────────────────
 
@@ -524,11 +550,119 @@
         + '</span></span>'
         + '<span class="lib-theme-foot">'
         + '<span class="lib-theme-count mono">'
-        + (n === null ? 'COUNT UNAVAILABLE' : n + (n === 1 ? ' ROOM' : ' ROOMS'))
+        + (n === null ? 'COUNT UNAVAILABLE' : n + (n === 1 ? ' PICTURE' : ' PICTURES'))
+        + '</span>'
+        // The five room types, with the ones that hold something lit.
+        // It tells the studio at a glance where the gaps are, which is
+        // the question a Theme -> Room library exists to answer.
+        + '<span class="lib-theme-rooms mono">'
+        + (t.rooms || []).map((r) =>
+          '<span class="lib-room-dot' + (r.count ? ' has' : '') + '" title="'
+          + escapeHtml(r.label + ' \u00b7 ' + r.count) + '">'
+          + escapeHtml(r.label.slice(0, 1)) + '</span>').join('')
+        + '</span>'
+        + '</span></button>';
+    }).join('') + '</div>';
+  }
+
+  /**
+   * ONE THEME'S ROOMS -- the hierarchy's middle level.
+   *
+   * Every room is shown whether or not it holds anything. An empty
+   * Kitchen is a real answer, and hiding it would leave the studio with
+   * no way to see the room exists, let alone upload into it. The card
+   * leads with that room's own starter picture, so the grid reads as
+   * rooms rather than as a list of words.
+   */
+  function roomsHtml() {
+    if (state.loading) return skeletonsHtml(5);
+    const current = theme();
+    const list = roomsOf();
+
+    if (!list.length) {
+      return '<div class="lib-empty"><h3 class="serif">No room types</h3>'
+        + '<p>The studio\u2019s room list could not be read by the server.</p></div>';
+    }
+
+    return '<div class="lib-theme-grid">' + list.map((r) => {
+      // The unsorted bucket has no starter picture of its own, so it
+      // borrows the theme's bathroom rather than showing a blank tile.
+      const art = r.id === 'unsorted'
+        ? (current ? current.slug + '-bathroom' : '')
+        : (current ? current.slug + '-' + r.slug : '');
+      return '<button type="button" class="lib-theme-card" data-room="' + escapeHtml(r.id) + '">'
+        + '<span class="lib-theme-art">'
+        + (art
+          ? '<img src="' + escapeHtml(CasaApi.resolveBackendImageUrl(
+            '/static/library-starters/' + art + '.png')) + '" alt="" loading="lazy" decoding="async">'
+          : '')
+        + '<span class="lib-theme-over">'
+        + '<span class="lib-theme-name serif">' + escapeHtml(r.label) + '</span>'
+        + '<span class="lib-theme-pal">' + escapeHtml(r.blurb || '') + '</span>'
+        + '</span></span>'
+        + '<span class="lib-theme-foot">'
+        + '<span class="lib-theme-count mono">'
+        + (r.count ? r.count + (r.count === 1 ? ' PICTURE' : ' PICTURES') : 'NOTHING YET')
         + '</span>'
         + '<span class="lib-theme-go mono">OPEN \u2192</span>'
         + '</span></button>';
     }).join('') + '</div>';
+  }
+
+  /**
+   * THE UPLOAD, WITH THE TWO THINGS A PICTURE HAS TO BE FILED UNDER.
+   *
+   * Theme and room are both dropdowns, both pre-set to wherever the
+   * studio is standing. They are editable on purpose: having walked
+   * into British > Kitchen to upload, the commonest next thing is a
+   * batch for British > Bathroom, and making that a trip back up two
+   * levels would be the kind of small rudeness that stops people using
+   * a tool.
+   *
+   * Whatever the dropdowns say when the files are picked is what the
+   * whole batch is filed under -- stated on the button, so it can never
+   * be a surprise.
+   */
+  function uploadHtml(current) {
+    if (!state.canAdd) {
+      return '<div class="lib-note">'
+        + '<span class="lib-note-k mono">ADDING PICTURES</span>'
+        + '<span>This account can browse and choose, but not add \u2014 that needs the '
+        + '<code>reference_images:write</code> permission, which Owner and Admin carry '
+        + 'and Staff does not.</span>'
+        + '</div>';
+    }
+    if (!current) return '';
+
+    const chosenRoom = state.uploadRoomId || state.roomId;
+    const chosenTheme = state.uploadThemeId || state.themeId;
+
+    const themeOptions = state.themes.map((t) =>
+      '<option value="' + escapeHtml(t.id) + '"' + (t.id === chosenTheme ? ' selected' : '') + '>'
+      + escapeHtml(t.label) + '</option>').join('');
+
+    // The studio's five room types -- never the unsorted bucket, which
+    // is where older pictures sit, not somewhere anything is filed.
+    const roomOptions = (state.roomTypes || []).map((r) =>
+      '<option value="' + escapeHtml(r.id) + '"' + (r.id === chosenRoom ? ' selected' : '') + '>'
+      + escapeHtml(r.label) + '</option>').join('');
+
+    const into = (state.themes.find((t) => t.id === chosenTheme) || {}).label || '';
+    const intoRoom = ((state.roomTypes || []).find((r) => r.id === chosenRoom) || {}).label || '';
+
+    return '<div class="lib-upload">'
+      + '<div class="lib-upload-fields">'
+      + '<label class="lib-field"><span class="lib-field-k mono">THEME</span>'
+      + '<select id="libTheme" class="lib-select">' + themeOptions + '</select></label>'
+      + '<label class="lib-field"><span class="lib-field-k mono">ROOM TYPE</span>'
+      + '<select id="libRoom" class="lib-select">' + roomOptions + '</select></label>'
+      + '</div>'
+      + '<label class="lib-add mono" for="libFiles">ADD IMAGES TO '
+      + escapeHtml((into + ' \u203a ' + intoRoom).toUpperCase()) + '</label>'
+      + '<input type="file" id="libFiles" accept="image/jpeg,image/png,image/webp" multiple hidden>'
+      + '<span class="lib-hint">Pick fifty or a hundred \u2014 they go up a few at a time, '
+      + 'into that theme and room on Google Drive.</span>'
+      + '</div>';
   }
 
   function queueHtml() {
@@ -615,30 +749,29 @@
           + storageHtml()
           + addHintHtml()
           + themesHtml()
-        : '<button type="button" class="lib-back mono" id="libBack">← ALL THEMES</button>'
+        : state.view === 'rooms'
+        ? '<button type="button" class="lib-back mono" id="libBack">← ALL THEMES</button>'
           + '<div class="lib-head">'
           + '<h1 class="step-h1 serif" style="margin:0">' + escapeHtml(current ? current.label : '') + '</h1>'
           + '<span class="lib-meta mono">' + escapeHtml(current ? current.palette : '') + '</span>'
           + '</div>'
-          + '<p class="step-sub">Tap a room to make it the reference image.</p>'
+          + '<p class="step-sub">Choose the room you are designing.</p>'
           + activeHtml()
           + storageHtml()
-          + (state.canAdd && current
-            ? '<div class="lib-actions">'
-              + '<label class="lib-add mono" for="libFiles">ADD IMAGES TO '
-              + escapeHtml(current.label.toUpperCase()) + '</label>'
-              + '<input type="file" id="libFiles" accept="image/jpeg,image/png,image/webp" multiple hidden>'
-              + '<span class="lib-hint">Pick as many as you like — they go up a few at a time.</span>'
-              + '</div>'
-            // Saying why there is no button beats leaving a blank where
-            // one would be: an account that cannot upload looked exactly
-            // like a feature that cannot upload.
-            : '<div class="lib-note">'
-              + '<span class="lib-note-k mono">ADDING ROOMS</span>'
-              + '<span>This account can browse and choose, but not add — that needs the '
-              + '<code>reference_images:write</code> permission, which Owner and Admin carry '
-              + 'and Staff does not.</span>'
-              + '</div>')
+          + roomsHtml()
+        : '<button type="button" class="lib-back mono" id="libBack">← '
+          + escapeHtml((current ? current.label : 'ALL THEMES').toUpperCase()) + '</button>'
+          + '<div class="lib-head">'
+          + '<h1 class="step-h1 serif" style="margin:0">'
+          + escapeHtml(room() ? room().label : '') + '</h1>'
+          + '<span class="lib-meta mono">'
+          + escapeHtml([current ? current.label : '', current ? current.palette : '']
+            .filter(Boolean).join(' · ')) + '</span>'
+          + '</div>'
+          + '<p class="step-sub">Tap a picture to make it the reference image.</p>'
+          + activeHtml()
+          + storageHtml()
+          + uploadHtml(current)
           + '<div class="alert" id="libAlert" style="display:none"></div>'
           + queueHtml()
           + referencesHtml())
@@ -673,9 +806,14 @@
     // mood-board wizard pre-selects its theme from this, and it works
     // in labels -- see the note beside themeLabel in the API client.
     const where = theme(ref.themeId);
+    const inRoom = (state.roomTypes || []).find((r) => r.id === ref.roomId);
     state.chosen = CasaApi.library.select({
       ...ref,
       themeLabel: where ? where.label : '',
+      // The wizard's own name for the room travels too, so choosing a
+      // Kitchen reference pre-selects Kitchen on the mood board -- the
+      // same reason themeLabel does.
+      roomWizard: inRoom ? inRoom.wizard : '',
     });
     render();
   }
@@ -694,7 +832,11 @@
     state.aborter = new AbortController();
     repaintQueue();
 
-    const into = state.themeId;
+    // Whatever the two dropdowns said when the files were picked. Read
+    // ONCE, here, so a studio that changes a dropdown while ninety
+    // pictures are going up does not split the batch between two rooms.
+    const into = state.uploadThemeId || state.themeId;
+    const intoRoom = state.uploadRoomId || state.roomId;
     let next = 0;
 
     const worker = async () => {
@@ -705,7 +847,7 @@
         item.progress = 0;
         repaintQueue();
         try {
-          const saved = await CasaApi.library.upload(item.file, { themeId: into }, {
+          const saved = await CasaApi.library.upload(item.file, { themeId: into, roomId: intoRoom }, {
             signal: state.aborter.signal,
             onProgress: (share) => {
               item.progress = share;
@@ -729,8 +871,29 @@
     state.running = false;
     const failed = state.queue.filter((f) => f.status === 'failed').length;
     const done = state.queue.filter((f) => f.status === 'done').length;
-    const theirs = theme(into);
-    if (theirs) theirs.count += done;
+
+    // THE COUNTS, RE-READ RATHER THAN GUESSED AT.
+    //
+    // Both levels of the hierarchy carry a number, and they came down
+    // with the themes when the page loaded -- so after a batch they are
+    // both stale, and going back showed "1 PICTURE" over a room holding
+    // sixty-one. Adding `done` to a local total was how the old flat
+    // page kept up; it cannot work here, because the batch may have
+    // been filed into a theme and room the client is not standing in.
+    //
+    // Nine rows and their room breakdown is a cheap thing to ask for
+    // once, at the end of an upload, and it is the only way the two
+    // numbers are certainly right.
+    if (done) {
+      try {
+        const fresh = await CasaApi.library.themes();
+        state.themes = fresh.themes;
+        state.storageError = fresh.storage.ok ? '' : fresh.storage.reason;
+      } catch (err) {
+        // The pictures went up; only the counts are stale. Not worth
+        // failing an upload over, and the next page load fixes it.
+      }
+    }
 
     render();
     if (failed) {
@@ -791,8 +954,37 @@
       btn.addEventListener('click', () => openTheme(btn.dataset.theme));
     });
 
+    document.querySelectorAll('[data-room]').forEach((btn) => {
+      btn.addEventListener('click', () => openRoom(btn.dataset.room));
+    });
+
+    // Back goes up ONE level, not all the way out: from a room to its
+    // theme's rooms, and from there to the themes.
     const back = document.getElementById('libBack');
-    if (back) back.addEventListener('click', openThemes);
+    if (back) {
+      back.addEventListener('click', () => {
+        if (state.view === 'room') { openTheme(state.themeId); return; }
+        openThemes();
+      });
+    }
+
+    // The two dropdowns decide where the NEXT batch goes. Held on the
+    // state rather than read at submit time, so the button above the
+    // file picker can say where they are about to land.
+    const themePicker = document.getElementById('libTheme');
+    if (themePicker) {
+      themePicker.addEventListener('change', () => {
+        state.uploadThemeId = themePicker.value;
+        render();
+      });
+    }
+    const roomPicker = document.getElementById('libRoom');
+    if (roomPicker) {
+      roomPicker.addEventListener('change', () => {
+        state.uploadRoomId = roomPicker.value;
+        render();
+      });
+    }
 
     const clear = document.getElementById('libClearChoice');
     if (clear) clear.addEventListener('click', clearChoice);
@@ -818,6 +1010,15 @@
     const files = document.getElementById('libFiles');
     if (files) {
       files.addEventListener('change', () => {
+        // A picture filed under no room would land in the unsorted
+        // bucket, which is where OLD pictures live -- not somewhere new
+        // ones should be put by accident.
+        if (!(state.uploadRoomId || state.roomId)) {
+          files.value = '';
+          showAlert('Choose a room type first \u2014 every picture is filed under a theme '
+            + 'and a room.');
+          return;
+        }
         if (files.files && files.files.length) enqueue(files.files);
         files.value = '';
       });
@@ -832,21 +1033,38 @@
     if (state.running) return;
     state.view = 'themes';
     state.themeId = null;
+    state.roomId = null;
     state.references = [];
     state.queue = [];
     state.loading = false;
     render();
   }
 
-  async function openTheme(themeId) {
-    state.view = 'theme';
+  /** A theme opens its ROOMS now, which need no request: the counts
+   *  came down with the themes. */
+  function openTheme(themeId) {
+    state.view = 'rooms';
     state.themeId = themeId;
+    state.roomId = null;
+    state.references = [];
+    state.queue = [];
+    state.loading = false;
+    render();
+  }
+
+  async function openRoom(roomId) {
+    state.view = 'room';
+    state.roomId = roomId;
+    // The upload form follows the studio into the room it just opened,
+    // which is nearly always the one they want to file into.
+    state.uploadThemeId = state.themeId;
+    state.uploadRoomId = roomId === 'unsorted' ? (state.uploadRoomId || '') : roomId;
     state.references = [];
     state.queue = [];
     state.loading = true;
     render();
     try {
-      const answer = await CasaApi.library.references(themeId);
+      const answer = await CasaApi.library.references(state.themeId, roomId);
       state.references = answer.references;
       // The starters are files and always arrive; only the studio's own
       // uploads need the database, so this now costs those alone rather
@@ -887,8 +1105,15 @@
 
     render();
     try {
-      const answer = await CasaApi.library.themes();
+      const [answer, roomTypes] = await Promise.all([
+        CasaApi.library.themes(),
+        // The studio's five room types, for the upload dropdown. Asked
+        // of the server rather than written into this page, so the two
+        // cannot disagree about what a room is.
+        CasaApi.library.rooms().catch(() => []),
+      ]);
       state.themes = answer.themes;
+      state.roomTypes = roomTypes;
       state.storageError = answer.storage.ok ? '' : answer.storage.reason;
     } catch (err) {
       // The request itself failed -- not the same thing as the server

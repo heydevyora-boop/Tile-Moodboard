@@ -77,14 +77,32 @@ function main() {
         // {themes, storage}, not a bare array: the endpoint reports
         // separately whether the counts could be read, so a database
         // without the library table still lists the studio's themes.
+        // Themes carry their room breakdown now -- the library is a
+        // Theme -> Room hierarchy, and the theme card shows which of
+        // its rooms hold anything.
         themes: async () => ({
           themes: [
-            { id: 'british', label: 'British', slug: 'british', palette: 'Heritage green', count: 0 },
-            { id: 'floral', label: 'Floral', slug: 'floral', palette: 'Blush pink', count: 0 },
+            {
+              id: 'british', label: 'British', slug: 'british', palette: 'Heritage green', count: 5,
+              rooms: [
+                { id: 'bathroom', label: 'Bathroom', slug: 'bathroom', blurb: 'Full bathroom.', count: 1, starterCount: 1 },
+                { id: 'kitchen', label: 'Kitchen', slug: 'kitchen', blurb: 'A run of counter.', count: 1, starterCount: 1 },
+              ],
+            },
+            {
+              id: 'floral', label: 'Floral', slug: 'floral', palette: 'Blush pink', count: 5,
+              rooms: [
+                { id: 'bathroom', label: 'Bathroom', slug: 'bathroom', blurb: 'Full bathroom.', count: 1, starterCount: 1 },
+              ],
+            },
           ],
           storage: { ok: true, reason: '' },
         }),
-        references: async () => [],
+        rooms: async () => [
+          { id: 'bathroom', label: 'Bathroom', slug: 'bathroom', blurb: 'Full bathroom.', wizard: 'Bathroom' },
+          { id: 'kitchen', label: 'Kitchen', slug: 'kitchen', blurb: 'A run of counter.', wizard: 'Kitchen & Dining' },
+        ],
+        references: async () => ({ references: [], storage: { ok: true, reason: '' } }),
         selection: () => null,
         select: (r) => r,
         clearSelection: () => {},

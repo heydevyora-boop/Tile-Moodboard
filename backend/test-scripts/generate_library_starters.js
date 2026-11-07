@@ -308,10 +308,10 @@ function depthX(x0, vpx, n) {
   return vpx + (x0 - vpx) * (FORESHORTEN / (FORESHORTEN + n));
 }
 
-function drawRoom(themeId, variant) {
+function drawRoom(themeId, room, variant) {
   const c = THEME_COLOURS[themeId];
   const pattern = PATTERNS[themeId];
-  const seed = (themeId.length * 7919 + variant * 104729) >>> 0;
+  const seed = (themeId.length * 7919 + room.length * 31337 + variant * 104729) >>> 0;
   const canvas = createCanvas(W, H);
   const ctx = canvas.getContext('2d');
 
@@ -417,67 +417,205 @@ function drawRoom(themeId, variant) {
   ctx.moveTo(bx0, by0); ctx.lineTo(bx1, by0);
   ctx.stroke();
 
-  // ── the vanity, standing ON the floor at the back wall ──
+  // ── the fittings, which are what makes it THAT room ──
   //
-  // Grounded, with a cabinet under it and a contact shadow. The first
-  // attempt floated a white pill in mid-air, which is most of why it
-  // did not read as a room.
-  const vw = bw * 0.44;
-  const vx = vpx - vw / 2;
-  const vTop = by1 - bh * 0.30;
-  const vDepth = 26;
-
-  ctx.fillStyle = 'rgba(20,14,8,0.28)';
-  ctx.beginPath();
-  ctx.ellipse(vpx, by1 + 6, vw * 0.62, 14, 0, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Cabinet. Deliberately a quiet joinery tone and not the theme's
-  // strongest colour: a saturated block here competes with the tiled
-  // wall behind it, which is the surface this picture is a reference
-  // FOR. The theme shows only in the handles.
+  // The box, the tiling and the light are the same for every room; only
+  // what stands in front of the back wall changes. That is deliberate:
+  // these are references for SURFACES, and a kitchen whose cabinets are
+  // drawn in loving detail invites the generator to copy the cabinets
+  // instead of the tiles.
+  //
+  // Silhouettes only, in a quiet joinery tone, with the theme showing in
+  // the metal. Every one stands ON the floor with a contact shadow --
+  // the first attempt floated a white pill in mid-air, which is most of
+  // why it did not read as a room at all.
   const joinery = mix(c.deep, c.ground, 0.62);
-  ctx.fillStyle = mix(joinery, '#000000', 0.1);
-  ctx.fillRect(vx, vTop, vw, by1 - vTop);
-  ctx.fillStyle = mix(joinery, '#ffffff', 0.07);
-  ctx.fillRect(vx + 8, vTop + 10, vw / 2 - 12, by1 - vTop - 20);
-  ctx.fillRect(vx + vw / 2 + 4, vTop + 10, vw / 2 - 12, by1 - vTop - 20);
-  ctx.fillStyle = c.metal;
-  ctx.fillRect(vx + vw / 2 - 26, vTop + (by1 - vTop) / 2 - 2, 20, 4);
-  ctx.fillRect(vx + vw / 2 + 8, vTop + (by1 - vTop) / 2 - 2, 20, 4);
+  const unit = mix(joinery, '#000000', 0.1);
+  const unitLight = mix(joinery, '#ffffff', 0.07);
 
-  // counter, with its front edge showing -- the one bit of thickness
-  // that stops it reading as a sticker.
-  ctx.fillStyle = '#FAF7F1';
-  ctx.fillRect(vx - 7, vTop - 12, vw + 14, 12);
-  ctx.fillStyle = mix('#FAF7F1', '#000000', 0.16);
-  ctx.fillRect(vx - 7, vTop, vw + 14, 5);
+  const ground = (cx, halfWidth) => {
+    ctx.fillStyle = 'rgba(20,14,8,0.28)';
+    ctx.beginPath();
+    ctx.ellipse(cx, by1 + 6, halfWidth, 14, 0, 0, Math.PI * 2);
+    ctx.fill();
+  };
 
-  // basin
-  ctx.fillStyle = '#FFFDF8';
-  roundRect(ctx, vpx - vw * 0.27, vTop - 40, vw * 0.54, 32, 11); ctx.fill();
-  ctx.fillStyle = 'rgba(0,0,0,0.12)';
-  roundRect(ctx, vpx - vw * 0.23, vTop - 34, vw * 0.46, 18, 8); ctx.fill();
+  const mirror = (cx, w, h, y, round) => {
+    ctx.fillStyle = 'rgba(20,14,8,0.18)';
+    roundRect(ctx, cx - w / 2 + 8, y + 10, w, h, round); ctx.fill();
+    const glass = ctx.createLinearGradient(cx - w / 2, y, cx + w / 2, y + h);
+    glass.addColorStop(0, mix(c.light, '#ffffff', 0.75));
+    glass.addColorStop(1, mix(c.ground, '#ffffff', 0.45));
+    ctx.fillStyle = glass;
+    roundRect(ctx, cx - w / 2, y, w, h, round); ctx.fill();
+    ctx.strokeStyle = c.metal; ctx.lineWidth = 6;
+    roundRect(ctx, cx - w / 2, y, w, h, round); ctx.stroke();
+  };
 
-  // tap
-  ctx.strokeStyle = c.metal; ctx.lineWidth = 6; ctx.lineCap = 'round';
-  ctx.beginPath();
-  ctx.moveTo(vpx, vTop - 96); ctx.lineTo(vpx, vTop - 46);
-  ctx.moveTo(vpx, vTop - 92); ctx.lineTo(vpx + 28, vTop - 92);
-  ctx.stroke();
+  const vanity = (widthShare) => {
+    const vw = bw * widthShare;
+    const vx = vpx - vw / 2;
+    const vTop = by1 - bh * 0.30;
 
-  // ── mirror, with the wall shadow behind it ──
-  const mw = bw * 0.30; const mh = bh * 0.34;
-  const my = by0 + bh * 0.12;
-  ctx.fillStyle = 'rgba(20,14,8,0.18)';
-  roundRect(ctx, vpx - mw / 2 + 8, my + 10, mw, mh, mw / 2); ctx.fill();
-  const glass = ctx.createLinearGradient(vpx - mw / 2, my, vpx + mw / 2, my + mh);
-  glass.addColorStop(0, mix(c.light, '#ffffff', 0.75));
-  glass.addColorStop(1, mix(c.ground, '#ffffff', 0.45));
-  ctx.fillStyle = glass;
-  roundRect(ctx, vpx - mw / 2, my, mw, mh, mw / 2); ctx.fill();
-  ctx.strokeStyle = c.metal; ctx.lineWidth = 6;
-  roundRect(ctx, vpx - mw / 2, my, mw, mh, mw / 2); ctx.stroke();
+    ground(vpx, vw * 0.62);
+    ctx.fillStyle = unit; ctx.fillRect(vx, vTop, vw, by1 - vTop);
+    ctx.fillStyle = unitLight;
+    ctx.fillRect(vx + 8, vTop + 10, vw / 2 - 12, by1 - vTop - 20);
+    ctx.fillRect(vx + vw / 2 + 4, vTop + 10, vw / 2 - 12, by1 - vTop - 20);
+    ctx.fillStyle = c.metal;
+    ctx.fillRect(vx + vw / 2 - 26, vTop + (by1 - vTop) / 2 - 2, 20, 4);
+    ctx.fillRect(vx + vw / 2 + 8, vTop + (by1 - vTop) / 2 - 2, 20, 4);
+
+    // The counter's front edge: the one bit of thickness that stops it
+    // reading as a sticker.
+    ctx.fillStyle = '#FAF7F1'; ctx.fillRect(vx - 7, vTop - 12, vw + 14, 12);
+    ctx.fillStyle = mix('#FAF7F1', '#000000', 0.16);
+    ctx.fillRect(vx - 7, vTop, vw + 14, 5);
+
+    ctx.fillStyle = '#FFFDF8';
+    roundRect(ctx, vpx - vw * 0.27, vTop - 40, vw * 0.54, 32, 11); ctx.fill();
+    ctx.fillStyle = 'rgba(0,0,0,0.12)';
+    roundRect(ctx, vpx - vw * 0.23, vTop - 34, vw * 0.46, 18, 8); ctx.fill();
+
+    ctx.strokeStyle = c.metal; ctx.lineWidth = 6; ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(vpx, vTop - 96); ctx.lineTo(vpx, vTop - 46);
+    ctx.moveTo(vpx, vTop - 92); ctx.lineTo(vpx + 28, vTop - 92);
+    ctx.stroke();
+  };
+
+  if (room === 'bathroom') {
+    vanity(0.44);
+    mirror(vpx, bw * 0.30, bh * 0.34, by0 + bh * 0.12, bw * 0.15);
+
+  } else if (room === 'powder_room') {
+    // The same room, smaller: a compact vanity and a round mirror, no
+    // shower -- which is exactly how the generator describes it too.
+    vanity(0.30);
+    mirror(vpx, bw * 0.19, bh * 0.26, by0 + bh * 0.14, bw * 0.095);
+
+  } else if (room === 'kitchen') {
+    // A run of counter, cabinets above, and the splashback between them
+    // -- the splashback IS the tiled surface, so the cabinets stop
+    // short of the trim rather than covering it.
+    const runW = bw * 0.78;
+    const rx = vpx - runW / 2;
+    const base = by1 - bh * 0.30;
+
+    ground(vpx, runW * 0.56);
+    ctx.fillStyle = unit; ctx.fillRect(rx, base, runW, by1 - base);
+    ctx.fillStyle = unitLight;
+    for (let i = 0; i < 4; i += 1) {
+      ctx.fillRect(rx + 8 + i * (runW / 4), base + 10, runW / 4 - 14, by1 - base - 20);
+    }
+    ctx.fillStyle = c.metal;
+    for (let i = 0; i < 4; i += 1) {
+      ctx.fillRect(rx + 22 + i * (runW / 4), base + 26, runW / 4 - 42, 4);
+    }
+
+    ctx.fillStyle = '#FAF7F1'; ctx.fillRect(rx - 8, base - 13, runW + 16, 13);
+    ctx.fillStyle = mix('#FAF7F1', '#000000', 0.16);
+    ctx.fillRect(rx - 8, base, runW + 16, 5);
+
+    // Sink and mixer tap.
+    ctx.fillStyle = mix('#FAF7F1', '#000000', 0.3);
+    roundRect(ctx, vpx - runW * 0.14, base - 9, runW * 0.28, 7, 3); ctx.fill();
+    ctx.strokeStyle = c.metal; ctx.lineWidth = 6; ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(vpx, base - 84); ctx.lineTo(vpx, base - 16);
+    ctx.quadraticCurveTo(vpx, base - 96, vpx + 34, base - 92);
+    ctx.stroke();
+
+    // Wall units, hung clear of the splashback.
+    const topY = by0 + bh * 0.10;
+    const topH = bh * 0.22;
+    ctx.fillStyle = unit;
+    ctx.fillRect(rx, topY, runW * 0.34, topH);
+    ctx.fillRect(vpx + runW * 0.16, topY, runW * 0.34, topH);
+    ctx.fillStyle = c.metal;
+    ctx.fillRect(rx + 20, topY + topH - 16, runW * 0.34 - 40, 4);
+    ctx.fillRect(vpx + runW * 0.16 + 20, topY + topH - 16, runW * 0.34 - 40, 4);
+
+  } else if (room === 'bedroom') {
+    // The bed against its feature wall, which is how the generator
+    // describes a bedroom -- so the headboard sits ON the tiled plane
+    // rather than in front of a blank one.
+    const bedW = bw * 0.52;
+    const bx = vpx - bedW / 2;
+    // Low on purpose. At 0.40 the headboard covered most of the dado,
+    // which is the surface this picture is a reference FOR -- the bed
+    // is here for scale, not for itself.
+    const headTop = by0 + bh * 0.58;
+    const mattressTop = by1 - bh * 0.20;
+
+    ground(vpx, bedW * 0.62);
+
+    ctx.fillStyle = unit;
+    roundRect(ctx, bx, headTop, bedW, by1 - headTop, 14); ctx.fill();
+    ctx.fillStyle = unitLight;
+    for (let i = 0; i < 3; i += 1) {
+      roundRect(ctx, bx + 14 + i * (bedW / 3), headTop + 14, bedW / 3 - 24, mattressTop - headTop - 30, 9);
+      ctx.fill();
+    }
+
+    ctx.fillStyle = '#F7F2E8';
+    roundRect(ctx, bx - 14, mattressTop, bedW + 28, by1 - mattressTop, 10); ctx.fill();
+    ctx.fillStyle = mix('#F7F2E8', c.deep, 0.18);
+    ctx.fillRect(bx - 14, mattressTop + (by1 - mattressTop) * 0.55, bedW + 28, (by1 - mattressTop) * 0.45);
+
+    // Pillows.
+    ctx.fillStyle = '#FFFDF8';
+    roundRect(ctx, vpx - bedW * 0.40, mattressTop - 26, bedW * 0.34, 26, 10); ctx.fill();
+    roundRect(ctx, vpx + bedW * 0.06, mattressTop - 26, bedW * 0.34, 26, 10); ctx.fill();
+
+    // Side tables and the pendants over them.
+    for (const side of [-1, 1]) {
+      const sx = vpx + side * (bedW / 2 + bw * 0.10);
+      ctx.fillStyle = unit;
+      ctx.fillRect(sx - bw * 0.05, by1 - bh * 0.16, bw * 0.10, bh * 0.16);
+      ctx.strokeStyle = c.metal; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(sx, by0 + bh * 0.16); ctx.lineTo(sx, by0 + bh * 0.36); ctx.stroke();
+      ctx.fillStyle = c.metal;
+      roundRect(ctx, sx - 16, by0 + bh * 0.36, 32, 20, 6); ctx.fill();
+    }
+
+  } else {
+    // Drawing room: seating facing a media wall, with the tiled plane
+    // behind it. Low furniture on purpose -- the wall is the subject.
+    const sofaW = bw * 0.56;
+    const sx = vpx - sofaW / 2;
+    const seatTop = by1 - bh * 0.20;
+
+    // Art, hung on the tiled wall.
+    const aw = bw * 0.26; const ah = bh * 0.26;
+    const ay = by0 + bh * 0.16;
+    ctx.fillStyle = 'rgba(20,14,8,0.16)';
+    ctx.fillRect(vpx - aw / 2 + 7, ay + 8, aw, ah);
+    ctx.fillStyle = mix(c.light, '#ffffff', 0.6);
+    ctx.fillRect(vpx - aw / 2, ay, aw, ah);
+    ctx.strokeStyle = c.metal; ctx.lineWidth = 5;
+    ctx.strokeRect(vpx - aw / 2, ay, aw, ah);
+    ctx.fillStyle = mix(c.deep, c.ground, 0.35);
+    ctx.fillRect(vpx - aw / 2 + 18, ay + 18, aw - 36, ah - 36);
+
+    ground(vpx, sofaW * 0.60);
+
+    ctx.fillStyle = unit;
+    roundRect(ctx, sx, seatTop, sofaW, by1 - seatTop, 14); ctx.fill();
+    ctx.fillStyle = unitLight;
+    roundRect(ctx, sx + 12, seatTop + 10, sofaW - 24, (by1 - seatTop) * 0.5, 10); ctx.fill();
+    // Cushions.
+    ctx.fillStyle = mix(unitLight, '#ffffff', 0.4);
+    for (let i = 0; i < 3; i += 1) {
+      roundRect(ctx, sx + 22 + i * (sofaW / 3), seatTop - 20, sofaW / 3 - 40, 24, 8); ctx.fill();
+    }
+    // Low table, in front and therefore lower in frame.
+    ctx.fillStyle = mix(c.metal, '#000000', 0.1);
+    roundRect(ctx, vpx - bw * 0.14, by1 + bh * 0.10, bw * 0.28, 10, 5); ctx.fill();
+    ctx.fillStyle = mix(c.metal, '#000000', 0.3);
+    ctx.fillRect(vpx - bw * 0.10, by1 + bh * 0.10 + 10, 6, 26);
+    ctx.fillRect(vpx + bw * 0.10 - 6, by1 + bh * 0.10 + 10, 6, 26);
+  }
 
   // ── grading ──
   // Daylight from the left, the right falling into shadow, and a
@@ -510,19 +648,45 @@ function drawRoom(themeId, variant) {
 
 fs.mkdirSync(OUT, { recursive: true });
 const themes = require(path.join(__dirname, '..', '..', 'shared', 'themes.json')).themes;
+const rooms = require(path.join(__dirname, '..', '..', 'shared', 'rooms.json')).rooms;
 
+// ONE PER THEME PER ROOM, not two per theme.
+//
+// The library is a Theme -> Room hierarchy now, so a second variant of
+// the same room matters far less than having every room filled at all:
+// nine themes times five rooms is forty-five cells, and thirty-six of
+// them would otherwise be empty, which is the blank-page complaint
+// again one level down.
+//
+// The dado layout is used throughout. It is the one that reads as a
+// tiled room in every room type -- a floor-to-ceiling feature bay
+// behind a bed or a sofa looks like a mistake rather than a scheme.
 let made = 0;
+const skipped = [];
+
 for (const theme of Object.values(themes)) {
   if (!THEME_COLOURS[theme.id]) {
-    console.log(`  skipped ${theme.id} -- no colours defined for it`);
+    skipped.push(theme.id);
     continue;
   }
-  for (let v = 0; v < 2; v += 1) {
-    const file = path.join(OUT, `${theme.slug}-${v + 1}.png`);
-    fs.writeFileSync(file, drawRoom(theme.id, v).toBuffer('image/png'));
-    const kb = Math.round(fs.statSync(file).size / 1024);
-    console.log(`  ${path.basename(file)}  ${kb}KB`);
+
+  for (const room of Object.values(rooms)) {
+    const file = path.join(OUT, `${theme.slug}-${room.slug}.png`);
+    fs.writeFileSync(file, drawRoom(theme.id, room.id, 0).toBuffer('image/png'));
     made += 1;
   }
+
+  const kb = Math.round(
+    Object.values(rooms).reduce(
+      (n, room) => n + fs.statSync(path.join(OUT, `${theme.slug}-${room.slug}.png`)).size,
+      0,
+    ) / 1024,
+  );
+  console.log(`  ${theme.label.padEnd(14)} ${Object.keys(rooms).length} rooms  ${kb}KB`);
 }
+
+if (skipped.length) {
+  console.log(`\n  no colours defined, so no starters drawn: ${skipped.join(', ')}`);
+}
+
 console.log(`\n${made} starter rooms written to frontend/img/library/`);

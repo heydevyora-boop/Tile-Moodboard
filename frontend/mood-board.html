@@ -1409,6 +1409,18 @@
           state.libraryRef.title + (state.libraryRef.room ? ' · ' + state.libraryRef.room : ''),
         ]);
       }
+      // The reference says which room it is FOR. When the wizard has
+      // been moved to a different one since, say so here rather than
+      // letting the two disagree silently -- the picture will be built
+      // on a room that is not the one the brief describes.
+      if (state.libraryRef && state.libraryRef.roomWizard
+        && state.room && state.room !== state.libraryRef.roomWizard) {
+        summary.push([
+          'NOTE',
+          'That reference is a ' + state.libraryRef.roomWizard
+            + '; this board is a ' + state.room + '.',
+        ]);
+      }
       body.innerHTML = '<div class="summary-card" style="margin-top:clamp(18px,2vw,26px)">' +
         summary.map(([k, v]) => '<div class="summary-row"><span class="k mono">' + k + '</span><span class="v">' + v + '</span></div>').join('') +
         '</div>';
@@ -2567,6 +2579,19 @@
       if (state.libraryRef && state.libraryRef.themeLabel) {
         const match = THEMES.find((t) => t.label === state.libraryRef.themeLabel);
         if (match) state.theme = match.label;
+      }
+      // AND THE ROOM, for exactly the same reason.
+      //
+      // The library is a Theme -> Room hierarchy, so a chosen reference
+      // knows which room it is a reference FOR. Starting the wizard on
+      // a different room than the picture shows is the same accident
+      // the theme pre-selection prevents -- and a worse one, because
+      // the room decides the whole brief, not just the palette.
+      //
+      // A default, not a lock: the client may still pick another.
+      if (state.libraryRef && state.libraryRef.roomWizard) {
+        const found = ROOMS.find((r) => r.name === state.libraryRef.roomWizard);
+        if (found) state.room = found.name;
       }
     }
 

@@ -1,0 +1,72 @@
+{
+  "_comment": [
+    "THE ROOM TYPES, for the De'vyora Library's Theme -> Room hierarchy.",
+    "",
+    "This file is the single source of truth, in the same way shared/themes.json is for",
+    "themes. backend/src/services/rooms.service.ts reads it so uploads, browsing and the",
+    "Drive folder names all agree on one list.",
+    "",
+    "THEY ARE THE SYSTEM'S OWN ROOMS, NOT A NEW PARALLEL LIST. Every entry here already",
+    "exists in the two places that matter downstream: `wizard` is the label the mood-board",
+    "wizard uses (frontend/mood-board.html, ROOMS), and `space` is the key Python's",
+    "describe_space matches on (catalog_processor/app/client_selections.py, SPACES).",
+    "Keeping them tied is what lets a client pick a Kitchen reference and have the board",
+    "come back a kitchen -- if these drifted apart, a reference would say one room and the",
+    "generated picture would show another.",
+    "",
+    "`slug` names the Drive sub-folder under the theme, and the starter image file.",
+    "",
+    "`aliases` carry the free text that reached the old `room` column before this list",
+    "existed, so an older row still lands in the right place instead of being orphaned.",
+    "",
+    "NOT LISTED: the wizard also offers 'Balcony & Patio', which the library does not",
+    "cover. Adding it is one entry here; it is left out because it was not asked for."
+  ],
+  "rooms": {
+    "bathroom": {
+      "id": "bathroom",
+      "label": "Bathroom",
+      "slug": "bathroom",
+      "wizard": "Bathroom",
+      "space": "bath",
+      "blurb": "Full bathroom, with a walk-in shower zone.",
+      "aliases": ["bath", "baths", "bathrooms", "wet room", "ensuite", "en-suite", "master bath"]
+    },
+    "bedroom": {
+      "id": "bedroom",
+      "label": "Bedroom",
+      "slug": "bedroom",
+      "wizard": "Bedroom",
+      "space": "bedroom",
+      "blurb": "The bed against its feature wall, quiet tones.",
+      "aliases": ["bedrooms", "master bedroom", "guest bedroom", "sleeping"]
+    },
+    "drawing_room": {
+      "id": "drawing_room",
+      "label": "Drawing Room",
+      "slug": "drawing-room",
+      "wizard": "Living Room",
+      "space": "living",
+      "blurb": "Drawing or living room — seating facing a media wall.",
+      "aliases": ["living room", "living", "lounge", "drawing", "sitting room", "family room", "hall"]
+    },
+    "powder_room": {
+      "id": "powder_room",
+      "label": "Powder Room",
+      "slug": "powder-room",
+      "wizard": "Powder Room",
+      "space": "powder",
+      "blurb": "Compact vanity, basin and mirror. No shower.",
+      "aliases": ["powder", "cloakroom", "cloak room", "wc", "half bath", "guest wc"]
+    },
+    "kitchen": {
+      "id": "kitchen",
+      "label": "Kitchen",
+      "slug": "kitchen",
+      "wizard": "Kitchen & Dining",
+      "space": "kitchen",
+      "blurb": "A run of counter, cabinets, and the splashback between.",
+      "aliases": ["kitchens", "kitchen and dining", "kitchen & dining", "dining", "pantry", "galley"]
+    }
+  }
+}
