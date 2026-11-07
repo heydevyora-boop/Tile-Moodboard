@@ -3715,6 +3715,76 @@ const ai = {
   }
 
   // ============================================================
+  // GOOGLE OAUTH -- connecting the studio's own Google account
+  // ============================================================
+  //
+  // A service account owns no Drive storage, so it cannot put a file
+  // in a personal My Drive. These are the owner-only calls that
+  // connect the studio's own account instead. No secret ever comes
+  // back: `status` says whether a token exists, never what it is, and
+  // the Picker token is short-lived and only for the Picker.
+
+  const googleDrive = {
+    status() {
+      return apiFetch(
+        '/integrations/google/status'
+      ).then(
+        (r) =>
+          r.data
+      );
+    },
+
+    connect() {
+      return apiFetch(
+        '/integrations/google/connect',
+        {
+          method: 'POST'
+        }
+      ).then(
+        (r) =>
+          r.data
+      );
+    },
+
+    disconnect() {
+      return apiFetch(
+        '/integrations/google/disconnect',
+        {
+          method: 'POST'
+        }
+      ).then(
+        (r) =>
+          r.data
+      );
+    },
+
+    pickerToken() {
+      return apiFetch(
+        '/integrations/google/picker-token',
+        {
+          method: 'POST'
+        }
+      ).then(
+        (r) =>
+          r.data
+      );
+    },
+
+    /** Folder, Theme/Room tree, a real upload, a public link, cleanup. */
+    selfTest() {
+      return apiFetch(
+        '/integrations/drive/self-test',
+        {
+          method: 'POST'
+        }
+      ).then(
+        (r) =>
+          r.data
+      );
+    }
+  };
+
+  // ============================================================
   // PYTHON AI SERVICE
   // ============================================================
 
@@ -3795,6 +3865,8 @@ const ai = {
     driveStatus,
 
     testDriveConnection,
+
+    googleDrive,
 
     pythonAiStatus,
 

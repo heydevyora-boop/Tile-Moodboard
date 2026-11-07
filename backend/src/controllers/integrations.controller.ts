@@ -5,6 +5,22 @@ import { describeLibraryFolder } from '@services/library.service';
 import { geminiClient } from '@services/gemini.service';
 import { googleDriveClient } from '@services/googleDrive.service';
 import { checkPythonAIHealth } from '@services/python-ai.service';
+import { AppError } from '@utils/AppError';
+import { logger } from '@utils/logger';
+import {
+  OAUTH_CALLBACK_PATH,
+  buildAuthUrl,
+  completeAuthorization,
+  describeOAuthError,
+  forgetRefreshToken,
+  getOAuthClient,
+  isOAuthAuthorized,
+  isOAuthConfigured,
+  oauthRedirectUri,
+  oauthScopes,
+  verifyState,
+} from '@services/googleOAuth.service';
+import { clearLibraryFolderCache, driveFolderIdFrom } from '@services/library.service';
 
 export const getGeminiStatus = catchAsync(async (_req: Request, res: Response) => {
   res.status(200).json({
@@ -42,9 +58,247 @@ export const getDriveStatus = catchAsync(async (_req: Request, res: Response) =>
       // the wrong Vercel environment was to try an upload and read the
       // failure -- after picking the files.
       libraryFolder: await describeLibraryFolder(),
+      // WHO THE DEPLOYMENT IS when it writes: the studio's own Google
+      // account, or the service account that owns no storage.
+      authMode: await googleDriveClient.authMode(),
     },
   });
 });
+
+// ════════════════════════════════════════════════════════════════════
+// GOOGLE OAUTH -- connecting the studio's own Google account
+// ════════════════════════════════════════════════════════════════════
+
+/*
+ * A service account cannot own a file, so it cannot put one in a
+ * personal My Drive however the folder is shared. These four endpoints
+ * are the way out that a personal Gmail actually has: the owner
+ * authorizes the application once, and it acts as them afterwards.
+ *
+ * NOTHING SECRET COMES BACK OUT. The status carries whether a token
+ * exists, never the token; the client secret is never sent anywhere;
+ * and the one short-lived access token that is returned goes only to
+ * the owner, only for the Google Picker, which cannot run without it.
+ */
+
+export const getGoogleOAuthStatus = catchAsync(async (_req: Request, res: Response) => {
+  const authorized = await isOAuthAuthorized();
+  const scopes = oauthScopes();
+  res.status(200).json({
+    success: true,
+    data: {
+      configured: isOAuthConfigured(),
+      authorized,
+      scopes,
+      /** drive.file reaches only what the app made or the owner picked. */
+      needsPicker: scopes.every((s) => s.endsWith('/drive.file')),
+      callbackPath: OAUTH_CALLBACK_PATH,
+      redirectUri: oauthRedirectUri(),
+      pickerApiKey: config.google.pickerApiKey,
+      clientId: config.google.oauthClientId,
+      libraryFolderId: driveFolderIdFrom(config.google.driveLibraryFolder),
+      authMode: await googleDriveClient.authMode(),
+    },
+  });
+});
+
+export const startGoogleOAuth = catchAsync(async (req: Request, res: Response) => {
+  res.status(200).json({ success: true, data: { url: buildAuthUrl(req.user!.id) } });
+});
+
+/**
+ * Google's redirect lands here. PUBLIC on purpose -- a top-level
+ * browser navigation from Google carries no Authorization header --
+ * and safe because the owner's identity is signed into `state` when
+ * the flow starts and verified here.
+ *
+ * Answers with a page rather than a redirect: the frontend lives at a
+ * different path in each deployment, and a wrong guess would end a
+ * successful connection on a 404.
+ */
+export const googleOAuthCallback = catchAsync(async (req: Request, res: Response) => {
+  const page = (title: string, body: string, ok: boolean) => {
+    res.status(ok ? 200 : 400).type('html').send(
+      `<!doctype html><html lang="en"><head><meta charset="utf-8">`
+      + `<meta name="viewport" content="width=device-width,initial-scale=1">`
+      + `<title>${title}</title><style>`
+      + `body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;`
+      + `background:#f6f1e9;color:#2b2520;font:16px/1.6 ui-serif,Georgia,serif;padding:24px}`
+      + `.card{max-width:34rem;background:#fffdf9;border:1px solid #e3d9c9;border-radius:18px;padding:32px}`
+      + `h1{font-size:1.4rem;margin:0 0 12px}p{margin:0 0 10px}`
+      + `code{font:13px ui-monospace,monospace;background:#f0e9dd;padding:2px 6px;border-radius:6px}`
+      + `</style></head><body><div class="card"><h1>${title}</h1>${body}</div></body></html>`,
+    );
+  };
+
+  const error = typeof req.query.error === 'string' ? req.query.error : '';
+  if (error) {
+    page('Google did not grant access', `<p>Google answered <code>${escapeText(error)}</code>. Nothing was changed. Close this tab and try again from the studio’s Drive settings.</p>`, false);
+    return;
+  }
+
+  const code = typeof req.query.code === 'string' ? req.query.code : '';
+  const state = typeof req.query.state === 'string' ? req.query.state : '';
+  if (!code) {
+    page('Nothing to complete', '<p>This page is where Google sends you back after you allow access. It was opened without an authorization code, so there is nothing to do here.</p>', false);
+    return;
+  }
+
+  let userId: string;
+  try {
+    ({ userId } = verifyState(state));
+  } catch (err) {
+    page('That sign-in could not be verified', `<p>${escapeText(err instanceof Error ? err.message : String(err))}</p>`, false);
+    return;
+  }
+
+  try {
+    const { scope } = await completeAuthorization(code, userId);
+    googleDriveClient.resetAuth();
+    clearLibraryFolderCache();
+    logger.info('Google Drive OAuth connected');
+    page(
+      'Google Drive is connected',
+      '<p>The De’vyora Library will upload as this Google account from now on, and the '
+      + 'pictures will be owned by it.</p>'
+      + `<p>Granted: <code>${escapeText(scope)}</code></p>`
+      + '<p>You can close this tab and go back to the library.</p>',
+      true,
+    );
+  } catch (err) {
+    page(
+      'The connection could not be completed',
+      `<p>${escapeText(err instanceof Error ? err.message : String(err))}</p>`,
+      false,
+    );
+  }
+});
+
+export const disconnectGoogleOAuth = catchAsync(async (_req: Request, res: Response) => {
+  await forgetRefreshToken();
+  googleDriveClient.resetAuth();
+  clearLibraryFolderCache();
+  res.status(200).json({ success: true, data: { authorized: false } });
+});
+
+/**
+ * A short-lived access token for the Google Picker, and nothing else.
+ *
+ * With the drive.file scope the application can only touch what it
+ * created -- so the folder the studio made by hand has to be handed to
+ * it once, and the Picker is the only way Google provides. The Picker
+ * runs in the browser and needs a token there; this mints one from the
+ * stored refresh token, for the owner alone. The refresh token itself
+ * never leaves the server.
+ */
+export const getGooglePickerToken = catchAsync(async (_req: Request, res: Response) => {
+  const client = await getOAuthClient();
+  try {
+    const { token, res: tokenRes } = await client.getAccessToken();
+    if (!token) throw AppError.badRequest('Google returned no access token.');
+    const expiresIn = (tokenRes?.data as { expires_in?: number } | undefined)?.expires_in ?? 3600;
+    res.status(200).json({
+      success: true,
+      data: {
+        accessToken: token,
+        expiresIn,
+        apiKey: config.google.pickerApiKey,
+        folderId: driveFolderIdFrom(config.google.driveLibraryFolder),
+      },
+    });
+  } catch (err) {
+    throw AppError.badRequest(`Google Drive could not be reached: ${describeOAuthError(err)}`);
+  }
+});
+
+/**
+ * THE REAL PROOF, runnable in production by the person who has to
+ * trust it: the folder, the Theme/Room tree, one actual upload, a
+ * public link, and the upload removed again.
+ *
+ * Every step reports for itself, because "it failed" was exactly the
+ * answer that cost the studio an evening -- and the test leaves behind
+ * only the two folders the library would have created anyway.
+ */
+export const runDriveSelfTest = catchAsync(async (_req: Request, res: Response) => {
+  const steps: { step: string; ok: boolean; detail: string }[] = [];
+  const record = async (step: string, fn: () => Promise<string>) => {
+    try {
+      steps.push({ step, ok: true, detail: await fn() });
+      return true;
+    } catch (err) {
+      steps.push({ step, ok: false, detail: err instanceof Error ? err.message : String(err) });
+      return false;
+    }
+  };
+
+  // A real 1x1 PNG -- the upload path checks the bytes, not the name.
+  const PNG = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+    'base64',
+  );
+
+  const folder = await describeLibraryFolder();
+  steps.push({
+    step: 'The library’s Drive folder',
+    ok: folder.ok,
+    detail: folder.ok ? `${folder.name} (${folder.folderId})` : folder.reason,
+  });
+
+  let themeId = '';
+  let roomId = '';
+  let fileId = '';
+
+  if (folder.ok) {
+    await record('Theme folder "British"', async () => {
+      const made = await googleDriveClient.getOrCreateFolder('British', folder.folderId);
+      themeId = made.id;
+      return made.id;
+    });
+  }
+  if (themeId) {
+    await record('Room folder "Bathroom"', async () => {
+      const made = await googleDriveClient.getOrCreateFolder('Bathroom', themeId);
+      roomId = made.id;
+      return made.id;
+    });
+  }
+  if (roomId) {
+    await record('Uploading a test picture', async () => {
+      const file = await googleDriveClient.uploadFile({
+        name: `devyora-connection-test-${Date.now()}.png`,
+        mimeType: 'image/png',
+        content: PNG,
+        parentFolderId: roomId,
+      });
+      fileId = file.id;
+      return file.id;
+    });
+  }
+  if (fileId) {
+    await record('Making it readable by link', () => googleDriveClient.generatePublicLink(fileId));
+    await record('Removing the test picture again', async () => {
+      await googleDriveClient.deleteFile(fileId);
+      return 'deleted';
+    });
+  }
+
+  res.status(200).json({
+    success: true,
+    data: {
+      ok: steps.every((s) => s.ok),
+      authMode: await googleDriveClient.authMode(),
+      steps,
+    },
+  });
+});
+
+/** Minimal escaping for the few values echoed into the callback page. */
+function escapeText(value: string): string {
+  return value.replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string
+  ));
+}
 
 export const testDriveConnection = catchAsync(async (_req: Request, res: Response) => {
   const result = await googleDriveClient.testConnection();

@@ -526,7 +526,12 @@
     if (!state.canAdd || !state.uploadError) return '';
     return '<div class="lib-note lib-note-bad">'
       + '<span class="lib-note-k mono">UPLOADING WILL NOT WORK YET</span>'
-      + '<span>' + escapeHtml(state.uploadError) + '</span>'
+      + '<span>' + escapeHtml(state.uploadError)
+      // WHERE IT IS FIXED, not only what is wrong. Connecting the
+      // studio's own Google account is the owner's answer to every
+      // one of these, and it is one page away.
+      + ' <a href="drive-connect.html">Open the studio\u2019s Drive settings</a> to connect '
+      + 'the Google account and test an upload.</span>'
       + '</div>';
   }
 
@@ -559,9 +564,14 @@
         // client is actually going to be choosing between, so it is
         // what the card shows -- the page used to lead with an abstract
         // pattern plate and looked like a palette chooser.
+        //
+        // The bathroom is that first starter, and the filename is
+        // <theme>-<room>.png. It used to ask for <theme>-1.png, which
+        // is what the starters were called before they were filed by
+        // room: nine cards, nine 404s, nine empty frames.
         + '<span class="lib-theme-art">'
         + '<img src="' + escapeHtml(CasaApi.resolveBackendImageUrl(
-          '/static/library-starters/' + t.slug + '-1.png')) + '" alt="" loading="lazy" decoding="async">'
+          '/static/library-starters/' + t.slug + '-bathroom.png')) + '" alt="" loading="lazy" decoding="async">'
         // ...with the pattern plate kept as a small inset, because the
         // surface is still the thing being chosen.
         + '<span class="lib-theme-plate"><img src="img/themes/' + escapeHtml(t.slug)

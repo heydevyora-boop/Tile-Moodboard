@@ -93,7 +93,11 @@ async function main() {
     folders.push({ name, parent });
     return { id: 'made-' + name, name };
   };
-  client.getFolderById = async (id) => (id === 'RealFolderId' ? { id, name: 'Reference Images' } : null);
+  // driveId marks it as living on a shared drive -- without one, a
+  // service account could not store anything in it at all, which
+  // section 6 covers on its own.
+  client.getFolderById = async (id) =>
+    (id === 'RealFolderId' ? { id, name: 'Reference Images', driveId: '0ASharedDriveId' } : null);
 
   const file = { originalname: 'room.png', mimetype: 'image/png', buffer: PNG };
   const attempt = async () => {
@@ -264,6 +268,160 @@ async function main() {
     await put(undefined);
     check('3g. a picture with no room lands in Unsorted, not in the theme folder',
       sentTo === 'made-Unsorted', sentTo);
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  console.log('\n4. a folder in My Drive cannot hold anything, and says so first');
+  {
+    // THE FAILURE THE STUDIO SPENT AN EVENING ON. The folder exists,
+    // the service account is on it as an Editor, the id is right --
+    // and Drive answers every upload with "Service Accounts do not
+    // have storage quota". Sharing was never the missing piece: a
+    // file has an owner, in a My Drive that owner is whoever created
+    // it, and a service account may own nothing at all.
+    let uploaded = 0;
+    client.uploadFile = async () => { uploaded += 1; return { id: 'f1', name: 'x' }; };
+    client.generatePublicLink = async () => 'ok';
+    client.getOrCreateFolder = async (name) => ({ id: 'made-' + name, name });
+    // No driveId: a plain folder in somebody's My Drive.
+    client.getFolderById = async (id) => ({ id, name: 'Reference Images' });
+
+    config.google.driveImpersonateUser = '';
+    config.google.driveLibraryFolder = 'https://drive.google.com/drive/folders/MyDriveFolder';
+    library.clearLibraryFolderCache();
+
+    let status = await library.describeLibraryFolder();
+    check('4a. a My Drive folder opens but is not usable', status.ok === false, status);
+    check('4b. ...and it is not reported as missing or mistyped',
+      status.configured === true && status.folderId === 'MyDriveFolder', status);
+    check('4c. ...the reason says the folder is in a My Drive',
+      /My Drive/.test(status.reason), status.reason);
+    check('4d. ...that re-sharing it does not help',
+      /even as an Editor/.test(status.reason), status.reason);
+    check('4e. ...and names both configurations that do work',
+      /SHARED DRIVE/.test(status.reason)
+      && /GOOGLE_DRIVE_IMPERSONATE_USER/.test(status.reason), status.reason);
+    check('4f. sharedDrive is reported as the fact it is', status.sharedDrive === false);
+
+    // Said BEFORE the files are picked is only half of it: the upload
+    // itself must refuse, rather than spending the bytes to be told by
+    // Google in its own words.
+    library.clearLibraryFolderCache();
+    let thrown = '';
+    try {
+      await library.addReference(file, { themeId: 'british', room: 'bathroom' }, 'user-1');
+    } catch (error) { thrown = error.message; }
+    check('4g. the upload refuses rather than sending the file', uploaded === 0);
+    check('4h. ...with the same words the page showed',
+      thrown.includes(status.reason), { thrown: thrown.slice(0, 120) });
+
+    // OAUTH DELEGATION -- Google's own second answer. With a user to
+    // act as, the file is owned by that person and a My Drive folder
+    // is exactly the right place for it.
+    config.google.driveImpersonateUser = 'studio@example.com';
+    library.clearLibraryFolderCache();
+    status = await library.describeLibraryFolder();
+    check('4i. with a delegated user the same folder is usable',
+      status.ok === true && status.reason === '', status);
+
+    library.clearLibraryFolderCache();
+    try {
+      await library.addReference(file, { themeId: 'british', room: 'bathroom' }, 'user-1');
+    } catch { /* the database is not part of this test */ }
+    check('4j. ...and the picture is actually sent', uploaded === 1);
+
+    // A shared drive needs no delegation at all.
+    config.google.driveImpersonateUser = '';
+    client.getFolderById = async (id) => ({ id, name: 'Reference Images', driveId: '0AShared' });
+    library.clearLibraryFolderCache();
+    status = await library.describeLibraryFolder();
+    check('4k. a folder on a shared drive is usable as it is',
+      status.ok === true && status.sharedDrive === true, status);
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  console.log('\n5. the requests Drive is actually sent');
+  {
+    // supportsAllDrives IS THE WHOLE FIX. A shared drive is the only
+    // place a service account's upload can live, and without this flag
+    // the API answers as though shared drives did not exist -- so the
+    // file is treated as one the service account would own in a My
+    // Drive, and refused for want of quota. The folder check carried
+    // the flag already; the upload, the folder creation, the lookup
+    // and the share did not.
+    const seen = {};
+    const fake = {
+      files: {
+        create: async (params) => {
+          seen[params.media ? 'upload' : 'createFolder'] = params;
+          return { data: { id: 'new-id', name: 'x', webViewLink: 'https://drive/x' } };
+        },
+        list: async (params) => { seen.list = params; return { data: { files: [] } }; },
+        get: async (params) => { seen.get = params; return { data: { id: 'id', name: 'n', mimeType: 'application/vnd.google-apps.folder', driveId: '0AShared', webViewLink: 'https://drive/x' } }; },
+        delete: async (params) => { seen.delete = params; return { data: {} }; },
+      },
+      permissions: { create: async (params) => { seen.permission = params; return { data: {} } } },
+    };
+    const real = new drive.GoogleDriveClient(fake);
+
+    await real.uploadFile({ name: 'a.png', mimeType: 'image/png', content: PNG, parentFolderId: 'p' });
+    check('5a. the upload says it understands shared drives',
+      seen.upload && seen.upload.supportsAllDrives === true, seen.upload && Object.keys(seen.upload));
+
+    await real.createFolder('British', 'p');
+    check('5b. ...so does creating a folder inside one',
+      seen.createFolder && seen.createFolder.supportsAllDrives === true);
+
+    await real.findFolder('British', 'p');
+    check('5c. ...and the search, which would otherwise find nothing there',
+      seen.list && seen.list.supportsAllDrives === true
+      && seen.list.includeItemsFromAllDrives === true, seen.list);
+
+    await real.generatePublicLink('new-id');
+    check('5d. ...and making the picture publicly readable',
+      seen.permission && seen.permission.supportsAllDrives === true);
+
+    await real.deleteFile('new-id');
+    check('5e. ...and deleting it again',
+      seen.delete && seen.delete.supportsAllDrives === true);
+
+    const folder = await real.getFolderById('id');
+    check('5f. the folder check reads which drive the folder is on',
+      folder && folder.driveId === '0AShared', folder);
+
+    // GOOGLE'S OWN WORDING, TRANSLATED. It arrives as a 403, which
+    // would otherwise be reported as a permission error and send the
+    // studio back to re-share a folder that was already shared right.
+    const refusing = new drive.GoogleDriveClient({
+      files: {
+        create: async () => {
+          const err = new Error('quota');
+          err.response = { status: 403, data: { error: {
+            errors: [{ reason: 'storageQuotaExceeded' }],
+            message: 'Service Accounts do not have storage quota. Leverage shared drives ...',
+          } } };
+          throw err;
+        },
+        list: async () => ({ data: { files: [] } }),
+        get: async () => ({ data: {} }),
+        delete: async () => ({ data: {} }),
+      },
+      permissions: { create: async () => ({ data: {} }) },
+    });
+    let quotaError = null;
+    try {
+      await refusing.uploadFile({ name: 'a.png', mimeType: 'image/png', content: PNG, parentFolderId: 'p' });
+    } catch (error) { quotaError = error; }
+    check('5g. Google’s quota refusal is not reported as a permission problem',
+      quotaError && !/authentication\/permission error/.test(quotaError.message),
+      quotaError && quotaError.message);
+    check('5h. ...it is explained, with both configurations that work',
+      quotaError && /owns no Google Drive storage/.test(quotaError.message)
+      && /SHARED DRIVE/.test(quotaError.message)
+      && /GOOGLE_DRIVE_IMPERSONATE_USER/.test(quotaError.message),
+      quotaError && quotaError.message.slice(0, 120));
+    check('5i. ...and it is not retried, because no retry can fix it',
+      quotaError && quotaError.retryable === false);
   }
 
   console.log(`\n${pass}/${pass + fail} checks passed`);

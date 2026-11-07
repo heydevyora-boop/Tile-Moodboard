@@ -13,6 +13,7 @@
  * Run:  node test-scripts/library_browse_test.js
  */
 
+const fs = require('fs');
 const path = require('path');
 const http = require('http');
 const { execFileSync } = require('child_process');
@@ -195,6 +196,38 @@ async function main() {
       await page.locator('.lib-theme-card[data-theme="rustic"]').textContent());
     check('1e. a client is not offered the studio’s upload button',
       await page.locator('#libFiles').count() === 0);
+
+    // EVERY CARD'S PICTURE IS A FILE THAT EXISTS.
+    //
+    // The grid asked for <theme>-1.png -- what the starters were
+    // called before they were filed by room -- long after they had
+    // become <theme>-<room>.png. Nine themes, nine 404s, nine empty
+    // frames, and nothing in any test that looked. Asserted against
+    // the disk rather than against the network so a lazily-loaded
+    // card below the fold is still covered.
+    const STARTERS = path.join(FRONTEND, 'img', 'library');
+    const missingArt = async () => {
+      const srcs = await page.$$eval('.lib-theme-art > img', (els) =>
+        els.map((e) => e.getAttribute('src') || ''));
+      return srcs
+        .filter((src) => src.indexOf('/static/library-starters/') !== -1)
+        .map((src) => src.split('/static/library-starters/')[1])
+        .filter((file) => !fs.existsSync(path.join(STARTERS, file)));
+    };
+    const missingOnThemes = await missingArt();
+    check('1f. every theme card’s picture is a file that exists',
+      missingOnThemes.length === 0, missingOnThemes);
+    check('1g. ...and there is one on every card',
+      await page.locator('.lib-theme-art > img').count()
+        === await page.locator('.lib-theme-card').count());
+
+    await page.click('[data-theme="british"]');
+    await page.waitForSelector('[data-room]', { timeout: 20000 });
+    const missingOnRooms = await missingArt();
+    check('1h. and every room card’s picture too', missingOnRooms.length === 0, missingOnRooms);
+    // Back to the themes for the sections below -- the views are a
+    // state, not browser history, so the page is simply re-opened.
+    await openLibrary();
   }
 
   // ════════════════════════════════════════════════════════════════

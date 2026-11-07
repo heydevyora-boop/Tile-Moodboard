@@ -83,18 +83,100 @@ key column in this table, so a row cannot exist for a picture kept
 anywhere else. `imageUrl` is the browser-ready Drive link derived from
 that id.
 
-> **Known blocker for the upload chunk.** The Google credential in use is
-> a *service account*, and a service account owns no Drive storage quota
-> — an upload into its own My Drive is refused outright. This is already
-> visible elsewhere in the system: every generated scene is recorded with
-> `imageSource: "inline"`, which is the fallback used only when no Drive
-> link came back.
->
-> Before upload can work, one of these has to be true: the pictures live
-> in a **Shared Drive** the service account is a member of, or the
-> credential is changed to **OAuth delegation**. Storing links to files
-> the studio put in Drive by hand sidesteps it; uploading through the app
-> does not.
+#### A service account owns nothing, and that decides where the folder goes
+
+The Google credential in use is a *service account*, and a service
+account has **no Drive storage quota at all**. Drive does not refuse the
+*permission*; it refuses to let that account **own** a file. Every file
+has an owner, and in a My Drive the owner is whoever created it — so an
+upload into a My Drive folder comes back:
+
+```
+Service Accounts do not have storage quota. Leverage shared drives ...,
+or use OAuth delegation ... instead.
+```
+
+**Sharing the folder does not fix this.** Adding the service account as
+an Editor — even as the owner's own folder, even at the Drive root — grants
+it the right to write, and it still cannot own what it writes. Three
+configurations work; Google's error names the first two:
+
+| | What to do | Whose storage it uses | Needs |
+|---|---|---|---|
+| **Shared drive** | Put the folder on a shared drive and add the service account to *that drive* as a **Content manager**. | The shared drive's | Google Workspace, Business Standard or better |
+| **Domain-wide delegation** | Set `GOOGLE_DRIVE_IMPERSONATE_USER` to a mailbox on the studio's Workspace domain and grant the service account domain-wide delegation for the Drive scope in the Admin console. | That person's | Google Workspace of any tier |
+| **The owner's own OAuth** | The owner authorizes the application once from `/drive-connect.html`; it acts as them afterwards. | The owner's | Nothing but a Google account |
+
+**This studio is on a personal Gmail**, so the third row is the one that
+applies — and it is what the library now uses when it is connected. The
+service account stays configured underneath it: `authMode()` prefers the
+connected account and falls back, so nothing that worked before stops
+working because OAuth was configured and not yet finished.
+
+#### The owner's own Google account, end to end
+
+The flow is an ordinary server-side Authorization Code exchange with
+`access_type=offline`, in `googleOAuth.service.ts`:
+
+1. The owner opens **`/drive-connect.html`** and presses *Connect*.
+   `POST /api/v1/integrations/google/connect` returns Google's consent
+   URL, with the owner's id **signed into `state`**.
+2. Google sends the browser back to
+   **`GET /api/v1/integrations/google/callback`** — the one route in
+   `integrations.routes.ts` that is deliberately *outside*
+   `authenticate()`, because a top-level navigation from Google carries
+   no Authorization header. The signed `state` is what replaces the
+   guard: forged or older than fifteen minutes and the callback refuses.
+3. The code is exchanged server-side. The **refresh token is encrypted
+   with AES-256-GCM and stored in the existing `api_keys` table** —
+   no schema change, the same store and the same key the Gemini key
+   already uses. `GOOGLE_OAUTH_REFRESH_TOKEN` is read as a fallback.
+4. `google-auth-library` mints and renews access tokens underneath every
+   Drive call. A revoked grant arrives as `invalid_grant` *during an
+   upload*; it is translated into "connect the account again" rather
+   than reported as a Drive permission error, and never retried.
+
+**Nothing secret comes back out.** The status endpoint says whether a
+token exists, never what it is; the client secret never leaves the
+server; and the only token the browser ever sees is the short-lived
+access token the Google Picker cannot run without, handed to the owner
+alone.
+
+#### Why there is a Picker step
+
+With the default `drive.file` scope the application can only touch what
+it created or what the owner explicitly handed it — which is the whole
+reason that scope needs no Google verification and no security
+assessment. The studio's "Reference Images" folder was made by hand, so
+it has to be handed over once: the connect page opens the **Google
+Picker**, the owner chooses that folder, and from then on the app can
+create the Theme/Room folders inside it and upload. Everything it
+creates afterwards is its own.
+
+Setting `GOOGLE_OAUTH_SCOPE` to the full `https://www.googleapis.com/auth/drive`
+removes the Picker step entirely. The price is that it is a **restricted**
+scope: the consent screen warns that the app is unverified, and Google
+may require a CASA security assessment before it will verify it. Either
+way the OAuth app must be moved from *Testing* to **In production**, or
+Google expires the refresh token after seven days.
+
+**The flag that makes the first one work.** Every Drive request this
+client sends now carries `supportsAllDrives: true` (and
+`includeItemsFromAllDrives` when listing). Without it the API answers as
+though shared drives did not exist — so a folder on one is not found, a
+sub-folder is created in a My Drive instead, and the upload is refused
+for want of quota *even when the configuration was right*. That one
+missing flag is why putting the folder on a shared drive did not help on
+its own.
+
+**Said before the files are picked.** `describeLibraryFolder` reads the
+folder's `driveId`. No `driveId` means it is in a My Drive; with no
+delegated user configured, the library reports itself unusable with the
+table above in words, rather than letting a hundred photographs be
+chosen and then refused one at a time. Google's own quota refusal, if it
+still arrives, is translated into the same sentence instead of being
+reported as a permission error — which is what sent the studio back to
+re-share a folder that was already shared correctly.
 
 #### One folder, named by the studio
 
@@ -107,8 +189,10 @@ GOOGLE_DRIVE_LIBRARY_FOLDER=https://drive.google.com/drive/folders/1AbCdEf...
 GOOGLE_DRIVE_LIBRARY_FOLDER=1AbCdEf...
 ```
 
-The studio creates that folder (they called it **Reference Images**),
-shares it with the service account as an **Editor**, and sets this. The
+The studio creates that folder (they called it **Reference Images**) —
+on a shared drive, or in a My Drive if `GOOGLE_DRIVE_IMPERSONATE_USER`
+is set; see above, because sharing it as an Editor is *not* by itself
+enough — and sets this. The
 same value is also read from `GOOGLE_DRIVE_REFERENCE_IMAGES_FOLDER`, so
 whichever of the two names is typed into the environment, the pictures
 land in the right place.
@@ -119,7 +203,7 @@ somewhere the studio had not chosen, and on a service account it wrote
 into a My Drive with no storage quota at all — which is most of why
 uploads failed. **A folder the studio creates and shares is the
 configuration that actually works**, and it is also the fix for the
-quota blocker above when that folder lives on a Shared Drive.
+quota blocker above when that folder lives on a shared drive.
 
 **Unset is a refusal, not a fallback.** With no folder configured the
 library will not upload at all, because uploading to the root is
@@ -494,6 +578,7 @@ one after its first use, not more expensive.
 | the Drive folder: links, ids, every way it can be misconfigured, and the Theme/Room tree | `backend/test-scripts/library_drive_folder_test.js` |
 | the room types, their tie to the wizard and to Python, and older rows finding their room | `backend/test-scripts/library_rooms_test.js` |
 | the page on a database with no library table | `backend/test-scripts/library_unmigrated_test.js` |
+| connecting the owner's Google account: the signed state, the token at rest, which credential wins, a dead grant, the routes, and the self-test | `backend/test-scripts/google_oauth_test.js` |
 
 ## Still outstanding, and not code
 

@@ -141,6 +141,44 @@ export const config = {
       env.GOOGLE_DRIVE_LIBRARY_FOLDER
       || env.GOOGLE_DRIVE_REFERENCE_IMAGES_FOLDER
       || '',
+
+    /**
+     * The Workspace user the service account acts as, when one is set
+     * (GOOGLE_DRIVE_IMPERSONATE_USER). Empty means it acts as itself --
+     * which owns no Drive storage, so the library's folder must then be
+     * on a shared drive. See env.ts.
+     */
+    driveImpersonateUser:
+      env.GOOGLE_DRIVE_IMPERSONATE_USER
+      || '',
+
+    /**
+     * The owner's own Google account, authorized once, acting for the
+     * library's uploads. The only configuration a personal Gmail can
+     * use -- see googleOAuth.service.ts and env.ts.
+     */
+    oauthClientId:
+      env.GOOGLE_OAUTH_CLIENT_ID
+      || '',
+
+    oauthClientSecret:
+      env.GOOGLE_OAUTH_CLIENT_SECRET
+      || '',
+
+    oauthRedirectUri:
+      env.GOOGLE_OAUTH_REDIRECT_URI
+      || '',
+
+    oauthScope:
+      env.GOOGLE_OAUTH_SCOPE,
+
+    oauthRefreshToken:
+      env.GOOGLE_OAUTH_REFRESH_TOKEN
+      || '',
+
+    pickerApiKey:
+      env.GOOGLE_PICKER_API_KEY
+      || '',
   },
 
   // ============================================================

@@ -281,6 +281,98 @@ const envSchema = z.object({
     .string()
     .optional(),
 
+  /*
+   * THE USER A SERVICE ACCOUNT ACTS AS, when it has to write into a
+   * person's own My Drive.
+   *
+   * A service account owns no Drive storage at all. Sharing a My Drive
+   * folder with it as an Editor does not change that: the file it
+   * creates would be owned by the service account, and Google refuses
+   * with "Service Accounts do not have storage quota". There are
+   * exactly two configurations that work, and Google's own error names
+   * both -- a shared drive, or OAuth delegation. This is the second.
+   *
+   * Set it to a Workspace mailbox on the same domain (the studio's own
+   * address) AND grant the service account domain-wide delegation for
+   * https://www.googleapis.com/auth/drive in the Admin console. The
+   * service account then acts as that person: the files it uploads are
+   * owned by them and count against their storage, exactly as if they
+   * had dragged them in.
+   *
+   * Unset -- the default, and the only possibility on a personal Gmail
+   * account -- the service account acts as itself, and the library's
+   * folder must live on a shared drive.
+   */
+  GOOGLE_DRIVE_IMPERSONATE_USER: z
+    .string()
+    .optional(),
+
+  /*
+   * ==========================================================
+   * GOOGLE OAUTH -- the studio's own Gmail, for Drive
+   * ==========================================================
+   *
+   * The way a PERSONAL Google account can hold the library's pictures.
+   * A service account owns no Drive storage and a personal account has
+   * no shared drives and no domain-wide delegation to grant, so the
+   * only remaining configuration is the owner authorizing the app once
+   * and the app acting as them afterwards. See googleOAuth.service.ts.
+   *
+   * A "Web application" OAuth client in the Google Cloud console. Its
+   * Authorized redirect URI must be, character for character,
+   *   <BACKEND_PUBLIC_URL>/api/v1/integrations/google/callback
+   */
+  GOOGLE_OAUTH_CLIENT_ID:
+    z.string().optional(),
+
+  GOOGLE_OAUTH_CLIENT_SECRET:
+    z.string().optional(),
+
+  /*
+   * Only when the callback cannot be derived from BACKEND_PUBLIC_URL --
+   * a preview deployment, a tunnel. It must match the console exactly.
+   */
+  GOOGLE_OAUTH_REDIRECT_URI:
+    z.string().optional(),
+
+  /*
+   * WHICH SCOPE, and what it costs.
+   *
+   *   drive.file (the default) is not a sensitive scope: no Google
+   *   verification, no security assessment, and a published app's
+   *   refresh token does not expire. It reaches only what the app
+   *   created or what the owner handed it through the Google Picker,
+   *   which is why there is a Picker step for the one folder that
+   *   already exists.
+   *
+   *   https://www.googleapis.com/auth/drive reaches the existing
+   *   folder with no Picker step, but it is a RESTRICTED scope: the
+   *   consent screen warns that the app is unverified, and Google may
+   *   require a CASA security assessment to verify it.
+   */
+  GOOGLE_OAUTH_SCOPE: z
+    .string()
+    .default(
+      'https://www.googleapis.com/auth/drive.file',
+    ),
+
+  /*
+   * A refresh token kept in the environment instead of the database.
+   * The database copy, written when the owner connects, wins. This is
+   * for a deployment that would rather not store it there at all.
+   */
+  GOOGLE_OAUTH_REFRESH_TOKEN:
+    z.string().optional(),
+
+  /*
+   * The browser API key the Google Picker needs (Cloud console ->
+   * Credentials -> API key, restricted to the Picker API and to this
+   * site's HTTP referrer). It is not a secret -- it is sent to the
+   * browser by design -- but it is only handed to the owner's page.
+   */
+  GOOGLE_PICKER_API_KEY:
+    z.string().optional(),
+
   // ==========================================================
   // GEMINI AI
   // ==========================================================
