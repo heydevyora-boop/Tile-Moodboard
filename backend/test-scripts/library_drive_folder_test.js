@@ -84,17 +84,25 @@ async function main() {
   client.isConfigured = () => true;
 
   let uploads = 0;
-  let createdFolders = 0;
+  // Every folder found-or-created, with its parent -- so the test can
+  // assert the SHAPE of the tree and not merely that something existed.
+  const folders = [];
   client.uploadFile = async () => { uploads += 1; return { id: 'f1', name: 'x' }; };
   client.generatePublicLink = async () => 'ok';
-  client.getOrCreateFolder = async (name) => { createdFolders += 1; return { id: 'made-' + name, name }; };
+  client.getOrCreateFolder = async (name, parent) => {
+    folders.push({ name, parent });
+    return { id: 'made-' + name, name };
+  };
   client.getFolderById = async (id) => (id === 'RealFolderId' ? { id, name: 'Reference Images' } : null);
 
   const file = { originalname: 'room.png', mimetype: 'image/png', buffer: PNG };
   const attempt = async () => {
     library.clearLibraryFolderCache();
+    folders.length = 0;
     try {
-      await library.addReference(file, { themeId: 'british', title: 'A room' }, 'user-1');
+      await library.addReference(
+        file, { themeId: 'british', room: 'bathroom', title: 'A room' }, 'user-1',
+      );
       return null;
     } catch (error) {
       return error.message;
@@ -113,7 +121,7 @@ async function main() {
     // THE WHOLE POINT. Falling back to the root would be exactly the
     // behaviour this setting exists to prevent.
     check('2e. and NO folder was created in the Drive root instead',
-      createdFolders === 0, createdFolders);
+      folders.length === 0, folders);
   }
 
   {
@@ -140,10 +148,11 @@ async function main() {
   }
 
   // ════════════════════════════════════════════════════════════════
-  console.log('\n3. and with it set properly, straight into that folder');
+  console.log('\n3. and with it set, into <folder>/<Theme>/<Room>');
   {
     config.google.driveLibraryFolder = 'https://drive.google.com/drive/folders/RealFolderId';
     library.clearLibraryFolderCache();
+    folders.length = 0;
 
     let sentTo = null;
     client.uploadFile = async (input) => {
@@ -151,15 +160,48 @@ async function main() {
       return { id: 'drive-1', name: input.name };
     };
 
-    // The database is not running in this test, so the upload is taken
-    // as far as Drive and the row write is what fails. That is exactly
-    // the boundary under test: WHERE the bytes went.
-    try {
-      await library.addReference(file, { themeId: 'british', title: 'A room' }, 'user-1');
-    } catch (error) { /* the row, not the upload */ }
+    // The database is not running here, so the upload is taken as far
+    // as Drive and the row write is what fails. That is exactly the
+    // boundary under test: WHERE the bytes went.
+    const put = async (room) => {
+      folders.length = 0;
+      sentTo = null;
+      try {
+        await library.addReference(
+          file, { themeId: 'british', room, title: 'A room' }, 'user-1',
+        );
+      } catch (error) { /* the row, not the upload */ }
+    };
 
-    check('3a. the picture went to the configured folder', sentTo === 'RealFolderId', sentTo);
-    check('3b. ...and not to the Drive root', createdFolders === 0, createdFolders);
+    await put('bathroom');
+    check('3a. the theme folder is made under the configured one, not the Drive root',
+      folders[0] && folders[0].name === 'British' && folders[0].parent === 'RealFolderId',
+      folders[0]);
+    check('3b. ...the room folder under the theme',
+      folders[1] && folders[1].name === 'Bathroom' && folders[1].parent === 'made-British',
+      folders[1]);
+    check('3c. ...and the picture into THAT', sentTo === 'made-Bathroom', sentTo);
+    check('3d. the folders are named as a person reads them, not as ids',
+      folders.every((f) => !/^[a-z_]+$/.test(f.name)), folders.map((f) => f.name));
+
+    // A second picture into the same place must not re-walk the tree:
+    // a hundred-picture batch would otherwise pay two Drive lookups
+    // each, two hundred round trips inside a sixty-second function.
+    await put('bathroom');
+    check('3e. a second picture into the same room re-walks nothing',
+      folders.length === 0 && sentTo === 'made-Bathroom', folders);
+
+    // ...but a different room is a different folder.
+    await put('kitchen');
+    check('3f. a different room gets its own folder under the same theme',
+      sentTo === 'made-Kitchen'
+      && folders.some((f) => f.name === 'Kitchen' && f.parent === 'made-British'),
+      { sentTo, folders });
+
+    // And a picture filed under no room still has somewhere to go.
+    await put(undefined);
+    check('3g. a picture with no room lands in Unsorted, not in the theme folder',
+      sentTo === 'made-Unsorted', sentTo);
   }
 
   console.log(`\n${pass}/${pass + fail} checks passed`);

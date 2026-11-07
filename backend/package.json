@@ -30,6 +30,7 @@
     "test:library-unmigrated": "node test-scripts/library_unmigrated_test.js",
     "library:starters": "node test-scripts/generate_library_starters.js",
     "test:library-drive-folder": "node test-scripts/library_drive_folder_test.js",
+    "test:library-rooms": "node test-scripts/library_rooms_test.js",
     "test:library-moodboard": "node test-scripts/library_moodboard_test.js",
     "test:library-reference-prompt": "cd ../catalog_processor && GEMINI_API_KEY=${GEMINI_API_KEY:-test-key-not-used} PYTHONPATH=. python3.13 app/test_library_reference_prompt.py",
     "test:library-upload": "node test-scripts/library_upload_test.js",

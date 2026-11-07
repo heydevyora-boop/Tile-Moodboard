@@ -744,6 +744,16 @@
          * pre-select".
          */
         themeLabel: reference.themeLabel || '',
+        /** The room id, as the hierarchy's second level stores it. */
+        roomId: reference.roomId || '',
+        /**
+         * The mood-board wizard's own name for that room ("Kitchen &
+         * Dining", not "kitchen"), carried for the same reason
+         * themeLabel is: the wizard works in labels, and a client who
+         * chose a Kitchen reference should not then have to find
+         * Kitchen in the wizard themselves.
+         */
+        roomWizard: reference.roomWizard || '',
         title: reference.title || '',
         imageUrl: reference.imageUrl || '',
         room: reference.room || '',
@@ -784,8 +794,16 @@
      * the starters are files and are returned either way, which is what
      * stops a theme opening to nothing.
      */
-    references(themeId) {
-      const query = themeId ? '?themeId=' + encodeURIComponent(themeId) : '';
+    /** The studio's room types, for the upload form's dropdown. */
+    rooms() {
+      return apiFetch('/library/rooms').then((r) => r.data.rooms || []);
+    },
+
+    references(themeId, roomId) {
+      const parts = [];
+      if (themeId) parts.push('themeId=' + encodeURIComponent(themeId));
+      if (roomId) parts.push('roomId=' + encodeURIComponent(roomId));
+      const query = parts.length ? '?' + parts.join('&') : '';
       return apiFetch('/library/references' + query).then((r) => ({
         references: r.data.references || [],
         storage: r.data.storage || { ok: true, reason: '' },

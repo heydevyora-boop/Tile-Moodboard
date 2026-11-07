@@ -207,6 +207,111 @@ than new `library:*` ones. New permissions would have to be added to
 every role that should hold them, and a role-seeding mistake locks the
 owner out of their own feature.
 
+## Theme → Room
+
+The library is two levels, not one. A picture is filed under a **theme**
+and a **room type**, and browsing follows the same shape:
+
+```
+De'vyora Library
+├── British              ├── Bathroom          ← the pictures
+│   ├── Bathroom         ├── Bedroom
+│   ├── Bedroom          ├── Drawing Room
+│   ├── Drawing Room     ├── Powder Room
+│   ├── Powder Room      ├── Kitchen
+│   ├── Kitchen          └── Balcony & Patio
+│   └── Balcony & Patio
+├── Roman Touch  …       (and the same six under every theme)
+```
+
+### The rooms are the system's own, not a new list
+
+`shared/rooms.json` is the source of truth, read by
+`backend/src/services/rooms.service.ts` — the same arrangement
+`shared/themes.json` has, and for the same reason.
+
+Every room carries two fields that tie it to the rest of the system:
+
+| field | points at | why |
+| --- | --- | --- |
+| `wizard` | the mood-board wizard's own label | choosing a Kitchen reference pre-selects Kitchen on the board |
+| `space` | the key Python's `describe_space` matches | the generator draws the room the reference actually shows |
+
+If these drifted apart, a client could choose a Kitchen reference and
+get a bathroom back — which is the one thing this hierarchy exists to
+make impossible.
+
+Six rooms, matching the six the wizard offers. **Balcony & Patio** is
+the outdoor one, and `shared/rooms.json` marks it `outdoor: true` —
+which changes two things and nothing else:
+
+- the starter is **drawn** as a parapet with open sky above it and an
+  outdoor floor, not as a box with a ceiling;
+- its shipped reading says *"a chest-high parapet carrying …, open sky
+  above it"* rather than *"… to dado height, plain above"*.
+
+That second one is not cosmetic. The reading is what the tile-matching
+step searches the catalog **with**, so a board told to answer "plain
+above dado height" on a surface that has no above would pick a product
+for a wall that is not there.
+
+Python holds `balcony` and `patio` as two entries matched on substring,
+balcony first; one room here covers both, as the wizard does, and
+points at that first key.
+
+### Backward compatibility, and why there is no `roomType` column
+
+`LibraryReference.room` already existed and was already nullable. What
+changed is what it **means**: it now holds a room id. No migration, no
+backfill, no second column to keep in step — every row written before
+the hierarchy has `NULL` there, because the upload form only ever sent
+`themeId`.
+
+A row that does carry free text ("Bathroom", "ensuite", "Kitchen &
+Dining") is resolved by alias at read time. Anything unrecognised shows
+under **Unsorted**, which appears only when it holds something.
+
+> A picture the studio uploaded must never become invisible because a
+> category was added after it.
+
+That rule is why the room filter is applied **in code, not in SQL**.
+`room = 'bathroom'` looks obvious and is wrong: it misses every older
+row. The counts resolved aliases and the list did not, so a room card
+said two pictures and opening it showed one. `resolveRoomId` is now the
+single definition of "which room is this in", used by both.
+
+### On Drive, the same shape
+
+```
+<the studio's Reference Images folder>
+  └── British
+        └── Bathroom
+              └── the picture
+```
+
+Found or created under the configured folder, cached per theme-and-room
+so a hundred-picture batch walks the tree once rather than two hundred
+times.
+
+### Uploading
+
+Two dropdowns, both pre-set to wherever the studio is standing and both
+editable — having walked into British › Kitchen, the commonest next
+thing is a batch for British › Bathroom. Whatever they say when the
+files are picked is what the whole batch is filed under, stated on the
+button so it cannot be a surprise. A batch with no room is refused
+rather than dropped into Unsorted, which is where *old* pictures live.
+
+An unknown room is refused on the way **in** and tolerated on the way
+**out**: strict where a mistake would make a picture unbrowsable, lenient
+where it would make one disappear.
+
+### Starters
+
+One per theme per room — 9 × 6 = **54**, so no cell of the grid is
+empty. Each ships its own reading, which names the room, so a board
+built on the Kitchen reference reads as a kitchen brief.
+
 ## Browsing, and choosing the reference
 
 Two views on one page, no router and no second page:
@@ -386,7 +491,8 @@ one after its first use, not more expensive.
 | browsing and choosing | `backend/test-scripts/library_browse_test.js` |
 | bulk upload | `backend/test-scripts/library_upload_test.js` |
 | the page, the menu, the schema | `backend/test-scripts/devyora_library_test.js` |
-| the Drive folder: links, ids, and every way it can be misconfigured | `backend/test-scripts/library_drive_folder_test.js` |
+| the Drive folder: links, ids, every way it can be misconfigured, and the Theme/Room tree | `backend/test-scripts/library_drive_folder_test.js` |
+| the room types, their tie to the wizard and to Python, and older rows finding their room | `backend/test-scripts/library_rooms_test.js` |
 | the page on a database with no library table | `backend/test-scripts/library_unmigrated_test.js` |
 
 ## Still outstanding, and not code

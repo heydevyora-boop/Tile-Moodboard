@@ -7,7 +7,7 @@
       "use": "@vercel/node",
       "config": {
         "maxDuration": 60,
-        "includeFiles": ["shared/themes.json", "frontend/img/library/**"]
+        "includeFiles": ["shared/themes.json", "shared/rooms.json", "frontend/img/library/**"]
       }
     },
     {

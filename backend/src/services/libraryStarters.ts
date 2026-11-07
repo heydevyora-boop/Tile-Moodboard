@@ -27,6 +27,7 @@
  */
 
 import type { LibraryVisualProfile } from './libraryMatch.service';
+import { ROOM_LIST, describeRoom } from './rooms.service';
 
 /** Where this backend serves the starter image files from. */
 export const STARTER_PATH = '/static/library-starters';
@@ -37,7 +38,10 @@ export const STARTER_PREFIX = 'starter:';
 export interface StarterRoom {
   id: string;
   themeId: string;
+  /** A room id from shared/rooms.json -- the hierarchy's second level. */
+  roomId: string;
   title: string;
+  /** The room's label, as the gallery prints it. */
   room: string;
   description: string;
   /** The file under STARTER_PATH. */
@@ -45,19 +49,35 @@ export interface StarterRoom {
   profile: LibraryVisualProfile;
 }
 
-/** What the two variants of every theme are: a dado, and a feature bay. */
-const LAYOUTS = [
-  {
-    suffix: '1',
-    name: 'Dado',
-    describe: 'The pattern runs the full width of the wall to dado height, plain above it.',
-  },
-  {
-    suffix: '2',
-    name: 'Feature Bay',
-    describe: 'The pattern is held to one bay behind the vanity, floor to ceiling, plain either side.',
-  },
-] as const;
+/**
+ * The lay-up every starter uses: a dado, with the pattern running the
+ * full width of the wall and plain above it.
+ *
+ * ONE PER THEME PER ROOM, not two per theme. The library is a Theme ->
+ * Room hierarchy now, so a second variant of the same room matters far
+ * less than having every room filled at all -- nine themes times five
+ * rooms is forty-five cells, and thirty-six of them would otherwise be
+ * empty.
+ *
+ * The dado is the layout that reads as a tiled room in every room type.
+ * A floor-to-ceiling feature bay behind a bed or a sofa looks like a
+ * mistake rather than a scheme.
+ */
+const LAYOUT_NOTE =
+  'The pattern runs the full width of the wall to dado height, plain above it.';
+
+/**
+ * ...except outdoors, where there is no wall to run a dado up. A
+ * balcony is a parapet, the sky above it and a floor, so the pattern
+ * fills the parapet and that is the whole of it.
+ *
+ * Saying this correctly matters more than it looks: the reading is what
+ * the tile-matching step searches the catalog WITH, and a board told to
+ * answer "plain above dado height" on a surface that has no above will
+ * pick a product for a wall that is not there.
+ */
+const OUTDOOR_LAYOUT_NOTE =
+  'The pattern fills the parapet, with open sky above it and an outdoor floor below.';
 
 /**
  * Each theme's reading, written from the drawing itself.
@@ -222,20 +242,24 @@ const SLUGS: Record<string, string> = {
 };
 
 function build(): StarterRoom[] {
-  const rooms: StarterRoom[] = [];
+  const made: StarterRoom[] = [];
 
   for (const [themeId, reading] of Object.entries(THEME_READINGS)) {
-    for (const layout of LAYOUTS) {
-      const dado = layout.suffix === '1';
-      rooms.push({
-        id: `${STARTER_PREFIX}${SLUGS[themeId]}-${layout.suffix}`,
+    for (const room of ROOM_LIST) {
+      const note = room.outdoor ? OUTDOOR_LAYOUT_NOTE : LAYOUT_NOTE;
+
+      made.push({
+        id: `${STARTER_PREFIX}${SLUGS[themeId]}-${room.slug}`,
         themeId,
-        title: `${reading.title} — ${layout.name}`,
-        room: 'Bathroom',
-        description: `${reading.summary} ${layout.describe}`,
-        file: `${SLUGS[themeId]}-${layout.suffix}.png`,
+        roomId: room.id,
+        // "Cobalt Zellige Kitchen" -- the theme's own name for its
+        // scheme, then the room it is drawn as.
+        title: `${reading.title} ${room.label}`,
+        room: room.label,
+        description: `${reading.summary} ${note}`,
+        file: `${SLUGS[themeId]}-${room.slug}.png`,
         profile: {
-          summary: `${reading.summary} ${layout.describe}`,
+          summary: `A ${room.label.toLowerCase()}. ${reading.summary} ${note}`,
           dominantColour: reading.dominantColour,
           palette: reading.palette,
           materials: reading.materials,
@@ -244,24 +268,28 @@ function build(): StarterRoom[] {
           formats: reading.formats,
           mood: reading.mood,
           surfaces: {
-            floor: reading.floor,
-            // In the dado layout the pattern IS the lower wall; in the
-            // feature bay the walls either side are plain and the bay
-            // carries it. Saying which is which is the whole reason a
-            // board can put the right product in the right role.
-            walls: dado
-              ? `${reading.figured} to dado height, ${reading.plain} above`
-              : reading.plain,
-            feature: dado
-              ? 'none — the pattern runs the full width rather than concentrating on one plane'
-              : `${reading.figured}, floor to ceiling in one bay behind the vanity`,
+            floor: room.outdoor
+              ? `${reading.floor}, laid as an outdoor floor`
+              : reading.floor,
+            // The pattern IS the lower wall in this lay-up -- or the
+            // whole parapet, outdoors, where there is nothing above it
+            // but sky. Saying which is the whole reason a board can put
+            // the right product in the right role: the base answers the
+            // plain field and the floor, the decorated piece answers
+            // this.
+            walls: room.outdoor
+              ? `a chest-high parapet carrying ${reading.figured}, open sky above it`
+              : `${reading.figured} to dado height, ${reading.plain} above`,
+            feature:
+              'none \u2014 the pattern runs the full width rather than concentrating '
+              + 'on one plane',
           },
         },
       });
     }
   }
 
-  return rooms;
+  return made;
 }
 
 export const STARTER_ROOMS: StarterRoom[] = build();
@@ -277,14 +305,37 @@ export function starterById(id: string): StarterRoom | null {
   return BY_ID.get(id) ?? null;
 }
 
-export function startersForTheme(themeId: string): StarterRoom[] {
-  return STARTER_ROOMS.filter((room) => room.themeId === themeId);
+/**
+ * A theme's starters, optionally narrowed to one room.
+ *
+ * An unrecognised roomId returns nothing rather than everything: it
+ * means the caller asked for a room that does not exist, and answering
+ * with the whole theme would quietly show a Kitchen's pictures under a
+ * heading that says something else.
+ */
+export function startersForTheme(themeId: string, roomId?: unknown): StarterRoom[] {
+  const inTheme = STARTER_ROOMS.filter((room) => room.themeId === themeId);
+  if (!roomId) return inTheme;
+
+  const room = describeRoom(roomId);
+  if (!room) return [];
+  return inTheme.filter((entry) => entry.roomId === room.id);
 }
 
 /** How many starters each theme has, to add to the gallery's counts. */
 export function starterCounts(): Record<string, number> {
   const counts: Record<string, number> = {};
   for (const room of STARTER_ROOMS) counts[room.themeId] = (counts[room.themeId] ?? 0) + 1;
+  return counts;
+}
+
+/** How many starters one theme has in each room, for its room list. */
+export function starterRoomCounts(themeId: string): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const room of STARTER_ROOMS) {
+    if (room.themeId !== themeId) continue;
+    counts[room.roomId] = (counts[room.roomId] ?? 0) + 1;
+  }
   return counts;
 }
 
@@ -303,6 +354,7 @@ export function asReference(room: StarterRoom) {
     imageUrl: `${STARTER_PATH}/${room.file}`,
     driveFileId: '',
     room: room.room,
+    roomId: room.roomId,
     description: room.description,
     isActive: true,
     sortOrder: 0,

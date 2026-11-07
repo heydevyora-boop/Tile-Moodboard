@@ -215,6 +215,15 @@ async function main() {
     } catch (err) { /* not JSON; not one of ours */ }
   });
 
+
+  /** Theme -> Room -> pictures: reaching a picture is two clicks now. */
+  const openThemeRoom = async (themeId, roomId) => {
+    await page.click('[data-theme="' + themeId + '"]');
+    await page.waitForSelector('[data-room]', { timeout: 20000 });
+    await page.click('[data-room="' + roomId + '"]');
+    await page.waitForSelector('.lib-card, .lib-empty', { timeout: 20000 });
+  };
+
   await page.goto(`${base}/login.html`, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => document.getElementById('checkingState').style.display === 'none');
   await page.fill('#email', 'priya@example.test');
@@ -227,8 +236,7 @@ async function main() {
   {
     await page.goto(`${base}/devyora-library.html`, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('.lib-theme-card', { timeout: 20000 });
-    await page.click('[data-theme="moroccan"]');
-    await page.waitForSelector('.lib-card', { timeout: 20000 });
+    await openThemeRoom('moroccan', 'bathroom');
     // The first card in a theme is now one of the STARTER rooms that
     // ship with the application, and that is deliberately what this
     // walks: it is the path a studio with nothing uploaded takes, and
@@ -245,7 +253,7 @@ async function main() {
 
     const kept = await page.evaluate(() => JSON.parse(localStorage.getItem('casa_library_selection')));
     check('1c. the choice carries the reference’s id',
-      kept.id === 'starter:moroccan-1', kept.id);
+      kept.id === 'starter:moroccan-bathroom', kept.id);
     check('1d. ...and its theme’s LABEL, which is what the wizard works in',
       kept.themeLabel === 'Moroccan', kept);
 
@@ -268,7 +276,7 @@ async function main() {
       await page.locator('.libref-acts a[href="devyora-library.html"]').count() === 1
       && await page.locator('#librefClear').count() === 1);
     check('2e. the picture itself is shown on the banner',
-      /library-starters\/moroccan-1\.png$/.test(
+      /library-starters\/moroccan-bathroom\.png$/.test(
         await page.locator('.libref-thumb img').getAttribute('src') || ''),
       await page.locator('.libref-thumb img').getAttribute('src'));
 
@@ -302,7 +310,7 @@ async function main() {
 
     check('3a. the board is generated', await page.locator('.board-card').count() === 1);
     check('3b. ...and the request carried the reference’s id',
-      sentBodies.generate && sentBodies.generate.libraryReferenceId === 'starter:moroccan-1',
+      sentBodies.generate && sentBodies.generate.libraryReferenceId === 'starter:moroccan-bathroom',
       sentBodies.generate && sentBodies.generate.libraryReferenceId);
     check('3c. ...the id ALONE -- not a URL this page could choose',
       sentBodies.generate && !JSON.stringify(sentBodies.generate).includes('drive.google.com'),
@@ -326,14 +334,14 @@ async function main() {
     await page.waitForSelector('.viz-image-frame img, .viz-error', { timeout: 60000 });
 
     check('4a. the scene request carried the reference’s id',
-      sentBodies.scene && sentBodies.scene.library_reference_id === 'starter:moroccan-1',
+      sentBodies.scene && sentBodies.scene.library_reference_id === 'starter:moroccan-bathroom',
       sentBodies.scene && sentBodies.scene.library_reference_id);
     // A starter is a file this server hosts, so Python -- a separate
     // function fetching over the public internet -- needs it as an
     // ABSOLUTE url. A relative path would be choosable and then fail
     // at the one moment it mattered.
     check('4b. ...and the server turned it into an absolute URL Python can fetch',
-      /^https?:\/\/[^/]+\/static\/library-starters\/moroccan-1\.png$/.test(
+      /^https?:\/\/[^/]+\/static\/library-starters\/moroccan-bathroom\.png$/.test(
         (pythonCalls[0] && pythonCalls[0].scene_image_url) || ''),
       pythonCalls[0] && pythonCalls[0].scene_image_url);
     // Which HOST that absolute URL carries is checked in

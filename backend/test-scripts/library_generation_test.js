@@ -626,7 +626,7 @@ async function main() {
     // -- still has a library to choose from and generate with.
     reset();
     const out = await call('/mood-boards/generate', {
-      ...BRIEF, libraryReferenceId: 'starter:moroccan-1',
+      ...BRIEF, libraryReferenceId: 'starter:moroccan-bathroom',
     });
 
     check('11a. a board can be built on one', out.status === 200
@@ -672,7 +672,7 @@ async function main() {
     const body = JSON.stringify({
       product_id: tiles.TILE_BASE.id,
       surface: 'WALL',
-      library_reference_id: 'starter:moroccan-1',
+      library_reference_id: 'starter:moroccan-bathroom',
       materials: [{ role: 'base', tile_id: tiles.TILE_BASE.id }],
       requirements: { room: 'BATHROOM', style: 'Moroccan' },
     });
@@ -701,7 +701,7 @@ async function main() {
     check('12a. the scene is generated', res.status === 200, res.text && res.text.slice(0, 200));
     const sent = pythonCalls[0];
     check('12b. the scene image is an absolute URL',
-      /^https?:\/\/[^/]+\/static\/library-starters\/moroccan-1\.png$/.test(
+      /^https?:\/\/[^/]+\/static\/library-starters\/moroccan-bathroom\.png$/.test(
         (sent && sent.scene_image_url) || ''),
       sent && sent.scene_image_url);
     check('12c. ...built from the host the request actually arrived on',
@@ -716,7 +716,7 @@ async function main() {
     // And it must actually be servable, or the URL is a promise this
     // server cannot keep.
     const origin = base.replace(/\/api\/v1$/, '');
-    const file = await realFetch(`${origin}/static/library-starters/moroccan-1.png`);
+    const file = await realFetch(`${origin}/static/library-starters/moroccan-bathroom.png`);
     const bytes = Buffer.from(await file.arrayBuffer());
     check('12f. that URL really serves a PNG from this server',
       file.status === 200 && bytes.slice(0, 8).toString('hex') === '89504e470d0a1a0a',
@@ -732,7 +732,7 @@ async function main() {
   // ════════════════════════════════════════════════════════════════
   console.log('\n13. a starter cannot be deleted, and says why');
   {
-    const res = await realFetch(`${base}/library/references/starter:moroccan-1`, {
+    const res = await realFetch(`${base}/library/references/starter:moroccan-bathroom`, {
       method: 'DELETE', headers: { Authorization: `Bearer ${token}` },
     });
     const body = await res.json();
