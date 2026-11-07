@@ -312,6 +312,12 @@ function drawRoom(themeId, room, variant) {
   const c = THEME_COLOURS[themeId];
   const pattern = PATTERNS[themeId];
   const seed = (themeId.length * 7919 + room.length * 31337 + variant * 104729) >>> 0;
+
+  // A BALCONY IS NOT A BOX. It has no ceiling and no walls to speak of:
+  // a parapet about chest high, the sky above it, and an outdoor floor.
+  // Drawing one with the interior's ceiling and full-height side walls
+  // would produce a room with a wall in the middle of it.
+  const outdoor = room === 'balcony_patio';
   const canvas = createCanvas(W, H);
   const ctx = canvas.getContext('2d');
 
@@ -325,16 +331,30 @@ function drawRoom(themeId, room, variant) {
   const by1 = depthY(H, vpy, DEPTH);          // its foot
   const by0 = depthY(0, vpy, DEPTH);          // its head
 
-  // ── ceiling ──
-  ctx.fillStyle = mix(c.light, '#ffffff', 0.55);
-  ctx.beginPath();
-  ctx.moveTo(0, 0); ctx.lineTo(W, 0); ctx.lineTo(bx1, by0); ctx.lineTo(bx0, by0);
-  ctx.closePath(); ctx.fill();
+  // ── overhead: a ceiling indoors, open sky out ──
+  if (outdoor) {
+    const sky = ctx.createLinearGradient(0, 0, 0, H * 0.55);
+    sky.addColorStop(0, '#A8C4D8');
+    sky.addColorStop(0.65, '#D6E3EA');
+    sky.addColorStop(1, mix(c.light, '#ffffff', 0.7));
+    ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
+  } else {
+    ctx.fillStyle = mix(c.light, '#ffffff', 0.55);
+    ctx.beginPath();
+    ctx.moveTo(0, 0); ctx.lineTo(W, 0); ctx.lineTo(bx1, by0); ctx.lineTo(bx0, by0);
+    ctx.closePath(); ctx.fill();
+  }
 
   // ── side walls, plain: the back wall is where the theme speaks ──
+  //
+  // Outdoors these are the building's own returns, and they stop at the
+  // parapet rather than running to the top of the frame -- otherwise
+  // the sky is boxed in and it stops reading as open.
   for (const side of [0, 1]) {
     const fx = side ? W : 0;
     const bxs = side ? bx1 : bx0;
+    const topFront = outdoor ? H * 0.16 : 0;
+    const topBack = outdoor ? by0 + (by1 - by0) * 0.34 : by0;
     const g = ctx.createLinearGradient(fx, 0, bxs, 0);
     // The left wall catches the light, the right falls away. That one
     // difference does more for depth than any amount of detail.
@@ -342,7 +362,7 @@ function drawRoom(themeId, room, variant) {
     g.addColorStop(1, mix(c.ground, '#000000', side ? 0.05 : 0.02));
     ctx.fillStyle = g;
     ctx.beginPath();
-    ctx.moveTo(fx, 0); ctx.lineTo(bxs, by0); ctx.lineTo(bxs, by1); ctx.lineTo(fx, H);
+    ctx.moveTo(fx, topFront); ctx.lineTo(bxs, topBack); ctx.lineTo(bxs, by1); ctx.lineTo(fx, H);
     ctx.closePath(); ctx.fill();
   }
 
@@ -382,10 +402,46 @@ function drawRoom(themeId, room, variant) {
   }
   ctx.restore();
 
-  // ── the back wall ──
+  // ── the back plane: a wall indoors, a parapet out ──
   const bw = bx1 - bx0;
   const bh = by1 - by0;
   const dadoY = by0 + bh * 0.46;
+
+  // THE PARAPET IS WHERE THE THEME SPEAKS OUTDOORS, and it is chest
+  // high: it starts where a dado would END, so the pattern fills it
+  // completely rather than sitting in a band with sky behind the rest.
+  const planeTop = outdoor ? by0 + bh * 0.46 : by0;
+
+  if (outdoor) {
+    ctx.fillStyle = mix(c.light, '#ffffff', 0.3);
+    ctx.fillRect(bx0, planeTop, bw, by1 - planeTop);
+
+    ctx.save();
+    ctx.beginPath(); ctx.rect(bx0, planeTop, bw, by1 - planeTop); ctx.clip();
+    pattern(ctx, bx0, planeTop, bw, by1 - planeTop, c, seed);
+    ctx.restore();
+
+    // A coping stone along the top, which every real parapet has and
+    // which is what stops it reading as a half-painted wall.
+    ctx.fillStyle = mix(c.light, '#ffffff', 0.55);
+    ctx.fillRect(bx0 - 6, planeTop - 11, bw + 12, 11);
+    ctx.fillStyle = mix(c.light, '#000000', 0.18);
+    ctx.fillRect(bx0 - 6, planeTop, bw + 12, 4);
+
+    // A railing above it, against the sky.
+    ctx.strokeStyle = c.metal; ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(bx0 + 6, planeTop - 74); ctx.lineTo(bx1 - 6, planeTop - 74);
+    ctx.stroke();
+    ctx.lineWidth = 3;
+    for (let i = 0; i <= 14; i += 1) {
+      const rx = bx0 + 6 + (bw - 12) * (i / 14);
+      ctx.beginPath(); ctx.moveTo(rx, planeTop - 74); ctx.lineTo(rx, planeTop - 11); ctx.stroke();
+    }
+
+    ctx.fillStyle = mix(c.deep, '#000000', 0.25);
+    ctx.fillRect(bx0, by1 - 9, bw, 9);
+  } else {
 
   ctx.fillStyle = mix(c.light, '#ffffff', 0.3);
   ctx.fillRect(bx0, by0, bw, bh);
@@ -410,11 +466,15 @@ function drawRoom(themeId, room, variant) {
   // Skirting, and the corner lines that tell the eye where the walls meet.
   ctx.fillStyle = mix(c.deep, '#000000', 0.25);
   ctx.fillRect(bx0, by1 - 9, bw, 9);
+  }
+
+  // The corners, from wherever the back plane actually starts -- the
+  // ceiling line indoors, the top of the parapet out.
   ctx.strokeStyle = 'rgba(26,21,18,0.22)'; ctx.lineWidth = 1.5;
   ctx.beginPath();
-  ctx.moveTo(bx0, by0); ctx.lineTo(bx0, by1);
-  ctx.moveTo(bx1, by0); ctx.lineTo(bx1, by1);
-  ctx.moveTo(bx0, by0); ctx.lineTo(bx1, by0);
+  ctx.moveTo(bx0, planeTop); ctx.lineTo(bx0, by1);
+  ctx.moveTo(bx1, planeTop); ctx.lineTo(bx1, by1);
+  if (!outdoor) { ctx.moveTo(bx0, by0); ctx.lineTo(bx1, by0); }
   ctx.stroke();
 
   // ── the fittings, which are what makes it THAT room ──
@@ -578,6 +638,45 @@ function drawRoom(themeId, room, variant) {
       ctx.fillStyle = c.metal;
       roundRect(ctx, sx - 16, by0 + bh * 0.36, 32, 20, 6); ctx.fill();
     }
+
+  } else if (room === 'balcony_patio') {
+    // Outdoor seating and a planter, low and to one side -- the floor
+    // and the parapet are the surfaces this is a reference FOR, so
+    // nothing stands in the middle of either.
+    const px = vpx + bw * 0.26;
+    const pw = bw * 0.16;
+    const pTop = by1 - bh * 0.22;
+
+    ground(px, pw * 0.7);
+    ctx.fillStyle = mix(c.metal, '#000000', 0.12);
+    ctx.beginPath();
+    ctx.moveTo(px - pw / 2, pTop);
+    ctx.lineTo(px + pw / 2, pTop);
+    ctx.lineTo(px + pw * 0.38, by1);
+    ctx.lineTo(px - pw * 0.38, by1);
+    ctx.closePath(); ctx.fill();
+
+    // What grows in it: a few strokes, not a botanical study.
+    const leaf = rnd(seed ^ 0x2f1a);
+    ctx.strokeStyle = '#4E7A4A'; ctx.lineWidth = 5; ctx.lineCap = 'round';
+    for (let i = 0; i < 9; i += 1) {
+      const a = -Math.PI / 2 + (leaf() - 0.5) * 1.5;
+      const len = 46 + leaf() * 54;
+      ctx.beginPath();
+      ctx.moveTo(px + (leaf() - 0.5) * pw * 0.6, pTop + 4);
+      ctx.lineTo(px + Math.cos(a) * len, pTop + 4 + Math.sin(a) * len);
+      ctx.stroke();
+    }
+
+    // A chair, in silhouette, on the other side.
+    const cx2 = vpx - bw * 0.26;
+    const seatY = by1 - bh * 0.15;
+    ground(cx2, bw * 0.11);
+    ctx.fillStyle = mix(c.deep, c.ground, 0.5);
+    roundRect(ctx, cx2 - bw * 0.09, seatY, bw * 0.18, 12, 5); ctx.fill();
+    roundRect(ctx, cx2 - bw * 0.09, seatY - bh * 0.16, 12, bh * 0.16, 5); ctx.fill();
+    ctx.fillRect(cx2 - bw * 0.075, seatY + 12, 7, by1 - seatY - 12);
+    ctx.fillRect(cx2 + bw * 0.065, seatY + 12, 7, by1 - seatY - 12);
 
   } else {
     // Drawing room: seating facing a media wall, with the tiled plane

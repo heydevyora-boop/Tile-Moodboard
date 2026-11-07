@@ -248,7 +248,7 @@ async function main() {
     await page.click('#libBack');
     await page.waitForSelector('.lib-theme-card', { timeout: 10000 });
     check('2l3. ...and so does the theme',
-      /65 PICTURES/.test(
+      /66 PICTURES/.test(
         await page.locator('.lib-theme-card[data-theme="british"]').textContent() || ''
       ),
       await page.locator('.lib-theme-card[data-theme="british"]').textContent());
@@ -338,7 +338,7 @@ async function main() {
     await page.click('#libBack');
     await page.waitForSelector('.lib-theme-card', { timeout: 10000 });
     check('4c2. ...and so does the theme',
-      /[^0-9]6 PICTURES/.test(
+      /[^0-9]7 PICTURES/.test(
         await page.locator('.lib-theme-card[data-theme="floral"]').textContent() || ''
       ),
       await page.locator('.lib-theme-card[data-theme="floral"]').textContent());

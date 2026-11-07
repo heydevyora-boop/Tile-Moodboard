@@ -174,15 +174,15 @@ async function main() {
     // A starter is a room a client can open, choose and generate from,
     // so it counts -- which is also why no theme reads as empty any
     // more, and why the page is never the blank grid that was reported.
-    // Four uploaded plus five starters -- one per room type, which is
+    // Four uploaded plus six starters -- one per room type, which is
     // what makes every cell of the Theme x Room grid non-empty.
     check('1c. ...named, with its palette and how many pictures it holds',
       /British/.test(await british.textContent() || '')
       && /Heritage green/.test(await british.textContent() || '')
-      && /9 PICTURES/.test(await british.textContent() || ''),
+      && /10 PICTURES/.test(await british.textContent() || ''),
       await british.textContent());
     check('1d. ...and a theme nobody has uploaded to still offers its starters',
-      /5 PICTURES/.test(
+      /6 PICTURES/.test(
         await page.locator('.lib-theme-card[data-theme="rustic"]').textContent() || ''
       ),
       await page.locator('.lib-theme-card[data-theme="rustic"]').textContent());

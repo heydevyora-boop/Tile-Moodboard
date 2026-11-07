@@ -176,8 +176,8 @@ async function main() {
     // One starter per room type, so the Theme x Room grid has no empty
     // cell at all -- which is the blank-page complaint, one level down.
     const first = await page.locator('.lib-theme-card').first().textContent() || '';
-    check('2a. every theme shows a starter for each of its five rooms',
-      /5 PICTURES/.test(first), first);
+    check('2a. every theme shows a starter for each of its six rooms',
+      /6 PICTURES/.test(first), first);
     check('2b. ...and none claims to be empty',
       !/0 PICTURES/.test(await page.locator('.lib-theme-grid').textContent() || '')
       && !/COUNT UNAVAILABLE/.test(await page.locator('.lib-theme-grid').textContent() || ''));
@@ -248,7 +248,7 @@ async function main() {
       await page.locator('.lib-note-bad').count() === 0);
     const grid = await page.locator('.lib-theme-grid').textContent() || '';
     check('6b. the counts are unchanged, since nothing was uploaded',
-      /5 PICTURES/.test(grid) && !/COUNT UNAVAILABLE/.test(grid), grid.slice(0, 160));
+      /6 PICTURES/.test(grid) && !/COUNT UNAVAILABLE/.test(grid), grid.slice(0, 160));
     check('6c. ...and the upload is where the hint said it was',
       await (async () => {
         await openThemeRoom('british', 'kitchen');

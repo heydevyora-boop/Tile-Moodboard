@@ -67,6 +67,19 @@ const LAYOUT_NOTE =
   'The pattern runs the full width of the wall to dado height, plain above it.';
 
 /**
+ * ...except outdoors, where there is no wall to run a dado up. A
+ * balcony is a parapet, the sky above it and a floor, so the pattern
+ * fills the parapet and that is the whole of it.
+ *
+ * Saying this correctly matters more than it looks: the reading is what
+ * the tile-matching step searches the catalog WITH, and a board told to
+ * answer "plain above dado height" on a surface that has no above will
+ * pick a product for a wall that is not there.
+ */
+const OUTDOOR_LAYOUT_NOTE =
+  'The pattern fills the parapet, with open sky above it and an outdoor floor below.';
+
+/**
  * Each theme's reading, written from the drawing itself.
  *
  * `floorText` and `wallText` describe the dado layout; the feature-bay
@@ -233,6 +246,8 @@ function build(): StarterRoom[] {
 
   for (const [themeId, reading] of Object.entries(THEME_READINGS)) {
     for (const room of ROOM_LIST) {
+      const note = room.outdoor ? OUTDOOR_LAYOUT_NOTE : LAYOUT_NOTE;
+
       made.push({
         id: `${STARTER_PREFIX}${SLUGS[themeId]}-${room.slug}`,
         themeId,
@@ -241,10 +256,10 @@ function build(): StarterRoom[] {
         // scheme, then the room it is drawn as.
         title: `${reading.title} ${room.label}`,
         room: room.label,
-        description: `${reading.summary} ${LAYOUT_NOTE}`,
+        description: `${reading.summary} ${note}`,
         file: `${SLUGS[themeId]}-${room.slug}.png`,
         profile: {
-          summary: `A ${room.label.toLowerCase()}. ${reading.summary} ${LAYOUT_NOTE}`,
+          summary: `A ${room.label.toLowerCase()}. ${reading.summary} ${note}`,
           dominantColour: reading.dominantColour,
           palette: reading.palette,
           materials: reading.materials,
@@ -253,12 +268,18 @@ function build(): StarterRoom[] {
           formats: reading.formats,
           mood: reading.mood,
           surfaces: {
-            floor: reading.floor,
-            // The pattern IS the lower wall in this lay-up. Saying so
-            // is the whole reason a board can put the right product in
-            // the right role: the base answers the plain field and the
-            // floor, the decorated piece answers this.
-            walls: `${reading.figured} to dado height, ${reading.plain} above`,
+            floor: room.outdoor
+              ? `${reading.floor}, laid as an outdoor floor`
+              : reading.floor,
+            // The pattern IS the lower wall in this lay-up -- or the
+            // whole parapet, outdoors, where there is nothing above it
+            // but sky. Saying which is the whole reason a board can put
+            // the right product in the right role: the base answers the
+            // plain field and the floor, the decorated piece answers
+            // this.
+            walls: room.outdoor
+              ? `a chest-high parapet carrying ${reading.figured}, open sky above it`
+              : `${reading.figured} to dado height, ${reading.plain} above`,
             feature:
               'none \u2014 the pattern runs the full width rather than concentrating '
               + 'on one plane',

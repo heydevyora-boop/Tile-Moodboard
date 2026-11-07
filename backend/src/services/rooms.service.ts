@@ -27,6 +27,16 @@ export interface RoomProfile {
   /** The key Python's describe_space matches on. */
   space: string;
   blurb: string;
+  /**
+   * True for a space with no ceiling and no walls to speak of -- a
+   * parapet, the sky above it and a floor.
+   *
+   * It changes how a starter is DRAWN and how its reading is worded
+   * ("its parapet carries", not "its walls carry"). Nothing downstream
+   * of the library reads it: the generator already knows a balcony is
+   * an outdoor space from its own table.
+   */
+  outdoor?: boolean;
   aliases?: string[];
 }
 

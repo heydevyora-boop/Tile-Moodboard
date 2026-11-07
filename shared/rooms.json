@@ -19,8 +19,12 @@
     "`aliases` carry the free text that reached the old `room` column before this list",
     "existed, so an older row still lands in the right place instead of being orphaned.",
     "",
-    "NOT LISTED: the wizard also offers 'Balcony & Patio', which the library does not",
-    "cover. Adding it is one entry here; it is left out because it was not asked for."
+    "`outdoor` marks a space with no ceiling and no walls to speak of: a parapet, the sky",
+    "above it and a floor. The starter generator draws it differently for that reason, and",
+    "the reading a starter ships says 'parapet' where an indoor one says 'walls'.",
+    "",
+    "Python holds 'balcony' and 'patio' as two entries matched on substring, with balcony",
+    "first; one room here covers both, as the wizard does, and points at that first key."
   ],
   "rooms": {
     "bathroom": {
@@ -67,6 +71,16 @@
       "space": "kitchen",
       "blurb": "A run of counter, cabinets, and the splashback between.",
       "aliases": ["kitchens", "kitchen and dining", "kitchen & dining", "dining", "pantry", "galley"]
+    },
+    "balcony_patio": {
+      "id": "balcony_patio",
+      "label": "Balcony & Patio",
+      "slug": "balcony-patio",
+      "wizard": "Balcony & Patio",
+      "space": "balcony",
+      "blurb": "Open to the sky \u2014 a parapet, a railing and an outdoor floor.",
+      "outdoor": true,
+      "aliases": ["balcony", "patio", "terrace", "deck", "veranda", "verandah", "outdoor", "balconies"]
     }
   }
 }

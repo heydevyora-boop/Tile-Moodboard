@@ -214,13 +214,14 @@ and a **room type**, and browsing follows the same shape:
 
 ```
 De'vyora Library
-├── British              ├── Bathroom      ← the pictures
+├── British              ├── Bathroom          ← the pictures
 │   ├── Bathroom         ├── Bedroom
 │   ├── Bedroom          ├── Drawing Room
 │   ├── Drawing Room     ├── Powder Room
-│   ├── Powder Room      └── Kitchen
-│   └── Kitchen
-├── Roman Touch  …       (and the same five under every theme)
+│   ├── Powder Room      ├── Kitchen
+│   ├── Kitchen          └── Balcony & Patio
+│   └── Balcony & Patio
+├── Roman Touch  …       (and the same six under every theme)
 ```
 
 ### The rooms are the system's own, not a new list
@@ -240,9 +241,23 @@ If these drifted apart, a client could choose a Kitchen reference and
 get a bathroom back — which is the one thing this hierarchy exists to
 make impossible.
 
-The five are the ones the studio asked for. The wizard also offers
-**Balcony & Patio**, which the library does not cover; adding it is one
-entry in that file.
+Six rooms, matching the six the wizard offers. **Balcony & Patio** is
+the outdoor one, and `shared/rooms.json` marks it `outdoor: true` —
+which changes two things and nothing else:
+
+- the starter is **drawn** as a parapet with open sky above it and an
+  outdoor floor, not as a box with a ceiling;
+- its shipped reading says *"a chest-high parapet carrying …, open sky
+  above it"* rather than *"… to dado height, plain above"*.
+
+That second one is not cosmetic. The reading is what the tile-matching
+step searches the catalog **with**, so a board told to answer "plain
+above dado height" on a surface that has no above would pick a product
+for a wall that is not there.
+
+Python holds `balcony` and `patio` as two entries matched on substring,
+balcony first; one room here covers both, as the wizard does, and
+points at that first key.
 
 ### Backward compatibility, and why there is no `roomType` column
 
@@ -293,7 +308,7 @@ where it would make one disappear.
 
 ### Starters
 
-One per theme per room — 9 × 5 = **45**, so no cell of the grid is
+One per theme per room — 9 × 6 = **54**, so no cell of the grid is
 empty. Each ships its own reading, which names the room, so a board
 built on the Kitchen reference reads as a kitchen brief.
 
