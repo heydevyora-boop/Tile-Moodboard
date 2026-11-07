@@ -150,6 +150,26 @@ async function main() {
     check('3e. the account now counts as connected',
       (await oauth.isOAuthAuthorized()) === true);
 
+    // A SERVERLESS INSTANCE THAT ASKED TOO EARLY. Each one holds its
+    // own copy of this, so an instance that answered a request before
+    // the owner connected must not go on insisting the account is
+    // unconnected -- which is precisely the minute afterwards, when
+    // the owner uploads. The absence of a token is never remembered.
+    await oauth.forgetRefreshToken();
+    check('3e2. an unconnected read is not cached',
+      (await oauth.isOAuthAuthorized()) === false);
+    await prisma.apiKey.create({
+      data: {
+        service: oauth.OAUTH_SERVICE,
+        label: 'written by another instance',
+        encryptedValue: require(path.join(ROOT, 'src/utils/crypto'))
+          .encryptSecret('1//written-elsewhere', require(path.join(ROOT, 'src/utils/crypto'))
+            .deriveEncryptionKey(config.auth.encryptionKey)),
+      },
+    });
+    check('3e3. ...so a token another instance wrote is picked up at once',
+      (await oauth.readRefreshToken()) === '1//written-elsewhere');
+
     // Re-connecting rotates the one row rather than piling up grants
     // nobody can tell apart.
     await oauth.storeRefreshToken('1//second-dummy-refresh-token', null);
@@ -261,6 +281,55 @@ async function main() {
       !!thrown && /seven days/.test(thrown.message), thrown && thrown.message);
     check('6e. it is not retried, because no retry can fix it',
       !!thrown && thrown.retryable === false);
+    check('6f. ...and the client built on the dead authorization is dropped',
+      !!thrown && thrown.authExpired === true);
+
+    // ...and the client that holds the dead token is actually thrown
+    // away, or every later call in this process replays it.
+    let dropped = 0;
+    const dropping = new drive.GoogleDriveClient({
+      files: {
+        create: async () => {
+          const err = new Error('invalid_grant');
+          err.response = { status: 400, data: { error: 'invalid_grant' } };
+          throw err;
+        },
+        list: async () => ({ data: { files: [] } }),
+        get: async () => ({ data: {} }),
+        delete: async () => ({ data: {} }),
+      },
+      permissions: { create: async () => ({ data: {} }) },
+    });
+    dropping.resetAuth = () => { dropped += 1; };
+    try {
+      await dropping.uploadFile({
+        name: 'a.png', mimeType: 'image/png', content: Buffer.from('x'), parentFolderId: 'p',
+      });
+    } catch { /* expected */ }
+    check('6g. ...and the client holding it is dropped, once', dropped === 1, dropped);
+
+    // A plain Drive failure must NOT throw the credential away.
+    let keptDrops = 0;
+    const notFound = new drive.GoogleDriveClient({
+      files: {
+        create: async () => {
+          const err = new Error('nope');
+          err.response = { status: 404, data: { error: { message: 'File not found' } } };
+          throw err;
+        },
+        list: async () => ({ data: { files: [] } }),
+        get: async () => ({ data: {} }),
+        delete: async () => ({ data: {} }),
+      },
+      permissions: { create: async () => ({ data: {} }) },
+    });
+    notFound.resetAuth = () => { keptDrops += 1; };
+    try {
+      await notFound.uploadFile({
+        name: 'a.png', mimeType: 'image/png', content: Buffer.from('x'), parentFolderId: 'p',
+      });
+    } catch { /* expected */ }
+    check('6h. ...while an ordinary Drive error leaves the credential alone', keptDrops === 0);
   }
 
   // ════════════════════════════════════════════════════════════════

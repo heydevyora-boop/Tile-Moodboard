@@ -20,9 +20,18 @@ import {
 export class DriveError extends AppError {
   public readonly retryable: boolean;
 
-  constructor(message: string, statusCode: number, retryable: boolean) {
+  /**
+   * True when the credential itself failed rather than the request --
+   * a revoked or expired authorization. The client built on it is
+   * dropped so the next call builds a fresh one from whatever the
+   * owner has reconnected, instead of replaying a dead token.
+   */
+  public readonly authExpired: boolean;
+
+  constructor(message: string, statusCode: number, retryable: boolean, authExpired = false) {
     super(message, statusCode);
     this.retryable = retryable;
+    this.authExpired = authExpired;
   }
 }
 
@@ -69,7 +78,7 @@ function classifyError(err: unknown): DriveError {
   // owner would think to look. Retrying cannot fix it: the owner has
   // to connect the Google account again, and the message says so.
   if (typeof data?.error === 'string') {
-    return new DriveError(`Google Drive could not authenticate: ${describeOAuthError(err)}`, 401, false);
+    return new DriveError(`Google Drive could not authenticate: ${describeOAuthError(err)}`, 401, false, true);
   }
 
   const reason = data?.error?.errors?.[0]?.reason;
@@ -257,7 +266,11 @@ export class GoogleDriveClient {
         try {
           return await fn();
         } catch (err) {
-          throw classifyError(err);
+          const classified = classifyError(err);
+          // The stored authorization died mid-request: the client
+          // holding it is no use to the next caller either.
+          if (classified.authExpired) this.resetAuth();
+          throw classified;
         }
       },
       {

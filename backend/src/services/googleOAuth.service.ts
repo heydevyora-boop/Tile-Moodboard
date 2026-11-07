@@ -81,7 +81,7 @@ export function oauthScopes(): string[] {
  * GOOGLE_OAUTH_REDIRECT_URI for the cases where it does not (a
  * preview URL, a tunnel).
  */
-export const OAUTH_CALLBACK_PATH = '/api/v1/integrations/google/callback';
+export const OAUTH_CALLBACK_PATH = `${config.app.apiPrefix}/integrations/google/callback`;
 
 export function oauthRedirectUri(): string {
   if (config.google.oauthRedirectUri) return config.google.oauthRedirectUri;
@@ -238,8 +238,15 @@ export async function readRefreshToken(): Promise<string> {
     logger.warn(`Google OAuth: stored refresh token could not be read (${err instanceof Error ? err.message : String(err)})`);
   }
 
-  cachedRefreshToken = fromDb || config.google.oauthRefreshToken || '';
-  return cachedRefreshToken;
+  const token = fromDb || config.google.oauthRefreshToken || '';
+
+  // ONLY A TOKEN IS REMEMBERED, never its absence. Each serverless
+  // instance has its own copy of this, and one that answered a request
+  // before the owner connected would otherwise go on insisting the
+  // account is unconnected for as long as it stays warm -- which is
+  // exactly the minute after connecting, when the owner uploads.
+  if (token) cachedRefreshToken = token;
+  return token;
 }
 
 export async function isOAuthAuthorized(): Promise<boolean> {
