@@ -1098,8 +1098,18 @@
     // Adding pictures is the studio's job, not the client's. The button
     // is shown to whoever may actually use it; the server refuses the
     // rest either way, so this only decides what is worth showing.
+    //
+    // '*' COUNTS, AND LEAVING IT OUT HID THE BUTTON FROM THE OWNER.
+    //
+    // The Owner role's permission list is exactly ["*"] (prisma/seed.ts),
+    // and the server has always read it that way -- requirePermission is
+    // `includes('*') || includes(permission)`. This line checked only for
+    // the named permission, so the two asked the same question and gave
+    // different answers: the Owner's upload would have been accepted, and
+    // they were never shown the control to make one.
     state.canAdd = Array.isArray(user.permissions)
-      && user.permissions.indexOf('reference_images:write') !== -1;
+      && (user.permissions.indexOf('*') !== -1
+        || user.permissions.indexOf('reference_images:write') !== -1);
 
     state.chosen = CasaApi.library.selection();
 

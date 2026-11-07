@@ -61,7 +61,14 @@ async function main() {
   drive.googleDriveClient.deleteFile = async () => {};
 
   const staffRole = await prisma.role.create({
-    data: { name: 'OWNER', description: 'test', permissions: ['reference_images:read', 'reference_images:write'] },
+    // ["*"], as prisma/seed.ts actually seeds the Owner -- NOT a list of
+    // named permissions. Spelling them out here is precisely how the
+    // wildcard bug got through: the page checked only for the named
+    // permission, so the real Owner, whose list is just ["*"], was shown
+    // no upload control at all while the server would have accepted the
+    // upload. A fixture that does not look like production proves
+    // nothing about production.
+    data: { name: 'OWNER', description: 'test', permissions: ['*'] },
   });
   const clientRole = await prisma.role.create({
     data: { name: 'STAFF', description: 'test', permissions: ['reference_images:read'] },
@@ -343,6 +350,15 @@ async function main() {
       await page.locator('#libFiles').count() === 0);
     await openThemeRoom('british', 'unsorted');
     check('5a. the studio is offered the upload', await page.locator('#libFiles').count() === 1);
+    check('5a1. ...on a role whose only permission is the wildcard',
+      (await page.evaluate(() => {
+        try { return JSON.parse(atob(localStorage.getItem('casa_access_token').split('.')[1])).permissions; }
+        catch (err) { return null; }
+      }) || []).join(',') === '*',
+      await page.evaluate(() => {
+        try { return JSON.parse(atob(localStorage.getItem('casa_access_token').split('.')[1])).permissions; }
+        catch (err) { return null; }
+      }));
     check('5a2. ...with a theme and a room to file under',
       await page.locator('#libTheme').count() === 1
       && await page.locator('#libRoom').count() === 1);
