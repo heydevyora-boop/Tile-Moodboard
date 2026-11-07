@@ -141,6 +141,16 @@ export const config = {
       env.GOOGLE_DRIVE_LIBRARY_FOLDER
       || env.GOOGLE_DRIVE_REFERENCE_IMAGES_FOLDER
       || '',
+
+    /**
+     * The Workspace user the service account acts as, when one is set
+     * (GOOGLE_DRIVE_IMPERSONATE_USER). Empty means it acts as itself --
+     * which owns no Drive storage, so the library's folder must then be
+     * on a shared drive. See env.ts.
+     */
+    driveImpersonateUser:
+      env.GOOGLE_DRIVE_IMPERSONATE_USER
+      || '',
   },
 
   // ============================================================

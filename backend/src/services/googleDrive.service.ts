@@ -20,6 +20,27 @@ export class DriveError extends AppError {
   }
 }
 
+/**
+ * THE FAILURE A STUDIO ACTUALLY HITS, in words it can act on.
+ *
+ * Google's own text for it is "Service Accounts do not have storage
+ * quota. Leverage shared drives ... or use OAuth delegation ...", with
+ * two documentation links -- accurate, and unreadable as an answer to
+ * "why did my photograph not upload?". It is not a permission problem
+ * and no amount of re-sharing the folder fixes it: a service account
+ * owns no Drive storage at all, so any file it would OWN is refused.
+ * Only two configurations avoid that, and both are named here.
+ */
+export const SERVICE_ACCOUNT_NO_QUOTA =
+  'a service account owns no Google Drive storage of its own, so Drive refuses to let it '
+  + 'create a file that it would own. Sharing a My Drive folder with it \u2014 even as an '
+  + 'Editor \u2014 does not change that, because the uploaded file would still belong to the '
+  + 'service account. Two configurations work: move the library folder onto a SHARED DRIVE '
+  + '(Google Workspace) and add the service account to that drive as a Content manager, or '
+  + 'set GOOGLE_DRIVE_IMPERSONATE_USER to a mailbox on the studio\u2019s Workspace domain and '
+  + 'grant the service account domain-wide delegation for the Drive scope, so that it '
+  + 'uploads as that person and the files are owned by them.';
+
 const RETRYABLE_REASONS = new Set(['rateLimitExceeded', 'userRateLimitExceeded', 'quotaExceeded', 'backendError', 'internalError']);
 
 function classifyError(err: unknown): DriveError {
@@ -27,6 +48,13 @@ function classifyError(err: unknown): DriveError {
   const status = gaxiosErr.response?.status ?? (typeof gaxiosErr.code === 'number' ? gaxiosErr.code : undefined);
   const reason = gaxiosErr.response?.data?.error?.errors?.[0]?.reason;
   const message = gaxiosErr.response?.data?.error?.message ?? gaxiosErr.message ?? 'Google Drive request failed';
+
+  // Checked before everything else: it arrives as a 403, which would
+  // otherwise be reported as a permission error and send the studio off
+  // to re-share a folder that is already shared correctly.
+  if (reason === 'storageQuotaExceeded' || /do not have storage quota/i.test(message)) {
+    return new DriveError(`Google Drive refused the upload: ${SERVICE_ACCOUNT_NO_QUOTA}`, 400, false);
+  }
 
   if (reason && RETRYABLE_REASONS.has(reason)) {
     return new DriveError(`Google Drive: ${message}`, 429, true);
@@ -82,6 +110,18 @@ export interface DriveFile {
   id: string;
   name: string;
   webViewLink?: string;
+  /**
+   * The id of the SHARED DRIVE this item lives on, when it lives on
+   * one. Absent for anything in somebody's My Drive -- including a
+   * My Drive folder shared with this credential.
+   *
+   * It is the one fact that decides whether an upload can succeed at
+   * all: a file created on a shared drive is owned by that drive, a
+   * file created in a My Drive is owned by whoever created it, and a
+   * service account cannot own anything. Only getFolderById asks for
+   * it, because only the configured folder is checked this way.
+   */
+  driveId?: string;
 }
 
 /** Minimal structural subset of drive_v3.Drive this client actually uses — lets tests inject a fake without depending on googleapis' full type surface. */
@@ -121,9 +161,19 @@ export class GoogleDriveClient {
     // keyFile stays first so existing Docker/local deployments keep the
     // exact behaviour they had. The JSON variant is only consulted when no
     // key path is set -- see GOOGLE_SERVICE_ACCOUNT_JSON in config/env.ts.
+
+    // OAUTH DELEGATION, when the studio has configured it. With a
+    // subject the credential stops acting as the service account and
+    // acts as that person instead, which is the only way a file can be
+    // uploaded into a My Drive and owned by somebody who has storage.
+    // Unset -- the default -- this is undefined and nothing changes.
+    const clientOptions = config.google.driveImpersonateUser
+      ? { subject: config.google.driveImpersonateUser }
+      : undefined;
+
     const auth = config.google.serviceAccountKeyPath
-      ? new google.auth.GoogleAuth({ keyFile: config.google.serviceAccountKeyPath, scopes })
-      : new google.auth.GoogleAuth({ credentials: parseServiceAccountJson(config.google.serviceAccountJson as string), scopes });
+      ? new google.auth.GoogleAuth({ keyFile: config.google.serviceAccountKeyPath, scopes, clientOptions })
+      : new google.auth.GoogleAuth({ credentials: parseServiceAccountJson(config.google.serviceAccountJson as string), scopes, clientOptions });
     this.cachedDrive = google.drive({ version: 'v3', auth }) as unknown as DriveApiClient;
     return this.cachedDrive;
   }
@@ -160,7 +210,18 @@ export class GoogleDriveClient {
     const escapedName = name.replace(/'/g, "\\'");
     const q = `mimeType='application/vnd.google-apps.folder' and name='${escapedName}' and trashed=false${parentClause}`;
 
-    const res = await this.withRetry(() => drive.files.list({ q, fields: 'files(id,name)', pageSize: 1 }));
+    const res = await this.withRetry(() =>
+      drive.files.list({
+        q,
+        fields: 'files(id,name)',
+        pageSize: 1,
+        // Without these two a folder on a shared drive is simply not
+        // found, and get-or-create would answer by creating a second
+        // one -- in a My Drive, where the upload then fails.
+        supportsAllDrives: true,
+        includeItemsFromAllDrives: true,
+      }),
+    );
     const file = res.data.files?.[0];
     return file?.id ? { id: file.id, name: file.name ?? name } : null;
   }
@@ -173,6 +234,7 @@ export class GoogleDriveClient {
       drive.files.create({
         requestBody: { name, mimeType: 'application/vnd.google-apps.folder', parents: parentFolderId ? [parentFolderId] : undefined },
         fields: 'id,name',
+        supportsAllDrives: true,
       }),
     );
     if (!res.data.id) throw new DriveError('Google Drive did not return an id for the created folder', 502, false);
@@ -208,7 +270,9 @@ export class GoogleDriveClient {
       const res = await this.withRetry(() =>
         drive.files.get({
           fileId: folderId,
-          fields: 'id,name,mimeType,trashed',
+          // driveId answers "can anything actually be stored in here?"
+          // -- see DriveFile.driveId.
+          fields: 'id,name,mimeType,trashed,driveId',
           // A folder on a Shared Drive is invisible without this, and a
           // Shared Drive is exactly where a service account's files can
           // live -- so omitting it would reject the very configuration
@@ -222,7 +286,7 @@ export class GoogleDriveClient {
       if (file.trashed) return null;
       if (file.mimeType !== 'application/vnd.google-apps.folder') return null;
 
-      return { id: file.id, name: file.name ?? '(untitled)' };
+      return { id: file.id, name: file.name ?? '(untitled)', driveId: file.driveId ?? undefined };
     } catch {
       return null;
     }
@@ -233,7 +297,13 @@ export class GoogleDriveClient {
     const drive = this.getDrive();
 
     const res = await this.withRetry(() =>
-      drive.files.list({ q: `'${folderId}' in parents and trashed=false`, fields: 'files(id,name,webViewLink)', pageSize: 100 }),
+      drive.files.list({
+        q: `'${folderId}' in parents and trashed=false`,
+        fields: 'files(id,name,webViewLink)',
+        pageSize: 100,
+        supportsAllDrives: true,
+        includeItemsFromAllDrives: true,
+      }),
     );
     return (res.data.files ?? [])
       .filter((f): f is { id: string; name?: string | null; webViewLink?: string | null } => !!f.id)
@@ -251,6 +321,11 @@ export class GoogleDriveClient {
         requestBody: { name: input.name, parents: input.parentFolderId ? [input.parentFolderId] : undefined },
         media: { mimeType: input.mimeType, body: Readable.from(input.content) },
         fields: 'id,name,webViewLink',
+        // THE FLAG THE WHOLE LIBRARY DEPENDS ON. A shared drive is the
+        // only place a service account's upload can be stored, and
+        // without this the request is handled as if shared drives did
+        // not exist -- so the file is refused for want of quota.
+        supportsAllDrives: true,
       }),
     );
     if (!res.data.id) throw new DriveError('Google Drive did not return an id for the uploaded file', 502, false);
@@ -260,7 +335,7 @@ export class GoogleDriveClient {
   async deleteFile(fileId: string): Promise<void> {
     if (!this.isConfigured()) throw AppError.internal('Google Drive is not configured');
     const drive = this.getDrive();
-    await this.withRetry(() => drive.files.delete({ fileId }));
+    await this.withRetry(() => drive.files.delete({ fileId, supportsAllDrives: true }));
   }
 
   // ── Generate Public Links ────────────────────────────────────────────
@@ -270,8 +345,10 @@ export class GoogleDriveClient {
     if (!this.isConfigured()) throw AppError.internal('Google Drive is not configured');
     const drive = this.getDrive();
 
-    await this.withRetry(() => drive.permissions.create({ fileId, requestBody: { role: 'reader', type: 'anyone' } }));
-    const res = await this.withRetry(() => drive.files.get({ fileId, fields: 'webViewLink' }));
+    await this.withRetry(() =>
+      drive.permissions.create({ fileId, requestBody: { role: 'reader', type: 'anyone' }, supportsAllDrives: true }),
+    );
+    const res = await this.withRetry(() => drive.files.get({ fileId, fields: 'webViewLink', supportsAllDrives: true }));
 
     if (!res.data.webViewLink) throw new DriveError('Google Drive did not return a shareable link after making the file public', 502, false);
     return res.data.webViewLink;

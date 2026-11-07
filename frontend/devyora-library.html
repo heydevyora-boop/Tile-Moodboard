@@ -559,9 +559,14 @@
         // client is actually going to be choosing between, so it is
         // what the card shows -- the page used to lead with an abstract
         // pattern plate and looked like a palette chooser.
+        //
+        // The bathroom is that first starter, and the filename is
+        // <theme>-<room>.png. It used to ask for <theme>-1.png, which
+        // is what the starters were called before they were filed by
+        // room: nine cards, nine 404s, nine empty frames.
         + '<span class="lib-theme-art">'
         + '<img src="' + escapeHtml(CasaApi.resolveBackendImageUrl(
-          '/static/library-starters/' + t.slug + '-1.png')) + '" alt="" loading="lazy" decoding="async">'
+          '/static/library-starters/' + t.slug + '-bathroom.png')) + '" alt="" loading="lazy" decoding="async">'
         // ...with the pattern plate kept as a small inset, because the
         // surface is still the thing being chosen.
         + '<span class="lib-theme-plate"><img src="img/themes/' + escapeHtml(t.slug)

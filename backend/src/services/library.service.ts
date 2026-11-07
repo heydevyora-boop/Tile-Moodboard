@@ -32,7 +32,7 @@ import { AppError } from '@utils/AppError';
 import { logActivity } from './activityLog.service';
 import { describeTheme } from './themes.service';
 import { describeRoom, storableRoomId, resolveRoomId, UNSORTED_ROOM } from './rooms.service';
-import { googleDriveClient } from './googleDrive.service';
+import { googleDriveClient, SERVICE_ACCOUNT_NO_QUOTA, DriveFile } from './googleDrive.service';
 import { buildStoredFilename } from '@middlewares/uploadReferenceImage';
 import { isRealImageBuffer } from '@utils/fileSignature';
 import { toDriveDownloadUrl } from './referenceImages.service';
@@ -76,7 +76,7 @@ export function driveFolderIdFrom(value: string): string {
   return '';
 }
 
-let cachedFolderId: string | null = null;
+let cachedFolder: DriveFile | null = null;
 
 /**
  * What this deployment can actually see of the library's Drive folder.
@@ -102,6 +102,13 @@ export interface LibraryFolderStatus {
   folderId: string;
   /** The folder's name on Drive, when it opened. */
   name: string;
+  /**
+   * Whether the folder lives on a shared drive rather than in
+   * somebody's My Drive. False is not a detail: with a plain service
+   * account it is the difference between an upload that works and one
+   * Drive refuses outright. See SERVICE_ACCOUNT_NO_QUOTA.
+   */
+  sharedDrive: boolean;
 }
 
 /**
@@ -128,6 +135,7 @@ export async function describeLibraryFolder(): Promise<LibraryFolderStatus> {
       configured: false,
       folderId: '',
       name: '',
+      sharedDrive: false,
       reason:
         'The De\u2019vyora Library has no Google Drive folder configured, and it will not '
         + 'upload anywhere else. Create a folder in the studio\u2019s Drive (for example '
@@ -144,6 +152,7 @@ export async function describeLibraryFolder(): Promise<LibraryFolderStatus> {
       configured: true,
       folderId: '',
       name: '',
+      sharedDrive: false,
       reason:
         `GOOGLE_DRIVE_LIBRARY_FOLDER is set to "${configured}", which is neither a Google `
         + 'Drive folder link nor a folder id. Paste the folder\u2019s link '
@@ -157,6 +166,7 @@ export async function describeLibraryFolder(): Promise<LibraryFolderStatus> {
       configured: true,
       folderId,
       name: '',
+      sharedDrive: false,
       reason:
         'A Drive folder is configured, but this deployment has no Google credential to open '
         + 'it with. Set GOOGLE_SERVICE_ACCOUNT_JSON.',
@@ -167,9 +177,7 @@ export async function describeLibraryFolder(): Promise<LibraryFolderStatus> {
   // service account was never given access to, otherwise surfaces as a
   // generic Drive failure on every single upload of a hundred, with
   // nothing to say which setting is at fault.
-  const folder = cachedFolderId
-    ? { id: cachedFolderId, name: '' }
-    : await googleDriveClient.getFolderById(folderId);
+  const folder = cachedFolder ?? await googleDriveClient.getFolderById(folderId);
 
   if (!folder) {
     return {
@@ -177,6 +185,7 @@ export async function describeLibraryFolder(): Promise<LibraryFolderStatus> {
       configured: true,
       folderId,
       name: '',
+      sharedDrive: false,
       reason:
         `The Google Drive folder ${folderId} could not be opened. Either the id in `
         + 'GOOGLE_DRIVE_LIBRARY_FOLDER is wrong, the folder is in the bin, or it has not '
@@ -185,13 +194,42 @@ export async function describeLibraryFolder(): Promise<LibraryFolderStatus> {
     };
   }
 
-  cachedFolderId = folder.id;
-  return { ok: true, reason: '', configured: true, folderId: folder.id, name: folder.name };
+  cachedFolder = folder;
+  const sharedDrive = !!folder.driveId;
+
+  /*
+   * THE FOLDER OPENS AND STILL NOTHING CAN BE PUT IN IT.
+   *
+   * This is the state the studio was left in: the folder exists, the
+   * service account was shared on it as an Editor, the id is right --
+   * and every single upload comes back "Service Accounts do not have
+   * storage quota". Sharing was never the missing piece. A file has an
+   * owner; on a shared drive that owner is the drive, in a My Drive it
+   * is whoever created the file, and a service account is allowed to
+   * own nothing at all.
+   *
+   * Said here, BEFORE a hundred files are picked, rather than a
+   * hundred times afterwards -- and only when the deployment has no
+   * delegated user to upload as, because with one the file is owned by
+   * that person and a My Drive folder is perfectly fine.
+   */
+  if (!sharedDrive && !config.google.driveImpersonateUser) {
+    return {
+      ok: false,
+      configured: true,
+      folderId: folder.id,
+      name: folder.name,
+      sharedDrive: false,
+      reason:
+        `“${folder.name}” opens, but it is a folder in somebody’s My Drive, and `
+        + `${SERVICE_ACCOUNT_NO_QUOTA}`,
+    };
+  }
+
+  return { ok: true, reason: '', configured: true, folderId: folder.id, name: folder.name, sharedDrive };
 }
 
 async function libraryRootId(): Promise<string> {
-  if (cachedFolderId) return cachedFolderId;
-
   const status = await describeLibraryFolder();
   if (!status.ok) throw AppError.badRequest(status.reason);
 
@@ -219,7 +257,7 @@ const cachedSubfolders = new Map<string, string>();
 
 /** Forgets the folder tree -- for tests, and after a config change. */
 export function clearLibraryFolderCache(): void {
-  cachedFolderId = null;
+  cachedFolder = null;
   cachedSubfolders.clear();
 }
 

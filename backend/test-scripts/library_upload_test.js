@@ -84,8 +84,11 @@ async function main() {
   driveState.lookedUp = [];
   client.getFolderById = async (id) => {
     driveState.lookedUp.push(id);
+    // driveId: the folder is on a SHARED DRIVE, which is the only
+    // configuration a service account can actually store a file in --
+    // see describeLibraryFolder.
     return id === '1RefImagesFolderId'
-      ? { id, name: 'Reference Images' }
+      ? { id, name: 'Reference Images', driveId: '0ASharedDriveId' }
       : null;
   };
   // <Reference Images>/<Theme>/<Room>, which is the shape the studio

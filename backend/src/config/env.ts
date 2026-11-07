@@ -281,6 +281,32 @@ const envSchema = z.object({
     .string()
     .optional(),
 
+  /*
+   * THE USER A SERVICE ACCOUNT ACTS AS, when it has to write into a
+   * person's own My Drive.
+   *
+   * A service account owns no Drive storage at all. Sharing a My Drive
+   * folder with it as an Editor does not change that: the file it
+   * creates would be owned by the service account, and Google refuses
+   * with "Service Accounts do not have storage quota". There are
+   * exactly two configurations that work, and Google's own error names
+   * both -- a shared drive, or OAuth delegation. This is the second.
+   *
+   * Set it to a Workspace mailbox on the same domain (the studio's own
+   * address) AND grant the service account domain-wide delegation for
+   * https://www.googleapis.com/auth/drive in the Admin console. The
+   * service account then acts as that person: the files it uploads are
+   * owned by them and count against their storage, exactly as if they
+   * had dragged them in.
+   *
+   * Unset -- the default, and the only possibility on a personal Gmail
+   * account -- the service account acts as itself, and the library's
+   * folder must live on a shared drive.
+   */
+  GOOGLE_DRIVE_IMPERSONATE_USER: z
+    .string()
+    .optional(),
+
   // ==========================================================
   // GEMINI AI
   // ==========================================================

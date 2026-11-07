@@ -83,18 +83,49 @@ key column in this table, so a row cannot exist for a picture kept
 anywhere else. `imageUrl` is the browser-ready Drive link derived from
 that id.
 
-> **Known blocker for the upload chunk.** The Google credential in use is
-> a *service account*, and a service account owns no Drive storage quota
-> — an upload into its own My Drive is refused outright. This is already
-> visible elsewhere in the system: every generated scene is recorded with
-> `imageSource: "inline"`, which is the fallback used only when no Drive
-> link came back.
->
-> Before upload can work, one of these has to be true: the pictures live
-> in a **Shared Drive** the service account is a member of, or the
-> credential is changed to **OAuth delegation**. Storing links to files
-> the studio put in Drive by hand sidesteps it; uploading through the app
-> does not.
+#### A service account owns nothing, and that decides where the folder goes
+
+The Google credential in use is a *service account*, and a service
+account has **no Drive storage quota at all**. Drive does not refuse the
+*permission*; it refuses to let that account **own** a file. Every file
+has an owner, and in a My Drive the owner is whoever created it — so an
+upload into a My Drive folder comes back:
+
+```
+Service Accounts do not have storage quota. Leverage shared drives ...,
+or use OAuth delegation ... instead.
+```
+
+**Sharing the folder does not fix this.** Adding the service account as
+an Editor — even as the owner's own folder, even at the Drive root — grants
+it the right to write, and it still cannot own what it writes. Exactly two
+configurations work, and Google's error names both:
+
+| | What to do | Whose storage it uses |
+|---|---|---|
+| **Shared drive** | Put the folder on a shared drive (Google Workspace) and add the service account to *that drive* as a **Content manager**. | The shared drive's |
+| **OAuth delegation** | Set `GOOGLE_DRIVE_IMPERSONATE_USER` to a mailbox on the studio's Workspace domain, and grant the service account **domain-wide delegation** for `https://www.googleapis.com/auth/drive` in the Admin console. The credential then acts as that person. | That person's |
+
+A personal Gmail account has neither, and the library cannot upload from
+one.
+
+**The flag that makes the first one work.** Every Drive request this
+client sends now carries `supportsAllDrives: true` (and
+`includeItemsFromAllDrives` when listing). Without it the API answers as
+though shared drives did not exist — so a folder on one is not found, a
+sub-folder is created in a My Drive instead, and the upload is refused
+for want of quota *even when the configuration was right*. That one
+missing flag is why putting the folder on a shared drive did not help on
+its own.
+
+**Said before the files are picked.** `describeLibraryFolder` reads the
+folder's `driveId`. No `driveId` means it is in a My Drive; with no
+delegated user configured, the library reports itself unusable with the
+table above in words, rather than letting a hundred photographs be
+chosen and then refused one at a time. Google's own quota refusal, if it
+still arrives, is translated into the same sentence instead of being
+reported as a permission error — which is what sent the studio back to
+re-share a folder that was already shared correctly.
 
 #### One folder, named by the studio
 
@@ -107,8 +138,10 @@ GOOGLE_DRIVE_LIBRARY_FOLDER=https://drive.google.com/drive/folders/1AbCdEf...
 GOOGLE_DRIVE_LIBRARY_FOLDER=1AbCdEf...
 ```
 
-The studio creates that folder (they called it **Reference Images**),
-shares it with the service account as an **Editor**, and sets this. The
+The studio creates that folder (they called it **Reference Images**) —
+on a shared drive, or in a My Drive if `GOOGLE_DRIVE_IMPERSONATE_USER`
+is set; see above, because sharing it as an Editor is *not* by itself
+enough — and sets this. The
 same value is also read from `GOOGLE_DRIVE_REFERENCE_IMAGES_FOLDER`, so
 whichever of the two names is typed into the environment, the pictures
 land in the right place.
@@ -119,7 +152,7 @@ somewhere the studio had not chosen, and on a service account it wrote
 into a My Drive with no storage quota at all — which is most of why
 uploads failed. **A folder the studio creates and shares is the
 configuration that actually works**, and it is also the fix for the
-quota blocker above when that folder lives on a Shared Drive.
+quota blocker above when that folder lives on a shared drive.
 
 **Unset is a refusal, not a fallback.** With no folder configured the
 library will not upload at all, because uploading to the root is
