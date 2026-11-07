@@ -78,46 +78,124 @@ export function driveFolderIdFrom(value: string): string {
 
 let cachedFolderId: string | null = null;
 
-async function libraryRootId(): Promise<string> {
-  if (cachedFolderId) return cachedFolderId;
+/**
+ * What this deployment can actually see of the library's Drive folder.
+ *
+ * REPORTED RATHER THAN THROWN, for two reasons the studio just hit.
+ * The gallery can warn BEFORE a hundred files are picked -- losing a
+ * batch to a setting is the failure this exists to prevent -- and the
+ * owner can read, on the integrations screen, what the server reads
+ * rather than having to argue with it about whether the variable was
+ * set.
+ *
+ * libraryRootId throws on exactly these answers, so there is one
+ * definition of what is wrong and one wording for it.
+ */
+export interface LibraryFolderStatus {
+  /** True only when a folder is configured AND this credential opens it. */
+  ok: boolean;
+  /** Why not, in words the studio can act on. Empty when ok. */
+  reason: string;
+  /** Whether the variable holds anything at all. */
+  configured: boolean;
+  /** The id read out of the link, when one could be. */
+  folderId: string;
+  /** The folder's name on Drive, when it opened. */
+  name: string;
+}
 
+/**
+ * The hint that matters most when somebody is sure they set it.
+ *
+ * On Vercel a variable belongs to an environment -- Production,
+ * Preview, Development -- so a Preview deployment does not see a
+ * Production-only value; and a deployment built before the variable
+ * was added keeps the old value until it is redeployed. Both look
+ * identical from in here: the variable is simply empty.
+ */
+const ENV_HINT =
+  'If you have already set it: a variable on Vercel belongs to one environment, so a '
+  + 'Preview deployment does not see a Production-only value \u2014 set it for both \u2014 '
+  + 'and a deployment built before the variable was added keeps the old value until it is '
+  + 'redeployed.';
+
+export async function describeLibraryFolder(): Promise<LibraryFolderStatus> {
   const configured = config.google.driveLibraryFolder;
 
   if (!configured) {
-    throw AppError.badRequest(
-      'The De\u2019vyora Library has no Google Drive folder configured, and it will not '
-      + 'upload anywhere else. Create a folder in the studio\u2019s Drive (for example '
-      + '"Reference Images"), share it with the service account as an Editor, and set '
-      + 'GOOGLE_DRIVE_LIBRARY_FOLDER to its link or its id.',
-    );
+    return {
+      ok: false,
+      configured: false,
+      folderId: '',
+      name: '',
+      reason:
+        'The De\u2019vyora Library has no Google Drive folder configured, and it will not '
+        + 'upload anywhere else. Create a folder in the studio\u2019s Drive (for example '
+        + '"Reference Images"), share it with the service account as an Editor, and set '
+        + `GOOGLE_DRIVE_LIBRARY_FOLDER to its link or its id. ${ENV_HINT}`,
+    };
   }
 
   const folderId = driveFolderIdFrom(configured);
 
   if (!folderId) {
-    throw AppError.badRequest(
-      `GOOGLE_DRIVE_LIBRARY_FOLDER is set to "${configured}", which is neither a Google `
-      + 'Drive folder link nor a folder id. Paste the folder\u2019s link '
-      + '(https://drive.google.com/drive/folders/...) or just the id from the end of it.',
-    );
+    return {
+      ok: false,
+      configured: true,
+      folderId: '',
+      name: '',
+      reason:
+        `GOOGLE_DRIVE_LIBRARY_FOLDER is set to "${configured}", which is neither a Google `
+        + 'Drive folder link nor a folder id. Paste the folder\u2019s link '
+        + '(https://drive.google.com/drive/folders/...) or just the id from the end of it.',
+    };
+  }
+
+  if (!googleDriveClient.isConfigured()) {
+    return {
+      ok: false,
+      configured: true,
+      folderId,
+      name: '',
+      reason:
+        'A Drive folder is configured, but this deployment has no Google credential to open '
+        + 'it with. Set GOOGLE_SERVICE_ACCOUNT_JSON.',
+    };
   }
 
   // CHECKED ONCE, BEFORE ANYTHING IS SENT. A wrong id, or one the
   // service account was never given access to, otherwise surfaces as a
   // generic Drive failure on every single upload of a hundred, with
   // nothing to say which setting is at fault.
-  const folder = await googleDriveClient.getFolderById(folderId);
+  const folder = cachedFolderId
+    ? { id: cachedFolderId, name: '' }
+    : await googleDriveClient.getFolderById(folderId);
 
   if (!folder) {
-    throw AppError.badRequest(
-      `The Google Drive folder ${folderId} could not be opened. Either the id in `
-      + 'GOOGLE_DRIVE_LIBRARY_FOLDER is wrong, the folder is in the bin, or it has not been '
-      + 'shared with this deployment\u2019s service account \u2014 share it as an Editor.',
-    );
+    return {
+      ok: false,
+      configured: true,
+      folderId,
+      name: '',
+      reason:
+        `The Google Drive folder ${folderId} could not be opened. Either the id in `
+        + 'GOOGLE_DRIVE_LIBRARY_FOLDER is wrong, the folder is in the bin, or it has not '
+        + 'been shared with this deployment\u2019s service account \u2014 share it as an '
+        + 'Editor.',
+    };
   }
 
   cachedFolderId = folder.id;
-  return folder.id;
+  return { ok: true, reason: '', configured: true, folderId: folder.id, name: folder.name };
+}
+
+async function libraryRootId(): Promise<string> {
+  if (cachedFolderId) return cachedFolderId;
+
+  const status = await describeLibraryFolder();
+  if (!status.ok) throw AppError.badRequest(status.reason);
+
+  return status.folderId;
 }
 
 /**

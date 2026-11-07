@@ -148,6 +148,68 @@ async function main() {
   }
 
   // ════════════════════════════════════════════════════════════════
+  console.log('\n2z. and the page can ask BEFORE anybody picks a file');
+  {
+    // WHAT THE STUDIO ACTUALLY HIT: four files chosen, four identical
+    // failures, and the reason only readable afterwards. The server
+    // knows all of this at page load, so it has to be askable then.
+    config.google.driveLibraryFolder = '';
+    library.clearLibraryFolderCache();
+    let status = await library.describeLibraryFolder();
+    check('2z1. an unset folder is reported, not thrown', status.ok === false);
+    check('2z2. ...saying it is not configured at all', status.configured === false);
+    check('2z3. ...naming the variable', /GOOGLE_DRIVE_LIBRARY_FOLDER/.test(status.reason));
+
+    // THE HINT THAT MATTERS when somebody is certain they set it: on
+    // Vercel the value belongs to one environment, and an existing
+    // deployment keeps the old one until it is rebuilt. Both look
+    // identical from the server: the variable is simply empty.
+    check('2z4. ...and why a variable you DID set can still be missing',
+      /Preview/.test(status.reason) && /redeployed/.test(status.reason), status.reason);
+
+    config.google.driveLibraryFolder = 'Reference Images';
+    library.clearLibraryFolderCache();
+    status = await library.describeLibraryFolder();
+    check('2z5. a folder name is reported as not a link or an id',
+      status.ok === false && status.configured === true
+      && /neither a Google Drive folder link nor a folder id/.test(status.reason),
+      status.reason);
+
+    config.google.driveLibraryFolder = 'https://drive.google.com/drive/folders/WrongFolderId';
+    library.clearLibraryFolderCache();
+    status = await library.describeLibraryFolder();
+    check('2z6. an unreachable folder is reported with the id it tried',
+      status.ok === false && /WrongFolderId/.test(status.reason), status.reason);
+
+    config.google.driveLibraryFolder = 'https://drive.google.com/drive/folders/RealFolderId';
+    library.clearLibraryFolderCache();
+    status = await library.describeLibraryFolder();
+    check('2z7. a working one reports ok, with the folder it opened',
+      status.ok === true && status.folderId === 'RealFolderId'
+      && status.name === 'Reference Images' && status.reason === '',
+      status);
+
+    // One definition of what is wrong: the thrown message and the
+    // reported one are the same words, so the page and the upload
+    // cannot tell the studio two different stories.
+    config.google.driveLibraryFolder = '';
+    library.clearLibraryFolderCache();
+    const reported = (await library.describeLibraryFolder()).reason;
+    library.clearLibraryFolderCache();
+    let thrown = '';
+    try {
+      await library.addReference(file, { themeId: 'british', room: 'bathroom' }, 'user-1');
+    } catch (error) { thrown = error.message; }
+    // One definition, quoted verbatim: the per-file failure adds the
+    // file's name in front and nothing else, so the page's warning and
+    // the upload's refusal cannot tell two different stories.
+    check('2z8. the thrown message quotes the reported reason verbatim',
+      thrown.includes(reported), { reported: reported.slice(0, 60), thrown: thrown.slice(0, 90) });
+    check('2z9. ...with the file it was for',
+      thrown.startsWith('"room.png" could not be stored'), thrown.slice(0, 50));
+  }
+
+  // ════════════════════════════════════════════════════════════════
   console.log('\n3. and with it set, into <folder>/<Theme>/<Room>');
   {
     config.google.driveLibraryFolder = 'https://drive.google.com/drive/folders/RealFolderId';

@@ -403,6 +403,13 @@
      * says, in the words the server used, exactly what to do.
      */
     storageError: '',
+    /**
+     * Why this deployment cannot upload, when it cannot.
+     *
+     * Known at page load, so the studio is warned before picking
+     * files rather than after watching a hundred of them fail.
+     */
+    uploadError: '',
     /** True once the theme request has actually come back. */
     loadFailed: false,
     queue: [],
@@ -505,6 +512,21 @@
         ? '<span><span class="lib-stat-n serif">' + rooms + '</span>'
           + '<span class="lib-stat-k mono">' + (rooms === 1 ? 'ROOM' : 'ROOMS') + '</span></span>'
         : '')
+      + '</div>';
+  }
+
+  /**
+   * Why uploading will not work, said BEFORE any files are picked.
+   *
+   * The studio's own account of what just happened: four files chosen,
+   * four failures, and the reason only readable afterwards. The server
+   * knows this at page load, so the page says it at page load.
+   */
+  function uploadBlockedHtml() {
+    if (!state.canAdd || !state.uploadError) return '';
+    return '<div class="lib-note lib-note-bad">'
+      + '<span class="lib-note-k mono">UPLOADING WILL NOT WORK YET</span>'
+      + '<span>' + escapeHtml(state.uploadError) + '</span>'
       + '</div>';
   }
 
@@ -747,6 +769,7 @@
           + '</div>'
           + activeHtml()
           + storageHtml()
+          + uploadBlockedHtml()
           + addHintHtml()
           + themesHtml()
         : state.view === 'rooms'
@@ -771,6 +794,7 @@
           + '<p class="step-sub">Tap a picture to make it the reference image.</p>'
           + activeHtml()
           + storageHtml()
+          + uploadBlockedHtml()
           + uploadHtml(current)
           + '<div class="alert" id="libAlert" style="display:none"></div>'
           + queueHtml()
@@ -889,6 +913,7 @@
         const fresh = await CasaApi.library.themes();
         state.themes = fresh.themes;
         state.storageError = fresh.storage.ok ? '' : fresh.storage.reason;
+        state.uploadError = fresh.uploads.ok ? '' : fresh.uploads.reason;
       } catch (err) {
         // The pictures went up; only the counts are stale. Not worth
         // failing an upload over, and the next page load fixes it.
@@ -1013,6 +1038,14 @@
         // A picture filed under no room would land in the unsorted
         // bucket, which is where OLD pictures live -- not somewhere new
         // ones should be put by accident.
+        if (state.uploadError) {
+          // Every file in this batch would fail the same way, for the
+          // same reason, one after another. Saying so once, before any
+          // of them go up, beats a hundred identical failures.
+          files.value = '';
+          showAlert(state.uploadError);
+          return;
+        }
         if (!(state.uploadRoomId || state.roomId)) {
           files.value = '';
           showAlert('Choose a room type first \u2014 every picture is filed under a theme '
@@ -1125,6 +1158,7 @@
       state.themes = answer.themes;
       state.roomTypes = roomTypes;
       state.storageError = answer.storage.ok ? '' : answer.storage.reason;
+      state.uploadError = answer.uploads.ok ? '' : answer.uploads.reason;
     } catch (err) {
       // The request itself failed -- not the same thing as the server
       // answering with no themes, and the page says so rather than

@@ -365,6 +365,21 @@ async function main() {
     check('5a3. ...both already set to where the studio is standing',
       await page.locator('#libTheme').inputValue() === 'british',
       await page.locator('#libTheme').inputValue());
+
+    // AND THE WARNING IS ALREADY THERE, BEFORE ANY FILE IS PICKED.
+    //
+    // This deployment has no GOOGLE_DRIVE_LIBRARY_FOLDER set -- the
+    // studio's own situation. What they got was four files chosen,
+    // four identical failures, and the reason only readable
+    // afterwards. The server knows at page load, so the page says it
+    // at page load.
+    const blocked = await page.locator('.lib-note-bad').allTextContents();
+    const warning = blocked.find((t) => /UPLOADING WILL NOT WORK YET/.test(t)) || '';
+    check('5a4. the page warns that uploading will not work', Boolean(warning), blocked);
+    check('5a5. ...naming the variable to set',
+      /GOOGLE_DRIVE_LIBRARY_FOLDER/.test(warning), warning);
+    check('5a6. ...and why one you DID set can still be missing',
+      /Preview/.test(warning) && /redeployed/.test(warning), warning);
     // FOUR, not six: the two starters ship with the application and
     // there is nothing for the studio to remove, so they carry no
     // REMOVE at all. The server refuses one too.

@@ -783,6 +783,11 @@
       return apiFetch('/library/themes').then((r) => ({
         themes: r.data.themes || [],
         storage: r.data.storage || { ok: true, reason: '' },
+        // Whether this deployment can upload at all -- asked when the
+        // gallery loads, so a studio is not told after picking a
+        // hundred files. Separate from `storage`, which is the
+        // database: the two break for different reasons.
+        uploads: r.data.uploads || { ok: true, reason: '' },
       }));
     },
 
