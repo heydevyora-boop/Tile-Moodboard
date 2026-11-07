@@ -97,6 +97,9 @@ function main() {
             },
           ],
           storage: { ok: true, reason: '' },
+          // Whether this deployment can upload at all, asked at page
+          // load so a studio is not told after picking a hundred files.
+          uploads: { ok: true, reason: '' },
         }),
         rooms: async () => [
           { id: 'bathroom', label: 'Bathroom', slug: 'bathroom', blurb: 'Full bathroom.', wizard: 'Bathroom' },

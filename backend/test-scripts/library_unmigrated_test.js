@@ -244,8 +244,14 @@ async function main() {
       + 'CONSTRAINT "LibraryReference_pkey" PRIMARY KEY ("id"))'], { stdio: 'ignore' });
 
     await openLibrary();
+    // The DATABASE warning specifically. There is a second red note on
+    // this deployment -- no Drive folder is configured either -- and
+    // counting red notes would conflate two different problems with
+    // two different remedies.
     check('6a. no storage warning is shown',
-      await page.locator('.lib-note-bad').count() === 0);
+      !(await page.locator('.lib-note-bad').allTextContents())
+        .some((t) => /prisma migrate deploy/.test(t)),
+      await page.locator('.lib-note-bad').allTextContents());
     const grid = await page.locator('.lib-theme-grid').textContent() || '';
     check('6b. the counts are unchanged, since nothing was uploaded',
       /6 PICTURES/.test(grid) && !/COUNT UNAVAILABLE/.test(grid), grid.slice(0, 160));

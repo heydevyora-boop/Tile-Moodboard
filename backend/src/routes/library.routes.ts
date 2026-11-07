@@ -129,7 +129,7 @@ router.get(
 router.get(
   '/themes',
   requirePermission('reference_images:read'),
-  catchAsync(async (_req: Request, res: Response) => {
+  catchAsync(async (req: Request, res: Response) => {
     // THE NINE THEMES DO NOT COME FROM THE DATABASE.
     //
     // They are shared/themes.json. Only the counts beside them need a
@@ -180,11 +180,29 @@ router.get(
       // Stable, and the same order the file lists them in.
       .filter((theme, index, all) => all.findIndex((t) => t.id === theme.id) === index);
 
+    // CAN THIS DEPLOYMENT UPLOAD AT ALL?
+    //
+    // Asked HERE, when the gallery loads, rather than discovered after
+    // a studio has picked a hundred files and watched every one fail.
+    // Separate from `storage`, which is about the database: the two
+    // break for different reasons and have different remedies.
+    //
+    // Only for someone who could actually upload -- a client browsing
+    // has no use for it, and the reason names environment variables.
+    const mayUpload = req.user?.permissions?.some(
+      (p) => p === '*' || p === 'reference_images:write',
+    ) ?? false;
+
+    const uploads = mayUpload
+      ? await library.describeLibraryFolder()
+      : { ok: true, reason: '' };
+
     res.status(200).json({
       success: true,
       data: {
         themes,
         storage: { ok: !storageError, reason: storageError },
+        uploads: { ok: uploads.ok, reason: uploads.reason },
       },
     });
   }),

@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { catchAsync } from '@utils/catchAsync';
 import { config } from '@config/index';
+import { describeLibraryFolder } from '@services/library.service';
 import { geminiClient } from '@services/gemini.service';
 import { googleDriveClient } from '@services/googleDrive.service';
 import { checkPythonAIHealth } from '@services/python-ai.service';
@@ -35,6 +36,12 @@ export const getDriveStatus = catchAsync(async (_req: Request, res: Response) =>
     data: {
       configured: googleDriveClient.isConfigured(),
       rootFolder: config.google.driveRootFolder,
+      // WHAT THIS DEPLOYMENT ACTUALLY READS for the De'vyora Library's
+      // folder, and whether the credential opens it. Without this the
+      // only way to tell a variable that was never set from one set on
+      // the wrong Vercel environment was to try an upload and read the
+      // failure -- after picking the files.
+      libraryFolder: await describeLibraryFolder(),
     },
   });
 });
