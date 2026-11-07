@@ -1,12 +1,12 @@
 #!/bin/sh
 set -e
 
-# schema.prisma references DIRECT_URL directly (used only for migrations —
-# see the datasource block's comment). When there's no connection pooler
-# in front of Postgres (the bundled docker-compose container, or most
-# non-Supabase setups), it's identical to DATABASE_URL — this fallback
-# means a .env that only sets DATABASE_URL still works, rather than
-# failing on a cryptic "Environment variable not found: DIRECT_URL".
+# prisma.config.ts uses DIRECT_URL for migrations when it is set, and
+# DATABASE_URL otherwise — the CLI only, never the running server. When
+# there's no connection pooler in front of Postgres (the bundled
+# docker-compose container, or most non-Supabase setups) the two are
+# identical, so this fallback just keeps a .env that sets only
+# DATABASE_URL working.
 export DIRECT_URL="${DIRECT_URL:-$DATABASE_URL}"
 
 echo "Applying database migrations..."

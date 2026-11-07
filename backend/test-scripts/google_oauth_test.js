@@ -52,6 +52,16 @@ function check(label, ok, extra) {
   }
 }
 
+/** A Prisma-shaped failure with the given code. */
+function describeTokenStoreFailureFor(code) {
+  const err = new Error('prisma');
+  err.code = code;
+  // eslint-disable-next-line no-undef
+  return oauthRef.describeTokenStoreFailure(err);
+}
+
+let oauthRef = null;
+
 async function main() {
   execFileSync('psql', [DB_URL.replace(/\/tm_oauth\?/, '/postgres?'), '-c', 'drop database if exists tm_oauth'], { stdio: 'ignore' });
   execFileSync('psql', [DB_URL.replace(/\/tm_oauth\?/, '/postgres?'), '-c', 'create database tm_oauth'], { stdio: 'ignore' });
@@ -63,6 +73,7 @@ async function main() {
   const { prisma } = require(path.join(ROOT, 'src/db/connection'));
   const { config } = require(path.join(ROOT, 'src/config/index'));
   const oauth = require(path.join(ROOT, 'src/services/googleOAuth.service'));
+  oauthRef = oauth;
   const drive = require(path.join(ROOT, 'src/services/googleDrive.service'));
   const library = require(path.join(ROOT, 'src/services/library.service'));
 
@@ -181,6 +192,32 @@ async function main() {
   }
 
   // ════════════════════════════════════════════════════════════════
+  console.log('\n3z. and when there is nowhere to keep it');
+  {
+    // THE WORST MOMENT FOR A VAGUE ERROR. Google has already said yes,
+    // and it will not issue a second refresh token until the owner
+    // removes the app from their account -- so "could not be
+    // completed" sends somebody back to Google, which is not where
+    // the problem is. An un-migrated database is exactly this case:
+    // the token is kept in api_keys.
+    const missingTable = describeTokenStoreFailureFor('P2021');
+    check('3z1. an un-migrated database is named as the reason',
+      /no api_keys table/.test(missingTable), missingTable);
+    check('3z2. ...with the command that fixes it',
+      /prisma migrate deploy/.test(missingTable), missingTable);
+    check('3z3. ...and the warning that Google will not issue a second one',
+      /myaccount\.google\.com\/permissions/.test(missingTable)
+      && /only on a first authorization|only on a first|refresh token only/.test(missingTable),
+      missingTable);
+    check('3z4. a missing column is the same answer',
+      /no api_keys table/.test(describeTokenStoreFailureFor('P2022')));
+
+    const other = oauth.describeTokenStoreFailure(new Error('connection refused'));
+    check('3z5. anything else is passed through as itself',
+      /connection refused/.test(other) && !/api_keys/.test(other), other);
+  }
+
+  // ════════════════════════════════════════════════════════════════
   console.log('\n4. which credential the Drive client then uses');
   {
     // The service account stays configured underneath. Nothing that
@@ -226,8 +263,27 @@ async function main() {
     let status = await library.describeLibraryFolder();
     check('5a. unconnected, the library refuses it and says why',
       status.ok === false && /My Drive/.test(status.reason), status.reason);
-    check('5b. ...naming connecting the studio’s own account as the answer',
-      /connect the studio’s own Google account/.test(status.reason), status.reason);
+    // CONFIGURED IS NOT CONNECTED. Setting the client id and secret
+    // feels like finishing, and it is not: nothing is authorized until
+    // somebody presses Connect once. That state was being answered
+    // with the whole shared-drive-and-delegation essay -- true, and
+    // useless, when the answer is one button on a linked page.
+    check('5b. ...and that a sign-in is set up but unused, which is the state it is in',
+      /has a Google sign-in set up/.test(status.reason)
+      && /press\s+Connect/.test(status.reason), status.reason);
+    check('5b2. ...not the shared-drive essay, which nothing here can act on',
+      !/SHARED DRIVE/.test(status.reason), status.reason);
+
+    // With no OAuth client configured at all there is nothing to
+    // press, so the full answer is still the right one.
+    const savedClientId = config.google.oauthClientId;
+    config.google.oauthClientId = '';
+    library.clearLibraryFolderCache();
+    const bare = await library.describeLibraryFolder();
+    check('5b3. with no OAuth client configured, both real configurations are named',
+      /SHARED DRIVE/.test(bare.reason)
+      && /GOOGLE_DRIVE_IMPERSONATE_USER/.test(bare.reason), bare.reason);
+    config.google.oauthClientId = savedClientId;
 
     await oauth.storeRefreshToken('1//dummy-refresh-token-not-real', null);
     drive.googleDriveClient.resetAuth();
