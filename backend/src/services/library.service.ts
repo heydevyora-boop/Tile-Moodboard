@@ -197,6 +197,13 @@ export async function describeLibraryFolder(): Promise<LibraryFolderStatus> {
   cachedFolder = folder;
   const sharedDrive = !!folder.driveId;
 
+  // WHO THIS DEPLOYMENT IS WHEN IT UPLOADS. Only a service account
+  // acting as itself is barred from a My Drive folder; the studio's
+  // own Google account, connected through OAuth, owns the files it
+  // creates and may put them wherever it likes.
+  const actsAsAPerson = (await googleDriveClient.authMode()) === 'oauth'
+    || !!config.google.driveImpersonateUser;
+
   /*
    * THE FOLDER OPENS AND STILL NOTHING CAN BE PUT IN IT.
    *
@@ -213,7 +220,7 @@ export async function describeLibraryFolder(): Promise<LibraryFolderStatus> {
    * delegated user to upload as, because with one the file is owned by
    * that person and a My Drive folder is perfectly fine.
    */
-  if (!sharedDrive && !config.google.driveImpersonateUser) {
+  if (!sharedDrive && !actsAsAPerson) {
     return {
       ok: false,
       configured: true,
@@ -222,7 +229,9 @@ export async function describeLibraryFolder(): Promise<LibraryFolderStatus> {
       sharedDrive: false,
       reason:
         `“${folder.name}” opens, but it is a folder in somebody’s My Drive, and `
-        + `${SERVICE_ACCOUNT_NO_QUOTA}`,
+        + `${SERVICE_ACCOUNT_NO_QUOTA} On a personal Google account the second of those is the `
+        + 'only one available: connect the studio’s own Google account from the owner’s '
+        + 'Drive settings, and the library uploads as them.',
     };
   }
 

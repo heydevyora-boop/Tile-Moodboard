@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Google Drive — De’vyora</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500&family=DM+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root { --ink:#1A1512; --paper:#F7F3EC; --card:#fff; --line:#E7DFD1; --sand:#F4EEE3;
+          --gold:#8A6A3B; --muted:#8B8177; --text2:#5B5147; --err:#A8552A; --ok:#4A6B4A; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--paper); color:var(--ink); font-family:'DM Sans',sans-serif;
+         -webkit-font-smoothing:antialiased; }
+  a { color:var(--gold); }
+  .mono { font-family:'JetBrains Mono',monospace; }
+  .serif { font-family:'Playfair Display',serif; }
+  button { font-family:inherit; }
+  .wrap { max-width:860px; margin:0 auto; padding:34px 22px 90px; }
+  .back { font-family:'JetBrains Mono',monospace; font-size:10.5px; letter-spacing:.18em;
+          color:var(--muted); text-decoration:none; }
+  h1 { font-family:'Playfair Display',serif; font-weight:600; font-size:31px; margin:16px 0 6px; }
+  .sub { color:var(--text2); font-size:14px; line-height:1.65; max-width:62ch; margin:0 0 26px; }
+  .panel { background:var(--card); border:1px solid var(--line); border-radius:16px;
+           padding:22px 24px; margin-bottom:18px; }
+  .panel h2 { font-family:'Playfair Display',serif; font-weight:600; font-size:18px; margin:0 0 4px; }
+  .panel p.note { color:var(--text2); font-size:13px; line-height:1.7; margin:8px 0 0; }
+  .state { display:flex; align-items:center; gap:10px; font-family:'JetBrains Mono',monospace;
+           font-size:12px; color:var(--text2); }
+  .dot { width:9px; height:9px; border-radius:50%; flex:0 0 auto; background:#C9BFAE; }
+  .dot.on { background:var(--ok); } .dot.off { background:var(--err); }
+  .rows { display:grid; gap:10px; margin-top:16px; }
+  .row { display:grid; grid-template-columns:minmax(132px,auto) 1fr; gap:14px; align-items:baseline; }
+  .row b { font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:.17em;
+           text-transform:uppercase; color:#A0968A; font-weight:400; }
+  .row span { font-size:13px; color:var(--text2); line-height:1.6; }
+  code { font-family:'JetBrains Mono',monospace; font-size:11.5px; background:var(--sand);
+         padding:2px 6px; border-radius:6px; word-break:break-all; }
+  .actions { display:flex; gap:10px; flex-wrap:wrap; margin-top:20px; }
+  .btn { border:none; border-radius:11px; padding:12px 20px; font-size:12.5px; font-weight:500;
+         letter-spacing:.1em; text-transform:uppercase; background:var(--gold); color:#fff; cursor:pointer; }
+  .btn.ghost { background:transparent; color:var(--text2); border:1px solid var(--line); }
+  .btn[disabled] { opacity:.45; cursor:not-allowed; }
+  .warn { border:1px solid var(--line); border-left:3px solid var(--err); border-radius:11px;
+          background:#FFFDF9; padding:15px 17px; margin-top:18px; font-size:13px; line-height:1.7; color:var(--text2); }
+  .warn strong { color:var(--ink); }
+  ol.steps { margin:10px 0 0 18px; padding:0; font-size:13px; line-height:1.85; color:var(--text2); }
+  .checks { display:grid; gap:9px; margin-top:16px; }
+  .check { display:grid; grid-template-columns:16px 1fr; gap:11px; align-items:start;
+           font-family:'JetBrains Mono',monospace; font-size:11.5px; line-height:1.6; }
+  .check .m { font-weight:500; }
+  .check.ok .m { color:var(--ok); } .check.bad .m { color:var(--err); }
+  .check .d { color:var(--text2); word-break:break-word; }
+  .check .d b { color:var(--ink); font-weight:500; }
+  .verdict { margin-top:16px; font-size:14px; }
+  .verdict.ok { color:var(--ok); } .verdict.bad { color:var(--err); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="devyora-library.html">&larr; DE’VYORA LIBRARY</a>
+  <h1>Google Drive</h1>
+  <p class="sub">
+    The library keeps its reference pictures in one Google Drive folder. This is where the studio
+    says <em>whose</em> Drive account it keeps them as — and proves, with a real upload, that it can.
+  </p>
+
+  <div class="panel" id="connPanel">
+    <h2>Connection</h2>
+    <div class="state"><span class="dot"></span>Checking…</div>
+  </div>
+
+  <div class="panel">
+    <h2>Prove it works</h2>
+    <p class="note">
+      Creates <strong>British → Bathroom</strong> inside the library’s folder, uploads one real
+      picture, makes it readable by link, then deletes that picture again. Nothing else is touched.
+    </p>
+    <div class="actions"><button class="btn" id="testBtn">Run the upload test</button></div>
+    <div id="testOut"></div>
+  </div>
+</div>
+
+<script src="assets/api-client.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  function esc(value) {
+    return String(value == null ? '' : value).replace(/[&<>"']/g, (c) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    })[c]);
+  }
+
+  const MODE = {
+    oauth: 'the studio’s own Google account',
+    delegated: 'a service account acting as a Workspace user',
+    'service-account': 'a service account — which owns no Drive storage',
+    none: 'nothing: no credential is configured',
+  };
+
+  const state = { status: null, drive: null };
+
+  function row(label, value) {
+    return '<div class="row"><b>' + esc(label) + '</b><span>' + value + '</span></div>';
+  }
+
+  function render() {
+    const s = state.status || {};
+    const folder = (state.drive && state.drive.libraryFolder) || {};
+    const connected = !!s.authorized;
+
+    let html = '<h2>Connection</h2>'
+      + '<div class="state"><span class="dot ' + (connected ? 'on' : 'off') + '"></span>'
+      + (connected
+        ? 'Connected — the library uploads as the studio’s Google account'
+        : 'Not connected — the library would upload as ' + esc(MODE[s.authMode] || 'nothing'))
+      + '</div>';
+
+    html += '<div class="rows">'
+      + row('Uploads as', esc(MODE[s.authMode] || s.authMode || '—'))
+      + row('Library folder', folder.ok
+        ? esc(folder.name) + ' <code>' + esc(folder.folderId) + '</code>'
+        : '<span style="color:var(--err)">' + esc(folder.reason || 'not configured') + '</span>')
+      + row('Scope', '<code>' + esc((s.scopes || []).join(' ') || '—') + '</code>')
+      + row('Callback URL', '<code>' + esc(s.redirectUri || '(set BACKEND_PUBLIC_URL)') + '</code>')
+      + '</div>';
+
+    if (!s.configured) {
+      html += '<div class="warn"><strong>The OAuth client is not configured yet.</strong>'
+        + '<ol class="steps">'
+        + '<li>Google Cloud console → APIs &amp; Services → Credentials → Create credentials → '
+        + 'OAuth client ID → <strong>Web application</strong>.</li>'
+        + '<li>Authorized redirect URI, exactly: <code>'
+        + esc(s.redirectUri || ('<BACKEND_PUBLIC_URL>' + (s.callbackPath || ''))) + '</code></li>'
+        + '<li>Set <code>GOOGLE_OAUTH_CLIENT_ID</code> and <code>GOOGLE_OAUTH_CLIENT_SECRET</code>, '
+        + 'then redeploy.</li></ol></div>';
+    }
+
+    html += '<div class="actions">'
+      + '<button class="btn" id="connectBtn"' + (s.configured ? '' : ' disabled') + '>'
+      + (connected ? 'Re-connect' : 'Connect the studio’s Google account') + '</button>'
+      + (connected && s.needsPicker
+        ? '<button class="btn ghost" id="pickBtn">Hand it the Reference Images folder</button>' : '')
+      + (connected ? '<button class="btn ghost" id="offBtn">Disconnect</button>' : '')
+      + '</div>';
+
+    if (connected && s.needsPicker) {
+      html += '<p class="note">This connection uses the <code>drive.file</code> scope, which reaches only '
+        + 'what the application itself created or what you hand it. Pick the <strong>Reference Images</strong> '
+        + 'folder once and it can work inside it from then on. Setting <code>GOOGLE_OAUTH_SCOPE</code> to the '
+        + 'full Drive scope removes this step, at the price of Google’s unverified-app warning.</p>';
+    }
+
+    document.getElementById('connPanel').innerHTML = html;
+    wire();
+  }
+
+  function wire() {
+    const connect = document.getElementById('connectBtn');
+    if (connect) connect.addEventListener('click', async () => {
+      connect.disabled = true;
+      try {
+        const { url } = await CasaApi.googleDrive.connect();
+        window.location.href = url;
+      } catch (err) {
+        alert(err.message || 'The connection could not be started.');
+        connect.disabled = false;
+      }
+    });
+
+    const off = document.getElementById('offBtn');
+    if (off) off.addEventListener('click', async () => {
+      if (!window.confirm('Disconnect the Google account? Uploads stop working until it is connected again.')) return;
+      try { await CasaApi.googleDrive.disconnect(); } catch (err) { alert(err.message); }
+      load();
+    });
+
+    const pick = document.getElementById('pickBtn');
+    if (pick) pick.addEventListener('click', () => openPicker(pick));
+  }
+
+  async function load() {
+    const [status, drive] = await Promise.all([
+      CasaApi.googleDrive.status().catch((err) => ({ error: err.message })),
+      CasaApi.driveStatus().catch(() => ({})),
+    ]);
+    state.status = status;
+    state.drive = drive;
+    render();
+  }
+
+  // ── THE GOOGLE PICKER ────────────────────────────────────────────
+  //
+  // With drive.file this is the only way Google provides to hand an
+  // application a folder it did not create itself. Loaded on demand,
+  // so the page costs nothing until the button is pressed.
+
+  function loadScript(src) {
+    return new Promise((resolve, reject) => {
+      const el = document.createElement('script');
+      el.src = src;
+      el.onload = resolve;
+      el.onerror = () => reject(new Error('Google’s Picker script could not be loaded.'));
+      document.head.appendChild(el);
+    });
+  }
+
+  async function openPicker(btn) {
+    btn.disabled = true;
+    try {
+      const grant = await CasaApi.googleDrive.pickerToken();
+      if (!grant.apiKey) throw new Error('GOOGLE_PICKER_API_KEY is not set, and the Picker cannot run without it.');
+      if (!window.gapi) await loadScript('https://apis.google.com/js/api.js');
+      await new Promise((resolve) => window.gapi.load('picker', resolve));
+
+      const view = new window.google.picker.DocsView(window.google.picker.ViewId.FOLDERS)
+        .setIncludeFolders(true)
+        .setSelectFolderEnabled(true)
+        .setMimeTypes('application/vnd.google-apps.folder');
+
+      new window.google.picker.PickerBuilder()
+        .setOAuthToken(grant.accessToken)
+        .setDeveloperKey(grant.apiKey)
+        .setTitle('Choose the Reference Images folder')
+        .addView(view)
+        .setCallback((data) => {
+          const picker = window.google.picker;
+          if (data.action === picker.Action.CANCEL) { btn.disabled = false; return; }
+          if (data.action !== picker.Action.PICKED) return;
+
+          const chosen = (data.docs || [])[0] || {};
+          btn.disabled = false;
+          if (grant.folderId && chosen.id !== grant.folderId) {
+            alert('That is a different folder from the one GOOGLE_DRIVE_LIBRARY_FOLDER names ('
+              + grant.folderId + '). Pick that folder, or change the variable to this one: ' + chosen.id);
+            return;
+          }
+          runTest();
+        })
+        .build()
+        .setVisible(true);
+    } catch (err) {
+      alert(err.message || 'The Picker could not be opened.');
+      btn.disabled = false;
+    }
+  }
+
+  // ── THE PROOF ────────────────────────────────────────────────────
+
+  async function runTest() {
+    const out = document.getElementById('testOut');
+    const btn = document.getElementById('testBtn');
+    btn.disabled = true;
+    out.innerHTML = '<p class="note">Running…</p>';
+    try {
+      const result = await CasaApi.googleDrive.selfTest();
+      out.innerHTML = '<div class="checks">' + (result.steps || []).map((step) =>
+        '<div class="check ' + (step.ok ? 'ok' : 'bad') + '">'
+        + '<span class="m">' + (step.ok ? '✓' : '✕') + '</span>'
+        + '<span class="d"><b>' + esc(step.step) + '</b> — ' + esc(step.detail) + '</span></div>'
+      ).join('') + '</div>'
+      + '<p class="verdict ' + (result.ok ? 'ok' : 'bad') + '">'
+      + (result.ok
+        ? 'Uploads work. The library is ready.'
+        : 'It did not get through — the first ✕ above is the reason.')
+      + '</p>';
+      load();
+    } catch (err) {
+      out.innerHTML = '<div class="warn">' + esc(err.message || 'The test could not be run.') + '</div>';
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  (async function start() {
+    const user = await CasaApi.requireAuth();
+    if ((user.role || '').toUpperCase() !== 'OWNER') {
+      document.querySelector('.wrap').innerHTML =
+        '<a class="back" href="devyora-library.html">&larr; DE’VYORA LIBRARY</a>'
+        + '<h1>Owner only</h1><p class="sub">Connecting the studio’s Google account is the owner’s to do. '
+        + 'Ask them to open this page.</p>';
+      return;
+    }
+    document.getElementById('testBtn').addEventListener('click', runTest);
+    await load();
+  })();
+})();
+</script>
+</body>
+</html>

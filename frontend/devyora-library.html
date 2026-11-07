@@ -526,7 +526,12 @@
     if (!state.canAdd || !state.uploadError) return '';
     return '<div class="lib-note lib-note-bad">'
       + '<span class="lib-note-k mono">UPLOADING WILL NOT WORK YET</span>'
-      + '<span>' + escapeHtml(state.uploadError) + '</span>'
+      + '<span>' + escapeHtml(state.uploadError)
+      // WHERE IT IS FIXED, not only what is wrong. Connecting the
+      // studio's own Google account is the owner's answer to every
+      // one of these, and it is one page away.
+      + ' <a href="drive-connect.html">Open the studio\u2019s Drive settings</a> to connect '
+      + 'the Google account and test an upload.</span>'
       + '</div>';
   }
 

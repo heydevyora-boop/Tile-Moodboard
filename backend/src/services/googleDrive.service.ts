@@ -4,6 +4,12 @@ import { config } from '@config/index';
 import { AppError } from '@utils/AppError';
 import { logger } from '@utils/logger';
 import { retryWithBackoff } from '@utils/retry';
+import {
+  isOAuthConfigured,
+  isOAuthAuthorized,
+  getOAuthClient,
+  describeOAuthError,
+} from './googleOAuth.service';
 
 /**
  * Same retryable/permanent split as Module 12's GeminiError, for the
@@ -44,10 +50,30 @@ export const SERVICE_ACCOUNT_NO_QUOTA =
 const RETRYABLE_REASONS = new Set(['rateLimitExceeded', 'userRateLimitExceeded', 'quotaExceeded', 'backendError', 'internalError']);
 
 function classifyError(err: unknown): DriveError {
-  const gaxiosErr = err as { response?: { status?: number; data?: { error?: { errors?: { reason?: string }[]; message?: string } } }; code?: number | string; message?: string };
+  const gaxiosErr = err as {
+    response?: {
+      status?: number;
+      // Drive's own errors carry an object here; the OAuth token
+      // endpoint answers with a string ("invalid_grant") instead.
+      data?: { error?: { errors?: { reason?: string }[]; message?: string } | string };
+    };
+    code?: number | string;
+    message?: string;
+  };
   const status = gaxiosErr.response?.status ?? (typeof gaxiosErr.code === 'number' ? gaxiosErr.code : undefined);
-  const reason = gaxiosErr.response?.data?.error?.errors?.[0]?.reason;
-  const message = gaxiosErr.response?.data?.error?.message ?? gaxiosErr.message ?? 'Google Drive request failed';
+  const data = gaxiosErr.response?.data;
+
+  // THE TOKEN ITSELF FAILED, not the Drive call. google-auth-library
+  // refreshes the access token underneath every request, so a revoked
+  // or expired authorization arrives here rather than anywhere the
+  // owner would think to look. Retrying cannot fix it: the owner has
+  // to connect the Google account again, and the message says so.
+  if (typeof data?.error === 'string') {
+    return new DriveError(`Google Drive could not authenticate: ${describeOAuthError(err)}`, 401, false);
+  }
+
+  const reason = data?.error?.errors?.[0]?.reason;
+  const message = data?.error?.message ?? gaxiosErr.message ?? 'Google Drive request failed';
 
   // Checked before everything else: it arrives as a 403, which would
   // otherwise be reported as a permission error and send the studio off
@@ -146,14 +172,61 @@ export class GoogleDriveClient {
   }
 
   isConfigured(): boolean {
-    return !!this.driveOverride || !!config.google.serviceAccountKeyPath || !!config.google.serviceAccountJson;
+    return !!this.driveOverride
+      || isOAuthConfigured()
+      || !!config.google.serviceAccountKeyPath
+      || !!config.google.serviceAccountJson;
   }
 
-  private getDrive(): DriveApiClient {
+  /**
+   * WHICH CREDENTIAL THIS DEPLOYMENT WILL ACTUALLY USE.
+   *
+   *   oauth              the studio's own Google account, authorized
+   *                      once. Files are owned by them, so they can
+   *                      live in an ordinary My Drive folder.
+   *   service-account    a robot that owns no storage. It can only
+   *                      write to a shared drive.
+   *   delegated          a service account acting as a Workspace user
+   *                      (GOOGLE_DRIVE_IMPERSONATE_USER).
+   *
+   * OAuth is preferred when it is connected, and the service account
+   * stays as the fallback underneath it -- nothing that works today
+   * stops working because OAuth was configured and not yet finished.
+   */
+  async authMode(): Promise<'oauth' | 'delegated' | 'service-account' | 'none'> {
+    if (this.driveOverride) return 'service-account';
+    if (await isOAuthAuthorized()) return 'oauth';
+    if (config.google.serviceAccountKeyPath || config.google.serviceAccountJson) {
+      return config.google.driveImpersonateUser ? 'delegated' : 'service-account';
+    }
+    return 'none';
+  }
+
+  /** Forgets the built client -- after the owner connects or disconnects. */
+  resetAuth(): void {
+    if (!this.driveOverride) this.cachedDrive = null;
+  }
+
+  private async getDrive(): Promise<DriveApiClient> {
     if (this.cachedDrive) return this.cachedDrive;
+
+    // THE OWNER'S OWN ACCOUNT FIRST, when it has been connected. It is
+    // the only credential that can own a file in a personal My Drive,
+    // which is where the studio's library folder lives.
+    if (await isOAuthAuthorized()) {
+      const auth = await getOAuthClient();
+      this.cachedDrive = google.drive({ version: 'v3', auth }) as unknown as DriveApiClient;
+      return this.cachedDrive;
+    }
+
     if (!config.google.serviceAccountKeyPath && !config.google.serviceAccountJson) {
-      throw AppError.internal(
-        'Google Drive is not configured (set GOOGLE_SERVICE_ACCOUNT_KEY_PATH, or GOOGLE_SERVICE_ACCOUNT_JSON on a read-only/serverless host)',
+      throw AppError.badRequest(
+        isOAuthConfigured()
+          ? 'Google Drive has not been connected yet: the OAuth client is configured but the '
+            + 'studio\u2019s Google account has not authorized it. Connect it from the owner\u2019s '
+            + 'Drive settings.'
+          : 'Google Drive is not configured (connect the studio\u2019s Google account, or set '
+            + 'GOOGLE_SERVICE_ACCOUNT_KEY_PATH / GOOGLE_SERVICE_ACCOUNT_JSON)',
       );
     }
     const scopes = ['https://www.googleapis.com/auth/drive'];
@@ -204,7 +277,7 @@ export class GoogleDriveClient {
   /** Finds a folder by exact name within an optional parent — the read half of get-or-create. */
   async findFolder(name: string, parentFolderId?: string): Promise<DriveFile | null> {
     if (!this.isConfigured()) throw AppError.internal('Google Drive is not configured');
-    const drive = this.getDrive();
+    const drive = await this.getDrive();
 
     const parentClause = parentFolderId ? ` and '${parentFolderId}' in parents` : '';
     const escapedName = name.replace(/'/g, "\\'");
@@ -228,7 +301,7 @@ export class GoogleDriveClient {
 
   async createFolder(name: string, parentFolderId?: string): Promise<DriveFile> {
     if (!this.isConfigured()) throw AppError.internal('Google Drive is not configured');
-    const drive = this.getDrive();
+    const drive = await this.getDrive();
 
     const res = await this.withRetry(() =>
       drive.files.create({
@@ -264,7 +337,7 @@ export class GoogleDriveClient {
    */
   async getFolderById(folderId: string): Promise<DriveFile | null> {
     if (!this.isConfigured()) throw AppError.internal('Google Drive is not configured');
-    const drive = this.getDrive();
+    const drive = await this.getDrive();
 
     try {
       const res = await this.withRetry(() =>
@@ -294,7 +367,7 @@ export class GoogleDriveClient {
 
   async listFolderContents(folderId: string): Promise<DriveFile[]> {
     if (!this.isConfigured()) throw AppError.internal('Google Drive is not configured');
-    const drive = this.getDrive();
+    const drive = await this.getDrive();
 
     const res = await this.withRetry(() =>
       drive.files.list({
@@ -314,7 +387,7 @@ export class GoogleDriveClient {
 
   async uploadFile(input: UploadFileInput): Promise<DriveFile> {
     if (!this.isConfigured()) throw AppError.internal('Google Drive is not configured');
-    const drive = this.getDrive();
+    const drive = await this.getDrive();
 
     const res = await this.withRetry(() =>
       drive.files.create({
@@ -334,7 +407,7 @@ export class GoogleDriveClient {
 
   async deleteFile(fileId: string): Promise<void> {
     if (!this.isConfigured()) throw AppError.internal('Google Drive is not configured');
-    const drive = this.getDrive();
+    const drive = await this.getDrive();
     await this.withRetry(() => drive.files.delete({ fileId, supportsAllDrives: true }));
   }
 
@@ -343,7 +416,7 @@ export class GoogleDriveClient {
   /** Grants "anyone with the link can view" and returns the shareable URL. Idempotent — re-sharing an already-public file just re-confirms the permission. */
   async generatePublicLink(fileId: string): Promise<string> {
     if (!this.isConfigured()) throw AppError.internal('Google Drive is not configured');
-    const drive = this.getDrive();
+    const drive = await this.getDrive();
 
     await this.withRetry(() =>
       drive.permissions.create({ fileId, requestBody: { role: 'reader', type: 'anyone' }, supportsAllDrives: true }),

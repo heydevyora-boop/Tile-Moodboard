@@ -98,16 +98,67 @@ or use OAuth delegation ... instead.
 
 **Sharing the folder does not fix this.** Adding the service account as
 an Editor — even as the owner's own folder, even at the Drive root — grants
-it the right to write, and it still cannot own what it writes. Exactly two
-configurations work, and Google's error names both:
+it the right to write, and it still cannot own what it writes. Three
+configurations work; Google's error names the first two:
 
-| | What to do | Whose storage it uses |
-|---|---|---|
-| **Shared drive** | Put the folder on a shared drive (Google Workspace) and add the service account to *that drive* as a **Content manager**. | The shared drive's |
-| **OAuth delegation** | Set `GOOGLE_DRIVE_IMPERSONATE_USER` to a mailbox on the studio's Workspace domain, and grant the service account **domain-wide delegation** for `https://www.googleapis.com/auth/drive` in the Admin console. The credential then acts as that person. | That person's |
+| | What to do | Whose storage it uses | Needs |
+|---|---|---|---|
+| **Shared drive** | Put the folder on a shared drive and add the service account to *that drive* as a **Content manager**. | The shared drive's | Google Workspace, Business Standard or better |
+| **Domain-wide delegation** | Set `GOOGLE_DRIVE_IMPERSONATE_USER` to a mailbox on the studio's Workspace domain and grant the service account domain-wide delegation for the Drive scope in the Admin console. | That person's | Google Workspace of any tier |
+| **The owner's own OAuth** | The owner authorizes the application once from `/drive-connect.html`; it acts as them afterwards. | The owner's | Nothing but a Google account |
 
-A personal Gmail account has neither, and the library cannot upload from
-one.
+**This studio is on a personal Gmail**, so the third row is the one that
+applies — and it is what the library now uses when it is connected. The
+service account stays configured underneath it: `authMode()` prefers the
+connected account and falls back, so nothing that worked before stops
+working because OAuth was configured and not yet finished.
+
+#### The owner's own Google account, end to end
+
+The flow is an ordinary server-side Authorization Code exchange with
+`access_type=offline`, in `googleOAuth.service.ts`:
+
+1. The owner opens **`/drive-connect.html`** and presses *Connect*.
+   `POST /api/v1/integrations/google/connect` returns Google's consent
+   URL, with the owner's id **signed into `state`**.
+2. Google sends the browser back to
+   **`GET /api/v1/integrations/google/callback`** — the one route in
+   `integrations.routes.ts` that is deliberately *outside*
+   `authenticate()`, because a top-level navigation from Google carries
+   no Authorization header. The signed `state` is what replaces the
+   guard: forged or older than fifteen minutes and the callback refuses.
+3. The code is exchanged server-side. The **refresh token is encrypted
+   with AES-256-GCM and stored in the existing `api_keys` table** —
+   no schema change, the same store and the same key the Gemini key
+   already uses. `GOOGLE_OAUTH_REFRESH_TOKEN` is read as a fallback.
+4. `google-auth-library` mints and renews access tokens underneath every
+   Drive call. A revoked grant arrives as `invalid_grant` *during an
+   upload*; it is translated into "connect the account again" rather
+   than reported as a Drive permission error, and never retried.
+
+**Nothing secret comes back out.** The status endpoint says whether a
+token exists, never what it is; the client secret never leaves the
+server; and the only token the browser ever sees is the short-lived
+access token the Google Picker cannot run without, handed to the owner
+alone.
+
+#### Why there is a Picker step
+
+With the default `drive.file` scope the application can only touch what
+it created or what the owner explicitly handed it — which is the whole
+reason that scope needs no Google verification and no security
+assessment. The studio's "Reference Images" folder was made by hand, so
+it has to be handed over once: the connect page opens the **Google
+Picker**, the owner chooses that folder, and from then on the app can
+create the Theme/Room folders inside it and upload. Everything it
+creates afterwards is its own.
+
+Setting `GOOGLE_OAUTH_SCOPE` to the full `https://www.googleapis.com/auth/drive`
+removes the Picker step entirely. The price is that it is a **restricted**
+scope: the consent screen warns that the app is unverified, and Google
+may require a CASA security assessment before it will verify it. Either
+way the OAuth app must be moved from *Testing* to **In production**, or
+Google expires the refresh token after seven days.
 
 **The flag that makes the first one work.** Every Drive request this
 client sends now carries `supportsAllDrives: true` (and
@@ -527,6 +578,7 @@ one after its first use, not more expensive.
 | the Drive folder: links, ids, every way it can be misconfigured, and the Theme/Room tree | `backend/test-scripts/library_drive_folder_test.js` |
 | the room types, their tie to the wizard and to Python, and older rows finding their room | `backend/test-scripts/library_rooms_test.js` |
 | the page on a database with no library table | `backend/test-scripts/library_unmigrated_test.js` |
+| connecting the owner's Google account: the signed state, the token at rest, which credential wins, a dead grant, the routes, and the self-test | `backend/test-scripts/google_oauth_test.js` |
 
 ## Still outstanding, and not code
 
