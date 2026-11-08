@@ -175,6 +175,20 @@ export interface DriveApiClient {
 export class GoogleDriveClient {
   private cachedDrive: DriveApiClient | null;
 
+  /**
+   * WHICH CREDENTIAL THE CACHED CLIENT WAS BUILT FOR.
+   *
+   * Without this, an instance that served one request before the owner
+   * connected keeps its service-account client for as long as it stays
+   * warm -- and goes on uploading as an account that owns no storage,
+   * while a connected personal account sits there unused. On a
+   * serverless host that is not a corner case: the instance that
+   * stores the token is rarely the instance that handles the next
+   * upload, so the studio would see some uploads work and others fail
+   * for no visible reason.
+   */
+  private cachedDriveMode: 'oauth' | 'service-account' | null = null;
+
   /** driveOverride lets tests inject a fake Drive API without real credentials — same reasoning as GeminiClient's apiKeyOverride. */
   constructor(private readonly driveOverride?: DriveApiClient) {
     this.cachedDrive = driveOverride ?? null;
@@ -213,20 +227,33 @@ export class GoogleDriveClient {
 
   /** Forgets the built client -- after the owner connects or disconnects. */
   resetAuth(): void {
-    if (!this.driveOverride) this.cachedDrive = null;
+    if (this.driveOverride) return;
+    this.cachedDrive = null;
+    this.cachedDriveMode = null;
   }
 
   private async getDrive(): Promise<DriveApiClient> {
-    if (this.cachedDrive) return this.cachedDrive;
+    // A test's injected client, or one already built for the owner's
+    // own account: nothing better exists, so it is reused as is.
+    if (this.driveOverride) return this.driveOverride;
+    if (this.cachedDrive && this.cachedDriveMode === 'oauth') return this.cachedDrive;
 
     // THE OWNER'S OWN ACCOUNT FIRST, when it has been connected. It is
     // the only credential that can own a file in a personal My Drive,
     // which is where the studio's library folder lives.
+    //
+    // Checked even when a service-account client is already cached --
+    // see cachedDriveMode. Falling back is for when there is nothing
+    // better; carrying on with the fallback after something better
+    // arrived is just a stale cache, and an invisible one.
     if (await isOAuthAuthorized()) {
       const auth = await getOAuthClient();
       this.cachedDrive = google.drive({ version: 'v3', auth }) as unknown as DriveApiClient;
+      this.cachedDriveMode = 'oauth';
       return this.cachedDrive;
     }
+
+    if (this.cachedDrive) return this.cachedDrive;
 
     if (!config.google.serviceAccountKeyPath && !config.google.serviceAccountJson) {
       throw AppError.badRequest(
@@ -257,6 +284,7 @@ export class GoogleDriveClient {
       ? new google.auth.GoogleAuth({ keyFile: config.google.serviceAccountKeyPath, scopes, clientOptions })
       : new google.auth.GoogleAuth({ credentials: parseServiceAccountJson(config.google.serviceAccountJson as string), scopes, clientOptions });
     this.cachedDrive = google.drive({ version: 'v3', auth }) as unknown as DriveApiClient;
+    this.cachedDriveMode = 'service-account';
     return this.cachedDrive;
   }
 
@@ -376,6 +404,38 @@ export class GoogleDriveClient {
     } catch {
       return null;
     }
+  }
+
+  /**
+   * One file, read back from Drive by id -- what it is called and
+   * which folder it is actually in.
+   *
+   * uploadFile's own answer is Drive's acknowledgement of the request;
+   * this is Drive being asked afterwards, independently, whether the
+   * file is there and where it landed. The self-test needs the second
+   * kind: a 200 on the upload is not evidence that a picture is in the
+   * right folder.
+   */
+  async describeFile(fileId: string): Promise<{ id: string; name: string; parents: string[]; webViewLink?: string } | null> {
+    if (!this.isConfigured()) throw AppError.internal('Google Drive is not configured');
+    const drive = await this.getDrive();
+
+    const res = await this.withRetry(() =>
+      drive.files.get({
+        fileId,
+        fields: 'id,name,parents,trashed,webViewLink',
+        supportsAllDrives: true,
+      }),
+    );
+
+    const file = res.data;
+    if (!file?.id || file.trashed) return null;
+    return {
+      id: file.id,
+      name: file.name ?? '(untitled)',
+      parents: file.parents ?? [],
+      webViewLink: file.webViewLink ?? undefined,
+    };
   }
 
   async listFolderContents(folderId: string): Promise<DriveFile[]> {

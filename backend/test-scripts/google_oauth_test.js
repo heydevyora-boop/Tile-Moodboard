@@ -536,6 +536,29 @@ async function main() {
     };
     driveClient.generatePublicLink = async (id) => { publicised.push(id); return 'https://drive/' + id; };
     driveClient.deleteFile = async (id) => { deleted.push(id); };
+    // Drive asked again, independently of the upload's own answer.
+    driveClient.describeFile = async (id) => (deleted.includes(id)
+      ? null
+      : { id, name: 'devyora-connection-test.png', parents: ['folder-Bathroom'] });
+
+    // The anonymous fetch of the public link goes to drive.google.com,
+    // which is not reachable from a test. Only that host is answered
+    // here; everything else -- this suite's own HTTP calls to the app
+    // -- goes to the real fetch.
+    const realFetch = global.fetch;
+    let anonymousFetches = 0;
+    let anonymousStatus = 200;
+    global.fetch = async (url, init) => {
+      if (String(url).includes('drive.google.com')) {
+        anonymousFetches += 1;
+        return {
+          ok: anonymousStatus < 400,
+          status: anonymousStatus,
+          headers: { get: () => 'image/png' },
+        };
+      }
+      return realFetch(url, init);
+    };
 
     await oauth.storeRefreshToken('1//dummy-refresh-token-not-real', null);
     driveClient.resetAuth();
@@ -558,8 +581,43 @@ async function main() {
     check('8p. ...and removed its own test picture again',
       deleted.length === 1 && deleted[0] === 'uploaded-1', deleted);
     check('8q. every step is reported, so a failure names itself',
-      (test.json.data.steps || []).length === 6
+      (test.json.data.steps || []).length === 9
       && test.json.data.steps.every((s) => s.step && s.detail), test.json.data.steps);
+
+    // A 200 ON THE UPLOAD IS NOT EVIDENCE THE PICTURE IS THERE.
+    const stepNamed = (fragment) =>
+      (test.json.data.steps || []).find((s) => s.step.includes(fragment));
+    check('8q2. ...and the file is looked up again, in the folder it should be in',
+      !!stepNamed('Finding it again') && stepNamed('Finding it again').ok
+      && /folder-Bathroom/.test(stepNamed('Finding it again').detail),
+      stepNamed('Finding it again'));
+    check('8q3. ...the link is fetched with no credentials, as the generator will',
+      anonymousFetches === 1 && stepNamed('no credentials').ok, anonymousFetches);
+    check('8q4. ...and the test picture is confirmed gone, not merely deleted',
+      !!stepNamed('Confirming it is gone') && stepNamed('Confirming it is gone').ok);
+
+    // Each failure is a different failure, and says which.
+    anonymousStatus = 403;
+    const blocked = await call('POST', '/integrations/drive/self-test', ownerToken);
+    const shareStep = (blocked.json.data.steps || []).find((s) => s.step.includes('no credentials'));
+    check('8q5. a file that uploads but cannot be read anonymously is named as a sharing restriction',
+      blocked.json.data.ok === false && !!shareStep && !shareStep.ok
+      && /sharing restriction/.test(shareStep.detail)
+      && /rather than[\s\S]*an upload failure/.test(shareStep.detail), shareStep);
+    anonymousStatus = 200;
+
+    // ...and a file that lands in the wrong place is not a pass.
+    driveClient.describeFile = async (id) => ({ id, name: 'x.png', parents: ['somewhere-else'] });
+    const misplaced = await call('POST', '/integrations/drive/self-test', ownerToken);
+    const findStep = (misplaced.json.data.steps || []).find((s) => s.step.includes('Finding it again'));
+    check('8q6. a picture that lands in the wrong folder fails, naming both folders',
+      misplaced.json.data.ok === false && !!findStep && !findStep.ok
+      && /somewhere-else/.test(findStep.detail) && /folder-Bathroom/.test(findStep.detail),
+      findStep);
+    driveClient.describeFile = async (id) => (deleted.includes(id)
+      ? null
+      : { id, name: 'devyora-connection-test.png', parents: ['folder-Bathroom'] });
+    global.fetch = realFetch;
 
     // And it reports a failure rather than claiming success.
     driveClient.uploadFile = async () => { throw new Error('Service Accounts do not have storage quota.'); };
@@ -570,6 +628,77 @@ async function main() {
       failed.json.data.steps);
 
     await new Promise((r) => server.close(r));
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  console.log('\n9. the fallback must not outlive the thing it falls back from');
+  {
+    // THE INVISIBLE HALF-CONNECTED STATE. Every serverless instance
+    // builds its own Drive client and keeps it. An instance that
+    // served one request before the owner pressed Connect would hold
+    // a service-account client for as long as it stayed warm -- and
+    // the instance that stores the token is rarely the instance that
+    // handles the next upload. The studio would see some uploads work
+    // and others fail with "Service Accounts do not have storage
+    // quota", for no visible reason.
+    config.google.serviceAccountJson = JSON.stringify({
+      client_email: 'robot@example.iam.gserviceaccount.com',
+      private_key: '-----BEGIN PRIVATE KEY-----\nnot-a-real-key\n-----END PRIVATE KEY-----\n',
+    });
+
+    const makeStaleClient = () => {
+      let used = 0;
+      const client = new drive.GoogleDriveClient();
+      // Exactly the state a warm instance is in: a client already
+      // built, for the service account.
+      client.cachedDrive = {
+        files: {
+          list: async () => { used += 1; return { data: { files: [] } }; },
+          create: async () => ({ data: { id: 'x' } }),
+          get: async () => ({ data: {} }),
+          delete: async () => ({ data: {} }),
+        },
+        permissions: { create: async () => ({ data: {} }) },
+      };
+      client.cachedDriveMode = 'service-account';
+      return { client, usedCount: () => used };
+    };
+
+    // Control: nothing better exists, so the cached client is reused.
+    await oauth.forgetRefreshToken();
+    const cold = makeStaleClient();
+    await cold.client.findFolder('British', 'root').catch(() => {});
+    check('9a. with no account connected, the service-account client is reused',
+      cold.usedCount() === 1, cold.usedCount());
+
+    // Now the owner connects, on some other instance.
+    await oauth.storeRefreshToken('1//dummy-refresh-token-not-real', null);
+    const warm = makeStaleClient();
+    await warm.client.findFolder('British', 'root').catch(() => {});
+    check('9b. once an account IS connected, the stale service-account client is not used',
+      warm.usedCount() === 0, warm.usedCount());
+
+    // ...and it is not rebuilt from scratch on every single call once
+    // it is the owner's account: a hundred-picture batch would pay for
+    // that a hundred times.
+    const settled = new drive.GoogleDriveClient();
+    settled.cachedDrive = { files: { list: async () => ({ data: { files: [] } }) } };
+    settled.cachedDriveMode = 'oauth';
+    let rebuilt = false;
+    const spyAuthorized = oauth.isOAuthAuthorized;
+    oauth.isOAuthAuthorized = async () => { rebuilt = true; return true; };
+    await settled.findFolder('British', 'root').catch(() => {});
+    oauth.isOAuthAuthorized = spyAuthorized;
+    check('9c. an OAuth client already built is reused as it is', rebuilt === false);
+
+    // resetAuth forgets the mode too, or the next call would decide
+    // from a mode that no longer describes anything.
+    const reset = makeStaleClient();
+    reset.client.resetAuth();
+    check('9d. resetAuth clears the remembered mode, not just the client',
+      reset.client.cachedDrive === null && reset.client.cachedDriveMode === null);
+
+    await oauth.forgetRefreshToken();
   }
 
   console.log(`\n${pass}/${pass + fail} checks passed`);

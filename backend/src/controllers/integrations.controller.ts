@@ -21,6 +21,7 @@ import {
   verifyState,
 } from '@services/googleOAuth.service';
 import { clearLibraryFolderCache, driveFolderIdFrom } from '@services/library.service';
+import { toDriveDownloadUrl } from '@services/referenceImages.service';
 
 export const getGeminiStatus = catchAsync(async (_req: Request, res: Response) => {
   res.status(200).json({
@@ -276,10 +277,61 @@ export const runDriveSelfTest = catchAsync(async (_req: Request, res: Response) 
     });
   }
   if (fileId) {
+    // DRIVE ASKED AGAIN, INDEPENDENTLY. The upload's own 200 is the
+    // request being accepted; this is the file being found afterwards,
+    // in the folder it was supposed to land in. They are not the same
+    // claim, and only the second one is worth reporting as proof.
+    await record('Finding it again in that folder', async () => {
+      const found = await googleDriveClient.describeFile(fileId);
+      if (!found) throw new Error(`Drive does not return a file with id ${fileId}.`);
+      if (!found.parents.includes(roomId)) {
+        throw new Error(
+          `The file exists (${found.id}) but its parent is ${found.parents.join(', ') || '(none)'}, `
+          + `not the Bathroom folder ${roomId}.`,
+        );
+      }
+      return `${found.name} \u2014 id ${found.id}, inside ${roomId}`;
+    });
+
     await record('Making it readable by link', () => googleDriveClient.generatePublicLink(fileId));
+
+    // THE FOUR WAYS THIS STEP CAN FAIL ARE NOT THE SAME FAILURE. The
+    // permission call above can succeed and the file still not be
+    // fetchable -- a Workspace or account policy can refuse
+    // link-sharing after the fact. The only way to tell is to fetch it
+    // the way the Python visualization service will: no credentials.
+    await record('Fetching it with no credentials, as the generator does', async () => {
+      const url = toDriveDownloadUrl(fileId);
+      // Not annotated: `Response` in this file is Express's.
+      const res = await fetch(url, { redirect: 'follow' }).catch((err: unknown) => {
+        throw new Error(
+          `The link could not be fetched at all (${err instanceof Error ? err.message : String(err)}). `
+          + 'That is a network failure from this deployment, not a Drive permission problem.',
+        );
+      });
+      if (!res.ok) {
+        throw new Error(
+          `Drive answered ${res.status} to an anonymous fetch of ${url}. The file uploaded and the `
+          + 'permission was accepted, so this is a sharing restriction on the account rather than '
+          + 'an upload failure \u2014 generated scenes would not be able to read it.',
+        );
+      }
+      const type = res.headers.get('content-type') || '';
+      return `${res.status} ${type}`;
+    });
+
     await record('Removing the test picture again', async () => {
       await googleDriveClient.deleteFile(fileId);
       return 'deleted';
+    });
+
+    // ...and gone means gone: a delete that reports success and
+    // leaves the file behind would quietly litter the studio's folder
+    // every time this test is run.
+    await record('Confirming it is gone', async () => {
+      const stillThere = await googleDriveClient.describeFile(fileId);
+      if (stillThere) throw new Error(`The test picture ${fileId} is still in Drive.`);
+      return 'the folder is as it was';
     });
   }
 
