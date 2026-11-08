@@ -145,9 +145,35 @@ async function main() {
       /could not be opened/.test(message || ''), message);
     check('2j. ...naming the id it tried, not the whole link',
       /WrongFolderId/.test(message || ''), message);
-    check('2k. ...and listing the three things it can be',
-      /is wrong/.test(message || '') && /in the bin/.test(message || '')
-      && /shared with/.test(message || ''), message);
+    // THE TWO HALVES THAT MAKE IT A DIAGNOSIS. Which credential was
+    // refused -- because sharing the folder with the service account
+    // does nothing when the request went out as somebody else -- and
+    // what Google itself answered, because 404 and 403 have opposite
+    // remedies. It used to guess at three causes and name none of
+    // them as the one that happened, which is how a studio ends up
+    // re-sharing the same folder for an evening.
+    check('2k. ...and saying which credential was refused',
+      /could not be opened as /.test(message || ''), message);
+    check('2k2. ...still pointing at the variable to check',
+      /GOOGLE_DRIVE_LIBRARY_FOLDER/.test(message || '')
+      && /in the bin/.test(message || ''), message);
+
+    // Google's own answer, when there is one, is carried through
+    // verbatim rather than discarded.
+    client.getFolderById = async () => {
+      client.lastFolderError = 'Google answered 404 for that id: this credential has never '
+        + 'been given access to it.';
+      return null;
+    };
+    library.clearLibraryFolderCache();
+    const withReason = await attempt();
+    check('2k3. ...and Google\u2019s own status reaches the studio',
+      /404/.test(withReason || '') && /never been given access/.test(withReason || ''),
+      withReason);
+    client.lastFolderError = '';
+    client.getFolderById = async (id) =>
+      (id === 'RealFolderId' ? { id, name: 'Reference Images', driveId: '0ASharedDriveId' } : null);
+
     check('2l. still nothing uploaded', uploads === 0, uploads);
   }
 
