@@ -181,6 +181,13 @@
                    background:var(--sand); padding:1px 5px; border-radius:5px; }
   .lib-note-bad { border-color:var(--err); }
   .lib-note-bad .lib-note-k { color:var(--err); }
+  /* showAlert() writes here. The class had no rule on this page, so
+     every alert came out as unstyled body text sitting between the
+     upload card and the pictures -- which is how the same sentence
+     appeared to be printed twice. */
+  .alert { padding:10px 13px; margin:14px 0 0; border:1px solid var(--err);
+           border-radius:12px; background:var(--card); font-size:11.5px;
+           line-height:1.5; color:var(--err); }
 
   /* ── the themes ──
      A theme card now shows a ROOM, not a swatch: the first starter in
@@ -1053,7 +1060,11 @@
           // same reason, one after another. Saying so once, before any
           // of them go up, beats a hundred identical failures.
           files.value = '';
-          showAlert(state.uploadError);
+          // Not the reason again -- it is already on screen, in the
+          // warning directly above this card, and printing the same
+          // paragraph twice reads like a bug rather than an answer.
+          showAlert('Nothing was uploaded: the library cannot write to Google Drive yet. '
+            + 'The warning above this card says what is missing.');
           return;
         }
         if (!(state.uploadRoomId || state.roomId)) {
