@@ -225,6 +225,23 @@ export class GoogleDriveClient {
     return 'none';
   }
 
+  /**
+   * WHY THE LAST getFolderById() CAME BACK EMPTY.
+   *
+   * That method answers null for every kind of failure, because for
+   * its caller they all mean "this folder is not usable". But they do
+   * not all have the same remedy, and the difference is the whole
+   * diagnosis: 404 means this credential has never been granted the
+   * folder (with drive.file, that the Picker grant did not take);
+   * 403 means it was granted and refused; 401 means the credential
+   * itself is dead. Swallowing the error left one sentence blaming
+   * the id, the bin, or sharing -- none of which may be true.
+   *
+   * Set on every call, cleared at the start of one. Empty means the
+   * call succeeded or has not run.
+   */
+  public lastFolderError = '';
+
   /** Forgets the built client -- after the owner connects or disconnects. */
   resetAuth(): void {
     if (this.driveOverride) return;
@@ -379,6 +396,7 @@ export class GoogleDriveClient {
   async getFolderById(folderId: string): Promise<DriveFile | null> {
     if (!this.isConfigured()) throw AppError.internal('Google Drive is not configured');
     const drive = await this.getDrive();
+    this.lastFolderError = '';
 
     try {
       const res = await this.withRetry(() =>
@@ -396,12 +414,37 @@ export class GoogleDriveClient {
       );
 
       const file = res.data;
-      if (!file?.id) return null;
-      if (file.trashed) return null;
-      if (file.mimeType !== 'application/vnd.google-apps.folder') return null;
+      if (!file?.id) {
+        this.lastFolderError = 'Google answered without a file.';
+        return null;
+      }
+      if (file.trashed) {
+        this.lastFolderError = `“${file.name ?? folderId}” is in the bin.`;
+        return null;
+      }
+      if (file.mimeType !== 'application/vnd.google-apps.folder') {
+        this.lastFolderError = `That id is a ${file.mimeType ?? 'file'}, not a folder.`;
+        return null;
+      }
 
       return { id: file.id, name: file.name ?? '(untitled)', driveId: file.driveId ?? undefined };
-    } catch {
+    } catch (err) {
+      // GOOGLE'S OWN ANSWER, KEPT. Which status it is decides what to
+      // do next, and it was being discarded here.
+      const status = err instanceof DriveError ? err.statusCode : 0;
+      const message = err instanceof Error ? err.message : String(err);
+
+      this.lastFolderError = status === 404
+        ? `Google answered 404 for that id: this credential has never been given access to it. `
+          + `With the drive.file scope that is what a folder the Picker has not granted looks `
+          + `like — sharing the folder in Drive does not grant it, only the Picker does. `
+          + `(${message})`
+        : status === 403
+          ? `Google answered 403: the credential can see that id but is not allowed to open it. `
+            + `(${message})`
+          : status === 401
+            ? `Google answered 401: the credential itself was rejected. (${message})`
+            : message;
       return null;
     }
   }

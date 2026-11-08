@@ -181,6 +181,24 @@ export async function describeLibraryFolder(): Promise<LibraryFolderStatus> {
   const folder = cachedFolder ?? await googleDriveClient.getFolderById(folderId);
 
   if (!folder) {
+    // WHOSE FAILURE IT WAS, and what Google actually said.
+    //
+    // This used to guess at three causes and name none of them as the
+    // one that happened, which left the studio re-sharing a folder
+    // over and over. Both halves matter: the credential that was
+    // refused, because sharing a folder with the service account does
+    // nothing when the request went out as somebody else; and
+    // Google's own status, because 404 and 403 have opposite remedies.
+    const mode = await googleDriveClient.authMode();
+    const asWhom = mode === 'oauth'
+      ? 'the connected Google account'
+      : mode === 'delegated'
+        ? `the service account acting as ${config.google.driveImpersonateUser}`
+        : mode === 'service-account'
+          ? 'the service account — no Google account is connected'
+          : 'no credential at all';
+    const detail = googleDriveClient.lastFolderError;
+
     return {
       ok: false,
       configured: true,
@@ -188,10 +206,10 @@ export async function describeLibraryFolder(): Promise<LibraryFolderStatus> {
       name: '',
       sharedDrive: false,
       reason:
-        `The Google Drive folder ${folderId} could not be opened. Either the id in `
-        + 'GOOGLE_DRIVE_LIBRARY_FOLDER is wrong, the folder is in the bin, or it has not '
-        + 'been shared with this deployment\u2019s service account \u2014 share it as an '
-        + 'Editor.',
+        `The Google Drive folder ${folderId} could not be opened as ${asWhom}.`
+        + (detail ? ` ${detail}` : '')
+        + ' Check that the id in GOOGLE_DRIVE_LIBRARY_FOLDER is the folder you mean, that it '
+        + 'is not in the bin, and that this credential has been given access to it.',
     };
   }
 
