@@ -272,6 +272,29 @@ async function main() {
       /\/static\/library-starters\//.test(
         await page.locator('.lib-card:has(.lib-starter-flag) img').first().getAttribute('src') || ''));
 
+    // THE ONE DRIVE URL SHAPE A BROWSER CAN RENDER.
+    //
+    // A row stores uc?export=download deliberately: the Python
+    // visualization service fetches it server-side and wants the
+    // download endpoint. An <img> pointed at that same URL is handed
+    // an HTML interstitial instead of pixels and draws nothing -- a
+    // blank card sitting beside a starter that renders perfectly,
+    // which is exactly what the studio saw after their first real
+    // upload. Both halves are asserted, because fixing the first by
+    // rewriting the row would break generation instead.
+    const uploadedSrc = await uploaded.getAttribute('src') || '';
+    check('2d3. ...in the form a browser can actually draw, not the download endpoint',
+      /drive\.google\.com\/thumbnail\?id=/.test(uploadedSrc)
+      && !/export=download/.test(uploadedSrc), uploadedSrc);
+
+    const storedRow = await prisma.libraryReference.findFirst({
+      where: { themeId: 'british' },
+      orderBy: { createdAt: 'asc' },
+    });
+    check('2d4. ...while the row itself still carries the download form the generator fetches',
+      /uc\?export=download/.test((storedRow && storedRow.imageUrl) || ''),
+      storedRow && storedRow.imageUrl);
+
     // Back goes up ONE level, which is what a hierarchy needs.
     check('2e. there is a way back', await page.locator('#libBack').count() === 1);
     await page.click('#libBack');
