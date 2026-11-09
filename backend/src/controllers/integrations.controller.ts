@@ -3,7 +3,7 @@ import { catchAsync } from '@utils/catchAsync';
 import { config } from '@config/index';
 import { describeLibraryFolder } from '@services/library.service';
 import { geminiClient } from '@services/gemini.service';
-import { googleDriveClient } from '@services/googleDrive.service';
+import { googleDriveClient, DriveError } from '@services/googleDrive.service';
 import { checkPythonAIHealth } from '@services/python-ai.service';
 import { AppError } from '@utils/AppError';
 import { logger } from '@utils/logger';
@@ -363,8 +363,38 @@ export const runDriveSelfTest = catchAsync(async (_req: Request, res: Response) 
     // leaves the file behind would quietly litter the studio's folder
     // every time this test is run.
     await record('Confirming it is gone', async () => {
-      const stillThere = await googleDriveClient.describeFile(fileId);
-      if (stillThere) throw new Error(`The test picture ${fileId} is still in Drive.`);
+      let stillThere;
+      try {
+        stillThere = await googleDriveClient.describeFile(fileId);
+      } catch (err) {
+        // A 404 FOR AN ID WE JUST DELETED IS THE CONFIRMATION, not a
+        // failure of it. describeFile does not swallow errors -- it
+        // must not, or a dead credential would read as an empty
+        // folder -- so the one status that means "gone" is recognised
+        // here and everything else is left to fail as itself: 401 and
+        // 403 say the check could not be made, and a network error
+        // says the same, none of which is evidence the file was
+        // removed.
+        if (err instanceof DriveError && err.statusCode === 404) {
+          return 'Drive answers 404 for that id \u2014 the test picture is gone.';
+        }
+        throw new Error(
+          `The deletion could not be verified: ${err instanceof Error ? err.message : String(err)}. `
+          + 'The file may or may not still be there.',
+        );
+      }
+
+      // Drive answered, and the file is still there. The delete call
+      // reported success, so this is the case worth catching.
+      if (stillThere) {
+        throw new Error(
+          `The test picture ${fileId} is still in Drive after the delete reported success`
+          + `${stillThere.parents.length ? `, in ${stillThere.parents.join(', ')}` : ''}.`,
+        );
+      }
+
+      // describeFile also answers null for a file in the bin, which
+      // is removed from the folder without being purged.
       return 'the folder is as it was';
     });
   }

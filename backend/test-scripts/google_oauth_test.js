@@ -574,9 +574,15 @@ async function main() {
     driveClient.generatePublicLink = async (id) => { publicised.push(id); return 'https://drive/' + id; };
     driveClient.deleteFile = async (id) => { deleted.push(id); };
     // Drive asked again, independently of the upload's own answer.
-    driveClient.describeFile = async (id) => (deleted.includes(id)
-      ? null
-      : { id, name: 'devyora-connection-test.png', parents: ['folder-Bathroom'] });
+    // Drive's real answer for an id that has been deleted is a 404,
+    // not an empty response -- and that 404 is the confirmation the
+    // step is looking for, not a failure of it.
+    driveClient.describeFile = async (id) => {
+      if (deleted.includes(id)) {
+        throw new drive.DriveError('Google Drive: file or folder not found: File not found.', 404, false);
+      }
+      return { id, name: 'devyora-connection-test.png', parents: ['folder-Bathroom'] };
+    };
     driveClient.whoAmI = async () => ({ email: 'studio@example.test', name: 'Store Owner' });
 
     // The anonymous fetch of the public link goes to drive.google.com,
@@ -640,8 +646,49 @@ async function main() {
       stepNamed('Finding it again'));
     check('8q3. ...the link is fetched with no credentials, as the generator will',
       anonymousFetches === 1 && stepNamed('no credentials').ok, anonymousFetches);
-    check('8q4. ...and the test picture is confirmed gone, not merely deleted',
-      !!stepNamed('Confirming it is gone') && stepNamed('Confirming it is gone').ok);
+    // A 404 FOR THE ID WE JUST DELETED IS THE PROOF, not the failure.
+    // Reported as a failure, it turned an otherwise perfect run red
+    // on its last line.
+    check('8q4. ...and a 404 for the deleted id is read as confirmation, not failure',
+      !!stepNamed('Confirming it is gone') && stepNamed('Confirming it is gone').ok
+      && /404/.test(stepNamed('Confirming it is gone').detail),
+      stepNamed('Confirming it is gone'));
+
+    // A FILE THAT SURVIVES ITS OWN DELETION IS A FAILURE. The delete
+    // call reported success, so this is exactly the case worth
+    // catching rather than trusting.
+    driveClient.describeFile = async (id) =>
+      ({ id, name: 'devyora-connection-test.png', parents: ['folder-Bathroom'] });
+    const survived = await call('POST', '/integrations/drive/self-test', ownerToken);
+    const survivedStep = (survived.json.data.steps || [])
+      .find((s) => s.step.includes('Confirming it is gone'));
+    check('8q4b. a file still in Drive after the delete is a failure, naming where it is',
+      survived.json.data.ok === false && !!survivedStep && !survivedStep.ok
+      && /still in Drive/.test(survivedStep.detail)
+      && /folder-Bathroom/.test(survivedStep.detail), survivedStep);
+
+    // ...and anything that is not a 404 is not evidence of anything.
+    // A dead credential must not read as a tidy folder.
+    driveClient.describeFile = async (id) => {
+      if (deleted.includes(id)) {
+        throw new drive.DriveError('Google Drive could not authenticate: invalid_grant', 401, false);
+      }
+      return { id, name: 'devyora-connection-test.png', parents: ['folder-Bathroom'] };
+    };
+    const unverifiable = await call('POST', '/integrations/drive/self-test', ownerToken);
+    const unverifiableStep = (unverifiable.json.data.steps || [])
+      .find((s) => s.step.includes('Confirming it is gone'));
+    check('8q4c. a 401 is not mistaken for a successful deletion',
+      unverifiable.json.data.ok === false && !!unverifiableStep && !unverifiableStep.ok
+      && /could not be verified/.test(unverifiableStep.detail)
+      && /invalid_grant/.test(unverifiableStep.detail), unverifiableStep);
+
+    driveClient.describeFile = async (id) => {
+      if (deleted.includes(id)) {
+        throw new drive.DriveError('Google Drive: file or folder not found: File not found.', 404, false);
+      }
+      return { id, name: 'devyora-connection-test.png', parents: ['folder-Bathroom'] };
+    };
 
     // Each failure is a different failure, and says which.
     anonymousStatus = 403;
