@@ -1,0 +1,109 @@
+/*
+ * THE SIDEBAR'S TOGGLE, SHARED BY EVERY PAGE THAT HAS ONE.
+ *
+ * Six pages carry the same sidebar markup, each with its own copy of
+ * the same rules. This file is loaded AFTER those inline styles on
+ * purpose: the rules below have the same specificity as the ones they
+ * replace, so the cascade decides, and the page keeps every other
+ * thing it says about its own layout.
+ *
+ * Two behaviours, one control:
+ *
+ *   desktop   the sidebar is open, as it always was. The button
+ *             collapses it and remembers that choice.
+ *   phone     the sidebar was `display:none` -- unreachable, with no
+ *             way to navigate at all. It is now a drawer that slides
+ *             in over the page, closed to begin with.
+ */
+
+.sb-toggle {
+  position: fixed;
+  top: 18px;
+  left: 14px;
+  z-index: 1001;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 1px solid var(--line, #E7DFD1);
+  border-radius: 11px;
+  background: #FCFAF6;
+  cursor: pointer;
+  transition: left .22s ease, background .15s ease, box-shadow .15s ease;
+}
+.sb-toggle:hover { background: #fff; box-shadow: 0 2px 10px rgba(26,21,18,.07); }
+.sb-toggle:focus-visible { outline: 2px solid var(--gold, #8A6A3B); outline-offset: 2px; }
+
+.sb-toggle span {
+  display: block;
+  width: 17px;
+  height: 1.6px;
+  border-radius: 2px;
+  background: var(--ink, #1A1512);
+  transition: transform .2s ease, opacity .2s ease;
+}
+
+/* Open on a wide screen: the button sits at the sidebar's inner edge,
+   level with the wordmark, so it reads as part of the panel. */
+body.sb-open .sb-toggle { left: 214px; }
+
+/* ── Wide screens ─────────────────────────────────────────────── */
+
+body.sb-closed .sidebar { display: none; }
+
+/* Collapsed, the button floats over the page's own top-left corner --
+   where these pages put their eyebrow line. Give it the width back. */
+@media (min-width: 861px) {
+  body.sb-closed .main { padding-left: 68px; }
+}
+
+/* ── Phones and small tablets ─────────────────────────────────── */
+
+@media (max-width: 860px) {
+  /* The page hides it outright. Here it is a drawer instead. */
+  .sidebar {
+    display: flex;
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 266px;
+    max-width: 84vw;
+    z-index: 1000;
+    transform: translateX(-102%);
+    transition: transform .24s ease;
+    box-shadow: 0 0 40px rgba(26, 21, 18, .18);
+  }
+  body.sb-open .sidebar { transform: none; }
+  body.sb-closed .sidebar { display: flex; }
+
+  /* Room for the button, which now floats over the page. */
+  .main { padding-top: 70px; }
+
+  /* Open, it rides the drawer to the drawer's own inner edge -- the
+     same place it sits on a wide screen -- and becomes a close
+     button. Left where it was, it covered the mark. */
+  body.sb-open .sb-toggle { background: #fff; }
+  body.sb-open .sb-toggle span:nth-child(1) { transform: translateY(5.6px) rotate(45deg); }
+  body.sb-open .sb-toggle span:nth-child(2) { opacity: 0; }
+  body.sb-open .sb-toggle span:nth-child(3) { transform: translateY(-5.6px) rotate(-45deg); }
+
+  .sb-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 999;
+    background: rgba(26, 21, 18, .38);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .24s ease;
+  }
+  body.sb-open .sb-backdrop { opacity: 1; pointer-events: auto; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sb-toggle, .sidebar, .sb-backdrop, .sb-toggle span { transition: none; }
+}

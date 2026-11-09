@@ -25,8 +25,34 @@ if (!connectionString) {
 // PRISMA POSTGRES ADAPTER
 // ------------------------------------------------------------
 
+/*
+ * HOW MANY POSTGRES CONNECTIONS ONE INSTANCE MAY HOLD.
+ *
+ * node-postgres defaults to 10 per pool, and this deployment runs on
+ * serverless functions: every warm instance keeps its own pool, so ten
+ * apiece exhausts a pooler that allows fifteen in total. That is the
+ * "(EMAXCONNSESSION) max clients reached in session mode" the library
+ * page was reporting -- the database was not down, the connections to
+ * it had simply all been taken and held.
+ *
+ * Three is deliberate rather than tuned: enough for a request that
+ * fans out a few queries at once (settings reads several categories in
+ * parallel), small enough that several warm instances still fit. A
+ * request that wants a fourth waits for one of the three instead of
+ * opening another, which is the behaviour that was missing.
+ *
+ * idleTimeoutMillis matters as much as max on a serverless host: an
+ * instance between requests holds nothing, so a frozen one stops
+ * occupying a slot it is not using. connectionTimeoutMillis is
+ * generous on purpose -- queueing behind a busy pool is normal and
+ * should wait, not fail.
+ */
 const adapter = new PrismaPg({
   connectionString,
+  max: 3,
+  idleTimeoutMillis: 10_000,
+  connectionTimeoutMillis: 15_000,
+  allowExitOnIdle: true,
 });
 
 // ------------------------------------------------------------
@@ -52,9 +78,17 @@ export const prisma =
 // DEVELOPMENT QUERY LOGGING
 // ------------------------------------------------------------
 
-if (config.isDev) {
-  global.__prisma = prisma;
+/*
+ * ONE CLIENT PER PROCESS, in production too.
+ *
+ * This cache was only ever populated in development, so anything that
+ * evaluated this module a second time in production built a second
+ * client -- and a second pool, with its own connections, on top of a
+ * pooler that was already full.
+ */
+global.__prisma = prisma;
 
+if (config.isDev) {
   prisma.$on("query" as never, (e: any) => {
     logger.debug(
       `prisma query (${e.duration}ms): ${e.query}`
