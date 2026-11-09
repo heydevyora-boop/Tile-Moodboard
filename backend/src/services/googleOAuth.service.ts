@@ -68,6 +68,28 @@ export function isOAuthConfigured(): boolean {
   return !!config.google.oauthClientId && !!config.google.oauthClientSecret;
 }
 
+/**
+ * THE CLOUD PROJECT NUMBER THE GOOGLE PICKER MUST BE TOLD.
+ *
+ * PickerBuilder.setAppId is documented as REQUIRED for the drive.file
+ * scope, and this is its value. Without it the Picker still opens,
+ * still lets the owner choose a folder and still hands the id back --
+ * so it looks as though it worked -- but Google never records the
+ * per-file grant against this OAuth client. Every later files.get
+ * from the server then answers 404 for an id the owner just picked,
+ * which is indistinguishable from a wrong id.
+ *
+ * Derived from the client id rather than configured separately: a
+ * Google OAuth client id is "<project number>-<hash>.apps.
+ * googleusercontent.com", so the number is already here, and a
+ * second variable would be one more thing to set wrongly. It must be
+ * the project that issued the client id -- a different project's
+ * number produces exactly the same silent 404.
+ */
+export function pickerAppId(): string {
+  return /^(\d+)-/.exec(config.google.oauthClientId)?.[1] ?? '';
+}
+
 export function oauthScopes(): string[] {
   return config.google.oauthScope.split(/[\s,]+/).filter(Boolean);
 }

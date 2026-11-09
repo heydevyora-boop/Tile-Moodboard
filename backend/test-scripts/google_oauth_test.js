@@ -144,6 +144,43 @@ async function main() {
   }
 
   // ════════════════════════════════════════════════════════════════
+  console.log('\n2z. the Picker app id, without which the pick grants nothing');
+  {
+    // THE LINE THE WHOLE drive.file PATH TURNS ON. setAppId is
+    // documented as required for that scope. Without it the Picker
+    // still opens, still lets the owner choose a folder and still
+    // hands back its id -- so it looks as though it worked -- but
+    // Google records no grant against this client, and every later
+    // files.get answers 404 for an id the owner just picked.
+    check('2z1. this suite\u2019s dummy client id carries no project number, so none is invented',
+      oauth.pickerAppId() === '', oauth.pickerAppId());
+
+    const saved = config.google.oauthClientId;
+    config.google.oauthClientId = '123456789012-abcdefg.apps.googleusercontent.com';
+    check('2z2. ...the digits before the hyphen, not the whole id',
+      oauth.pickerAppId() === '123456789012', oauth.pickerAppId());
+
+    // A second variable would be one more thing to set wrongly, and
+    // a different project's number fails in exactly the same silence.
+    config.google.oauthClientId = 'not-a-real-client-id';
+    check('2z3. an id with no project number yields nothing, rather than a guess',
+      oauth.pickerAppId() === '', oauth.pickerAppId());
+    config.google.oauthClientId = saved;
+
+    // The page must refuse to open the Picker without one: picking a
+    // folder that cannot be granted wastes the only action that
+    // creates the grant.
+    const page = require('fs').readFileSync(
+      path.join(ROOT, '..', 'frontend', 'drive-connect.html'), 'utf8',
+    );
+    check('2z4. the Picker is given the app id', /\.setAppId\(grant\.appId\)/.test(page));
+    check('2z5. ...and refuses to open without one',
+      /if \(!grant\.appId\) throw new Error/.test(page));
+    check('2z6. ...and the page says a folder picked earlier must be picked again',
+      /pick it again/i.test(page));
+  }
+
+  // ════════════════════════════════════════════════════════════════
   console.log('\n3. the refresh token, which must never be readable or returned');
   {
     check('3a. nothing is authorized before the owner connects',
@@ -540,6 +577,7 @@ async function main() {
     driveClient.describeFile = async (id) => (deleted.includes(id)
       ? null
       : { id, name: 'devyora-connection-test.png', parents: ['folder-Bathroom'] });
+    driveClient.whoAmI = async () => ({ email: 'studio@example.test', name: 'Store Owner' });
 
     // The anonymous fetch of the public link goes to drive.google.com,
     // which is not reachable from a test. Only that host is answered
@@ -581,8 +619,17 @@ async function main() {
     check('8p. ...and removed its own test picture again',
       deleted.length === 1 && deleted[0] === 'uploaded-1', deleted);
     check('8q. every step is reported, so a failure names itself',
-      (test.json.data.steps || []).length === 9
+      (test.json.data.steps || []).length === 10
       && test.json.data.steps.every((s) => s.step && s.detail), test.json.data.steps);
+
+    // WHICH ACCOUNT THE SERVER IS, asked of Google rather than
+    // inferred -- the question behind every one of these failures.
+    // Reported, but not allowed to decide the verdict: a credential
+    // whose scope cannot reach about.get still uploads perfectly well.
+    check('8q0. the account the server acts as is asked of Google and reported',
+      (test.json.data.steps || []).some(
+        (s) => /Google account this server/.test(s.step) && /studio@example.test/.test(s.detail),
+      ), test.json.data.steps && test.json.data.steps[0]);
 
     // A 200 ON THE UPLOAD IS NOT EVIDENCE THE PICTURE IS THERE.
     const stepNamed = (fragment) =>

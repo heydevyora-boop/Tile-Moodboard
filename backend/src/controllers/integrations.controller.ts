@@ -18,6 +18,7 @@ import {
   isOAuthConfigured,
   oauthRedirectUri,
   oauthScopes,
+  pickerAppId,
   verifyState,
 } from '@services/googleOAuth.service';
 import { clearLibraryFolderCache, driveFolderIdFrom } from '@services/library.service';
@@ -198,12 +199,25 @@ export const getGooglePickerToken = catchAsync(async (_req: Request, res: Respon
     const { token, res: tokenRes } = await client.getAccessToken();
     if (!token) throw AppError.badRequest('Google returned no access token.');
     const expiresIn = (tokenRes?.data as { expires_in?: number } | undefined)?.expires_in ?? 3600;
+
+    // WITHOUT THIS THE PICKER GRANTS NOTHING. See pickerAppId: it is
+    // required for the drive.file scope, and its absence is silent --
+    // the folder is picked, the id comes back, and the server is then
+    // refused with a 404 it cannot tell from a typo.
+    const appId = pickerAppId();
+
     res.status(200).json({
       success: true,
       data: {
         accessToken: token,
         expiresIn,
         apiKey: config.google.pickerApiKey,
+        appId,
+        appIdProblem: appId
+          ? ''
+          : 'GOOGLE_OAUTH_CLIENT_ID does not begin with a project number, so the Picker cannot '
+            + 'be told which app to grant access to. A Google OAuth client id looks like '
+            + '"123456789012-abc.apps.googleusercontent.com"; check the value.',
         folderId: driveFolderIdFrom(config.google.driveLibraryFolder),
       },
     });
@@ -222,13 +236,24 @@ export const getGooglePickerToken = catchAsync(async (_req: Request, res: Respon
  * only the two folders the library would have created anyway.
  */
 export const runDriveSelfTest = catchAsync(async (_req: Request, res: Response) => {
-  const steps: { step: string; ok: boolean; detail: string }[] = [];
-  const record = async (step: string, fn: () => Promise<string>) => {
+  /**
+   * `informational` steps are reported but do not decide the verdict.
+   * Knowing which Google account the server is cannot be had on every
+   * scope, and a deployment that uploads perfectly well should not be
+   * told it failed because Drive declined to introduce itself.
+   */
+  const steps: { step: string; ok: boolean; detail: string; informational?: boolean }[] = [];
+  const record = async (step: string, fn: () => Promise<string>, informational = false) => {
     try {
-      steps.push({ step, ok: true, detail: await fn() });
+      steps.push({ step, ok: true, detail: await fn(), informational });
       return true;
     } catch (err) {
-      steps.push({ step, ok: false, detail: err instanceof Error ? err.message : String(err) });
+      steps.push({
+        step,
+        ok: false,
+        detail: err instanceof Error ? err.message : String(err),
+        informational,
+      });
       return false;
     }
   };
@@ -238,6 +263,15 @@ export const runDriveSelfTest = catchAsync(async (_req: Request, res: Response) 
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
     'base64',
   );
+
+  // WHO THE SERVER IS, asked of Google rather than inferred. A folder
+  // shared with one account and a request made by another look
+  // identical from the outside; this is the step that tells them apart.
+  await record('The Google account this server is acting as', async () => {
+    const who = await googleDriveClient.whoAmI();
+    if (!who) return 'Drive did not say \u2014 the credential cannot read about.get.';
+    return `${who.email}${who.name ? ` (${who.name})` : ''}`;
+  }, true);
 
   const folder = await describeLibraryFolder();
   steps.push({
@@ -338,7 +372,7 @@ export const runDriveSelfTest = catchAsync(async (_req: Request, res: Response) 
   res.status(200).json({
     success: true,
     data: {
-      ok: steps.every((s) => s.ok),
+      ok: steps.every((s) => s.ok || s.informational),
       authMode: await googleDriveClient.authMode(),
       steps,
     },
