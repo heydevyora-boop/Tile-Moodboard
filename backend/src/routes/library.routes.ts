@@ -25,6 +25,7 @@ import { uploadReferenceImage } from '@middlewares/uploadReferenceImage';
 import * as library from '@services/library.service';
 import { THEMES } from '@services/themes.service';
 import { ROOM_LIST, UNSORTED_ROOM } from '@services/rooms.service';
+import { normalizeDriveImageUrl } from '@services/referenceImages.service';
 import {
   starterCounts,
   starterRoomCounts,
@@ -246,12 +247,37 @@ router.get(
     res.status(200).json({
       success: true,
       data: {
-        references: [...starters, ...uploaded],
+        references: [...starters, ...uploaded].map(forBrowser),
         storage: { ok: !storageError, reason: storageError },
       },
     });
   }),
 );
+
+/**
+ * THE ONE URL SHAPE A BROWSER CAN ACTUALLY RENDER.
+ *
+ * A library row stores imageUrl as Drive's uc?export=download form,
+ * deliberately: the Python visualization service fetches it server-side
+ * and wants the download endpoint. An <img> pointed at that same URL
+ * gets an HTML interstitial instead of pixels and draws nothing -- a
+ * blank card beside the starters, which are plain files and render
+ * fine. referenceImages.service has carried the fix and the
+ * explanation for the older flow since before this feature existed;
+ * this is the same read-time normalisation, applied where the library
+ * hands a row to a browser.
+ *
+ * Read-time only. Nothing is rewritten in the database, the row keeps
+ * the download form, and generation -- which resolves the reference by
+ * id on the server and never reads this field from the client -- is
+ * untouched. A starter's /static/... path is not a Drive URL, so it
+ * passes through unchanged.
+ */
+function forBrowser(reference: unknown): unknown {
+  const ref = reference as { imageUrl?: string | null } | null;
+  if (!ref || typeof ref !== 'object' || !ref.imageUrl) return reference;
+  return { ...ref, imageUrl: normalizeDriveImageUrl(ref.imageUrl) };
+}
 
 router.post(
   '/references',
@@ -275,7 +301,7 @@ router.post(
       req.user!.id,
       req,
     );
-    res.status(201).json({ success: true, data: { reference: created } });
+    res.status(201).json({ success: true, data: { reference: forBrowser(created) } });
   }),
 );
 
