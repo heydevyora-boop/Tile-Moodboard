@@ -6,7 +6,7 @@ import {
 
 import { prisma } from '@db/connection';
 import { logActivity } from '@services/activityLog.service';
-import { normalizeDriveImageUrl, toDriveFetchUrl } from '@services/referenceImages.service';
+import { normalizeDriveImageUrl, driveFileIdFromUrl } from '@services/referenceImages.service';
 import { isStarterId, starterById, STARTER_PATH } from '@services/libraryStarters';
 import { config } from '@config/index';
 
@@ -15,6 +15,39 @@ import { authenticate, requirePermission } from '@middlewares/auth';
 import {
   generateVisualization,
 } from '../services/python-ai.service';
+
+/**
+ * THE ADDRESS THE PYTHON SERVICE IS GIVEN FOR THE CHOSEN ROOM.
+ *
+ * Never a Drive link. Two things stop one working:
+ * uc?export=download answers a server with an HTML page rather than
+ * the file, and main_step6_complete.py rewrites ANY drive.google.com
+ * url back to exactly that form before fetching it. So no choice of
+ * Drive address made here survives the trip -- the thumbnail url this
+ * route used to send was never the one fetched, which is why fixing
+ * the url alone changed nothing.
+ *
+ * A url on this deployment's own host is left alone by that rewrite,
+ * and /static/library-reference reads the bytes with this
+ * deployment's own Drive credential. Whether the picture was ever
+ * shared publicly stops mattering.
+ *
+ * A starter's imageUrl is already an absolute url on this host and is
+ * returned untouched.
+ */
+function sceneImageUrlFor(imageUrl: string, req: Request): string {
+  const fileId = driveFileIdFromUrl(imageUrl);
+  if (!fileId) return imageUrl;
+
+  // The request's own origin, for the reason given where the starters
+  // build theirs: a configured one is stale by the next deployment.
+  const host = req.get('host');
+  const origin = host
+    ? `${req.protocol}://${host}`
+    : (config.backend.publicUrl || '').replace(/\/+$/, '');
+
+  return `${origin}/static/library-reference/${fileId}`;
+}
 
 const router = Router();
 
@@ -365,12 +398,7 @@ router.post(
 
           scene_image_url:
             libraryScene
-              // NOT the row's own imageUrl. That is Drive's
-              // uc?export=download form, which answers a server with
-              // an HTML page rather than the file -- the Python
-              // service fetched it, got a document, and reported
-              // "cannot identify image file".
-              ? toDriveFetchUrl(libraryScene.imageUrl)
+              ? sceneImageUrlFor(libraryScene.imageUrl, req)
               : typeof scene_image_url ===
                 'string'
                 ? scene_image_url.trim()

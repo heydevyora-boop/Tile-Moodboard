@@ -503,14 +503,16 @@ async function main() {
       sent.scene_image_url.includes(driveIdOf(reference.imageUrl)),
       sent && sent.scene_image_url);
 
-    // IN THE FORM A SERVER CAN ACTUALLY FETCH. The row stores Drive's
-    // uc?export=download address, which answers a server with an HTML
-    // page rather than the file -- the Python service fetched exactly
-    // that and reported "cannot identify image file". Same picture,
-    // the address that returns pixels.
-    check('7b2. ...at the address that answers with bytes, not a download page',
-      /drive\.google\.com\/thumbnail\?id=/.test(sent.scene_image_url)
-      && !/export=download/.test(sent.scene_image_url), sent && sent.scene_image_url);
+    // NEVER A DRIVE LINK. uc?export=download answers a server with an
+    // HTML page rather than the file, and main_step6_complete.py
+    // rewrites ANY drive.google.com url back to that form before
+    // fetching it -- so no choice of Drive address made here survives
+    // the trip. Changing the Drive url alone changed nothing, twice.
+    // It is served from this deployment instead, where the bytes are
+    // read with its own credential.
+    check('7b2. ...from this deployment, because a Drive link is rewritten downstream',
+      sent.scene_image_url.includes('/static/library-reference/')
+      && !/drive\.google\.com/.test(sent.scene_image_url), sent && sent.scene_image_url);
     check('7c. ...treated as a reference, not as a starting point',
       sent.scene_image_mode === 'reference', sent && sent.scene_image_mode);
     check('7d. ...and the step that INVENTS a room does not run',
@@ -756,6 +758,57 @@ async function main() {
     check('13a. it is refused', res.status === 400, res.status);
     check('13b. ...because it ships with the application, not the studio',
       /ships with De/.test(body.message || ''), body);
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  console.log('\n14. the picture this deployment serves to the generator');
+  {
+    // The address section 7 hands to Python has to actually answer
+    // with the file, from a machine holding no session at all.
+    const drive = require(path.join(ROOT, 'src/services/googleDrive.service'));
+    const PNG = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+      'base64',
+    );
+    const asked = [];
+    drive.googleDriveClient.isConfigured = () => true;
+    drive.googleDriveClient.downloadFile = async (fileId) => {
+      asked.push(fileId);
+      return { bytes: PNG, mimeType: 'image/png' };
+    };
+
+    const origin = `http://127.0.0.1:${server.address().port}`;
+
+    // No Authorization header: the service that fetches this is
+    // another machine, not a signed-in person.
+    const served = await realFetch(`${origin}/static/library-reference/ref-cobalt`);
+    const bytes = Buffer.from(await served.arrayBuffer());
+    check('14a. it answers without a login, because Python has none',
+      served.status === 200, served.status);
+    check('14b. ...with the file itself, read from Drive with this server’s credential',
+      bytes.equals(PNG) && asked.includes('ref-cobalt'), { len: bytes.length, asked });
+    check('14c. ...declared as an image, so a decoder knows what it has',
+      (served.headers.get('content-type') || '').startsWith('image/'),
+      served.headers.get('content-type'));
+
+    // NOT AN OPEN PROXY. Only a picture this library holds can be
+    // read through it; the rest of the studio's Drive cannot.
+    const notOurs = await realFetch(`${origin}/static/library-reference/1SomeOtherDriveFile`);
+    check('14d. a file the library does not hold is refused',
+      notOurs.status === 404, notOurs.status);
+    check('14e. ...and Drive is never even asked for it',
+      !asked.includes('1SomeOtherDriveFile'), asked);
+
+    // A sign-in page served with an image mime type would otherwise
+    // be passed on to a decoder that cannot say what went wrong --
+    // which is the failure this whole route exists to end.
+    drive.googleDriveClient.downloadFile = async () => ({
+      bytes: Buffer.from('<html>Sign in to continue</html>'),
+      mimeType: 'image/png',
+    });
+    const notAnImage = await realFetch(`${origin}/static/library-reference/ref-cobalt`);
+    check('14f. bytes that are not an image are refused here, not downstream',
+      notAnImage.status === 400, notAnImage.status);
   }
 
   server.close();
