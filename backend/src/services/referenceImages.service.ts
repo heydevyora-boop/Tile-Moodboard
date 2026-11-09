@@ -65,8 +65,32 @@ export function driveFileIdFromUrl(imageUrl: string | null): string | null {
  * visualization service fetches server-side and wants the download form.
  * Only what a browser renders is switched here.
  */
-function toDriveThumbnailUrl(fileId: string): string {
-  return `https://drive.google.com/thumbnail?id=${fileId}&sz=w1000`;
+function toDriveThumbnailUrl(fileId: string, width = 1000): string {
+  return `https://drive.google.com/thumbnail?id=${fileId}&sz=w${width}`;
+}
+
+/**
+ * The Drive address that answers a SERVER with image bytes.
+ *
+ * Same trap as the browser one above, and the same answer, but it bites
+ * somewhere else: uc?export=download hands back an HTML page rather
+ * than the file, so a fetch succeeds, the bytes are a document, and
+ * whatever tries to decode them says "cannot identify image file". The
+ * Python visualization service fetches the chosen reference room over
+ * the public internet and did exactly that.
+ *
+ * libraryMatch.fetchReferenceImage already falls back to this address
+ * when the download form fails it; this is that knowledge, named, for
+ * the callers that have no fallback of their own.
+ *
+ * 2048 because the picture is the scene a room is generated FROM: it
+ * wants more than the gallery's thumbnail and nothing like the
+ * original. A non-Drive URL -- a starter's /static/... path -- passes
+ * through unchanged.
+ */
+export function toDriveFetchUrl(imageUrl: string, width = 2048): string {
+  const fileId = driveFileIdFromUrl(imageUrl);
+  return fileId ? toDriveThumbnailUrl(fileId, width) : imageUrl;
 }
 
 /**
