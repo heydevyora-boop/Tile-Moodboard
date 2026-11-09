@@ -10,6 +10,7 @@ import swaggerUi from 'swagger-ui-express';
 
 import { config } from '@config/index';
 import { STARTER_PATH } from '@services/libraryStarters';
+import libraryImageRoutes from '@routes/libraryImage.routes';
 import { requestLogger } from '@middlewares/requestLogger';
 import { notFoundHandler } from '@middlewares/notFound';
 import { globalErrorHandler } from '@middlewares/errorHandler';
@@ -151,6 +152,15 @@ export function createApp(): Application {
   // ============================================================
   // EXISTING STATIC ASSETS
   // ============================================================
+
+  // The library's own pictures, read from Drive with this
+  // deployment's credential. See routes/libraryImage.routes.ts for
+  // why a Drive link cannot do this job.
+  app.use(
+    '/static/library-reference',
+    staticAssetHeaders,
+    libraryImageRoutes,
+  );
 
   app.use(
     '/static/extracted',

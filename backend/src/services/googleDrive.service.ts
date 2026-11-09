@@ -508,6 +508,38 @@ export class GoogleDriveClient {
     return { email: user.emailAddress, name: user.displayName ?? '' };
   }
 
+  /**
+   * ONE FILE'S BYTES, fetched with this deployment's own credential.
+   *
+   * Every other way of getting a library picture back out of Drive
+   * goes through a public URL, and those have been the whole of this
+   * feature's trouble: uc?export=download answers with an HTML page,
+   * and anything on drive.google.com is rewritten back to that form
+   * further down the pipeline. Asking Drive directly, as the account
+   * that owns the file, depends on none of it -- and works whether or
+   * not the file was ever shared.
+   */
+  async downloadFile(fileId: string): Promise<{ bytes: Buffer; mimeType: string }> {
+    if (!this.isConfigured()) throw AppError.internal('Google Drive is not configured');
+    const drive = await this.getDrive();
+
+    const meta = await this.withRetry(() =>
+      drive.files.get({ fileId, fields: 'mimeType', supportsAllDrives: true }),
+    );
+
+    const media = await this.withRetry(() =>
+      drive.files.get(
+        { fileId, alt: 'media', supportsAllDrives: true },
+        { responseType: 'arraybuffer' },
+      ),
+    );
+
+    return {
+      bytes: Buffer.from(media.data as unknown as ArrayBuffer),
+      mimeType: meta.data?.mimeType || 'application/octet-stream',
+    };
+  }
+
   async listFolderContents(folderId: string): Promise<DriveFile[]> {
     if (!this.isConfigured()) throw AppError.internal('Google Drive is not configured');
     const drive = await this.getDrive();
