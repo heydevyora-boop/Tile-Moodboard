@@ -468,6 +468,68 @@ async function main() {
       await page.locator('.lib-card.chosen').count() === 1);
   }
 
+  // ════════════════════════════════════════════════════════════════
+  console.log('\n6. the sidebar, on a desk and in a hand');
+  {
+    // A phone used to get `display:none` and no way to navigate at
+    // all: six pages with a sidebar nobody on a phone could reach.
+    // The toggle is built by a shared script, so this covers every
+    // one of them.
+    const sb = async () => page.evaluate(() => {
+      const bar = document.querySelector('.layout > .sidebar');
+      const box = bar.getBoundingClientRect();
+      return {
+        open: document.body.classList.contains('sb-open'),
+        visible: getComputedStyle(bar).display !== 'none' && box.right > 0 && box.width > 0,
+        toggles: document.querySelectorAll('.sb-toggle').length,
+      };
+    });
+
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await openLibrary();
+    let state = await sb();
+    check('6a. on a wide screen it is open, as it always was',
+      state.open && state.visible, state);
+    check('6b. ...with exactly one toggle, built once', state.toggles === 1, state.toggles);
+
+    await page.click('.sb-toggle');
+    state = await sb();
+    check('6c. the toggle collapses it', !state.open && !state.visible, state);
+
+    // The choice survives the next page, which is the point of
+    // collapsing it at all.
+    await openLibrary();
+    state = await sb();
+    check('6d. ...and that choice is remembered', !state.open, state);
+
+    await page.click('.sb-toggle');
+    check('6e. ...and it opens again', (await sb()).open);
+
+    await page.setViewportSize({ width: 393, height: 852 });
+    await openLibrary();
+    state = await sb();
+    check('6f. on a phone it starts closed, not covering the page',
+      !state.open && !state.visible, state);
+
+    await page.click('.sb-toggle');
+    // The drawer slides in over 240ms; measured on the same tick it is
+    // still off the left edge.
+    await page.waitForTimeout(500);
+    state = await sb();
+    check('6g. ...and the toggle brings it in', state.open && state.visible, state);
+    check('6h. ...over the page, with a backdrop behind it',
+      await page.locator('.sb-backdrop').count() === 1);
+
+    // Following a link must not leave the drawer sitting over the
+    // page that was asked for.
+    await page.click('.sidebar .nav-item');
+    await page.waitForTimeout(400);
+    check('6i. ...and choosing somewhere to go closes it again',
+      !(await page.evaluate(() => document.body.classList.contains('sb-open'))));
+
+    await page.setViewportSize({ width: 1280, height: 800 });
+  }
+
   await browser.close();
   server.close();
   await prisma.$disconnect();
