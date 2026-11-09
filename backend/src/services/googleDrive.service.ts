@@ -170,6 +170,10 @@ export interface DriveApiClient {
   permissions: {
     create: drive_v3.Drive['permissions']['create'];
   };
+  /** Optional: only the self-test asks who the credential belongs to. */
+  about?: {
+    get: drive_v3.Drive['about']['get'];
+  };
 }
 
 export class GoogleDriveClient {
@@ -479,6 +483,29 @@ export class GoogleDriveClient {
       parents: file.parents ?? [],
       webViewLink: file.webViewLink ?? undefined,
     };
+  }
+
+  /**
+   * WHOSE ACCOUNT THIS CREDENTIAL IS.
+   *
+   * "Which Google account is the server actually acting as?" has been
+   * the unanswerable question behind every one of these failures: a
+   * folder shared with one account and a request made by another look
+   * identical from the outside. Drive will say, so the self-test asks
+   * it rather than inferring from configuration.
+   *
+   * Null when the client cannot answer -- an injected fake, or a
+   * credential whose scope does not reach about.get.
+   */
+  async whoAmI(): Promise<{ email: string; name: string } | null> {
+    if (!this.isConfigured()) throw AppError.internal('Google Drive is not configured');
+    const drive = await this.getDrive();
+    if (!drive.about) return null;
+
+    const res = await this.withRetry(() => drive.about!.get({ fields: 'user(emailAddress,displayName)' }));
+    const user = res.data?.user;
+    if (!user?.emailAddress) return null;
+    return { email: user.emailAddress, name: user.displayName ?? '' };
   }
 
   async listFolderContents(folderId: string): Promise<DriveFile[]> {

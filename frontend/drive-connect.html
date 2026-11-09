@@ -179,6 +179,10 @@
       + '</div>';
 
     if (connected && s.needsPicker) {
+      html += '<p class="note"><strong>If you picked this folder before today, pick it again.</strong> '
+        + 'Google records the grant at the moment of picking, so a folder chosen by an earlier '
+        + 'version of this page was never granted and will keep answering 404 until it is '
+        + 'picked once more.</p>';
       html += '<p class="note">This connection uses the <code>drive.file</code> scope, which reaches only '
         + 'what the application itself created or what you hand it. Pick the <strong>Reference Images</strong> '
         + 'folder once and it can work inside it from then on. Setting <code>GOOGLE_OAUTH_SCOPE</code> to the '
@@ -244,6 +248,11 @@
     try {
       const grant = await CasaApi.googleDrive.pickerToken();
       if (!grant.apiKey) throw new Error('GOOGLE_PICKER_API_KEY is not set, and the Picker cannot run without it.');
+      // REQUIRED FOR drive.file, and silent when missing: the folder
+      // is picked, the id comes back, and the server is then refused
+      // with a 404 it cannot tell from a wrong id. Refused here
+      // rather than letting somebody pick a folder for nothing.
+      if (!grant.appId) throw new Error(grant.appIdProblem || 'The Picker has no app id to grant access to.');
       if (!window.gapi) await loadScript('https://apis.google.com/js/api.js');
       await new Promise((resolve) => window.gapi.load('picker', resolve));
 
@@ -255,6 +264,10 @@
       new window.google.picker.PickerBuilder()
         .setOAuthToken(grant.accessToken)
         .setDeveloperKey(grant.apiKey)
+        // THE LINE THE WHOLE drive.file PATH TURNS ON. Google records
+        // the per-file grant against this Cloud project; without it
+        // the pick is cosmetic and the backend stays locked out.
+        .setAppId(grant.appId)
         .setTitle('Choose the Reference Images folder')
         .addView(view)
         .setCallback((data) => {
