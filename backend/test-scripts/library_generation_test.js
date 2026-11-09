@@ -187,6 +187,11 @@ const boardsFor = (tiles) => [{
   reason_for_selection: 'The cream limestone answers the reference floor; the cobalt zellige answers its dado.',
 }];
 
+/** The Drive file id inside any of the URL shapes a row may carry. */
+function driveIdOf(url) {
+  return (/[?&]id=([^&]+)/.exec(String(url || '')) || [])[1] || '';
+}
+
 async function main() {
   const admin = DB_URL.replace(/\/tm_libgen\?/, '/postgres?');
   execFileSync('psql', [admin, '-c', 'drop database if exists tm_libgen'], { stdio: 'ignore' });
@@ -495,7 +500,17 @@ async function main() {
     check('7a. the scene is generated', out.status === 200, out.body);
     const sent = pythonCalls[0];
     check('7b. the reference’s own file is the scene image',
-      sent.scene_image_url === reference.imageUrl, sent && sent.scene_image_url);
+      sent.scene_image_url.includes(driveIdOf(reference.imageUrl)),
+      sent && sent.scene_image_url);
+
+    // IN THE FORM A SERVER CAN ACTUALLY FETCH. The row stores Drive's
+    // uc?export=download address, which answers a server with an HTML
+    // page rather than the file -- the Python service fetched exactly
+    // that and reported "cannot identify image file". Same picture,
+    // the address that returns pixels.
+    check('7b2. ...at the address that answers with bytes, not a download page',
+      /drive\.google\.com\/thumbnail\?id=/.test(sent.scene_image_url)
+      && !/export=download/.test(sent.scene_image_url), sent && sent.scene_image_url);
     check('7c. ...treated as a reference, not as a starting point',
       sent.scene_image_mode === 'reference', sent && sent.scene_image_mode);
     check('7d. ...and the step that INVENTS a room does not run',
@@ -530,7 +545,9 @@ async function main() {
     });
     const sent = pythonCalls[0];
     check('8a. the row’s URL wins over the one the page sent',
-      sent.scene_image_url === reference.imageUrl, sent && sent.scene_image_url);
+      sent.scene_image_url.includes(driveIdOf(reference.imageUrl))
+      && !sent.scene_image_url.includes('evil.example.test'),
+      sent && sent.scene_image_url);
     check('8b. ...and a page asking for a random room cannot override the choice',
       sent.generate_random_scene === false && sent.scene_image_mode === 'reference',
       [sent && sent.generate_random_scene, sent && sent.scene_image_mode]);

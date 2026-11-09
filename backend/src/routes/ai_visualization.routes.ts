@@ -6,7 +6,7 @@ import {
 
 import { prisma } from '@db/connection';
 import { logActivity } from '@services/activityLog.service';
-import { normalizeDriveImageUrl } from '@services/referenceImages.service';
+import { normalizeDriveImageUrl, toDriveFetchUrl } from '@services/referenceImages.service';
 import { isStarterId, starterById, STARTER_PATH } from '@services/libraryStarters';
 import { config } from '@config/index';
 
@@ -365,7 +365,12 @@ router.post(
 
           scene_image_url:
             libraryScene
-              ? libraryScene.imageUrl
+              // NOT the row's own imageUrl. That is Drive's
+              // uc?export=download form, which answers a server with
+              // an HTML page rather than the file -- the Python
+              // service fetched it, got a document, and reported
+              // "cannot identify image file".
+              ? toDriveFetchUrl(libraryScene.imageUrl)
               : typeof scene_image_url ===
                 'string'
                 ? scene_image_url.trim()
