@@ -54,3 +54,36 @@ export const sharedMoodBoardRateLimiter = rateLimit({
   legacyHeaders: false,
   message: { success: false, status: 'fail', message: 'Too many requests. Please try again in a few minutes.' },
 });
+
+/**
+ * A CLIENT CHOOSING ROOMS, with no login to limit them.
+ *
+ * Browsing and hearting are chatty -- a client works through a theme
+ * tapping hearts -- so this is far looser than the share limiter. It
+ * exists to stop a script from walking the token space, not to pace a
+ * real person.
+ */
+export const clientWishlistRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, status: 'fail', message: 'Too many requests. Please try again in a few minutes.' },
+});
+
+/**
+ * REGISTRATION IS TIGHT, because it writes a customer row and nothing
+ * stands in front of it. A showroom registers a handful of clients an
+ * hour from one address; a script would register thousands.
+ */
+export const clientRegistrationRateLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    status: 'fail',
+    message: 'Too many wishlists have been started from here. Please try again later, or ask the studio for help.',
+  },
+});

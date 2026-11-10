@@ -104,7 +104,12 @@ async function main() {
   });
 
   // THE DEPLOYED STATE: the code is here, the table is not.
-  execFileSync('psql', [DB_URL, '-c', 'drop table "LibraryReference"'], { stdio: 'ignore' });
+  //
+  // CASCADE because wishlist_items references LibraryReference: on a
+  // deployment where the library migration never ran, neither table
+  // exists, so taking the dependent one with it is the accurate
+  // simulation -- and without it Postgres refuses the drop outright.
+  execFileSync('psql', [DB_URL, '-c', 'drop table "LibraryReference" cascade'], { stdio: 'ignore' });
 
   const express = require('express');
   const host = express();

@@ -35,6 +35,7 @@
     "test:library-reference-prompt": "cd ../catalog_processor && GEMINI_API_KEY=${GEMINI_API_KEY:-test-key-not-used} PYTHONPATH=. python3.13 app/test_library_reference_prompt.py",
     "test:library-upload": "node test-scripts/library_upload_test.js",
     "test:devyora-library": "node test-scripts/devyora_library_test.js",
+    "test:client-wishlist": "node test-scripts/client_wishlist_test.js",
     "test:passkey-e2e": "node test-scripts/passkey_e2e_test.js",
     "test:scene-progress": "node test-scripts/scene_progress_test.js",
     "test:recent-generations-page": "node test-scripts/recent_generations_page_wiring_test.js",
