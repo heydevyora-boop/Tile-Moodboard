@@ -1836,6 +1836,125 @@
   };
 
   // ============================================================
+  // CLIENT WISHLIST (public, token-based — no auth, no
+  // requireAuth() gate; used only by wishlist.html)
+  //
+  // Same shape and the same reasoning as `shared` above: the client
+  // standing in the showroom has no account, so the unguessable token
+  // minted at registration stands in for one. It is kept in
+  // localStorage by the page, which is why a reload does not lose a
+  // wishlist.
+  //
+  // A selection sends ONLY an image id. The server reads the theme,
+  // the title, the Drive id and the url from the library itself, so
+  // there is deliberately nothing else to send here.
+  // ============================================================
+
+  const clientWishlist = {
+    register(name, phone) {
+      return apiFetch(
+        '/client-wishlists/register',
+        {
+          method: 'POST',
+          skipAuth: true,
+          body: {
+            name,
+            phone
+          }
+        }
+      ).then(
+        (r) =>
+          r.data
+      );
+    },
+
+    get(token) {
+      return apiFetch(
+        `/client-wishlists/${encodeURIComponent(token)}`,
+        {
+          skipAuth: true
+        }
+      ).then(
+        (r) =>
+          r.data
+      );
+    },
+
+    addItem(token, imageId) {
+      return apiFetch(
+        `/client-wishlists/${encodeURIComponent(token)}/items`,
+        {
+          method: 'POST',
+          skipAuth: true,
+          body: {
+            imageId
+          }
+        }
+      ).then(
+        (r) =>
+          r.data
+      );
+    },
+
+    removeItem(token, imageId) {
+      // The id goes in the body rather than the path: a starter's id
+      // is `starter:<theme>-<room>`, and a colon in a path segment is
+      // legal but needlessly fragile across proxies. The route
+      // accepts either.
+      return apiFetch(
+        `/client-wishlists/${encodeURIComponent(token)}/items`,
+        {
+          method: 'DELETE',
+          skipAuth: true,
+          body: {
+            imageId
+          }
+        }
+      ).then(
+        (r) =>
+          r.data
+      );
+    },
+
+    submit(token) {
+      return apiFetch(
+        `/client-wishlists/${encodeURIComponent(token)}/submit`,
+        {
+          method: 'POST',
+          skipAuth: true
+        }
+      ).then(
+        (r) =>
+          r.data
+      );
+    },
+
+    themes() {
+      return apiFetch(
+        '/client-wishlists/browse/themes',
+        {
+          skipAuth: true
+        }
+      ).then(
+        (r) =>
+          r.data
+      );
+    },
+
+    images(themeId) {
+      return apiFetch(
+        `/client-wishlists/browse/images?themeId=${encodeURIComponent(themeId || '')}`,
+        {
+          skipAuth: true
+        }
+      ).then(
+        (r) =>
+          r.data
+      );
+    }
+  };
+
+  // ============================================================
   // TILES (plain browse/search — Catalog page's Surface Archive.
   // Distinct from moodBoards.tiles() above, which resolves specific
   // ids referenced by a generated combination.)
@@ -3839,6 +3958,8 @@ const ai = {
     moodBoards,
 
     shared,
+
+    clientWishlist,
 
     tiles,
 
