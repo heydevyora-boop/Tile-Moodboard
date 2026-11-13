@@ -1,0 +1,996 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Your Wishlist · De’vyora</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500&family=DM+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  /* The studio's own palette and type, as every other De'vyora page
+     inlines them. This is a client-facing surface like shared.html --
+     no sidebar, no login, nothing to administer. */
+  :root { --ink:#1A1512; --paper:#F7F3EC; --card:#fff; --line:#E7DFD1; --sand:#F4EEE3; --gold:#8A6A3B; --gold-light:#E3C58E; --muted:#8B8177; --text2:#5B5147; --err:#A8552A; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--paper); color:var(--ink); font-family:'DM Sans',sans-serif; -webkit-font-smoothing:antialiased; }
+  .mono { font-family:'JetBrains Mono',monospace; }
+  .serif { font-family:'Playfair Display',serif; }
+  button { font-family:inherit; }
+  img { max-width:100%; }
+  @keyframes fadeIn { from{opacity:0} to{opacity:1} }
+  @keyframes rise { from{opacity:0; transform:translateY(14px)} to{opacity:1; transform:none} }
+  @keyframes spin { to{transform:rotate(360deg)} }
+  @keyframes shimmer { from{background-position:180% 0} to{background-position:-180% 0} }
+  @keyframes pop { 0%{transform:scale(1)} 40%{transform:scale(1.28)} 100%{transform:scale(1)} }
+
+  /* ── the bar that stays ── */
+  .topbar { position:sticky; top:0; z-index:40; display:flex; align-items:center; justify-content:space-between;
+            gap:12px; padding:12px clamp(14px,4vw,40px); background:var(--ink); color:#FBF6EC; }
+  .topbar-brand { display:flex; align-items:center; gap:11px; min-width:0; }
+  .topbar-mark { width:28px; height:28px; border-radius:7px; flex:0 0 auto; }
+  .topbar-name { font-size:15px; letter-spacing:.14em; line-height:1; }
+  .topbar-tag { font-size:8px; letter-spacing:.2em; color:var(--gold-light); margin-top:4px; }
+  .heart-btn { display:none; align-items:center; gap:9px; min-height:48px; padding:0 17px; background:transparent;
+               color:#FBF6EC; border:1px solid #4A4038; border-radius:12px; cursor:pointer;
+               font-size:10px; letter-spacing:.14em; }
+  .heart-btn.on { display:flex; }
+  .heart-btn:hover { border-color:var(--gold); }
+  .heart-btn .n { font-family:'JetBrains Mono',monospace; font-size:13px; letter-spacing:0; }
+  .heart-btn.bump .hb-ico { animation:pop .32s ease; }
+
+  .wrap { max-width:1180px; margin:0 auto; padding:clamp(20px,3.4vw,44px) clamp(14px,4vw,40px) clamp(48px,7vw,88px); }
+  .view { animation:fadeIn .3s ease both; }
+
+  /* ── headings ── */
+  .eyebrow { font-size:9.5px; letter-spacing:.24em; color:var(--gold); }
+  h1.title { font-weight:600; font-size:clamp(26px,3.6vw,40px); line-height:1.12; margin:12px 0 0; }
+  .sub { max-width:560px; font-size:clamp(14px,1.1vw,15.5px); line-height:1.6; color:var(--text2); margin:12px 0 0; }
+  .rule { width:54px; height:1px; background:#C7B393; margin:18px 0 0; }
+
+  /* ── registration ── */
+  .reg-shell { display:grid; grid-template-columns:1.05fr .95fr; gap:clamp(20px,3vw,46px); align-items:center;
+               margin-top:clamp(18px,3vw,34px); }
+  .reg-art { position:relative; border-radius:22px; overflow:hidden; border:1px solid var(--line);
+             background:var(--sand); aspect-ratio:4/3; }
+  .reg-art img { width:100%; height:100%; object-fit:cover; display:block; }
+  .reg-art::after { content:''; position:absolute; inset:0; background:linear-gradient(to top, rgba(26,21,18,.42), rgba(26,21,18,0) 58%); }
+  .reg-card { background:var(--card); border:1px solid var(--line); border-radius:22px;
+              padding:clamp(22px,2.8vw,34px); box-shadow:0 1px 2px rgba(26,21,18,.04); }
+  .field { display:flex; flex-direction:column; gap:7px; margin-top:20px; }
+  .field-k { font-size:8.5px; letter-spacing:.2em; color:var(--muted); }
+  .field-k .opt { color:#B5ABA0; }
+  .input { width:100%; min-height:56px; padding:0 15px; font:inherit; font-size:16px; color:var(--ink);
+           background:var(--paper); border:1px solid var(--line); border-radius:13px; }
+  .input:focus-visible { outline:2px solid var(--gold); outline-offset:2px; }
+  .input.bad { border-color:var(--err); }
+  .field-err { font-size:11.5px; color:var(--err); min-height:16px; }
+
+  .btn-primary { display:flex; align-items:center; justify-content:center; gap:10px; width:100%; min-height:58px;
+                 padding:0 20px; background:var(--ink); color:#FBF6EC; border:none; border-radius:14px;
+                 cursor:pointer; font-size:11px; letter-spacing:.16em; }
+  .btn-primary:hover:not(:disabled) { background:#33291F; }
+  .btn-primary:disabled { opacity:.5; cursor:not-allowed; }
+  .btn-ghost { display:flex; align-items:center; justify-content:center; gap:9px; min-height:52px; padding:0 20px;
+               background:var(--card); color:var(--ink); border:1px solid var(--line); border-radius:13px;
+               cursor:pointer; font-size:10px; letter-spacing:.14em; }
+  .btn-ghost:hover { background:#EFE7DA; border-color:#C7B393; }
+  .btn-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(210px,100%),1fr)); gap:11px; margin-top:22px; }
+
+  /* ── the themes ── */
+  .theme-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(268px, 1fr)); gap:20px; margin-top:clamp(18px,2.6vw,30px); }
+  .theme-card { position:relative; display:flex; flex-direction:column; text-align:left; padding:0;
+                background:var(--card); border:1px solid var(--line); border-radius:18px; overflow:hidden;
+                cursor:pointer; color:var(--ink); box-shadow:0 1px 2px rgba(26,21,18,.04);
+                transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease; }
+  .theme-card:hover { transform:translateY(-3px); border-color:var(--gold-light); box-shadow:0 14px 30px -14px rgba(26,21,18,.28); }
+  .theme-card:focus-visible { outline:2px solid var(--gold); outline-offset:3px; }
+  .theme-art { position:relative; aspect-ratio:4/3; background:var(--sand); overflow:hidden; }
+  .theme-art > img { width:100%; height:100%; object-fit:cover; display:block; transition:transform .5s cubic-bezier(.2,.7,.3,1); }
+  .theme-card:hover .theme-art > img { transform:scale(1.045); }
+  .theme-art::after { content:''; position:absolute; inset:auto 0 0 0; height:58%;
+                      background:linear-gradient(to top, rgba(26,21,18,.76), rgba(26,21,18,0)); }
+  .theme-plate { position:absolute; top:12px; left:12px; width:50px; height:50px; border-radius:11px; overflow:hidden;
+                 border:1px solid rgba(255,255,255,.5); box-shadow:0 3px 10px rgba(26,21,18,.3); }
+  .theme-plate img { width:100%; height:100%; object-fit:cover; display:block; }
+  .theme-over { position:absolute; inset:auto 0 0 0; z-index:1; padding:15px 17px 14px; display:flex; flex-direction:column; gap:4px; }
+  .theme-name { font-size:18px; color:#FFF8EC; line-height:1.25; }
+  .theme-desc { font-size:10.5px; line-height:1.45; color:rgba(255,248,236,.8); overflow:hidden;
+                text-overflow:ellipsis; white-space:nowrap; }
+  .theme-foot { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:12px 17px 13px; }
+  .theme-count { font-size:8.5px; letter-spacing:.16em; color:var(--gold); }
+  .theme-go { font-size:8.5px; letter-spacing:.16em; color:var(--muted); }
+  .theme-card:hover .theme-go { color:var(--ink); }
+  /* The chosen-from marker: a theme a client has already taken
+     something from, so the grid shows where they have been. */
+  .theme-mine { display:flex; align-items:center; gap:6px; font-size:8.5px; letter-spacing:.14em; color:var(--gold); }
+
+  /* Others has no single room to show, because it is all of them --
+     so its card is a quartet of four themes rather than one photo. */
+  .theme-card.is-others .theme-art { display:grid; grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr; gap:2px; background:var(--line); }
+  .theme-card.is-others .theme-art > img { width:100%; height:100%; }
+
+  /* ── a theme's rooms ── */
+  .gal-head { display:flex; align-items:flex-end; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+  .back-btn { display:inline-flex; align-items:center; gap:8px; min-height:44px; padding:0 14px 0 10px; margin-bottom:14px;
+              background:transparent; border:1px solid var(--line); border-radius:11px; cursor:pointer;
+              font-size:9.5px; letter-spacing:.14em; color:var(--text2); }
+  .back-btn:hover { background:#EFE7DA; color:var(--ink); }
+
+  .grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(258px, 1fr)); gap:20px; margin-top:clamp(18px,2.6vw,28px); }
+  .pic { position:relative; margin:0; background:var(--card); border:1px solid var(--line); border-radius:18px;
+         overflow:hidden; box-shadow:0 1px 2px rgba(26,21,18,.04);
+         transition:border-color .18s ease, box-shadow .18s ease; animation:rise .32s ease both; }
+  .pic.chosen { border-color:var(--gold); box-shadow:0 0 0 2px var(--gold), 0 14px 30px -16px rgba(26,21,18,.3); }
+  /* A FIXED FRAME, AND object-fit:cover INSIDE IT. The grid stays
+     calm across two hundred pictures of different shapes, and no
+     picture is ever stretched -- a squashed room is a misleading
+     room. The whole frame, at its own proportions, is one tap away
+     in the enlarged view. */
+  .pic-shot { position:relative; display:block; width:100%; padding:0; border:none; aspect-ratio:4/3;
+              background:var(--sand); overflow:hidden; cursor:zoom-in; }
+  .pic-shot img { width:100%; height:100%; object-fit:cover; display:block;
+                  transition:transform .5s cubic-bezier(.2,.7,.3,1), opacity .3s ease; }
+  .pic:hover .pic-shot img { transform:scale(1.04); }
+  .pic-shot img.loading { opacity:0; }
+  .pic-shot.failed { background:var(--sand) }
+  .pic-shot.failed::after { content:'PICTURE UNAVAILABLE'; position:absolute; inset:0; display:grid; place-items:center;
+                            font-family:'JetBrains Mono',monospace; font-size:8px; letter-spacing:.16em; color:var(--muted); }
+  .pic-foot { display:flex; align-items:center; gap:10px; padding:12px 14px 13px; }
+  /* A COLUMN, EXPLICITLY. These are spans, so without this the
+     title and the theme sit side by side on one line and the
+     theme slides under the heart. */
+  .pic-text { flex:1; min-width:0; display:flex; flex-direction:column; }
+  .pic-title { font-size:13.5px; line-height:1.35; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .pic-theme { font-size:8.5px; letter-spacing:.16em; color:var(--muted); margin-top:4px; }
+
+  /* ── the heart ── */
+  .heart { flex:0 0 auto; width:48px; height:48px; display:grid; place-items:center; background:var(--paper);
+           border:1px solid var(--line); border-radius:50%; cursor:pointer; color:#B5ABA0;
+           transition:background .16s ease, border-color .16s ease, color .16s ease, transform .16s ease; }
+  .heart:hover { border-color:var(--gold-light); color:var(--gold); }
+  .heart:focus-visible { outline:2px solid var(--gold); outline-offset:2px; }
+  .heart[aria-pressed="true"] { background:var(--gold); border-color:var(--gold); color:#FFF8EC; }
+  .heart[aria-pressed="true"] svg { animation:pop .32s ease; }
+  .heart[disabled] { opacity:.5; cursor:progress; }
+  .heart svg { width:21px; height:21px; display:block; }
+
+  /* ── skeletons, empty, error ── */
+  .skel { aspect-ratio:4/3; border-radius:18px; border:1px solid var(--line);
+          background:linear-gradient(100deg,var(--sand) 18%,#FBF7F0 38%,var(--sand) 58%) 0 0/220% 100%;
+          animation:shimmer 1.5s linear infinite; }
+  .note { margin-top:22px; padding:clamp(22px,3vw,34px); background:var(--card); border:1px solid var(--line);
+          border-radius:20px; text-align:center; }
+  .note.bad { border-color:var(--err); }
+  .note h3 { font-weight:600; font-size:20px; margin:0; }
+  .note p { max-width:460px; margin:10px auto 0; font-size:14px; line-height:1.6; color:var(--text2); }
+  .note .btn-ghost { display:inline-flex; margin-top:18px; }
+  .sentinel { height:1px; }
+  .more-wrap { display:flex; justify-content:center; margin-top:26px; }
+  .counting { font-size:9px; letter-spacing:.18em; color:var(--muted); margin-top:16px; }
+
+  /* ── the enlarged room ── */
+  .zoom { position:fixed; inset:0; z-index:90; display:none; background:rgba(16,13,11,.9); }
+  .zoom.on { display:grid; place-items:center; animation:fadeIn .2s ease both; }
+  .zoom-inner { max-width:min(1100px,94vw); max-height:92vh; display:flex; flex-direction:column; gap:14px; }
+  .zoom-inner img { max-width:100%; max-height:74vh; width:auto; height:auto; object-fit:contain; display:block;
+                    border-radius:16px; background:#201A16; }
+  .zoom-bar { display:flex; align-items:center; gap:14px; flex-wrap:wrap; color:#FBF6EC; }
+  .zoom-bar .t { flex:1; min-width:0; }
+  .zoom-bar .t .n { font-size:19px; line-height:1.25; }
+  .zoom-bar .t .s { font-size:8.5px; letter-spacing:.18em; color:var(--gold-light); margin-top:5px; }
+  .zoom-close { min-height:48px; padding:0 17px; background:transparent; color:#C7BCAA; border:1px solid #4A4038;
+                border-radius:12px; cursor:pointer; font-size:9.5px; letter-spacing:.14em; }
+  .zoom-close:hover { color:#FBF6EC; border-color:var(--gold); }
+
+  /* ── the wishlist, and what happens after ── */
+  .sum { display:flex; align-items:baseline; gap:14px; flex-wrap:wrap; margin-top:14px; }
+  .sum-n { font-family:'Playfair Display',serif; font-size:clamp(34px,4.6vw,54px); line-height:1; }
+  .sum-k { font-size:9.5px; letter-spacing:.2em; color:var(--muted); }
+  .confirm { margin-top:clamp(22px,3vw,32px); padding:clamp(20px,2.6vw,30px); background:var(--sand);
+             border:1px solid var(--line); border-radius:20px; }
+  .confirm h2 { font-weight:600; font-size:clamp(19px,2.1vw,25px); margin:0; line-height:1.18; }
+  .confirm p { max-width:520px; margin:10px 0 0; font-size:14px; line-height:1.6; color:var(--text2); }
+  .code-chip { display:inline-flex; align-items:center; gap:9px; margin-top:16px; padding:11px 15px; background:var(--ink);
+               color:#FBF6EC; border-radius:12px; font-family:'JetBrains Mono',monospace; font-size:15px; letter-spacing:.1em; }
+  .code-chip .k { font-size:8px; letter-spacing:.2em; color:var(--gold-light); }
+  .done-strip { display:grid; grid-template-columns:repeat(auto-fill,minmax(112px,1fr)); gap:8px; margin-top:22px; }
+  .done-strip span { aspect-ratio:1; border-radius:12px; overflow:hidden; background:var(--sand); border:1px solid var(--line); }
+  .done-strip img { width:100%; height:100%; object-fit:cover; display:block; }
+
+  .toast { position:fixed; left:50%; bottom:26px; transform:translateX(-50%); z-index:95; max-width:min(520px,92vw);
+           padding:13px 18px; background:var(--ink); color:#FBF6EC; border-radius:13px; font-size:13px; line-height:1.5;
+           box-shadow:0 18px 40px -18px rgba(26,21,18,.7); display:none; }
+  .toast.on { display:block; animation:rise .24s ease both; }
+
+  .foot-note { font-size:8.5px; letter-spacing:.16em; color:#A0968A; text-align:center;
+               margin-top:clamp(30px,4vw,52px); line-height:2; }
+
+  .center-box { text-align:center; padding:72px 20px; }
+  .spinner-ring { width:52px; height:52px; margin:0 auto; border-radius:50%; border:2px dashed var(--gold);
+                  border-top-color:transparent; animation:spin .9s linear infinite; }
+
+  /* ── showroom tablet, then phone ── */
+  @media (max-width:900px) {
+    .reg-shell { grid-template-columns:1fr; }
+    .reg-art { order:-1; aspect-ratio:16/9; }
+  }
+  @media (max-width:720px) {
+    .theme-grid, .grid { grid-template-columns:repeat(auto-fill, minmax(158px, 1fr)); gap:12px; }
+    .theme-name { font-size:15px; }
+    .pic-foot { padding:10px 11px 11px; gap:8px; }
+    .pic-title { font-size:12px; }
+    .heart { width:44px; height:44px; }
+    .topbar-tag { display:none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-brand">
+    <img class="topbar-mark" src="img/devyora-mark.webp" alt="">
+    <div>
+      <div class="topbar-name serif">DE’VYORA</div>
+      <div class="topbar-tag mono">STUDIO &amp; SHOWROOM</div>
+    </div>
+  </div>
+  <button class="heart-btn mono" id="countBtn" type="button">
+    <span class="hb-ico" aria-hidden="true">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="#E3C58E" stroke="#E3C58E" stroke-width="1.6"><path d="M12 21s-7.5-4.6-9.4-9A5.3 5.3 0 0 1 12 6.3 5.3 5.3 0 0 1 21.4 12c-1.9 4.4-9.4 9-9.4 9z"/></svg>
+    </span>
+    <span>WISHLIST</span><span class="n" id="countN">0</span>
+  </button>
+</div>
+
+<div class="wrap" id="app">
+  <div class="center-box"><div class="spinner-ring"></div></div>
+</div>
+
+<div class="zoom" id="zoom"></div>
+<div class="toast" id="toast"></div>
+
+<script src="assets/api-client.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  const api = window.CasaApi.clientWishlist;
+
+  /* THE TOKEN IS THE WHOLE OF THE CLIENT'S IDENTITY, and it lives
+     here so that a reload -- a tablet going to sleep, a browser
+     restarting, a client wandering off and coming back -- does not
+     lose a wishlist. The selections themselves are never kept here:
+     they are read from the server every time, so what is on screen
+     is always what the studio will actually receive. */
+  const TOKEN_KEY = 'devyora.wishlist.token';
+
+  /* How many pictures are put on screen at once. A theme can hold two
+     hundred; asking a showroom tablet to lay out and decode all of
+     them at once is what makes a gallery feel broken. */
+  const PAGE = 24;
+
+  const state = {
+    view: 'boot',      // boot | register | themes | gallery | wishlist | done
+    token: null,
+    client: null,      // { code, name, status, items: [...] }
+    themes: [],
+    themesError: '',
+    theme: null,       // the open theme
+    images: [],
+    imagesError: '',
+    shown: 0,
+    loading: false,
+    busy: new Set(),   // image ids with a request in flight
+    submitting: false,
+    confirming: false,
+  };
+
+  const app = document.getElementById('app');
+  const countBtn = document.getElementById('countBtn');
+  const countN = document.getElementById('countN');
+  const zoomEl = document.getElementById('zoom');
+  const toastEl = document.getElementById('toast');
+
+  function escapeHtml(s) {
+    const d = document.createElement('div');
+    d.textContent = s == null ? '' : s;
+    return d.innerHTML;
+  }
+
+  let toastTimer = null;
+  function toast(message) {
+    toastEl.textContent = message;
+    toastEl.classList.add('on');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toastEl.classList.remove('on'), 4200);
+  }
+
+  function reason(err, fallback) {
+    return (err && err.message) || fallback;
+  }
+
+  // ── the pictures ────────────────────────────────────────────────
+
+  /* A SMALLER PICTURE FOR A SMALLER FRAME.
+     The server hands over Drive's thumbnail form at w1000, which is
+     right for a full-width view and four times the pixels a card
+     needs. Narrowing it here is read-time only -- the url in the
+     database is untouched, and anything that is not a Drive
+     thumbnail (a starter room is a file that ships with the app)
+     passes through unchanged. */
+  function atWidth(url, width) {
+    if (!url) return '';
+    return String(url).replace(/([?&]sz=)w\d+/, '$1w' + width);
+  }
+
+  function selectedIds() {
+    return new Set((state.client && state.client.items || []).map((i) => i.imageId));
+  }
+
+  function count() {
+    return (state.client && state.client.items || []).length;
+  }
+
+  function paintCount() {
+    const n = count();
+    countN.textContent = String(n);
+    countBtn.classList.toggle('on', !!state.client);
+    countBtn.classList.remove('bump');
+    if (n) { void countBtn.offsetWidth; countBtn.classList.add('bump'); }
+  }
+
+  const HEART_PATH = '<path d="M12 21s-7.5-4.6-9.4-9A5.3 5.3 0 0 1 12 6.3 5.3 5.3 0 0 1 21.4 12c-1.9 4.4-9.4 9-9.4 9z"/>';
+
+  function heartHtml(imageId, chosen) {
+    return '<button type="button" class="heart" data-heart="' + escapeHtml(imageId) + '"'
+      + ' aria-pressed="' + (chosen ? 'true' : 'false') + '"'
+      + ' aria-label="' + (chosen ? 'Remove from your wishlist' : 'Add to your wishlist') + '"'
+      + ' title="' + (chosen ? 'Remove from your wishlist' : 'Add to your wishlist') + '">'
+      + '<svg viewBox="0 0 24 24" fill="' + (chosen ? 'currentColor' : 'none')
+      + '" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round">' + HEART_PATH + '</svg>'
+      + '</button>';
+  }
+
+  function picHtml(image, chosen) {
+    return '<figure class="pic' + (chosen ? ' chosen' : '') + '" data-pic="' + escapeHtml(image.imageId) + '">'
+      + '<button type="button" class="pic-shot" data-zoom="' + escapeHtml(image.imageId) + '"'
+      + ' aria-label="See ' + escapeHtml(image.title) + ' larger">'
+      + '<img src="' + escapeHtml(atWidth(image.imageUrl, 600)) + '" alt="' + escapeHtml(image.title) + '"'
+      + ' class="loading" loading="lazy" decoding="async"'
+      + ' onload="this.classList.remove(\'loading\')"'
+      + ' onerror="this.classList.remove(\'loading\');this.style.display=\'none\';this.parentNode.classList.add(\'failed\')">'
+      + '</button>'
+      + '<figcaption class="pic-foot">'
+      + '<span class="pic-text">'
+      + '<span class="pic-title">' + escapeHtml(image.title) + '</span>'
+      + '<span class="pic-theme mono">' + escapeHtml(image.themeLabel || image.themeId) + '</span>'
+      + '</span>'
+      + heartHtml(image.imageId, chosen)
+      + '</figcaption></figure>';
+  }
+
+  // ── registration ────────────────────────────────────────────────
+
+  function registerHtml() {
+    return '<div class="view">'
+      + '<div class="reg-shell">'
+      + '<div>'
+      + '<div class="eyebrow mono">● DE’VYORA WISHLIST ●</div>'
+      + '<h1 class="title serif">Let’s find the rooms you love.</h1>'
+      + '<div class="rule"></div>'
+      + '<p class="sub">Browse the studio’s themes and keep the ones that speak to you. '
+      + 'Your name is all we need to begin.</p>'
+      + '<div class="reg-card">'
+      + '<form id="regForm" novalidate>'
+      + '<div class="field">'
+      + '<label class="field-k mono" for="regName">YOUR NAME</label>'
+      + '<input class="input" id="regName" name="name" type="text" maxlength="120"'
+      + ' autocomplete="name" autocapitalize="words" placeholder="Aarti Mehta" required>'
+      + '<span class="field-err" id="regNameErr"></span>'
+      + '</div>'
+      + '<div class="field">'
+      + '<label class="field-k mono" for="regPhone">MOBILE NUMBER <span class="opt">· OPTIONAL</span></label>'
+      + '<input class="input" id="regPhone" name="phone" type="tel" maxlength="30"'
+      + ' autocomplete="tel" inputmode="tel" placeholder="98765 43210">'
+      + '</div>'
+      + '<button class="btn-primary mono" id="regBtn" type="submit" style="margin-top:24px">START BROWSING</button>'
+      + '</form></div></div>'
+      + '<div class="reg-art">'
+      + '<img src="' + escapeHtml(window.CasaApi.resolveBackendImageUrl('/static/library-starters/british-bathroom.png'))
+      + '" alt="" decoding="async">'
+      + '</div></div>'
+      + '<div class="foot-note mono">DE’VYORA · MILAN · LISBON · NEW DELHI</div>'
+      + '</div>';
+  }
+
+  async function doRegister(event) {
+    event.preventDefault();
+    const nameEl = document.getElementById('regName');
+    const errEl = document.getElementById('regNameErr');
+    const btn = document.getElementById('regBtn');
+    const name = nameEl.value.trim();
+
+    /* Checked here as well as on the server, because a client who
+       typed nothing should be told at once rather than after a round
+       trip. The server refuses it too -- this is the courtesy, not
+       the rule. */
+    if (!name) {
+      nameEl.classList.add('bad');
+      errEl.textContent = 'Please enter your name to begin.';
+      nameEl.focus();
+      return;
+    }
+    nameEl.classList.remove('bad');
+    errEl.textContent = '';
+    btn.disabled = true;
+    btn.textContent = 'ONE MOMENT…';
+
+    try {
+      const data = await api.register(name, document.getElementById('regPhone').value.trim());
+      state.token = data.token;
+      state.client = data;
+      try { localStorage.setItem(TOKEN_KEY, data.token); } catch (_) { /* private window */ }
+      paintCount();
+      await openThemes();
+    } catch (err) {
+      btn.disabled = false;
+      btn.textContent = 'START BROWSING';
+      errEl.textContent = reason(err, 'We could not start your wishlist. Please try again.');
+    }
+  }
+
+  // ── the themes ──────────────────────────────────────────────────
+
+  function themeArt(theme) {
+    /* A ROOM, NOT A SWATCH -- the same choice the studio's own
+       library page makes, and for the same reason: a client is
+       picking between rooms, so the card shows one. The file is
+       <slug>-bathroom.png, a starter that ships with the app. */
+    return window.CasaApi.resolveBackendImageUrl(
+      '/static/library-starters/' + theme.slug + '-bathroom.png');
+  }
+
+  function themesHtml() {
+    if (state.loading) {
+      return '<div class="view"><div class="eyebrow mono">● CHOOSE A DIRECTION ●</div>'
+        + '<h1 class="title serif">Themes</h1><div class="theme-grid">'
+        + Array.from({ length: 6 }, () => '<div class="skel"></div>').join('')
+        + '</div></div>';
+    }
+
+    if (!state.themes.length) {
+      return '<div class="view"><h1 class="title serif">Themes</h1>'
+        + '<div class="note bad"><h3 class="serif">The themes could not be loaded</h3>'
+        + '<p>' + escapeHtml(state.themesError
+          || 'The studio’s theme list came back empty. Please ask a member of staff.')
+        + '</p><button class="btn-ghost mono" data-retry="themes">TRY AGAIN</button></div></div>';
+    }
+
+    const mine = new Set((state.client && state.client.items || []).map((i) => i.themeId));
+
+    return '<div class="view">'
+      + '<div class="eyebrow mono">● CHOOSE A DIRECTION ●</div>'
+      + '<h1 class="title serif">' + escapeHtml(firstName()) + ', where shall we start?</h1>'
+      + '<p class="sub">Open a theme and keep the rooms you like. You can move between themes '
+      + 'as often as you wish — nothing is lost.</p>'
+      + '<div class="theme-grid">'
+      + state.themes.map((t) => {
+        const others = t.id === 'others';
+        const n = t.count === null || t.count === undefined ? null : t.count;
+        /* Others is every room in all of the themes, so its card is
+           four of them rather than one -- it is not a tenth theme
+           with a look of its own, and pretending otherwise with a
+           single photograph would say the wrong thing. */
+        const art = others
+          ? state.themes.filter((x) => x.id !== 'others').slice(0, 4)
+            .map((x) => '<img src="' + escapeHtml(themeArt(x)) + '" alt="" loading="lazy" decoding="async">').join('')
+          : '<img src="' + escapeHtml(themeArt(t)) + '" alt="" loading="lazy" decoding="async">';
+
+        return '<button type="button" class="theme-card' + (others ? ' is-others' : '') + '"'
+          + ' data-theme="' + escapeHtml(t.id) + '">'
+          + '<span class="theme-art">' + art
+          + (others ? '' : '<span class="theme-plate"><img src="img/themes/' + escapeHtml(t.slug)
+            + '.svg" alt="" loading="lazy"></span>')
+          + '<span class="theme-over">'
+          + '<span class="theme-name serif">' + escapeHtml(t.label) + '</span>'
+          + '<span class="theme-desc">' + escapeHtml(others
+            ? 'Every room in the library, whatever its theme'
+            : (t.palette || '')) + '</span>'
+          + '</span></span>'
+          + '<span class="theme-foot">'
+          + '<span class="theme-count mono">'
+          + (n === null ? 'ROOMS INSIDE' : n + (n === 1 ? ' ROOM' : ' ROOMS')) + '</span>'
+          + (mine.has(t.id)
+            ? '<span class="theme-mine mono"><svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor">'
+              + HEART_PATH + '</svg>KEPT</span>'
+            : '<span class="theme-go mono">OPEN →</span>')
+          + '</span></button>';
+      }).join('')
+      + '</div>'
+      + (state.themesError
+        ? '<p class="counting mono">' + escapeHtml(state.themesError.toUpperCase()) + '</p>'
+        : '')
+      + '<div class="foot-note mono">DE’VYORA · MILAN · LISBON · NEW DELHI</div>'
+      + '</div>';
+  }
+
+  function firstName() {
+    const whole = (state.client && state.client.name) || '';
+    return whole.trim().split(/\s+/)[0] || 'Welcome';
+  }
+
+  // ── a theme's rooms ─────────────────────────────────────────────
+
+  function galleryHtml() {
+    const t = state.theme || {};
+    const head = '<button type="button" class="back-btn mono" data-back="themes">'
+      + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"'
+      + ' stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>ALL THEMES</button>'
+      + '<div class="gal-head"><div>'
+      + '<div class="eyebrow mono">● ' + escapeHtml(String(t.label || '').toUpperCase()) + ' ●</div>'
+      + '<h1 class="title serif">' + escapeHtml(t.label || '') + '</h1>'
+      + (t.id === 'others'
+        ? '<p class="sub">Every room in the library, gathered from all of the themes.</p>'
+        : (t.palette ? '<p class="sub">' + escapeHtml(t.palette) + '</p>' : ''))
+      + '</div></div>';
+
+    if (state.loading) {
+      return '<div class="view">' + head + '<div class="grid">'
+        + Array.from({ length: 8 }, () => '<div class="skel"></div>').join('') + '</div></div>';
+    }
+
+    if (state.imagesError && !state.images.length) {
+      return '<div class="view">' + head
+        + '<div class="note bad"><h3 class="serif">These rooms could not be loaded</h3>'
+        + '<p>' + escapeHtml(state.imagesError) + '</p>'
+        + '<button class="btn-ghost mono" data-retry="images">TRY AGAIN</button></div></div>';
+    }
+
+    if (!state.images.length) {
+      return '<div class="view">' + head
+        + '<div class="note"><h3 class="serif">Nothing here yet</h3>'
+        + '<p>The studio has not added rooms to this theme. Try another one — or ask a '
+        + 'member of staff what is coming.</p>'
+        + '<button class="btn-ghost mono" data-back="themes">BACK TO THEMES</button></div></div>';
+    }
+
+    const chosen = selectedIds();
+    const upTo = Math.min(state.shown, state.images.length);
+
+    return '<div class="view">' + head
+      + '<div class="grid" id="grid">'
+      + state.images.slice(0, upTo).map((im) => picHtml(im, chosen.has(im.imageId))).join('')
+      + '</div>'
+      + '<div class="sentinel" id="sentinel"></div>'
+      + (upTo < state.images.length
+        ? '<div class="more-wrap"><button class="btn-ghost mono" id="moreBtn">'
+          + 'SHOW MORE ROOMS</button></div>'
+        : '')
+      + '<p class="counting mono">SHOWING ' + upTo + ' OF ' + state.images.length
+      + (state.imagesError ? ' · ' + escapeHtml(state.imagesError.toUpperCase()) : '')
+      + '</p></div>';
+  }
+
+  /* INCREMENTAL, AND APPENDED RATHER THAN REDRAWN. Rewriting the grid
+     would throw away every picture the browser has already decoded
+     and jump the client back up the page. */
+  function showMore() {
+    const grid = document.getElementById('grid');
+    if (!grid) return;
+    const from = state.shown;
+    const to = Math.min(from + PAGE, state.images.length);
+    if (to <= from) return;
+    state.shown = to;
+
+    const chosen = selectedIds();
+    const html = state.images.slice(from, to).map((im) => picHtml(im, chosen.has(im.imageId))).join('');
+    grid.insertAdjacentHTML('beforeend', html);
+
+    const counting = document.querySelector('.counting');
+    if (counting) {
+      counting.textContent = 'SHOWING ' + to + ' OF ' + state.images.length
+        + (state.imagesError ? ' · ' + state.imagesError.toUpperCase() : '');
+    }
+    if (to >= state.images.length) {
+      const more = document.querySelector('.more-wrap');
+      if (more) more.remove();
+      if (watcher) watcher.disconnect();
+    }
+  }
+
+  let watcher = null;
+  function watchSentinel() {
+    if (watcher) { watcher.disconnect(); watcher = null; }
+    const sentinel = document.getElementById('sentinel');
+    if (!sentinel || !('IntersectionObserver' in window)) return;
+    watcher = new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting)) showMore();
+    }, { rootMargin: '600px 0px' });
+    watcher.observe(sentinel);
+  }
+
+  // ── the wishlist ────────────────────────────────────────────────
+
+  function wishlistHtml() {
+    const items = (state.client && state.client.items) || [];
+    const n = items.length;
+
+    if (!n) {
+      return '<div class="view">'
+        + '<button type="button" class="back-btn mono" data-back="themes">'
+        + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"'
+        + ' stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>ALL THEMES</button>'
+        + '<div class="eyebrow mono">● YOUR WISHLIST ●</div>'
+        + '<h1 class="title serif">Nothing kept yet</h1>'
+        + '<div class="note"><h3 class="serif">Tap the heart on a room you like</h3>'
+        + '<p>Everything you keep gathers here, from any theme. Nothing is sent to the studio '
+        + 'until you say so.</p>'
+        + '<button class="btn-ghost mono" data-back="themes">START BROWSING</button></div></div>';
+    }
+
+    return '<div class="view">'
+      + '<button type="button" class="back-btn mono" data-back="themes">'
+      + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"'
+      + ' stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>ALL THEMES</button>'
+      + '<div class="eyebrow mono">● YOUR WISHLIST ●</div>'
+      + '<h1 class="title serif">' + escapeHtml(firstName()) + '’s selection</h1>'
+      + '<div class="sum"><span class="sum-n">' + n + '</span>'
+      + '<span class="sum-k mono">' + (n === 1 ? 'ROOM KEPT' : 'ROOMS KEPT') + '</span></div>'
+      + '<div class="grid">'
+      + items.map((item) => '<figure class="pic chosen" data-pic="' + escapeHtml(item.imageId) + '">'
+        + '<button type="button" class="pic-shot" data-zoom="' + escapeHtml(item.imageId) + '"'
+        + ' aria-label="See ' + escapeHtml(item.title) + ' larger">'
+        + '<img src="' + escapeHtml(atWidth(item.imageUrl, 600)) + '" alt="' + escapeHtml(item.title) + '"'
+        + ' loading="lazy" decoding="async"'
+        + ' onerror="this.style.display=\'none\';this.parentNode.classList.add(\'failed\')">'
+        + '</button>'
+        + '<figcaption class="pic-foot"><span class="pic-text">'
+        + '<span class="pic-title">' + escapeHtml(item.title) + '</span>'
+        + '<span class="pic-theme mono">' + escapeHtml(themeLabelFor(item.themeId)) + '</span>'
+        + '</span>' + heartHtml(item.imageId, true) + '</figcaption></figure>').join('')
+      + '</div>'
+      + '<div class="confirm">'
+      + (state.confirming
+        ? '<h2 class="serif">Send these ' + n + (n === 1 ? ' room' : ' rooms') + ' to the studio?</h2>'
+          + '<p>The studio will put your selection together for your visit. Once sent, this '
+          + 'wishlist is kept as it is — you can always start a new one.</p>'
+          + '<div class="btn-row">'
+          + '<button class="btn-primary mono" id="submitYes"' + (state.submitting ? ' disabled' : '')
+          + '>' + (state.submitting ? 'SENDING…' : 'YES, SEND MY WISHLIST') + '</button>'
+          + '<button class="btn-ghost mono" id="submitNo"' + (state.submitting ? ' disabled' : '')
+          + '>NOT YET</button>'
+          + '</div>'
+        : '<h2 class="serif">Happy with your selection?</h2>'
+          + '<p>Send it to the studio and we will have it ready for you. You can keep browsing '
+          + 'and adding rooms until you do.</p>'
+          + '<div class="btn-row">'
+          + '<button class="btn-primary mono" id="submitBtn">SUBMIT MY WISHLIST</button>'
+          + '<button class="btn-ghost mono" data-back="themes">KEEP BROWSING</button>'
+          + '</div>')
+      + '</div></div>';
+  }
+
+  function themeLabelFor(themeId) {
+    const found = state.themes.find((t) => t.id === themeId);
+    return found ? found.label : themeId;
+  }
+
+  // ── after it is sent ────────────────────────────────────────────
+
+  function doneHtml() {
+    const items = (state.client && state.client.items) || [];
+    return '<div class="view">'
+      + '<div class="eyebrow mono">● SENT TO THE STUDIO ●</div>'
+      + '<h1 class="title serif">Thank you, ' + escapeHtml(firstName()) + '.</h1>'
+      + '<p class="sub">Your selection of ' + items.length + (items.length === 1 ? ' room' : ' rooms')
+      + ' is with the studio. Please quote this number when you speak to us.</p>'
+      + '<div class="code-chip"><span class="k">WISHLIST</span>'
+      + escapeHtml((state.client && state.client.code) || '') + '</div>'
+      + '<div class="done-strip">'
+      + items.map((item) => '<span><img src="' + escapeHtml(atWidth(item.imageUrl, 400))
+        + '" alt="' + escapeHtml(item.title) + '" loading="lazy" decoding="async"></span>').join('')
+      + '</div>'
+      + '<div class="confirm"><h2 class="serif">Seen something else you like?</h2>'
+      /* The backend keeps a submitted wishlist exactly as it was sent
+         -- that is the studio's copy, and it should not move under
+         them. So the controlled way back in is a NEW round, which
+         leaves the sent one intact. */
+      + '<p>This selection stays as you sent it. If you would like to choose again, we will '
+      + 'start a fresh wishlist — the one above is safe with the studio.</p>'
+      + '<div class="btn-row"><button class="btn-ghost mono" id="restartBtn">'
+      + 'START A NEW WISHLIST</button></div></div>'
+      + '<div class="foot-note mono">DE’VYORA · MILAN · LISBON · NEW DELHI</div>'
+      + '</div>';
+  }
+
+  // ── rendering ───────────────────────────────────────────────────
+
+  function render() {
+    if (state.view === 'register') app.innerHTML = registerHtml();
+    else if (state.view === 'themes') app.innerHTML = themesHtml();
+    else if (state.view === 'gallery') app.innerHTML = galleryHtml();
+    else if (state.view === 'wishlist') app.innerHTML = wishlistHtml();
+    else if (state.view === 'done') app.innerHTML = doneHtml();
+    else app.innerHTML = '<div class="center-box"><div class="spinner-ring"></div></div>';
+
+    paintCount();
+
+    const form = document.getElementById('regForm');
+    if (form) form.addEventListener('submit', doRegister);
+    const nameEl = document.getElementById('regName');
+    if (nameEl) nameEl.focus();
+
+    const more = document.getElementById('moreBtn');
+    if (more) more.addEventListener('click', showMore);
+    if (state.view === 'gallery') watchSentinel();
+
+    const submitBtn = document.getElementById('submitBtn');
+    if (submitBtn) submitBtn.addEventListener('click', () => { state.confirming = true; render(); });
+    const submitNo = document.getElementById('submitNo');
+    if (submitNo) submitNo.addEventListener('click', () => { state.confirming = false; render(); });
+    const submitYes = document.getElementById('submitYes');
+    if (submitYes) submitYes.addEventListener('click', doSubmit);
+    const restart = document.getElementById('restartBtn');
+    if (restart) restart.addEventListener('click', doRestart);
+    const retry = document.querySelector('[data-retry]');
+    if (retry) {
+      retry.addEventListener('click', () => {
+        if (retry.getAttribute('data-retry') === 'themes') openThemes();
+        else openTheme(state.theme);
+      });
+    }
+  }
+
+  // ── moving about ────────────────────────────────────────────────
+
+  async function openThemes() {
+    state.view = 'themes';
+    state.theme = null;
+    if (watcher) { watcher.disconnect(); watcher = null; }
+
+    if (state.themes.length) { render(); window.scrollTo(0, 0); return; }
+
+    state.loading = true;
+    render();
+    try {
+      const data = await api.themes();
+      state.themes = data.themes || [];
+      /* The counts need a database; the nine themes do not. When the
+         counts cannot be read the themes are still listed, and the
+         reason is shown rather than a shrug. */
+      state.themesError = data.storage && data.storage.ok === false
+        ? 'Room counts are unavailable just now' : '';
+    } catch (err) {
+      state.themes = [];
+      state.themesError = reason(err, 'The themes could not be loaded.');
+    }
+    state.loading = false;
+    render();
+    window.scrollTo(0, 0);
+  }
+
+  async function openTheme(theme) {
+    if (!theme) return;
+    state.view = 'gallery';
+    state.theme = theme;
+    state.images = [];
+    state.imagesError = '';
+    state.shown = 0;
+    state.loading = true;
+    render();
+
+    try {
+      const data = await api.images(theme.id);
+      state.images = data.images || [];
+      state.imagesError = data.storage && data.storage.ok === false
+        ? 'Some rooms could not be listed' : '';
+    } catch (err) {
+      state.images = [];
+      state.imagesError = reason(err, 'These rooms could not be loaded.');
+    }
+    state.shown = Math.min(PAGE, state.images.length);
+    state.loading = false;
+    render();
+    window.scrollTo(0, 0);
+  }
+
+  function openWishlist() {
+    state.view = 'wishlist';
+    state.confirming = false;
+    if (watcher) { watcher.disconnect(); watcher = null; }
+    render();
+    window.scrollTo(0, 0);
+  }
+
+  // ── keeping and unkeeping ───────────────────────────────────────
+
+  /* ONE CALL PER TAP, AND THE SERVER'S ANSWER WINS.
+     The heart turns over at once so the tap feels immediate, but what
+     is kept is whatever the server says is kept -- its reply carries
+     the whole wishlist, so a double tap, a dropped request or two
+     tablets on the same wishlist all settle to the same truth rather
+     than drifting. */
+  async function toggle(imageId) {
+    if (!state.token || state.busy.has(imageId)) return;
+    const chosen = selectedIds().has(imageId);
+
+    state.busy.add(imageId);
+    paintHeart(imageId, !chosen, true);
+
+    try {
+      const data = chosen
+        ? await api.removeItem(state.token, imageId)
+        : await api.addItem(state.token, imageId);
+      state.client = data;
+      state.busy.delete(imageId);
+
+      if (state.view === 'wishlist') { render(); return; }
+      paintHeart(imageId, selectedIds().has(imageId), false);
+      paintCount();
+    } catch (err) {
+      state.busy.delete(imageId);
+      paintHeart(imageId, chosen, false);
+      /* A wishlist already sent refuses changes -- the server says so,
+         and so should the screen, rather than silently flipping the
+         heart back. */
+      toast(reason(err, 'That could not be saved. Please try again.'));
+      if (state.client && state.client.status === 'SUBMITTED') refresh();
+    }
+  }
+
+  function paintHeart(imageId, chosen, busy) {
+    document.querySelectorAll('[data-heart="' + cssEscape(imageId) + '"]').forEach((btn) => {
+      btn.setAttribute('aria-pressed', chosen ? 'true' : 'false');
+      btn.setAttribute('aria-label', chosen ? 'Remove from your wishlist' : 'Add to your wishlist');
+      if (busy) btn.setAttribute('disabled', 'disabled'); else btn.removeAttribute('disabled');
+      const svg = btn.querySelector('svg');
+      if (svg) svg.setAttribute('fill', chosen ? 'currentColor' : 'none');
+    });
+    document.querySelectorAll('[data-pic="' + cssEscape(imageId) + '"]').forEach((fig) => {
+      fig.classList.toggle('chosen', chosen);
+    });
+  }
+
+  function cssEscape(value) {
+    return window.CSS && window.CSS.escape ? window.CSS.escape(value) : String(value).replace(/"/g, '\\"');
+  }
+
+  // ── sending it ──────────────────────────────────────────────────
+
+  async function doSubmit() {
+    /* Guarded twice: the flag stops a second call from a double tap
+       before the first has answered, and the button is disabled while
+       it is in flight. The server is idempotent regardless, so even a
+       request that slips through cannot submit twice. */
+    if (state.submitting) return;
+    state.submitting = true;
+    render();
+
+    try {
+      const data = await api.submit(state.token);
+      state.client = data;
+      state.submitting = false;
+      state.confirming = false;
+      state.view = 'done';
+      render();
+      window.scrollTo(0, 0);
+    } catch (err) {
+      state.submitting = false;
+      render();
+      toast(reason(err, 'Your wishlist could not be sent. Please try again.'));
+    }
+  }
+
+  function doRestart() {
+    try { localStorage.removeItem(TOKEN_KEY); } catch (_) { /* private window */ }
+    state.token = null;
+    state.client = null;
+    state.theme = null;
+    state.images = [];
+    state.shown = 0;
+    state.confirming = false;
+    state.view = 'register';
+    render();
+    window.scrollTo(0, 0);
+  }
+
+  async function refresh() {
+    if (!state.token) return;
+    try { state.client = await api.get(state.token); paintCount(); } catch (_) { /* leave as is */ }
+  }
+
+  // ── the enlarged room ───────────────────────────────────────────
+
+  function openZoom(imageId) {
+    const image = state.images.find((i) => i.imageId === imageId)
+      || ((state.client && state.client.items) || []).find((i) => i.imageId === imageId);
+    if (!image) return;
+    const chosen = selectedIds().has(imageId);
+
+    zoomEl.innerHTML = '<div class="zoom-inner">'
+      + '<img src="' + escapeHtml(atWidth(image.imageUrl, 1400)) + '" alt="' + escapeHtml(image.title) + '">'
+      + '<div class="zoom-bar"><span class="t">'
+      + '<span class="n serif">' + escapeHtml(image.title) + '</span>'
+      + '<span class="s mono">' + escapeHtml(image.themeLabel || themeLabelFor(image.themeId)) + '</span>'
+      + '</span>' + heartHtml(image.imageId, chosen)
+      + '<button type="button" class="zoom-close mono" data-zoom-close="1">CLOSE ✕</button>'
+      + '</div></div>';
+    zoomEl.classList.add('on');
+  }
+
+  function closeZoom() {
+    zoomEl.classList.remove('on');
+    zoomEl.innerHTML = '';
+  }
+
+  // ── one listener for the lot ────────────────────────────────────
+
+  document.addEventListener('click', (event) => {
+    const heart = event.target.closest('[data-heart]');
+    if (heart) { event.preventDefault(); toggle(heart.getAttribute('data-heart')); return; }
+
+    const zoom = event.target.closest('[data-zoom]');
+    if (zoom) { openZoom(zoom.getAttribute('data-zoom')); return; }
+
+    if (event.target.closest('[data-zoom-close]') || event.target === zoomEl) { closeZoom(); return; }
+
+    const themeCard = event.target.closest('[data-theme]');
+    if (themeCard) {
+      const id = themeCard.getAttribute('data-theme');
+      openTheme(state.themes.find((t) => t.id === id));
+      return;
+    }
+
+    const back = event.target.closest('[data-back]');
+    if (back) { openThemes(); }
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && zoomEl.classList.contains('on')) closeZoom();
+  });
+
+  countBtn.addEventListener('click', () => {
+    if (state.view === 'wishlist') openThemes(); else openWishlist();
+  });
+
+  // ── opening the page ────────────────────────────────────────────
+
+  async function boot() {
+    let token = null;
+    try { token = localStorage.getItem(TOKEN_KEY); } catch (_) { /* private window */ }
+
+    /* A token in the address bar wins over the stored one, so a client
+       can be handed their own link on another device. */
+    const fromUrl = new URLSearchParams(location.search).get('token');
+    if (fromUrl) token = fromUrl;
+
+    if (!token) { state.view = 'register'; render(); return; }
+
+    try {
+      state.client = await api.get(token);
+      state.token = token;
+      try { localStorage.setItem(TOKEN_KEY, token); } catch (_) { /* private window */ }
+      await openThemes();
+      /* A wishlist that has already been sent opens on its
+         confirmation, not on the themes: there is nothing left to
+         change, and showing the grid would invite a tap that the
+         server would only refuse. */
+      if (state.client.status === 'SUBMITTED') {
+        state.view = 'done';
+        render();
+      }
+    } catch (err) {
+      /* An expired, deleted or mistyped token is not an error worth
+         showing a client: they simply start again. */
+      try { localStorage.removeItem(TOKEN_KEY); } catch (_) { /* private window */ }
+      state.view = 'register';
+      render();
+    }
+  }
+
+  boot();
+})();
+</script>
+</body>
+</html>

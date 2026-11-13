@@ -188,16 +188,28 @@
     { id: 'projects', label: 'Projects', href: 'projects.html', ready: true },
     { id: 'catalog', label: 'Catalog', href: 'catalog.html', ready: true },
     { id: 'library', label: "De\u2019vyora Library", href: 'devyora-library.html', ready: true },
+    { id: 'clients', label: 'Client Wishlists', href: 'client-wishlists.html', ready: true, owner: true },
   ];
 
   function notReady() {
     alert('This section of the new design is still being rebuilt — coming soon.');
   }
 
+
+  /* THE CLIENT REGISTER IS THE STUDIO'S OWN BOOK -- owner and admin
+     only, the same gate the server puts on it. Hidden from everyone
+     else rather than shown and then refused. */
+  function navItemAllowed(item) {
+    if (!item.owner) return true;
+    const user = (window.CasaApi && CasaApi.getCachedUser) ? CasaApi.getCachedUser() : null;
+    const role = String((user && user.role) || '').toUpperCase();
+    return role === 'OWNER' || role === 'ADMIN';
+  }
+
   function renderNav() {
     const nav = document.getElementById('navItems');
     nav.innerHTML = '';
-    NAV_ITEMS.forEach((item) => {
+    NAV_ITEMS.filter(navItemAllowed).forEach((item) => {
       const btn = document.createElement('button');
       btn.className = 'nav-item' + (item.id === 'projects' ? ' active' : '');
       btn.innerHTML = '<span class="lbl">' + item.label + '</span>' + (item.ready ? '' : '<span class="badge mono">SOON</span>');

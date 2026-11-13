@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Client Wishlists · De’vyora</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500&family=DM+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root { --ink:#1A1512; --paper:#F7F3EC; --card:#fff; --line:#E7DFD1; --sand:#F4EEE3; --gold:#8A6A3B; --gold-light:#E3C58E; --muted:#8B8177; --text2:#5B5147; --err:#A8552A; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--paper); color:var(--ink); font-family:'DM Sans',sans-serif; -webkit-font-smoothing:antialiased; }
+  a { color:var(--gold); text-decoration:none; }
+  .mono { font-family:'JetBrains Mono',monospace; }
+  .serif { font-family:'Playfair Display',serif; }
+  button { font-family:inherit; }
+  img { max-width:100%; }
+  ::-webkit-scrollbar { width:10px; height:10px; }
+  ::-webkit-scrollbar-thumb { background:#DED3C0; border-radius:8px; border:3px solid var(--paper); }
+  @keyframes fadeIn { from{opacity:0} to{opacity:1} }
+  @keyframes rise { from{opacity:0; transform:translateY(14px)} to{opacity:1; transform:none} }
+  @keyframes shimmer { from{background-position:180% 0} to{background-position:-180% 0} }
+
+  .layout { display:flex; height:100vh; overflow:hidden; }
+  .sidebar { flex:0 0 auto; width:266px; height:100%; display:flex; flex-direction:column; background:#FCFAF6; border-right:1px solid var(--line); overflow-y:auto; }
+  .brand { padding:26px 22px 20px; border-bottom:1px solid #EFE7DA; }
+  .brand .name { font-size:19px; letter-spacing:.14em; line-height:1.1; }
+  .brand-row { display:flex; align-items:center; gap:10px; }
+  .brand-mark { flex:0 0 auto; width:30px; height:30px; border-radius:7px; display:block; }
+  /* The name div carries BOTH .brand and .name, so .brand's own
+     22px padding was landing on it a second time and pushing the
+     wordmark 22px clear of the mark, and .brand's border-bottom was
+     drawing a second rule under it. Inside the row it is a wordmark,
+     not a block: it shrink-wraps, carries neither, and the only space
+     between the two is the gap above. */
+  .brand-row .name { padding:0; border-bottom:none; flex:0 0 auto; }
+  .brand .tag { font-size:9px; letter-spacing:.22em; color:var(--muted); margin-top:6px; }
+  .nav { padding:20px 14px 8px; }
+  .nav-label { font-size:9.5px; letter-spacing:.2em; color:#A0968A; padding:0 8px 10px; }
+  .nav-items { display:flex; flex-direction:column; gap:3px; }
+  .nav-item { display:flex; align-items:center; gap:12px; width:100%; min-height:48px; padding:0 12px; border:none; border-radius:12px; cursor:pointer; font-size:14px; text-align:left; background:transparent; color:#4A4038; }
+  .nav-item.active { background:var(--ink); color:#FBF6EC; font-weight:500; }
+  .nav-item:not(.active):hover { background:#F1EADD; }
+  .nav-item .lbl { flex:1; }
+  .nav-item .badge { font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:.08em; padding:3px 7px; border-radius:100px; background:#F1EADD; color:var(--muted); }
+  .nav-item.active .badge { background:rgba(227,197,142,.2); color:var(--gold-light); }
+  .profile-wrap { margin-top:auto; padding:18px 16px; }
+  .profile { display:flex; align-items:center; gap:11px; padding:12px; background:var(--sand); border:1px solid var(--line); border-radius:14px; }
+  .avatar-circle { width:36px; height:36px; flex:0 0 auto; border-radius:50%; background:linear-gradient(150deg,#C09A5E,var(--gold)); display:grid; place-items:center; font-size:13px; color:#FFF8EC; }
+  .profile .name { font-size:13px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .profile .role { font-size:9px; letter-spacing:.14em; color:var(--muted); }
+  .logout-btn { margin-top:10px; width:100%; padding:8px; background:transparent; border:1px solid var(--line); border-radius:10px; cursor:pointer; font-size:10px; letter-spacing:.1em; color:var(--muted); }
+  .logout-btn:hover { color:var(--ink); border-color:#C7B393; }
+
+  .main { flex:1; min-width:0; overflow-y:auto; padding:clamp(22px,3vw,44px); }
+  .stage { animation:fadeIn .35s ease both; max-width:1100px; }
+
+  .eyebrow { display:flex; align-items:center; gap:9px; font-size:10px; letter-spacing:.2em; color:var(--gold); }
+  .dot { width:6px; height:6px; border-radius:50%; background:var(--gold); flex:0 0 auto; }
+
+  /* ── the register ── */
+  .step-h1 { font-weight:600; font-size:clamp(25px,3vw,36px); line-height:1.12; margin:10px 0 0; }
+  .step-sub { font-size:14px; line-height:1.6; color:var(--text2); max-width:620px; margin:9px 0 0; }
+
+  .filters { display:flex; flex-wrap:wrap; gap:12px; align-items:flex-end; margin-top:22px;
+             padding:15px 16px; background:var(--card); border:1px solid var(--line); border-radius:16px; }
+  .f { display:flex; flex-direction:column; gap:5px; min-width:0; }
+  .f-k { font-size:8px; letter-spacing:.18em; color:var(--muted); }
+  .f-in { min-height:44px; padding:0 12px; font:inherit; font-size:13.5px; color:var(--ink);
+          background:var(--paper); border:1px solid var(--line); border-radius:10px; }
+  .f-in:focus-visible { outline:2px solid var(--gold); outline-offset:2px; }
+  .f.grow { flex:1 1 230px; }
+  .f-clear { min-height:44px; padding:0 14px; background:transparent; border:1px solid var(--line);
+             border-radius:10px; cursor:pointer; font-size:9px; letter-spacing:.14em; color:var(--muted); }
+  .f-clear:hover { color:var(--ink); border-color:#C7B393; }
+
+  .tally { display:flex; align-items:baseline; gap:10px; margin-top:16px; }
+  .tally .n { font-family:'Playfair Display',serif; font-size:26px; line-height:1; }
+  .tally .k { font-size:9px; letter-spacing:.18em; color:var(--muted); }
+
+  .rows { margin-top:12px; border:1px solid var(--line); border-radius:16px; overflow:hidden; background:var(--card); }
+  .row { display:grid; grid-template-columns:minmax(0,2.1fr) minmax(0,1.3fr) 108px 96px 118px 88px;
+         gap:14px; align-items:center; padding:14px 16px; border-top:1px solid var(--line);
+         width:100%; background:none; text-align:left; cursor:pointer; font:inherit; color:inherit; }
+  .row:first-child { border-top:none; }
+  .row:hover { background:#FBF7F0; }
+  .row.head { cursor:default; background:var(--sand); font-size:8px; letter-spacing:.16em; color:var(--muted); }
+  .row.head:hover { background:var(--sand); }
+  /* A COLUMN, EXPLICITLY. These are spans, so without this the name
+     and the id beneath it lay out on one line and ran together --
+     "Meera Iyercmwf28a2700..." -- which no selector notices and one
+     look at the page makes obvious. */
+  .r-cell { min-width:0; display:flex; flex-direction:column; gap:4px; }
+  .r-pills { min-width:0; display:flex; flex-direction:column; gap:5px; align-items:flex-start; }
+  .r-name { font-size:14.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .r-sub { font-size:10px; letter-spacing:.1em; color:var(--muted);
+           overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .r-when { font-size:12px; color:var(--text2); }
+  .r-when span { display:block; font-size:9.5px; color:var(--muted); margin-top:3px; }
+  .r-n { font-family:'Playfair Display',serif; font-size:19px; }
+  .pill { display:inline-flex; align-items:center; gap:6px; padding:5px 10px; border-radius:99px;
+          font-size:8px; letter-spacing:.14em; border:1px solid var(--line); background:var(--paper); color:var(--muted); }
+  .pill.sent { background:var(--ink); border-color:var(--ink); color:#FBF6EC; }
+  .pill.bad { border-color:var(--err); color:var(--err); }
+  .pill.ok { border-color:#6E5228; color:#6E5228; }
+  .r-go { font-size:8.5px; letter-spacing:.16em; color:var(--muted); text-align:right; }
+  .row:hover .r-go { color:var(--ink); }
+
+  .pager { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:16px; flex-wrap:wrap; }
+  .pager .txt { font-size:9.5px; letter-spacing:.14em; color:var(--muted); }
+  .pager-btns { display:flex; gap:8px; }
+  .pg { min-height:42px; padding:0 15px; background:var(--card); border:1px solid var(--line);
+        border-radius:10px; cursor:pointer; font-size:9.5px; letter-spacing:.14em; color:var(--ink); }
+  .pg:disabled { opacity:.4; cursor:not-allowed; }
+  .pg:not(:disabled):hover { border-color:#C7B393; }
+
+  .lib-back { display:inline-flex; align-items:center; gap:7px; margin-top:4px; background:none; border:none;
+              padding:0; color:var(--muted); font-size:9.5px; letter-spacing:.14em; cursor:pointer; }
+  .lib-back:hover { color:var(--ink); }
+
+  /* ── one client ── */
+  .facts { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:1px; margin-top:20px;
+           background:var(--line); border:1px solid var(--line); border-radius:16px; overflow:hidden; }
+  .fact { background:var(--card); padding:14px 16px; }
+  .fact .k { font-size:8px; letter-spacing:.18em; color:var(--muted); }
+  .fact .v { font-size:15px; margin-top:6px; overflow-wrap:anywhere; }
+  .fact .v.mono { font-size:12.5px; letter-spacing:.04em; }
+
+  .drive { margin-top:16px; padding:15px 16px; border:1px solid var(--line); border-radius:16px;
+           background:var(--card); display:flex; gap:14px; align-items:flex-start; flex-wrap:wrap; }
+  .drive.bad { border-color:var(--err); }
+  .drive-t { flex:1; min-width:200px; }
+  .drive-k { font-size:8px; letter-spacing:.18em; color:var(--muted); }
+  .drive-v { font-size:13.5px; line-height:1.55; margin-top:6px; color:var(--text2); }
+  .drive-v a { color:var(--gold); word-break:break-all; }
+  .drive-acts { display:flex; gap:9px; flex-wrap:wrap; }
+  .btn-s { min-height:44px; padding:0 15px; background:var(--card); border:1px solid var(--line);
+           border-radius:11px; cursor:pointer; font-size:9.5px; letter-spacing:.14em; color:var(--ink); }
+  .btn-s:hover:not(:disabled) { background:#EFE7DA; border-color:#C7B393; }
+  .btn-s:disabled { opacity:.5; cursor:not-allowed; }
+  .btn-s.dark { background:var(--ink); border-color:var(--ink); color:#FBF6EC; }
+  .btn-s.dark:hover:not(:disabled) { background:#33291F; }
+
+  .picks { display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:18px; margin-top:18px; }
+  .pick { background:var(--card); border:1px solid var(--line); border-radius:16px; overflow:hidden; margin:0; }
+  .pick-shot { aspect-ratio:4/3; background:var(--sand); overflow:hidden; position:relative; }
+  .pick-shot img { width:100%; height:100%; object-fit:cover; display:block; }
+  .pick-shot.failed::after { content:'PICTURE UNAVAILABLE'; position:absolute; inset:0; display:grid;
+                             place-items:center; font-family:'JetBrains Mono',monospace; font-size:7.5px;
+                             letter-spacing:.14em; color:var(--muted); }
+  .pick-body { padding:12px 14px 13px; }
+  .pick-t { font-size:13.5px; line-height:1.35; }
+  .pick-meta { display:flex; flex-wrap:wrap; gap:6px; margin-top:9px; }
+  .tag { font-size:7.5px; letter-spacing:.14em; padding:4px 8px; border-radius:99px;
+         background:var(--sand); border:1px solid var(--line); color:var(--muted); }
+  .tag.gold { color:var(--gold); border-color:var(--gold-light); }
+  .tag.warn { color:var(--err); border-color:var(--err); }
+  .pick-ref { font-size:10px; line-height:1.5; color:var(--muted); margin-top:9px; overflow-wrap:anywhere; }
+
+  .note { margin-top:20px; padding:26px; background:var(--card); border:1px solid var(--line);
+          border-radius:18px; text-align:center; }
+  .note.bad { border-color:var(--err); }
+  .note h3 { font-weight:600; font-size:19px; margin:0; }
+  .note p { max-width:460px; margin:9px auto 0; font-size:13.5px; line-height:1.6; color:var(--text2); }
+  .skel { height:62px; border-top:1px solid var(--line);
+          background:linear-gradient(100deg,var(--sand) 18%,#FBF7F0 38%,var(--sand) 58%) 0 0/220% 100%;
+          animation:shimmer 1.5s linear infinite; }
+  .toast { position:fixed; left:50%; bottom:24px; transform:translateX(-50%); z-index:60; max-width:min(520px,92vw);
+           padding:13px 18px; background:var(--ink); color:#FBF6EC; border-radius:12px; font-size:13px;
+           line-height:1.5; box-shadow:0 18px 40px -18px rgba(26,21,18,.7); display:none; }
+  .toast.on { display:block; animation:rise .24s ease both; }
+
+  @media (max-width:980px) {
+    .row { grid-template-columns:minmax(0,1.6fr) 92px 86px 110px; }
+    .row .r-phone, .row .r-go { display:none; }
+  }
+  @media (max-width:620px) {
+    .row { grid-template-columns:minmax(0,1fr) 72px 104px; }
+    .row .r-count { display:none; }
+  }
+</style>
+<link rel="stylesheet" href="assets/sidebar.css">
+</head>
+<body>
+
+<div class="layout">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-row"><img class="brand-mark" src="img/devyora-mark.webp" alt="" width="30" height="30" decoding="async"><div class="brand name serif">DE’VYORA</div></div>
+      <div class="brand tag mono">STUDIO &amp; SHOWROOM</div>
+    </div>
+    <div class="nav">
+      <div class="nav-label mono">WORKSPACE</div>
+      <nav class="nav-items" id="navItems"></nav>
+    </div>
+    <div class="profile-wrap">
+      <div class="profile">
+        <div class="avatar-circle serif" id="profileInitials">··</div>
+        <div style="min-width:0; display:flex; flex-direction:column; gap:2px">
+          <span class="name" id="profileName">—</span>
+          <span class="role mono" id="profileRole">—</span>
+        </div>
+      </div>
+      <button class="logout-btn mono" id="logoutBtn">SIGN OUT</button>
+    </div>
+  </aside>
+
+  <main class="main" id="mainContent"></main>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="assets/api-client.js"></script>
+<script src="assets/sidebar.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  const NAV_ITEMS = [
+    { id: 'dashboard', label: 'Dashboard', href: 'dashboard.html' },
+    { id: 'moodboard', label: 'Mood Board', href: 'mood-board.html' },
+    { id: 'generations', label: 'Recent Generations', href: 'recent-generations.html' },
+    { id: 'projects', label: 'Projects', href: 'projects.html' },
+    { id: 'catalog', label: 'Catalog', href: 'catalog.html' },
+    { id: 'library', label: 'De’vyora Library', href: 'devyora-library.html' },
+    { id: 'clients', label: 'Client Wishlists', href: 'client-wishlists.html', owner: true },
+  ];
+
+  /* THE CLIENT REGISTER IS THE STUDIO'S OWN BOOK -- owner and admin
+     only, the same gate the server puts on it. Hidden from everyone
+     else rather than shown and then refused. */
+  function navItemAllowed(item) {
+    if (!item.owner) return true;
+    const user = (window.CasaApi && CasaApi.getCachedUser) ? CasaApi.getCachedUser() : null;
+    const role = String((user && user.role) || '').toUpperCase();
+    return role === 'OWNER' || role === 'ADMIN';
+  }
+
+  function renderNav() {
+    const nav = document.getElementById('navItems');
+    nav.innerHTML = '';
+    NAV_ITEMS.filter(navItemAllowed).forEach((item) => {
+      const btn = document.createElement('button');
+      btn.className = 'nav-item' + (item.id === 'clients' ? ' active' : '');
+      btn.innerHTML = '<span class="lbl">' + item.label + '</span>';
+      btn.addEventListener('click', () => { location.href = item.href; });
+      nav.appendChild(btn);
+    });
+  }
+
+  function escapeHtml(value) {
+    return String(value == null ? '' : value).replace(/[&<>"']/g, (c) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    })[c]);
+  }
+
+  /* A CARD-SIZED PICTURE FOR A CARD-SIZED FRAME. The stored url is
+     Drive's thumbnail at w1000, which is four times what a preview
+     needs; narrowing it is read-time only and leaves anything that is
+     not a Drive thumbnail alone. */
+  function atWidth(url, width) {
+    if (!url) return '';
+    return String(url).replace(/([?&]sz=)w\d+/, '$1w' + width);
+  }
+
+  function when(value) {
+    if (!value) return '—';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return '—';
+    return d.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' });
+  }
+
+  function atTime(value) {
+    if (!value) return '';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return '';
+    return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  }
+
+  let toastTimer = null;
+  function toast(message) {
+    const el = document.getElementById('toast');
+    el.textContent = message;
+    el.classList.add('on');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('on'), 5200);
+  }
+
+  const state = {
+    view: 'list',          // list | client
+    rows: [],
+    total: 0, page: 1, pages: 1, limit: 25,
+    filters: { q: '', status: 'ALL', from: '', to: '' },
+    loading: false,
+    error: '',
+    client: null,
+    clientLoading: false,
+    clientError: '',
+    syncing: false,
+  };
+
+  const main = document.getElementById('mainContent');
+
+  // ── the register ────────────────────────────────────────────────
+
+  function statusPill(row) {
+    return row.status === 'SUBMITTED'
+      ? '<span class="pill sent mono">SUBMITTED</span>'
+      : '<span class="pill mono">DRAFT</span>';
+  }
+
+  function drivePill(row) {
+    const d = row.drive || {};
+    if (d.syncedAt && d.folderId) return '<span class="pill ok mono">IN DRIVE</span>';
+    if (d.error) return '<span class="pill bad mono">DRIVE FAILED</span>';
+    // Nothing to say yet: a folder is made when the client submits.
+    if (row.status !== 'SUBMITTED') return '';
+    return '<span class="pill mono">NOT COPIED</span>';
+  }
+
+  function listHtml() {
+    const f = state.filters;
+    const head = '<div class="mono" style="font-size:10px; letter-spacing:.18em; color:var(--muted)">CLIENT REGISTER</div>'
+      + '<h1 class="step-h1 serif">Client Wishlists</h1>'
+      + '<p class="step-sub">Everyone who has registered on the showroom tablet, what they kept, '
+      + 'and whether it has reached the studio.</p>'
+      + '<div class="filters">'
+      + '<div class="f grow"><label class="f-k mono" for="fq">SEARCH · NAME, CODE OR ID</label>'
+      + '<input class="f-in" id="fq" type="search" placeholder="Aarti, DV-RVJNK, 98765…" value="'
+      + escapeHtml(f.q) + '"></div>'
+      + '<div class="f"><label class="f-k mono" for="fstatus">STATUS</label>'
+      + '<select class="f-in" id="fstatus">'
+      + ['ALL', 'SUBMITTED', 'DRAFT'].map((s) => '<option value="' + s + '"'
+        + (f.status === s ? ' selected' : '') + '>' + (s === 'ALL' ? 'All' : s.charAt(0) + s.slice(1).toLowerCase()) + '</option>').join('')
+      + '</select></div>'
+      + '<div class="f"><label class="f-k mono" for="ffrom">REGISTERED FROM</label>'
+      + '<input class="f-in" id="ffrom" type="date" value="' + escapeHtml(f.from) + '"></div>'
+      + '<div class="f"><label class="f-k mono" for="fto">TO</label>'
+      + '<input class="f-in" id="fto" type="date" value="' + escapeHtml(f.to) + '"></div>'
+      + '<button class="f-clear mono" id="fclear">CLEAR</button>'
+      + '</div>';
+
+    if (state.loading) {
+      return head + '<div class="rows">' + Array.from({ length: 6 }, () => '<div class="skel"></div>').join('') + '</div>';
+    }
+
+    if (state.error) {
+      return head + '<div class="note bad"><h3 class="serif">The register could not be read</h3>'
+        + '<p>' + escapeHtml(state.error) + '</p>'
+        + '<button class="btn-s mono" id="retryBtn" style="margin-top:16px">TRY AGAIN</button></div>';
+    }
+
+    if (!state.rows.length) {
+      const filtered = f.q || f.status !== 'ALL' || f.from || f.to;
+      return head + '<div class="note"><h3 class="serif">'
+        + (filtered ? 'Nothing matches that' : 'No client has registered yet')
+        + '</h3><p>'
+        + (filtered
+          ? 'Try a different name, code or date — or clear the filters to see everyone.'
+          : 'When a client registers on the showroom tablet they will appear here, with '
+            + 'whatever they have kept so far.')
+        + '</p></div>';
+    }
+
+    return head
+      + '<div class="tally"><span class="n">' + state.total + '</span>'
+      + '<span class="k mono">' + (state.total === 1 ? 'CLIENT' : 'CLIENTS') + '</span></div>'
+      + '<div class="rows">'
+      + '<div class="row head mono"><span>CLIENT</span><span class="r-phone">MOBILE · CODE</span>'
+      + '<span>REGISTERED</span><span class="r-count">KEPT</span><span>STATUS</span>'
+      + '<span class="r-go">·</span></div>'
+      + state.rows.map((row) =>
+        '<button type="button" class="row" data-open="' + escapeHtml(row.id) + '">'
+        + '<span class="r-cell"><span class="r-name">' + escapeHtml(row.name) + '</span>'
+        + '<span class="r-sub mono">' + escapeHtml(row.clientId) + '</span></span>'
+        + '<span class="r-cell r-phone"><span class="r-name">' + escapeHtml(row.phone || '—') + '</span>'
+        + '<span class="r-sub mono">' + escapeHtml(row.code) + '</span></span>'
+        + '<span class="r-when">' + escapeHtml(when(row.registeredAt))
+        + '<span class="mono">' + escapeHtml(atTime(row.registeredAt)) + '</span></span>'
+        + '<span class="r-count r-n">' + row.itemCount + '</span>'
+        + '<span class="r-pills">' + statusPill(row) + drivePill(row) + '</span>'
+        + '<span class="r-go mono">OPEN →</span>'
+        + '</button>').join('')
+      + '</div>'
+      + '<div class="pager"><span class="txt mono">PAGE ' + state.page + ' OF ' + state.pages + '</span>'
+      + '<span class="pager-btns">'
+      + '<button class="pg mono" id="prevBtn"' + (state.page <= 1 ? ' disabled' : '') + '>← PREVIOUS</button>'
+      + '<button class="pg mono" id="nextBtn"' + (state.page >= state.pages ? ' disabled' : '') + '>NEXT →</button>'
+      + '</span></div>';
+  }
+
+  // ── one client ──────────────────────────────────────────────────
+
+  function driveBlock(c) {
+    const d = c.drive || {};
+    const synced = d.syncedAt && d.folderId;
+    return '<div class="drive' + (d.error ? ' bad' : '') + '">'
+      + '<div class="drive-t"><div class="drive-k mono">GOOGLE DRIVE FOLDER</div>'
+      + '<div class="drive-v">'
+      + (synced
+        ? 'Copied ' + escapeHtml(when(d.syncedAt)) + ' · <a href="' + escapeHtml(d.folderUrl)
+          + '" target="_blank" rel="noopener">' + escapeHtml(d.folderUrl) + '</a>'
+        : d.error
+          ? escapeHtml(d.error)
+            + (d.folderId
+              ? ' · <a href="' + escapeHtml(d.folderUrl) + '" target="_blank" rel="noopener">open what exists</a>'
+              : '')
+          : c.status === 'SUBMITTED'
+            ? 'No folder yet. Copy this client’s pictures into the studio’s Drive.'
+            : 'A folder is created once the client submits their wishlist.')
+      + '</div></div>'
+      + '<div class="drive-acts">'
+      + '<button class="btn-s' + (synced ? '' : ' dark') + ' mono" id="syncBtn"'
+      + (state.syncing || c.status !== 'SUBMITTED' ? ' disabled' : '') + '>'
+      + (state.syncing ? 'COPYING…' : synced ? 'SYNC AGAIN' : 'COPY TO DRIVE') + '</button>'
+      + '</div></div>';
+  }
+
+  function clientHtml() {
+    const back = '<button type="button" class="lib-back mono" id="backBtn">← ALL CLIENTS</button>';
+
+    if (state.clientLoading) {
+      return back + '<div class="rows" style="margin-top:18px">'
+        + Array.from({ length: 4 }, () => '<div class="skel"></div>').join('') + '</div>';
+    }
+    if (state.clientError || !state.client) {
+      return back + '<div class="note bad"><h3 class="serif">This client could not be opened</h3>'
+        + '<p>' + escapeHtml(state.clientError || 'No such wishlist.') + '</p></div>';
+    }
+
+    const c = state.client;
+    return back
+      + '<div class="mono" style="font-size:10px; letter-spacing:.18em; color:var(--muted); margin-top:10px">'
+      + escapeHtml(c.code) + '</div>'
+      + '<h1 class="step-h1 serif">' + escapeHtml(c.name) + '</h1>'
+      + '<div class="facts">'
+      + '<div class="fact"><div class="k mono">MOBILE</div><div class="v">'
+      + escapeHtml(c.phone || 'Not given') + '</div></div>'
+      + '<div class="fact"><div class="k mono">CLIENT ID</div><div class="v mono">'
+      + escapeHtml(c.clientId) + '</div></div>'
+      + '<div class="fact"><div class="k mono">REGISTERED</div><div class="v">'
+      + escapeHtml(when(c.registeredAt)) + ' <span class="mono" style="font-size:11px; color:var(--muted)">'
+      + escapeHtml(atTime(c.registeredAt)) + '</span></div></div>'
+      + '<div class="fact"><div class="k mono">STATUS</div><div class="v">'
+      + (c.status === 'SUBMITTED'
+        ? 'Submitted ' + escapeHtml(when(c.submittedAt)) + ' <span class="mono" style="font-size:11px; color:var(--muted)">'
+          + escapeHtml(atTime(c.submittedAt)) + '</span>'
+        : 'Still choosing')
+      + '</div></div>'
+      + '<div class="fact"><div class="k mono">ROOMS KEPT</div><div class="v">' + c.items.length + '</div></div>'
+      + '</div>'
+      + driveBlock(c)
+      + (c.items.length
+        ? '<div class="picks">' + c.items.map((item) => pickHtml(
+          item, 0, null, c.status === 'SUBMITTED')).join('') + '</div>'
+        : '<div class="note"><h3 class="serif">Nothing kept yet</h3>'
+          + '<p>This client registered but has not hearted a room.</p></div>');
+  }
+
+  function pickHtml(item, _index, _all, submitted) {
+    /* WHAT THE CLIENT CHOSE, AND WHAT THE LIBRARY STILL HOLDS. They
+       can differ -- a picture deleted from the library leaves the
+       choice intact with no reference -- and the studio should be
+       able to see which. */
+    const ref = item.reference;
+    const refLine = item.isStarter
+      ? 'Starter room, shipped with De’vyora · ' + escapeHtml(item.imageId)
+      : ref
+        ? 'Library reference ' + escapeHtml(ref.id)
+          + (ref.driveFileId ? ' · Drive ' + escapeHtml(ref.driveFileId) : '')
+          + (ref.isActive ? '' : ' · removed from the library')
+        : 'The library picture this came from has since been deleted';
+
+    return '<figure class="pick">'
+      + '<div class="pick-shot">'
+      + '<img src="' + escapeHtml(atWidth(CasaApi.resolveBackendImageUrl(item.imageUrl), 500)) + '"'
+      + ' alt="' + escapeHtml(item.title) + '" loading="lazy" decoding="async"'
+      + ' onerror="this.style.display=\'none\';this.parentNode.classList.add(\'failed\')">'
+      + '</div>'
+      + '<figcaption class="pick-body">'
+      + '<div class="pick-t">' + escapeHtml(item.title) + '</div>'
+      + '<div class="pick-meta">'
+      + '<span class="tag gold mono">' + escapeHtml(themeLabel(item.themeId)) + '</span>'
+      + (item.room ? '<span class="tag mono">' + escapeHtml(item.room) + '</span>' : '')
+      /* Only worth saying once there is something to say: nothing is
+         copied until the client submits, so a draft's pictures are not
+         flagged as missing from a folder that does not exist yet. */
+      + (item.driveCopyId
+        ? '<span class="tag mono">COPIED</span>'
+        : submitted
+          ? '<span class="tag warn mono">NOT COPIED</span>'
+          : '')
+      + '</div>'
+      + '<div class="pick-ref mono">' + refLine + '</div>'
+      + '<div class="pick-ref mono">KEPT ' + escapeHtml(when(item.selectedAt)) + ' '
+      + escapeHtml(atTime(item.selectedAt)) + '</div>'
+      + '</figcaption></figure>';
+  }
+
+  /* The theme's own label, from the studio's theme file by way of the
+     server -- never a list kept in this page. */
+  let THEMES = {};
+  function themeLabel(themeId) {
+    return THEMES[themeId] || themeId;
+  }
+
+  // ── rendering and wiring ────────────────────────────────────────
+
+  function render() {
+    main.innerHTML = '<div class="stage">'
+      + (state.view === 'list' ? listHtml() : clientHtml())
+      + '</div>';
+
+    if (state.view === 'list') {
+      const q = document.getElementById('fq');
+      if (q) {
+        q.addEventListener('input', debounce(() => {
+          state.filters.q = q.value.trim();
+          state.page = 1;
+          load({ keepFocus: 'fq' });
+        }, 280));
+      }
+      bind('fstatus', 'change', (el) => { state.filters.status = el.value; state.page = 1; load(); });
+      bind('ffrom', 'change', (el) => { state.filters.from = el.value; state.page = 1; load(); });
+      bind('fto', 'change', (el) => { state.filters.to = el.value; state.page = 1; load(); });
+      bind('fclear', 'click', () => {
+        state.filters = { q: '', status: 'ALL', from: '', to: '' };
+        state.page = 1;
+        load();
+      });
+      bind('prevBtn', 'click', () => { state.page = Math.max(1, state.page - 1); load(); });
+      bind('nextBtn', 'click', () => { state.page = Math.min(state.pages, state.page + 1); load(); });
+      bind('retryBtn', 'click', () => load());
+    } else {
+      bind('backBtn', 'click', () => { state.view = 'list'; state.client = null; render(); });
+      bind('syncBtn', 'click', () => driveSync());
+    }
+  }
+
+  function bind(id, event, handler) {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener(event, () => handler(el));
+  }
+
+  function debounce(fn, ms) {
+    let t = null;
+    return function debounced() { clearTimeout(t); t = setTimeout(fn, ms); };
+  }
+
+  async function load(options) {
+    state.loading = true;
+    state.error = '';
+    render();
+
+    try {
+      const data = await CasaApi.clientRegister.list({
+        q: state.filters.q,
+        status: state.filters.status,
+        from: state.filters.from,
+        to: state.filters.to,
+        page: state.page,
+        limit: state.limit,
+      });
+      state.rows = data.wishlists || [];
+      state.total = data.total || 0;
+      state.pages = data.pages || 1;
+      state.page = data.page || 1;
+    } catch (err) {
+      state.rows = [];
+      state.error = (err && err.message) || 'The register could not be read.';
+    }
+
+    state.loading = false;
+    render();
+
+    // A search that re-rendered under the typist's hands puts the
+    // cursor back where it was, or the box loses focus every keystroke.
+    if (options && options.keepFocus) {
+      const el = document.getElementById(options.keepFocus);
+      if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
+    }
+  }
+
+  async function open(id) {
+    state.view = 'client';
+    state.client = null;
+    state.clientError = '';
+    state.clientLoading = true;
+    render();
+
+    try {
+      state.client = await CasaApi.clientRegister.get(id);
+    } catch (err) {
+      state.clientError = (err && err.message) || 'That client could not be opened.';
+    }
+    state.clientLoading = false;
+    render();
+  }
+
+  async function driveSync() {
+    if (state.syncing || !state.client) return;
+    state.syncing = true;
+    render();
+
+    try {
+      const data = await CasaApi.clientRegister.driveSync(state.client.id);
+      const d = data.drive || {};
+      toast(d.ok
+        ? (d.copied
+          ? d.copied + (d.copied === 1 ? ' picture copied' : ' pictures copied') + ' into the client’s Drive folder.'
+          : 'Already up to date — nothing needed copying.')
+        : d.reason || 'The copy did not finish.');
+      // Read it back rather than patching it in: the server is the
+      // record of what is actually in Drive.
+      state.client = await CasaApi.clientRegister.get(state.client.id);
+    } catch (err) {
+      toast((err && err.message) || 'The copy could not be started.');
+    }
+
+    state.syncing = false;
+    render();
+  }
+
+  document.addEventListener('click', (event) => {
+    const row = event.target.closest('[data-open]');
+    if (row) open(row.getAttribute('data-open'));
+  });
+
+  async function init() {
+    const user = await CasaApi.requireAuth();
+
+    document.getElementById('profileInitials').textContent = CasaApi.initials(user.name);
+    document.getElementById('profileName').textContent = user.name || user.email;
+    document.getElementById('profileRole').textContent = (user.role || '').toUpperCase();
+
+    renderNav();
+    document.getElementById('logoutBtn').addEventListener('click', async () => {
+      await CasaApi.auth.logout();
+      location.href = 'login.html';
+    });
+
+    const role = String(user.role || '').toUpperCase();
+    if (role !== 'OWNER' && role !== 'ADMIN') {
+      main.innerHTML = '<div class="stage"><div class="note bad">'
+        + '<h3 class="serif">This is the owner’s register</h3>'
+        + '<p>Client registrations and wishlists are visible to the studio owner and '
+        + 'administrators. Ask them if you need something from it.</p></div></div>';
+      return;
+    }
+
+    // The theme labels, so a picture can say which theme it came from
+    // without this page holding a list of its own.
+    try {
+      const data = await CasaApi.clientWishlist.themes();
+      (data.themes || []).forEach((t) => { THEMES[t.id] = t.label; });
+    } catch (_) { /* the ids still read perfectly well */ }
+
+    load();
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>

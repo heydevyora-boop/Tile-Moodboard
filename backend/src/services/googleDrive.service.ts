@@ -166,6 +166,8 @@ export interface DriveApiClient {
     delete: drive_v3.Drive['files']['delete'];
     list: drive_v3.Drive['files']['list'];
     get: drive_v3.Drive['files']['get'];
+    /** Reads a file and writes a new one elsewhere; the original is untouched. */
+    copy: drive_v3.Drive['files']['copy'];
   };
   permissions: {
     create: drive_v3.Drive['permissions']['create'];
@@ -578,6 +580,33 @@ export class GoogleDriveClient {
     );
     if (!res.data.id) throw new DriveError('Google Drive did not return an id for the uploaded file', 502, false);
     return { id: res.data.id, name: res.data.name ?? input.name, webViewLink: res.data.webViewLink ?? undefined };
+  }
+
+  /**
+   * A COPY OF A FILE, INTO ANOTHER FOLDER. The original is not moved,
+   * not renamed and not touched: files.copy reads it and writes a new
+   * file somewhere else, which is exactly what a client's own folder
+   * needs and the only safe thing to do to the studio's library.
+   *
+   * There is deliberately no "move" anywhere in this client; adding
+   * one would make it possible to empty the library by accident.
+   */
+  async copyFile(fileId: string, name: string, parentFolderId: string): Promise<DriveFile> {
+    if (!this.isConfigured()) throw AppError.internal('Google Drive is not configured');
+    const drive = await this.getDrive();
+
+    const res = await this.withRetry(() =>
+      drive.files.copy({
+        fileId,
+        requestBody: { name, parents: [parentFolderId] },
+        fields: 'id,name,webViewLink',
+        // The same flag the uploads depend on: without it a copy into
+        // a shared drive is refused for want of quota.
+        supportsAllDrives: true,
+      }),
+    );
+    if (!res.data.id) throw new DriveError('Google Drive did not return an id for the copied file', 502, false);
+    return { id: res.data.id, name: res.data.name ?? name, webViewLink: res.data.webViewLink ?? undefined };
   }
 
   async deleteFile(fileId: string): Promise<void> {

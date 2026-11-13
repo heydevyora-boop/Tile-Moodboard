@@ -24,6 +24,10 @@ function makeFakeDrive(overrides: Partial<DriveApiClient> = {}): DriveApiClient 
       delete: (async () => ({ data: {} })) as unknown as DriveApiClient['files']['delete'],
       list: (async () => ({ data: { files: [] } })) as unknown as DriveApiClient['files']['list'],
       get: (async () => ({ data: { webViewLink: 'https://drive.google.com/file/d/file-1/view' } })) as unknown as DriveApiClient['files']['get'],
+      // files.copy, which the client wishlist uses to put a copy of a
+      // library picture into a client's own folder. The original is
+      // only ever read.
+      copy: (async () => ({ data: { id: 'copy-1', name: 'test.png' } })) as unknown as DriveApiClient['files']['copy'],
       ...overrides.files,
     },
     permissions: {

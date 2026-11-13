@@ -307,15 +307,15 @@ model ReferenceImage {
 /// path and no blob key in this table to hold one. `imageUrl` is the
 /// browser-ready Drive link derived from that id.
 model LibraryReference {
-  id           String   @id @default(cuid())
+  id            String         @id @default(cuid())
   /// A theme id from shared/themes.json: "british", "roman_touch", ...
-  themeId      String
+  themeId       String
   /// What the client sees this room called.
-  title        String
+  title         String
   /// Drive link, browser-ready. Derived from driveFileId, never a local path.
-  imageUrl     String
+  imageUrl      String
   /// The Drive file itself. Required: Drive is the only store there is.
-  driveFileId  String   @unique
+  driveFileId   String         @unique
   /// THE ROOM TYPE, as the second level of the library's hierarchy:
   /// a room id from shared/rooms.json -- "bathroom", "bedroom",
   /// "drawing_room", "powder_room", "kitchen".
@@ -330,13 +330,13 @@ model LibraryReference {
   /// shows under "Unsorted" rather than being dropped: a picture the
   /// studio uploaded must never become invisible because a category was
   /// added after it.
-  room         String?
-  description  String?
+  room          String?
+  description   String?
   /// Unpublished rows stay out of the client's gallery without being deleted.
-  isActive     Boolean  @default(true)
+  isActive      Boolean        @default(true)
   /// The order the studio wants them shown in, within a theme.
-  sortOrder    Int      @default(0)
-  uploadedById String?
+  sortOrder     Int            @default(0)
+  uploadedById  String?
   /// WHAT THE STUDIO'S EYE READ IN THIS PICTURE.
   ///
   /// A LibraryVisualProfile (backend/src/services/libraryMatch.service.ts):
@@ -351,10 +351,11 @@ model LibraryReference {
   /// (an un-migrated database), it is simply read fresh each time.
   visualProfile Json?
   /// When that reading was taken, so a stale one can be told apart.
-  visualReadAt DateTime?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  uploadedBy   User?    @relation("LibraryReferenceUploadedBy", fields: [uploadedById], references: [id])
+  visualReadAt  DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  uploadedBy    User?          @relation("LibraryReferenceUploadedBy", fields: [uploadedById], references: [id])
+  wishlistItems WishlistItem[]
 
   @@index([themeId])
   @@index([themeId, isActive])
@@ -376,6 +377,7 @@ model Customer {
   favorites      CustomerFavorite[]
   createdBy      User?              @relation("CustomerCreatedBy", fields: [createdById], references: [id])
   moodBoards     MoodBoard[]
+  wishlists      ClientWishlist[]
 
   @@index([phone])
   @@map("customers")
@@ -590,6 +592,98 @@ model Setting {
   updatedBy   User?    @relation("SettingUpdatedBy", fields: [updatedById], references: [id])
 
   @@map("settings")
+}
+
+/// WHAT A CLIENT PICKED, AND WHETHER THEY HAVE FINISHED PICKING.
+///
+/// Identity is the existing Customer: it already has a required name, an
+/// optional phone and a created-at, which is the whole of what a
+/// registration is. What it does not have is anything about a round of
+/// choosing -- a status, a submission time, the Drive folder that round
+/// produced -- and those belong to the round, not to the person, because
+/// a client can come back next season and choose again.
+model ClientWishlist {
+  id            String         @id @default(cuid())
+  customerId    String
+  /// THE CLIENT'S ONLY CREDENTIAL. There is no login here: an
+  /// unguessable token in the URL is what proves this browser is the one
+  /// that registered, exactly as mood_board_shares.token does for a
+  /// shared board. It is never listed and never returned by a lookup
+  /// that was not given it.
+  token         String         @unique
+  /// The short one a person can say out loud across a showroom floor.
+  /// Unique, so it can be searched on, and separate from the token
+  /// because it is meant to be readable and therefore guessable.
+  code          String         @unique
+  status        WishlistStatus @default(DRAFT)
+  submittedAt   DateTime?
+  /// The folder this round's pictures were copied into, once there is
+  /// one. Nullable because it is created after submission -- and
+  /// because Drive may not have answered when it was.
+  driveFolderId String?
+  /// WHEN THE CLIENT'S DRIVE FOLDER WAS LAST BROUGHT UP TO DATE, and
+  /// what went wrong if it was not. The wishlist is complete in this
+  /// database whether or not Drive answered, so a failure is recorded
+  /// here to be shown and retried rather than allowed to fail the
+  /// submission.
+  driveSyncedAt DateTime?
+  driveError    String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  customer      Customer       @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  items         WishlistItem[]
+
+  @@index([customerId])
+  @@index([status])
+  @@map("client_wishlists")
+}
+
+/// ONE PICTURE A CLIENT HEARTED.
+///
+/// The picture is REFERENCED, never copied: imageUrl and driveFileId
+/// point at the library's own file. What is written down here is the
+/// choice itself, plus enough of the picture's identity to still mean
+/// something if the library changes underneath it.
+model WishlistItem {
+  id                 String   @id @default(cuid())
+  wishlistId         String
+  /// The library's own id for the picture, as the gallery hands it out:
+  /// a LibraryReference id, or a shipped starter like
+  /// "starter:british-bathroom". Starters are files rather than rows, so
+  /// this is a string and not a foreign key -- and it is what the unique
+  /// constraint is on, so one client cannot heart one picture twice
+  /// whichever kind it is.
+  imageId            String
+  /// The row behind imageId when there is one. SetNull rather than
+  /// Cascade on purpose: a studio deleting a library picture must not
+  /// quietly rewrite what a client chose last week.
+  libraryReferenceId String?
+  /// Drive's own id for the file, kept beside the choice so the record
+  /// survives the library row being removed.
+  driveFileId        String?
+  /// The COPY of this picture in the client's own Drive folder, once
+  /// one exists. Set means copied, null means not yet -- which is what
+  /// makes a repeated submission copy nothing twice. It never points
+  /// at the original, which is only ever read.
+  driveCopyId        String?
+  themeId            String
+  room               String?
+  title              String
+  imageUrl           String
+  createdAt          DateTime @default(now())
+
+  wishlist  ClientWishlist    @relation(fields: [wishlistId], references: [id], onDelete: Cascade)
+  reference LibraryReference? @relation(fields: [libraryReferenceId], references: [id], onDelete: SetNull)
+
+  @@unique([wishlistId, imageId])
+  @@index([wishlistId])
+  @@index([themeId])
+  @@map("wishlist_items")
+}
+
+enum WishlistStatus {
+  DRAFT
+  SUBMITTED
 }
 
 enum CatalogStatus {

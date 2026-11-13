@@ -360,12 +360,24 @@
     { id: 'projects', label: 'Projects', href: 'projects.html' },
     { id: 'catalog', label: 'Catalog', href: 'catalog.html' },
     { id: 'library', label: 'De’vyora Library', href: 'devyora-library.html' },
+    { id: 'clients', label: 'Client Wishlists', href: 'client-wishlists.html', owner: true },
   ];
+
+
+  /* THE CLIENT REGISTER IS THE STUDIO'S OWN BOOK -- owner and admin
+     only, the same gate the server puts on it. Hidden from everyone
+     else rather than shown and then refused. */
+  function navItemAllowed(item) {
+    if (!item.owner) return true;
+    const user = (window.CasaApi && CasaApi.getCachedUser) ? CasaApi.getCachedUser() : null;
+    const role = String((user && user.role) || '').toUpperCase();
+    return role === 'OWNER' || role === 'ADMIN';
+  }
 
   function renderNav() {
     const nav = document.getElementById('navItems');
     nav.innerHTML = '';
-    NAV_ITEMS.forEach((item) => {
+    NAV_ITEMS.filter(navItemAllowed).forEach((item) => {
       const btn = document.createElement('button');
       btn.className = 'nav-item' + (item.id === 'library' ? ' active' : '');
       btn.innerHTML = '<span class="lbl">' + item.label + '</span>';
@@ -782,6 +794,13 @@
           + '<p class="step-sub" style="margin-top:9px">Rooms kept by theme. Pick one and it '
           + 'becomes the reference: the catalog is searched for the tiles that match it, and '
           + 'the scene is generated from that same picture.</p>'
+          // THE SHOWROOM TABLET'S WAY IN to the client's own side of
+          // the library. A client has no login, so their screens are
+          // a separate page (wishlist.html) rather than this one in a
+          // different mood -- this is only the door to it, opened in
+          // its own tab so the staff view is still here afterwards.
+          + '<a class="lib-back mono" href="wishlist.html" target="_blank" rel="noopener" '
+          + 'id="libClientWishlist">OPEN THE CLIENT WISHLIST →</a>'
           + '</div>'
           + totalsHtml()
           + '</div>'
