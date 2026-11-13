@@ -20,6 +20,7 @@ import jobsRoutes from './jobs.routes';
 import aiVisualizationRoutes from './ai_visualization.routes';
 import libraryRoutes from './library.routes';
 import clientWishlistRoutes from './clientWishlist.routes';
+import sampleRoutes from './sample.routes';
 
 const router = Router();
 
@@ -27,6 +28,7 @@ router.use('/health', healthRoutes);
 router.use('/auth', authRoutes);
 router.use('/library', libraryRoutes);
 router.use('/client-wishlists', clientWishlistRoutes);
+router.use('/samples', sampleRoutes);
 router.use('/users', userRoutes);
 router.use('/roles', roleRoutes);
 router.use('/dashboard', dashboardRoutes);

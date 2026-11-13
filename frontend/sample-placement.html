@@ -1,0 +1,1362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sample Placement · De’vyora</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500&family=DM+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root { --ink:#1A1512; --paper:#F7F3EC; --card:#fff; --line:#E7DFD1; --sand:#F4EEE3; --gold:#8A6A3B; --gold-light:#E3C58E; --muted:#8B8177; --text2:#5B5147; --err:#A8552A; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--paper); color:var(--ink); font-family:'DM Sans',sans-serif; -webkit-font-smoothing:antialiased; }
+  a { color:var(--gold); text-decoration:none; }
+  .mono { font-family:'JetBrains Mono',monospace; }
+  .serif { font-family:'Playfair Display',serif; }
+  button { font-family:inherit; }
+  img { max-width:100%; }
+  ::-webkit-scrollbar { width:10px; height:10px; }
+  ::-webkit-scrollbar-thumb { background:#DED3C0; border-radius:8px; border:3px solid var(--paper); }
+  @keyframes fadeIn { from{opacity:0} to{opacity:1} }
+  @keyframes rise { from{opacity:0; transform:translateY(14px)} to{opacity:1; transform:none} }
+  @keyframes shimmer { from{background-position:180% 0} to{background-position:-180% 0} }
+
+  .layout { display:flex; height:100vh; overflow:hidden; }
+  .sidebar { flex:0 0 auto; width:266px; height:100%; display:flex; flex-direction:column; background:#FCFAF6; border-right:1px solid var(--line); overflow-y:auto; }
+  .brand { padding:26px 22px 20px; border-bottom:1px solid #EFE7DA; }
+  .brand .name { font-size:19px; letter-spacing:.14em; line-height:1.1; }
+  .brand-row { display:flex; align-items:center; gap:10px; }
+  .brand-mark { flex:0 0 auto; width:30px; height:30px; border-radius:7px; display:block; }
+  /* The name div carries BOTH .brand and .name, so .brand's own
+     22px padding was landing on it a second time and pushing the
+     wordmark 22px clear of the mark, and .brand's border-bottom was
+     drawing a second rule under it. Inside the row it is a wordmark,
+     not a block: it shrink-wraps, carries neither, and the only space
+     between the two is the gap above. */
+  .brand-row .name { padding:0; border-bottom:none; flex:0 0 auto; }
+  .brand .tag { font-size:9px; letter-spacing:.22em; color:var(--muted); margin-top:6px; }
+  .nav { padding:20px 14px 8px; }
+  .nav-label { font-size:9.5px; letter-spacing:.2em; color:#A0968A; padding:0 8px 10px; }
+  .nav-items { display:flex; flex-direction:column; gap:3px; }
+  .nav-item { display:flex; align-items:center; gap:12px; width:100%; min-height:48px; padding:0 12px; border:none; border-radius:12px; cursor:pointer; font-size:14px; text-align:left; background:transparent; color:#4A4038; }
+  .nav-item.active { background:var(--ink); color:#FBF6EC; font-weight:500; }
+  .nav-item:not(.active):hover { background:#F1EADD; }
+  .nav-item .lbl { flex:1; }
+  .nav-item .badge { font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:.08em; padding:3px 7px; border-radius:100px; background:#F1EADD; color:var(--muted); }
+  .nav-item.active .badge { background:rgba(227,197,142,.2); color:var(--gold-light); }
+  .profile-wrap { margin-top:auto; padding:18px 16px; }
+  .profile { display:flex; align-items:center; gap:11px; padding:12px; background:var(--sand); border:1px solid var(--line); border-radius:14px; }
+  .avatar-circle { width:36px; height:36px; flex:0 0 auto; border-radius:50%; background:linear-gradient(150deg,#C09A5E,var(--gold)); display:grid; place-items:center; font-size:13px; color:#FFF8EC; }
+  .profile .name { font-size:13px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .profile .role { font-size:9px; letter-spacing:.14em; color:var(--muted); }
+  .logout-btn { margin-top:10px; width:100%; padding:8px; background:transparent; border:1px solid var(--line); border-radius:10px; cursor:pointer; font-size:10px; letter-spacing:.1em; color:var(--muted); }
+  .logout-btn:hover { color:var(--ink); border-color:#C7B393; }
+
+  .main { flex:1; min-width:0; overflow-y:auto; padding:clamp(22px,3vw,44px); }
+  .stage { animation:fadeIn .35s ease both; max-width:1100px; }
+
+  .eyebrow { display:flex; align-items:center; gap:9px; font-size:10px; letter-spacing:.2em; color:var(--gold); }
+  .dot { width:6px; height:6px; border-radius:50%; background:var(--gold); flex:0 0 auto; }
+
+  .step-h1 { font-weight:600; font-size:clamp(24px,2.9vw,34px); line-height:1.12; margin:10px 0 0; }
+  .step-sub { font-size:14px; line-height:1.6; color:var(--text2); max-width:640px; margin:9px 0 0; }
+
+  /* ── the three views ── */
+  .tabs { display:flex; gap:7px; flex-wrap:wrap; margin-top:20px; }
+  .tab { min-height:44px; padding:0 16px; background:var(--card); border:1px solid var(--line);
+         border-radius:11px; cursor:pointer; font-size:10px; letter-spacing:.14em; color:var(--text2); }
+  .tab:hover { border-color:#C7B393; color:var(--ink); }
+  .tab.on { background:var(--ink); border-color:var(--ink); color:#FBF6EC; }
+  .tab .n { font-family:'JetBrains Mono',monospace; font-size:10px; margin-left:7px; opacity:.75; }
+
+  /* ── the scan box, always to hand ── */
+  .scan { display:flex; gap:9px; align-items:flex-end; flex-wrap:wrap; margin-top:16px;
+          padding:14px 15px; background:var(--card); border:1px solid var(--line); border-radius:14px; }
+  .scan .f { flex:1 1 260px; }
+  .scan-hint { font-size:9.5px; line-height:1.6; color:var(--muted); flex-basis:100%; margin:0; }
+
+  .f { display:flex; flex-direction:column; gap:5px; min-width:0; }
+  .f-k { font-size:8px; letter-spacing:.18em; color:var(--muted); }
+  .f-k .req { color:var(--err); }
+  .f-in { min-height:44px; padding:0 12px; font:inherit; font-size:13.5px; color:var(--ink);
+          background:var(--paper); border:1px solid var(--line); border-radius:10px; width:100%; }
+  .f-in:focus-visible { outline:2px solid var(--gold); outline-offset:2px; }
+  .f-in.bad { border-color:var(--err); }
+  textarea.f-in { min-height:68px; padding:10px 12px; resize:vertical; }
+  .f-err { font-size:11px; color:var(--err); min-height:15px; }
+
+  .filters { display:flex; flex-wrap:wrap; gap:11px; align-items:flex-end; margin-top:16px;
+             padding:14px 15px; background:var(--card); border:1px solid var(--line); border-radius:14px; }
+  .filters .f { flex:1 1 150px; }
+  .filters .f.grow { flex:2 1 230px; }
+
+  .btn { min-height:44px; padding:0 16px; background:var(--card); border:1px solid var(--line);
+         border-radius:11px; cursor:pointer; font-size:9.5px; letter-spacing:.14em; color:var(--ink); }
+  .btn:hover:not(:disabled) { background:#EFE7DA; border-color:#C7B393; }
+  .btn:disabled { opacity:.5; cursor:not-allowed; }
+  .btn.dark { background:var(--ink); border-color:var(--ink); color:#FBF6EC; }
+  .btn.dark:hover:not(:disabled) { background:#33291F; }
+  .btn.bad { border-color:var(--err); color:var(--err); }
+  .btn.bad:hover:not(:disabled) { background:#FBF0EA; }
+  .btn-row { display:flex; gap:9px; flex-wrap:wrap; margin-top:16px; }
+
+  .tally { display:flex; align-items:baseline; gap:10px; margin-top:16px; }
+  .tally .n { font-family:'Playfair Display',serif; font-size:25px; line-height:1; }
+  .tally .k { font-size:9px; letter-spacing:.18em; color:var(--muted); }
+
+  /* ── the sample cards ── */
+  .cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(285px,1fr)); gap:16px; margin-top:14px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:16px; overflow:hidden;
+          text-align:left; padding:0; cursor:pointer; color:inherit; font:inherit; width:100%;
+          transition:transform .16s ease, box-shadow .16s ease, border-color .16s ease; }
+  .card:hover { transform:translateY(-2px); border-color:var(--gold-light);
+                box-shadow:0 12px 26px -14px rgba(26,21,18,.26); }
+  .card.removed { opacity:.72; }
+  /* display:block, EXPLICITLY. These are spans inside a button, and
+     aspect-ratio has no effect on an inline box: the photograph sized
+     itself to its natural height and swallowed the card. */
+  .card-shot { display:block; aspect-ratio:16/10; background:var(--sand);
+               position:relative; overflow:hidden; }
+  .card-shot img { width:100%; height:100%; object-fit:cover; display:block; }
+  .card-shot.failed::after { content:'NO PHOTOGRAPH'; position:absolute; inset:0; display:grid;
+                             place-items:center; font-family:'JetBrains Mono',monospace;
+                             font-size:7.5px; letter-spacing:.14em; color:var(--muted); }
+  .card-body { display:block; padding:13px 15px 14px; }
+  .card-prod { display:block; font-size:14px; line-height:1.3;
+               overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .card-col { display:block; font-size:11px; color:var(--text2); margin-top:3px; }
+  .card-ids { display:flex; flex-wrap:wrap; gap:7px; margin-top:10px; }
+  .card-where { display:flex; align-items:baseline; gap:8px; margin-top:11px;
+                padding-top:11px; border-top:1px solid var(--line); }
+  .card-where .at { font-family:'JetBrains Mono',monospace; font-size:13px; }
+  .card-where .k { font-size:8px; letter-spacing:.16em; color:var(--muted); }
+  .card-date { display:block; font-size:9px; letter-spacing:.1em; color:var(--muted); margin-top:8px; }
+
+  .tag { font-size:7.5px; letter-spacing:.14em; padding:4px 8px; border-radius:99px;
+         background:var(--sand); border:1px solid var(--line); color:var(--muted);
+         display:inline-flex; align-items:center; gap:5px; }
+  .tag.mono { font-family:'JetBrains Mono',monospace; letter-spacing:.06em; font-size:9px; }
+  .tag.gold { color:var(--gold); border-color:var(--gold-light); }
+  .tag.ink { background:var(--ink); border-color:var(--ink); color:#FBF6EC; }
+  .tag.warn { color:var(--err); border-color:var(--err); }
+  .tag.ok { color:#6E5228; border-color:#6E5228; }
+
+  .pager { display:flex; align-items:center; justify-content:space-between; gap:12px;
+           margin-top:16px; flex-wrap:wrap; }
+  .pager .txt { font-size:9.5px; letter-spacing:.14em; color:var(--muted); }
+
+  /* ── registering ── */
+  .picker { display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:12px; margin-top:14px; }
+  .prod { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:13px 15px;
+          text-align:left; cursor:pointer; color:inherit; font:inherit; }
+  .prod:hover { border-color:var(--gold-light); background:#FBF7F0; }
+  .prod.on { border-color:var(--gold); box-shadow:0 0 0 1px var(--gold); }
+  /* display:block, for the fourth time on this page: a <button> of
+     <span>s lays them out inline, and the name and the code ran
+     together into "Carrara StatuarioKAJ-CS-600". */
+  .prod .n { display:block; font-size:13.5px; line-height:1.3; }
+  .prod .c { display:block; font-family:'JetBrains Mono',monospace; font-size:9.5px;
+             color:var(--muted); margin-top:5px; }
+
+  .colours { margin-top:16px; border:1px solid var(--line); border-radius:16px; overflow:hidden;
+             background:var(--card); }
+  .crow { display:grid; grid-template-columns:minmax(0,1.4fr) minmax(0,1.5fr) minmax(0,1.5fr) 118px;
+          gap:12px; align-items:center; padding:13px 15px; border-top:1px solid var(--line); }
+  .crow:first-child { border-top:none; }
+  .crow.head { background:var(--sand); font-size:8px; letter-spacing:.16em; color:var(--muted); }
+  .crow .cname { font-size:14px; }
+  .crow .ccode { font-family:'JetBrains Mono',monospace; font-size:9.5px; color:var(--muted); margin-top:4px; }
+  .crow .cell { min-width:0; display:flex; flex-direction:column; gap:4px; }
+  .pick-wrap { display:flex; gap:9px; align-items:center; }
+  .pick-wrap input[type="checkbox"] { width:19px; height:19px; accent-color:var(--gold); flex:0 0 auto; }
+
+  .panel { margin-top:16px; padding:16px; background:var(--card); border:1px solid var(--line);
+           border-radius:16px; }
+  .panel h3 { font-weight:600; font-size:16px; margin:0 0 4px; }
+  .panel p { font-size:13px; line-height:1.6; color:var(--text2); margin:0; }
+  .panel-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px; margin-top:14px; }
+
+  /* ── one sample ── */
+  .facts { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:1px;
+           margin-top:18px; background:var(--line); border:1px solid var(--line);
+           border-radius:16px; overflow:hidden; }
+  .fact { background:var(--card); padding:13px 15px; }
+  .fact .k { font-size:8px; letter-spacing:.18em; color:var(--muted); }
+  .fact .v { font-size:15px; margin-top:6px; overflow-wrap:anywhere; }
+  .fact .v.mono { font-family:'JetBrains Mono',monospace; font-size:12.5px; }
+
+  .shot-big { margin-top:16px; border:1px solid var(--line); border-radius:16px; overflow:hidden;
+              background:var(--sand); max-width:420px; }
+  .shot-big img { width:100%; display:block; }
+
+  .trail { margin-top:16px; border:1px solid var(--line); border-radius:16px; overflow:hidden;
+           background:var(--card); }
+  .tr { display:flex; gap:13px; align-items:flex-start; padding:14px 15px; border-top:1px solid var(--line); }
+  .tr:first-child { border-top:none; }
+  .tr-dot { width:9px; height:9px; border-radius:50%; background:var(--line); flex:0 0 auto; margin-top:6px; }
+  .tr.now .tr-dot { background:var(--gold); box-shadow:0 0 0 3px rgba(227,197,142,.3); }
+  .tr.pending .tr-dot { background:var(--err); }
+  /* display:block again -- these are spans, and inline they ran the
+     placement and its date together on one line. */
+  .tr-b { flex:1; min-width:0; display:flex; flex-direction:column; gap:5px; }
+  .tr-t { display:block; font-size:13.5px; line-height:1.4; }
+  .tr-t .at { font-family:'JetBrains Mono',monospace; }
+  .tr-m { display:block; font-size:10px; line-height:1.6; color:var(--muted); }
+
+  /* ── approvals ── */
+  .req { padding:15px; border-top:1px solid var(--line); }
+  .req:first-child { border-top:none; }
+  .req-top { display:flex; gap:12px; align-items:baseline; flex-wrap:wrap; }
+  .req-move { font-family:'JetBrains Mono',monospace; font-size:14px; }
+  .req-m { font-size:10.5px; line-height:1.7; color:var(--muted); margin-top:7px; }
+
+  .note { margin-top:18px; padding:24px; background:var(--card); border:1px solid var(--line);
+          border-radius:16px; text-align:center; }
+  .note.bad { border-color:var(--err); }
+  .note h3 { font-weight:600; font-size:18px; margin:0; }
+  .note p { max-width:460px; margin:9px auto 0; font-size:13.5px; line-height:1.6; color:var(--text2); }
+  .skel { height:58px; border-top:1px solid var(--line);
+          background:linear-gradient(100deg,var(--sand) 18%,#FBF7F0 38%,var(--sand) 58%) 0 0/220% 100%;
+          animation:shimmer 1.5s linear infinite; }
+  .skel-cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(285px,1fr)); gap:16px; margin-top:14px; }
+  .skel-card { aspect-ratio:16/10; border-radius:16px; border:1px solid var(--line);
+               background:linear-gradient(100deg,var(--sand) 18%,#FBF7F0 38%,var(--sand) 58%) 0 0/220% 100%;
+               animation:shimmer 1.5s linear infinite; }
+
+  .lib-back { display:inline-flex; align-items:center; gap:7px; background:none; border:none; padding:0;
+              color:var(--muted); font-size:9.5px; letter-spacing:.14em; cursor:pointer; }
+  .lib-back:hover { color:var(--ink); }
+
+  .toast { position:fixed; left:50%; bottom:24px; transform:translateX(-50%); z-index:60;
+           max-width:min(560px,92vw); padding:13px 18px; background:var(--ink); color:#FBF6EC;
+           border-radius:12px; font-size:13px; line-height:1.5; display:none;
+           box-shadow:0 18px 40px -18px rgba(26,21,18,.7); }
+  .toast.on { display:block; animation:rise .24s ease both; }
+  .toast.bad { background:#6B2E14; }
+
+  @media (max-width:860px) {
+    .crow { grid-template-columns:minmax(0,1fr) minmax(0,1fr); }
+    .crow .head-hide { display:none; }
+    .crow.head { display:none; }
+  }
+</style>
+<link rel="stylesheet" href="assets/sidebar.css">
+</head>
+<body>
+
+<div class="layout">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-row"><img class="brand-mark" src="img/devyora-mark.webp" alt="" width="30" height="30" decoding="async"><div class="brand name serif">DE’VYORA</div></div>
+      <div class="brand tag mono">STUDIO &amp; SHOWROOM</div>
+    </div>
+    <div class="nav">
+      <div class="nav-label mono">WORKSPACE</div>
+      <nav class="nav-items" id="navItems"></nav>
+    </div>
+    <div class="profile-wrap">
+      <div class="profile">
+        <div class="avatar-circle serif" id="profileInitials">··</div>
+        <div style="min-width:0; display:flex; flex-direction:column; gap:2px">
+          <span class="name" id="profileName">—</span>
+          <span class="role mono" id="profileRole">—</span>
+        </div>
+      </div>
+      <button class="logout-btn mono" id="logoutBtn">SIGN OUT</button>
+    </div>
+  </aside>
+
+  <main class="main" id="mainContent"></main>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="assets/api-client.js"></script>
+<script src="assets/sidebar.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  const NAV_ITEMS = [
+    { id: 'dashboard', label: 'Dashboard', href: 'dashboard.html' },
+    { id: 'moodboard', label: 'Mood Board', href: 'mood-board.html' },
+    { id: 'generations', label: 'Recent Generations', href: 'recent-generations.html' },
+    { id: 'projects', label: 'Projects', href: 'projects.html' },
+    { id: 'catalog', label: 'Catalog', href: 'catalog.html' },
+    { id: 'library', label: 'De’vyora Library', href: 'devyora-library.html' },
+    { id: 'samples', label: 'Sample Placement', href: 'sample-placement.html' },
+    { id: 'clients', label: 'Client Wishlists', href: 'client-wishlists.html', owner: true },
+  ];
+
+  function navItemAllowed(item) {
+    if (!item.owner) return true;
+    const user = (window.CasaApi && CasaApi.getCachedUser) ? CasaApi.getCachedUser() : null;
+    const role = String((user && user.role) || '').toUpperCase();
+    return role === 'OWNER' || role === 'ADMIN';
+  }
+
+  function renderNav() {
+    const nav = document.getElementById('navItems');
+    nav.innerHTML = '';
+    NAV_ITEMS.filter(navItemAllowed).forEach((item) => {
+      const btn = document.createElement('button');
+      btn.className = 'nav-item' + (item.id === 'samples' ? ' active' : '');
+      btn.innerHTML = '<span class="lbl">' + item.label + '</span>';
+      btn.addEventListener('click', () => { location.href = item.href; });
+      nav.appendChild(btn);
+    });
+  }
+
+  function escapeHtml(value) {
+    return String(value == null ? '' : value).replace(/[&<>"']/g, (c) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    })[c]);
+  }
+
+  /* A card-sized picture for a card-sized frame; the stored url is
+     Drive's thumbnail at w1000. Read-time only. */
+  function atWidth(url, width) {
+    if (!url) return '';
+    return String(url).replace(/([?&]sz=)w\d+/, '$1w' + width);
+  }
+
+  function when(value, withTime) {
+    if (!value) return '—';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return '—';
+    const date = d.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' });
+    return withTime
+      ? date + ' ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+      : date;
+  }
+
+  let toastTimer = null;
+  function toast(message, bad) {
+    const el = document.getElementById('toast');
+    el.textContent = message;
+    el.classList.toggle('bad', !!bad);
+    el.classList.add('on');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('on'), 5600);
+  }
+
+  const AVAILABILITY_LABEL = {
+    PHYSICAL_SAMPLE: 'Physical sample available',
+    CATALOGUE_ONLY: 'Catalogue only',
+    CUTOUT_ONLY: 'Cutout only',
+    NOT_AVAILABLE: 'Not available',
+  };
+
+  const state = {
+    view: 'samples',          // samples | sample | register | approvals
+    canWrite: false,
+    canApprove: false,
+
+    // the listing
+    rows: [], total: 0, page: 1, pages: 1, limit: 24,
+    filters: { q: '', cassetteNo: '', panelNo: '', availability: 'ALL', status: 'ACTIVE' },
+    loading: false, error: '',
+
+    // one sample
+    sample: null, sampleLoading: false, sampleError: '',
+    moveOpen: false, removeOpen: false, busy: false,
+
+    // registering
+    products: [], productQuery: '', productsLoading: false,
+    product: null, colours: [], coloursLoading: false, coloursError: '',
+    picked: {},               // colourId -> { cassetteNo, panelNo }
+    shared: { cassetteNo: '', panelNo: '', note: '' },
+    photo: null, confirming: false,
+
+    // approvals
+    requests: [], requestsLoading: false, requestsError: '', pendingCount: null,
+  };
+
+  const main = document.getElementById('mainContent');
+
+  // ── shared bits ─────────────────────────────────────────────────
+
+  function header() {
+    return '<div class="mono" style="font-size:10px; letter-spacing:.18em; color:var(--muted)">'
+      + 'PHYSICAL SAMPLES</div>'
+      + '<h1 class="step-h1 serif">Sample Placement</h1>'
+      + '<p class="step-sub">Which colours the showroom actually holds, where each piece sits, '
+      + 'and every move it has ever made.</p>'
+      + '<div class="tabs">'
+      + tab('samples', 'ALL SAMPLES')
+      + (state.canWrite ? tab('register', 'REGISTER A SAMPLE') : '')
+      + (state.canApprove ? tab('approvals', 'APPROVALS',
+        state.pendingCount === null ? '' : String(state.pendingCount)) : '')
+      + '</div>';
+  }
+
+  function tab(id, label, count) {
+    return '<button type="button" class="tab mono' + (state.view === id ? ' on' : '')
+      + '" data-tab="' + id + '">' + label
+      + (count ? '<span class="n">' + escapeHtml(count) + '</span>' : '') + '</button>';
+  }
+
+  function availabilityTag(value) {
+    const label = AVAILABILITY_LABEL[value] || value;
+    const cls = value === 'PHYSICAL_SAMPLE' ? ' ok' : value === 'NOT_AVAILABLE' ? '' : ' gold';
+    return '<span class="tag' + cls + ' mono">' + escapeHtml(label.toUpperCase()) + '</span>';
+  }
+
+  // ── the listing ─────────────────────────────────────────────────
+
+  function samplesHtml() {
+    const f = state.filters;
+
+    const scan = '<div class="scan">'
+      + '<div class="f"><label class="f-k mono" for="scanBox">SCAN OR TYPE A BARCODE</label>'
+      + '<input class="f-in mono" id="scanBox" type="search" placeholder="DVS-…" autocomplete="off"></div>'
+      + '<button class="btn dark mono" id="scanBtn">FIND SAMPLE</button>'
+      + '<p class="scan-hint mono">A HANDHELD SCANNER TYPES INTO THIS BOX AND PRESSES ENTER. '
+      + 'A BARCODE THAT IS NOT OURS SAYS SO.</p>'
+      + '</div>';
+
+    const filters = '<div class="filters">'
+      + '<div class="f grow"><label class="f-k mono" for="fq">SEARCH</label>'
+      + '<input class="f-in" id="fq" type="search" value="' + escapeHtml(f.q) + '" placeholder="Carrara, Orange, S-4K7QP…"></div>'
+      + '<div class="f"><label class="f-k mono" for="fcass">CASSETTE</label>'
+      + '<input class="f-in" id="fcass" type="search" value="' + escapeHtml(f.cassetteNo) + '" placeholder="C01"></div>'
+      + '<div class="f"><label class="f-k mono" for="fpanel">PANEL</label>'
+      + '<input class="f-in" id="fpanel" type="search" value="' + escapeHtml(f.panelNo) + '" placeholder="P05"></div>'
+      + '<div class="f"><label class="f-k mono" for="favail">AVAILABILITY</label>'
+      + '<select class="f-in" id="favail">'
+      + ['ALL'].concat(Object.keys(AVAILABILITY_LABEL)).map((v) => '<option value="' + v + '"'
+        + (f.availability === v ? ' selected' : '') + '>'
+        + (v === 'ALL' ? 'All' : AVAILABILITY_LABEL[v]) + '</option>').join('')
+      + '</select></div>'
+      + '<div class="f"><label class="f-k mono" for="fstatus">ON THE SHELF</label>'
+      + '<select class="f-in" id="fstatus">'
+      + [['ACTIVE', 'On a panel'], ['REMOVED', 'Removed'], ['ALL', 'Both']].map(([v, l]) =>
+        '<option value="' + v + '"' + (f.status === v ? ' selected' : '') + '>' + l + '</option>').join('')
+      + '</select></div>'
+      + '<button class="btn mono" id="fclear">CLEAR</button>'
+      + '</div>';
+
+    if (state.loading) {
+      return header() + scan + filters + '<div class="skel-cards">'
+        + Array.from({ length: 6 }, () => '<div class="skel-card"></div>').join('') + '</div>';
+    }
+
+    if (state.error) {
+      return header() + scan + filters
+        + '<div class="note bad"><h3 class="serif">The samples could not be read</h3>'
+        + '<p>' + escapeHtml(state.error) + '</p>'
+        + '<div class="btn-row" style="justify-content:center"><button class="btn mono" id="retryBtn">TRY AGAIN</button></div></div>';
+    }
+
+    if (!state.rows.length) {
+      const filtered = f.q || f.cassetteNo || f.panelNo || f.availability !== 'ALL' || f.status !== 'ACTIVE';
+      return header() + scan + filters
+        + '<div class="note"><h3 class="serif">'
+        + (filtered ? 'Nothing matches that' : 'No samples registered yet')
+        + '</h3><p>' + (filtered
+          ? 'Try a different product, colour, cassette or panel — or clear the filters.'
+          : 'Register a colour’s physical sample and it will appear here, with its barcode and '
+            + 'where it sits.')
+        + '</p></div>';
+    }
+
+    return header() + scan + filters
+      + '<div class="tally"><span class="n">' + state.total + '</span>'
+      + '<span class="k mono">' + (state.total === 1 ? 'SAMPLE' : 'SAMPLES') + '</span></div>'
+      + '<div class="cards">' + state.rows.map(cardHtml).join('') + '</div>'
+      + '<div class="pager"><span class="txt mono">PAGE ' + state.page + ' OF ' + state.pages + '</span>'
+      + '<span class="btn-row" style="margin-top:0">'
+      + '<button class="btn mono" id="prevBtn"' + (state.page <= 1 ? ' disabled' : '') + '>← PREVIOUS</button>'
+      + '<button class="btn mono" id="nextBtn"' + (state.page >= state.pages ? ' disabled' : '') + '>NEXT →</button>'
+      + '</span></div>';
+  }
+
+  function cardHtml(row) {
+    return '<button type="button" class="card' + (row.status === 'REMOVED' ? ' removed' : '')
+      + '" data-open="' + escapeHtml(row.id) + '">'
+      + '<span class="card-shot">'
+      + (row.photoUrl
+        ? '<img src="' + escapeHtml(atWidth(row.photoUrl, 600)) + '" alt="'
+          + escapeHtml(row.colour.colourName) + '" loading="lazy" decoding="async"'
+          + ' onerror="this.style.display=\'none\';this.parentNode.classList.add(\'failed\')">'
+        : '')
+      + '</span>'
+      + '<span class="card-body">'
+      + '<span class="card-prod">' + escapeHtml(row.product.name) + '</span>'
+      + '<span class="card-col">' + escapeHtml(row.colour.colourName)
+      + (row.colour.colourCode ? ' · ' + escapeHtml(row.colour.colourCode) : '') + '</span>'
+      + '<span class="card-ids">'
+      + '<span class="tag mono">' + escapeHtml(row.sampleId) + '</span>'
+      + '<span class="tag mono">' + escapeHtml(row.barcode) + '</span>'
+      + (row.status === 'REMOVED' ? '<span class="tag warn mono">REMOVED</span>' : '')
+      + (row.pendingRequest ? '<span class="tag warn mono">MOVE PENDING</span>' : '')
+      + '</span>'
+      /* THE CURRENT PLACEMENT ONLY. A pending move is flagged above but
+         never shown here -- that is the whole reason approval exists. */
+      + '<span class="card-where">'
+      + (row.placement
+        ? '<span class="at">' + escapeHtml(row.placement.cassetteNo) + ' / '
+          + escapeHtml(row.placement.panelNo) + '</span><span class="k mono">CASSETTE / PANEL</span>'
+        : '<span class="k mono">ON NO PANEL</span>')
+      + '</span>'
+      + '<span class="card-date mono">REGISTERED ' + escapeHtml(when(row.registeredAt)).toUpperCase()
+      + '</span>'
+      + '</span></button>';
+  }
+
+  // ── one sample ──────────────────────────────────────────────────
+
+  function sampleHtml() {
+    const back = '<button type="button" class="lib-back mono" id="backBtn">← ALL SAMPLES</button>';
+
+    if (state.sampleLoading) {
+      return back + '<div class="trail" style="margin-top:18px">'
+        + Array.from({ length: 4 }, () => '<div class="skel"></div>').join('') + '</div>';
+    }
+    if (state.sampleError || !state.sample) {
+      return back + '<div class="note bad"><h3 class="serif">This sample could not be opened</h3>'
+        + '<p>' + escapeHtml(state.sampleError || 'No such sample.') + '</p></div>';
+    }
+
+    const s = state.sample;
+    const product = s.colour.product;
+
+    return back
+      + '<div class="mono" style="font-size:10px; letter-spacing:.18em; color:var(--muted); margin-top:10px">'
+      + escapeHtml(s.sampleId) + ' · ' + escapeHtml(s.barcode) + '</div>'
+      + '<h1 class="step-h1 serif">' + escapeHtml(product.name) + ' · '
+      + escapeHtml(s.colour.colourName) + '</h1>'
+      + '<div class="btn-row" style="margin-top:12px">'
+      + availabilityTag(s.colour.availability)
+      + (s.status === 'REMOVED' ? '<span class="tag warn mono">REMOVED FROM THE SHELF</span>' : '')
+      + (s.pendingRequest ? '<span class="tag warn mono">'
+        + (s.pendingRequest.requestType === 'REMOVAL' ? 'REMOVAL' : 'MOVE') + ' AWAITING APPROVAL</span>' : '')
+      + '</div>'
+
+      + '<div class="facts">'
+      + '<div class="fact"><div class="k mono">CURRENT CASSETTE</div><div class="v mono">'
+      + escapeHtml(s.currentPlacement ? s.currentPlacement.cassetteNo : '—') + '</div></div>'
+      + '<div class="fact"><div class="k mono">CURRENT PANEL</div><div class="v mono">'
+      + escapeHtml(s.currentPlacement ? s.currentPlacement.panelNo : '—') + '</div></div>'
+      + '<div class="fact"><div class="k mono">SAMPLE ID</div><div class="v mono">'
+      + escapeHtml(s.sampleId) + '</div></div>'
+      + '<div class="fact"><div class="k mono">BARCODE</div><div class="v mono">'
+      + escapeHtml(s.barcode) + '</div></div>'
+      + '<div class="fact"><div class="k mono">REGISTERED</div><div class="v">'
+      + escapeHtml(when(s.registeredAt, true)) + '</div></div>'
+      + '<div class="fact"><div class="k mono">LAST MOVED</div><div class="v">'
+      + escapeHtml(when(s.lastMovementAt, true)) + '</div></div>'
+      + '<div class="fact"><div class="k mono">PRODUCT CODE</div><div class="v mono">'
+      + escapeHtml(product.productCode || '—') + '</div></div>'
+      + '</div>'
+
+      + (s.photoUrl
+        ? '<div class="shot-big"><img src="' + escapeHtml(atWidth(s.photoUrl, 900))
+          + '" alt="' + escapeHtml(s.colour.colourName) + '" loading="lazy"></div>'
+        : '<div class="note"><p>No photograph was stored for this sample.</p></div>')
+
+      + actionsHtml(s)
+      + trailHtml(s);
+  }
+
+  function actionsHtml(s) {
+    if (s.pendingRequest) {
+      return '<div class="panel"><h3 class="serif">A change is already waiting</h3>'
+        + '<p>'
+        + (s.pendingRequest.requestType === 'REMOVAL'
+          ? 'Somebody has asked for this sample to come off the shelf. '
+          : 'Somebody has asked for this sample to move to '
+            + escapeHtml(s.pendingRequest.to.cassetteNo) + ' / '
+            + escapeHtml(s.pendingRequest.to.panelNo) + '. ')
+        + 'Until an Admin decides it, the sample stays exactly where it is. '
+        + 'Only one change can wait at a time.</p></div>';
+    }
+
+    if (state.moveOpen) {
+      return '<div class="panel"><h3 class="serif">Where should it go?</h3>'
+        + '<p>The sample keeps its id and its barcode. Nothing moves until an Admin approves it.</p>'
+        + '<div class="panel-grid">'
+        + '<div class="f"><label class="f-k mono" for="mCass">NEW CASSETTE <span class="req">*</span></label>'
+        + '<input class="f-in" id="mCass" placeholder="C02"></div>'
+        + '<div class="f"><label class="f-k mono" for="mPanel">NEW PANEL <span class="req">*</span></label>'
+        + '<input class="f-in" id="mPanel" placeholder="P03"></div>'
+        + '</div>'
+        + '<div class="f" style="margin-top:12px"><label class="f-k mono" for="mReason">REASON</label>'
+        + '<textarea class="f-in" id="mReason" placeholder="Moved for the window display"></textarea></div>'
+        + '<div class="f-err" id="mErr"></div>'
+        + '<div class="btn-row">'
+        + '<button class="btn dark mono" id="mSend"' + (state.busy ? ' disabled' : '') + '>'
+        + (state.busy ? 'SENDING…' : 'SUBMIT MOVE REQUEST') + '</button>'
+        + '<button class="btn mono" id="mCancel">CANCEL</button>'
+        + '</div></div>';
+    }
+
+    if (state.removeOpen) {
+      return '<div class="panel"><h3 class="serif">Take it off the shelf?</h3>'
+        + '<p>Nothing is deleted. The sample keeps its id, its barcode and its whole history, and '
+        + 'can be put back later through an approved placement request. An Admin has to agree '
+        + 'first.</p>'
+        + '<div class="f" style="margin-top:12px"><label class="f-k mono" for="rReason">REASON</label>'
+        + '<textarea class="f-in" id="rReason" placeholder="The piece has cracked"></textarea></div>'
+        + '<div class="f-err" id="rErr"></div>'
+        + '<div class="btn-row">'
+        + '<button class="btn bad mono" id="rSend"' + (state.busy ? ' disabled' : '') + '>'
+        + (state.busy ? 'SENDING…' : 'SUBMIT REMOVAL REQUEST') + '</button>'
+        + '<button class="btn mono" id="rCancel">CANCEL</button>'
+        + '</div></div>';
+    }
+
+    return '<div class="btn-row">'
+      + '<button class="btn dark mono" id="moveBtn">'
+      + (s.status === 'REMOVED' ? 'PUT IT BACK ON A PANEL' : 'MOVE THIS SAMPLE') + '</button>'
+      + (s.status === 'REMOVED' ? ''
+        : '<button class="btn bad mono" id="removeBtn">REMOVE FROM THE SHELF</button>')
+      + '</div>';
+  }
+
+  /**
+   * THE FOUR THINGS, VISIBLY DIFFERENT.
+   *
+   * Current active placement, a pending request, the previous approved
+   * placements, and the refusals. A pending request is drawn as a
+   * request and never as a location.
+   */
+  function trailHtml(s) {
+    const rows = [];
+
+    if (s.pendingRequest) {
+      const p = s.pendingRequest;
+      rows.push({
+        cls: 'pending',
+        title: p.requestType === 'REMOVAL'
+          ? 'Removal requested'
+          : 'Move requested to <span class="at">' + escapeHtml(p.to.cassetteNo) + ' / '
+            + escapeHtml(p.to.panelNo) + '</span>',
+        meta: 'AWAITING ADMIN APPROVAL · ASKED ' + when(p.requestedAt, true).toUpperCase()
+          + ' · THE SAMPLE HAS NOT MOVED',
+      });
+    }
+
+    s.placements.forEach((p) => {
+      rows.push({
+        cls: p.isCurrent ? 'now' : '',
+        title: (p.isCurrent ? 'Currently at ' : 'Was at ')
+          + '<span class="at">' + escapeHtml(p.cassetteNo) + ' / ' + escapeHtml(p.panelNo) + '</span>',
+        meta: [
+          (p.isCurrent ? 'PLACED ' : 'FROM ') + when(p.placedAt, true).toUpperCase(),
+          p.endedAt ? 'UNTIL ' + when(p.endedAt, true).toUpperCase() : '',
+          p.placedBy ? 'BY ' + String(p.placedBy.name).toUpperCase() : '',
+          p.note ? '· ' + escapeHtml(p.note) : '',
+        ].filter(Boolean).join(' · '),
+      });
+    });
+
+    s.requests.filter((r) => r.status === 'REJECTED').forEach((r) => {
+      rows.push({
+        cls: '',
+        title: 'Refused: ' + (r.requestType === 'REMOVAL'
+          ? 'removal'
+          : 'move to <span class="at">' + escapeHtml(r.to.cassetteNo) + ' / '
+            + escapeHtml(r.to.panelNo) + '</span>'),
+        meta: [
+          'ASKED ' + when(r.requestedAt, true).toUpperCase(),
+          r.requestedBy ? 'BY ' + String(r.requestedBy.name).toUpperCase() : '',
+          r.decidedBy ? '· REFUSED BY ' + String(r.decidedBy.name).toUpperCase() : '',
+          r.decisionNote ? '· ' + escapeHtml(r.decisionNote) : '',
+        ].filter(Boolean).join(' · '),
+      });
+    });
+
+    return '<div class="mono" style="font-size:9px; letter-spacing:.18em; color:var(--muted); margin-top:22px">'
+      + 'MOVEMENT HISTORY</div>'
+      + '<div class="trail">'
+      + rows.map((r) => '<div class="tr ' + r.cls + '"><span class="tr-dot"></span>'
+        + '<span class="tr-b"><span class="tr-t">' + r.title + '</span>'
+        + '<span class="tr-m mono">' + r.meta + '</span></span></div>').join('')
+      + '</div>';
+  }
+
+  // ── registering ─────────────────────────────────────────────────
+
+  function registerHtml() {
+    const picker = '<div class="f" style="max-width:420px; margin-top:18px">'
+      + '<label class="f-k mono" for="pq">FIND A PRODUCT IN THE ERP CATALOGUE</label>'
+      + '<input class="f-in" id="pq" type="search" value="' + escapeHtml(state.productQuery)
+      + '" placeholder="Carrara, KAJ-CS-600…"></div>'
+      + (state.productsLoading
+        ? '<div class="skel-cards">' + Array.from({ length: 4 }, () => '<div class="skel-card" style="aspect-ratio:4/1"></div>').join('') + '</div>'
+        : '<div class="picker">' + state.products.map((p) =>
+          '<button type="button" class="prod' + (state.product && state.product.id === p.id ? ' on' : '')
+          + '" data-product="' + escapeHtml(p.id) + '">'
+          + '<span class="n">' + escapeHtml(p.name) + '</span>'
+          + '<span class="c">' + escapeHtml(p.productCode || p.id.slice(0, 10)) + '</span>'
+          + '</button>').join('') + '</div>')
+      + (!state.productsLoading && !state.products.length
+        ? '<div class="note"><p>No product in the ERP catalogue matches that.</p></div>' : '');
+
+    if (!state.product) return header() + picker;
+
+    return header() + picker + coloursHtml();
+  }
+
+  function coloursHtml() {
+    if (state.coloursLoading) {
+      return '<div class="colours">' + Array.from({ length: 4 }, () => '<div class="skel"></div>').join('') + '</div>';
+    }
+    if (state.coloursError) {
+      return '<div class="note bad"><h3 class="serif">The colours could not be read</h3>'
+        + '<p>' + escapeHtml(state.coloursError) + '</p></div>';
+    }
+
+    const pickedIds = Object.keys(state.picked);
+
+    return '<div class="mono" style="font-size:9px; letter-spacing:.18em; color:var(--muted); margin-top:20px">'
+      + 'COLOURS OF ' + escapeHtml(String(state.product.name).toUpperCase()) + '</div>'
+      + '<div class="colours">'
+      + '<div class="crow head mono"><span>COLOUR</span><span>WHAT THE STUDIO HOLDS</span>'
+      + '<span>WHERE IT SITS</span><span>REGISTER</span></div>'
+      + (state.colours.length
+        ? state.colours.map(colourRowHtml).join('')
+        : '<div class="req"><p class="step-sub" style="margin:0">This product has no colours on '
+          + 'record yet. Add one below.</p></div>')
+      + '</div>'
+
+      + '<div class="panel"><h3 class="serif">Add a colour</h3>'
+      + '<p>The ERP is the source of truth for the product; this records a colour of it and how '
+      + 'the showroom holds that colour.</p>'
+      + '<div class="panel-grid">'
+      + '<div class="f"><label class="f-k mono" for="ncName">COLOUR NAME <span class="req">*</span></label>'
+      + '<input class="f-in" id="ncName" placeholder="Orange"></div>'
+      + '<div class="f"><label class="f-k mono" for="ncCode">COLOUR CODE</label>'
+      + '<input class="f-in" id="ncCode" placeholder="ORG-04"></div>'
+      + '<div class="f"><label class="f-k mono" for="ncAvail">AVAILABILITY</label>'
+      + '<select class="f-in" id="ncAvail">'
+      + Object.keys(AVAILABILITY_LABEL).filter((k) => k !== 'PHYSICAL_SAMPLE')
+        .map((k) => '<option value="' + k + '">' + AVAILABILITY_LABEL[k] + '</option>').join('')
+      + '</select></div>'
+      + '</div>'
+      + '<p class="scan-hint mono" style="margin-top:10px">A COLOUR BECOMES “PHYSICAL SAMPLE '
+      + 'AVAILABLE” BY REGISTERING ITS PIECE ABOVE — CASSETTE, PANEL AND PHOTOGRAPH TOGETHER.</p>'
+      + '<div class="btn-row"><button class="btn mono" id="ncAdd">ADD COLOUR</button></div></div>'
+
+      + bulkHtml(pickedIds);
+  }
+
+  function colourRowHtml(colour) {
+    const registered = !!colour.sample;
+    const picked = Object.prototype.hasOwnProperty.call(state.picked, colour.id);
+
+    return '<div class="crow">'
+      + '<span class="cell"><span class="cname">' + escapeHtml(colour.colourName) + '</span>'
+      + (colour.colourCode ? '<span class="ccode">' + escapeHtml(colour.colourCode) + '</span>' : '')
+      + '</span>'
+
+      + '<span class="cell">' + availabilityTag(colour.availability)
+      + (registered
+        ? '<span class="ccode">' + escapeHtml(colour.sample.sampleId) + ' · '
+          + escapeHtml(colour.sample.barcode) + '</span>'
+        : '')
+      + '</span>'
+
+      + '<span class="cell">'
+      + (registered && colour.sample.placement
+        ? '<span class="cname mono">' + escapeHtml(colour.sample.placement.cassetteNo) + ' / '
+          + escapeHtml(colour.sample.placement.panelNo) + '</span>'
+        : '<span class="ccode">—</span>')
+      + '</span>'
+
+      + '<span class="cell">'
+      + (registered
+        ? '<span class="tag ok mono">REGISTERED</span>'
+        : '<span class="pick-wrap"><input type="checkbox" id="pick-' + escapeHtml(colour.id) + '"'
+          + ' data-pick="' + escapeHtml(colour.id) + '"' + (picked ? ' checked' : '') + '>'
+          + '<label class="f-k mono" for="pick-' + escapeHtml(colour.id) + '">SELECT</label></span>')
+      + '</span>'
+      + '</div>';
+  }
+
+  /**
+   * DUPLICATE FOR OTHER COLOURS -- the shared cassette and panel, with
+   * each chosen colour reviewable and correctable before saving.
+   */
+  function bulkHtml(pickedIds) {
+    if (!pickedIds.length) {
+      return '<div class="panel"><h3 class="serif">Register physical samples</h3>'
+        + '<p>Tick the colours whose pieces are on a panel. One cassette, one panel and one '
+        + 'photograph are shared across them — and each colour still gets its own sample id and '
+        + 'its own barcode. Any colour that actually went elsewhere can be corrected before '
+        + 'saving.</p></div>';
+    }
+
+    const chosen = state.colours.filter((c) => pickedIds.indexOf(c.id) !== -1);
+
+    return '<div class="panel"><h3 class="serif">Register '
+      + pickedIds.length + (pickedIds.length === 1 ? ' colour' : ' colours') + '</h3>'
+      + '<p>Each one gets its own sample id and its own barcode. Nothing is merged.</p>'
+      + '<div class="panel-grid">'
+      + '<div class="f"><label class="f-k mono" for="bCass">CASSETTE NUMBER <span class="req">*</span></label>'
+      + '<input class="f-in" id="bCass" value="' + escapeHtml(state.shared.cassetteNo) + '" placeholder="C01"></div>'
+      + '<div class="f"><label class="f-k mono" for="bPanel">EXACT PANEL NUMBER <span class="req">*</span></label>'
+      + '<input class="f-in" id="bPanel" value="' + escapeHtml(state.shared.panelNo) + '" placeholder="P05"></div>'
+      + '<div class="f"><label class="f-k mono" for="bPhoto">PHOTOGRAPH <span class="req">*</span></label>'
+      + '<input class="f-in" id="bPhoto" type="file" accept="image/jpeg,image/png,image/webp"></div>'
+      + '</div>'
+      + '<div class="f" style="margin-top:12px"><label class="f-k mono" for="bNote">NOTE</label>'
+      + '<input class="f-in" id="bNote" value="' + escapeHtml(state.shared.note) + '" placeholder="Top row, left to right"></div>'
+
+      + '<div class="mono" style="font-size:8px; letter-spacing:.18em; color:var(--muted); margin-top:18px">'
+      + 'REVIEW BEFORE SAVING</div>'
+      + '<div class="colours" style="margin-top:8px">'
+      + chosen.map((c) => '<div class="crow">'
+        + '<span class="cell"><span class="cname">' + escapeHtml(c.colourName) + '</span></span>'
+        + '<span class="cell"><label class="f-k mono" for="oc-' + escapeHtml(c.id) + '">CASSETTE</label>'
+        + '<input class="f-in" id="oc-' + escapeHtml(c.id) + '" data-override-cass="' + escapeHtml(c.id)
+        + '" value="' + escapeHtml(state.picked[c.id].cassetteNo || '') + '" placeholder="same"></span>'
+        + '<span class="cell"><label class="f-k mono" for="op-' + escapeHtml(c.id) + '">PANEL</label>'
+        + '<input class="f-in" id="op-' + escapeHtml(c.id) + '" data-override-panel="' + escapeHtml(c.id)
+        + '" value="' + escapeHtml(state.picked[c.id].panelNo || '') + '" placeholder="same"></span>'
+        + '<span class="cell"><button type="button" class="btn mono" data-unpick="' + escapeHtml(c.id)
+        + '">REMOVE</button></span>'
+        + '</div>').join('')
+      + '</div>'
+
+      + '<div class="f-err" id="bErr"></div>'
+      + (state.confirming
+        ? '<div class="panel" style="background:var(--sand)"><h3 class="serif">Register these '
+          + pickedIds.length + '?</h3><p>Each colour gets its own independent sample record, id '
+          + 'and barcode. This cannot be undone from here — a sample comes off the shelf only '
+          + 'through an approved removal request.</p>'
+          + '<div class="btn-row"><button class="btn dark mono" id="bYes"'
+          + (state.busy ? ' disabled' : '') + '>'
+          + (state.busy ? 'REGISTERING…' : 'YES, REGISTER THEM') + '</button>'
+          + '<button class="btn mono" id="bNo">NOT YET</button></div></div>'
+        : '<div class="btn-row"><button class="btn dark mono" id="bSave">REGISTER SAMPLES</button>'
+          + '</div>')
+      + '</div>';
+  }
+
+  // ── approvals ───────────────────────────────────────────────────
+
+  function approvalsHtml() {
+    if (state.requestsLoading) {
+      return header() + '<div class="trail">'
+        + Array.from({ length: 3 }, () => '<div class="skel"></div>').join('') + '</div>';
+    }
+    if (state.requestsError) {
+      return header() + '<div class="note bad"><h3 class="serif">The queue could not be read</h3>'
+        + '<p>' + escapeHtml(state.requestsError) + '</p></div>';
+    }
+    if (!state.requests.length) {
+      return header() + '<div class="note"><h3 class="serif">Nothing waiting</h3>'
+        + '<p>When a member of staff asks to move or remove a sample, it waits here for you.</p>'
+        + '</div>';
+    }
+
+    return header()
+      + '<div class="tally"><span class="n">' + state.requests.length + '</span>'
+      + '<span class="k mono">AWAITING YOUR DECISION</span></div>'
+      + '<div class="trail">' + state.requests.map(requestHtml).join('') + '</div>';
+  }
+
+  function requestHtml(r) {
+    return '<div class="req">'
+      + '<div class="req-top">'
+      + '<span class="tag ' + (r.requestType === 'REMOVAL' ? 'warn' : 'gold') + ' mono">'
+      + (r.requestType === 'REMOVAL' ? 'REMOVAL' : 'MOVE') + '</span>'
+      + '<span class="req-move">'
+      + (r.from ? escapeHtml(r.from.cassetteNo) + ' / ' + escapeHtml(r.from.panelNo) : '—')
+      + ' → ' + (r.to ? escapeHtml(r.to.cassetteNo) + ' / ' + escapeHtml(r.to.panelNo) : 'off the shelf')
+      + '</span>'
+      + '<span class="tag mono">' + escapeHtml(r.sampleId) + '</span>'
+      + '</div>'
+      + '<div class="req-m mono">'
+      + escapeHtml(r.product.name).toUpperCase() + ' · ' + escapeHtml(r.colourName).toUpperCase()
+      + ' · ' + escapeHtml(r.barcode)
+      + '<br>ASKED BY ' + escapeHtml(String(r.requestedBy ? r.requestedBy.name : 'someone').toUpperCase())
+      + ' ON ' + escapeHtml(when(r.requestedAt, true)).toUpperCase()
+      + (r.reason ? '<br>REASON: ' + escapeHtml(r.reason) : '')
+      + '</div>'
+      + '<div class="f" style="margin-top:11px"><label class="f-k mono" for="note-'
+      + escapeHtml(r.id) + '">NOTE · REQUIRED TO REFUSE</label>'
+      + '<input class="f-in" id="note-' + escapeHtml(r.id) + '" placeholder="Why?"></div>'
+      + '<div class="btn-row">'
+      + '<button class="btn dark mono" data-approve="' + escapeHtml(r.id) + '"'
+      + (state.busy ? ' disabled' : '') + '>APPROVE</button>'
+      + '<button class="btn bad mono" data-reject="' + escapeHtml(r.id) + '"'
+      + (state.busy ? ' disabled' : '') + '>REFUSE</button>'
+      + '<button class="btn mono" data-open="' + escapeHtml(r.physicalSampleId) + '">'
+      + 'VIEW SAMPLE &amp; HISTORY</button>'
+      + '</div></div>';
+  }
+
+  // ── rendering ───────────────────────────────────────────────────
+
+  function render() {
+    main.innerHTML = '<div class="stage">'
+      + (state.view === 'samples' ? samplesHtml()
+        : state.view === 'sample' ? sampleHtml()
+          : state.view === 'register' ? registerHtml()
+            : approvalsHtml())
+      + '</div>';
+    wire();
+  }
+
+  function bind(id, event, handler) {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener(event, () => handler(el));
+  }
+
+  /**
+   * ONE TIMER FOR ALL THE FILTER BOXES, so clearing them can cancel it.
+   *
+   * Each box used to carry its own debounce, holding the element it was
+   * created with. Clearing re-renders the row, but an in-flight timer
+   * then fired against the OLD element -- whose value was still what had
+   * been typed -- and put the filter straight back, so Clear looked
+   * broken for the length of one keystroke.
+   */
+  let filterTimer = null;
+  function queueFilter(fn) {
+    clearTimeout(filterTimer);
+    filterTimer = setTimeout(fn, 300);
+  }
+  function cancelFilterQueue() {
+    clearTimeout(filterTimer);
+    filterTimer = null;
+  }
+
+  function wire() {
+    // the scan box
+    const scanBox = document.getElementById('scanBox');
+    if (scanBox) {
+      scanBox.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') { event.preventDefault(); doScan(); }
+      });
+    }
+    bind('scanBtn', 'click', doScan);
+
+    // the listing's filters
+    [['fq', 'q'], ['fcass', 'cassetteNo'], ['fpanel', 'panelNo']].forEach(([id, key]) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener('input', () => queueFilter(() => {
+        // Read the live box, not the one this closure was made with.
+        const live = document.getElementById(id);
+        state.filters[key] = live ? live.value.trim() : '';
+        state.page = 1;
+        load(id);
+      }));
+    });
+    bind('favail', 'change', (el) => { state.filters.availability = el.value; state.page = 1; load(); });
+    bind('fstatus', 'change', (el) => { state.filters.status = el.value; state.page = 1; load(); });
+    bind('fclear', 'click', () => {
+      cancelFilterQueue();
+      state.filters = { q: '', cassetteNo: '', panelNo: '', availability: 'ALL', status: 'ACTIVE' };
+      state.page = 1; load();
+    });
+    bind('prevBtn', 'click', () => { state.page = Math.max(1, state.page - 1); load(); });
+    bind('nextBtn', 'click', () => { state.page = Math.min(state.pages, state.page + 1); load(); });
+    bind('retryBtn', 'click', () => load());
+
+    // one sample
+    bind('backBtn', 'click', () => {
+      state.view = 'samples'; state.sample = null; state.moveOpen = false; state.removeOpen = false;
+      render();
+    });
+    bind('moveBtn', 'click', () => { state.moveOpen = true; state.removeOpen = false; render(); });
+    bind('removeBtn', 'click', () => { state.removeOpen = true; state.moveOpen = false; render(); });
+    bind('mCancel', 'click', () => { state.moveOpen = false; render(); });
+    bind('rCancel', 'click', () => { state.removeOpen = false; render(); });
+    bind('mSend', 'click', sendMove);
+    bind('rSend', 'click', sendRemoval);
+
+    // registering
+    const pq = document.getElementById('pq');
+    if (pq) {
+      pq.addEventListener('input', () => queueFilter(() => {
+        const live = document.getElementById('pq');
+        state.productQuery = live ? live.value.trim() : '';
+        loadProducts('pq');
+      }));
+    }
+    bind('ncAdd', 'click', addColour);
+    bind('bCass', 'input', (el) => { state.shared.cassetteNo = el.value; });
+    bind('bPanel', 'input', (el) => { state.shared.panelNo = el.value; });
+    bind('bNote', 'input', (el) => { state.shared.note = el.value; });
+    bind('bPhoto', 'change', (el) => { state.photo = el.files && el.files[0] ? el.files[0] : null; });
+    bind('bSave', 'click', () => {
+      const err = document.getElementById('bErr');
+      if (!state.shared.cassetteNo.trim() || !state.shared.panelNo.trim()) {
+        err.textContent = 'A cassette number and an exact panel number are both required.';
+        return;
+      }
+      if (!state.photo) {
+        err.textContent = 'A photograph of the sample is required.';
+        return;
+      }
+      err.textContent = '';
+      state.confirming = true;
+      render();
+    });
+    bind('bNo', 'click', () => { state.confirming = false; render(); });
+    bind('bYes', 'click', saveBulk);
+
+    document.querySelectorAll('[data-override-cass]').forEach((el) => {
+      el.addEventListener('input', () => {
+        const id = el.getAttribute('data-override-cass');
+        if (state.picked[id]) state.picked[id].cassetteNo = el.value;
+      });
+    });
+    document.querySelectorAll('[data-override-panel]').forEach((el) => {
+      el.addEventListener('input', () => {
+        const id = el.getAttribute('data-override-panel');
+        if (state.picked[id]) state.picked[id].panelNo = el.value;
+      });
+    });
+  }
+
+  // one listener for everything that is a simple click
+  document.addEventListener('click', (event) => {
+    const t = event.target.closest('[data-tab]');
+    if (t) { goTab(t.getAttribute('data-tab')); return; }
+
+    const open = event.target.closest('[data-open]');
+    if (open) { openSample(open.getAttribute('data-open')); return; }
+
+    const prod = event.target.closest('[data-product]');
+    if (prod) { chooseProduct(prod.getAttribute('data-product')); return; }
+
+    const unpick = event.target.closest('[data-unpick]');
+    if (unpick) {
+      delete state.picked[unpick.getAttribute('data-unpick')];
+      state.confirming = false;
+      render();
+      return;
+    }
+
+    const approve = event.target.closest('[data-approve]');
+    if (approve) { decide(approve.getAttribute('data-approve'), true); return; }
+
+    const reject = event.target.closest('[data-reject]');
+    if (reject) { decide(reject.getAttribute('data-reject'), false); }
+  });
+
+  document.addEventListener('change', (event) => {
+    const pick = event.target.closest('[data-pick]');
+    if (!pick) return;
+    const id = pick.getAttribute('data-pick');
+    if (pick.checked) state.picked[id] = { cassetteNo: '', panelNo: '' };
+    else delete state.picked[id];
+    state.confirming = false;
+    render();
+  });
+
+  // ── moving about ────────────────────────────────────────────────
+
+  function goTab(id) {
+    state.view = id;
+    state.confirming = false;
+    if (id === 'samples') load();
+    else if (id === 'register') { render(); if (!state.products.length) loadProducts(); }
+    else if (id === 'approvals') loadRequests();
+  }
+
+  async function load(keepFocus) {
+    state.view = 'samples';
+    state.loading = true;
+    state.error = '';
+    render();
+
+    try {
+      const data = await CasaApi.samples.list({
+        q: state.filters.q,
+        cassetteNo: state.filters.cassetteNo,
+        panelNo: state.filters.panelNo,
+        availability: state.filters.availability,
+        status: state.filters.status,
+        page: state.page,
+        limit: state.limit,
+      });
+      state.rows = data.samples || [];
+      state.total = data.total || 0;
+      state.pages = data.pages || 1;
+      state.page = data.page || 1;
+    } catch (err) {
+      state.rows = [];
+      state.error = (err && err.message) || 'The samples could not be read.';
+    }
+
+    state.loading = false;
+    render();
+
+    if (keepFocus) {
+      const el = document.getElementById(keepFocus);
+      if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
+    }
+  }
+
+  async function doScan() {
+    const box = document.getElementById('scanBox');
+    const code = box ? box.value.trim() : '';
+    if (!code) return;
+
+    try {
+      const data = await CasaApi.samples.byBarcode(code);
+      if (box) box.value = '';
+      await openSample(data.sample.id);
+    } catch (err) {
+      toast((err && err.message) || 'That barcode could not be found.', true);
+    }
+  }
+
+  async function openSample(id) {
+    state.view = 'sample';
+    state.sample = null;
+    state.sampleError = '';
+    state.sampleLoading = true;
+    state.moveOpen = false;
+    state.removeOpen = false;
+    render();
+    window.scrollTo(0, 0);
+
+    try {
+      state.sample = await CasaApi.samples.history(id);
+    } catch (err) {
+      state.sampleError = (err && err.message) || 'That sample could not be opened.';
+    }
+    state.sampleLoading = false;
+    render();
+  }
+
+  async function sendMove() {
+    const cass = document.getElementById('mCass');
+    const panel = document.getElementById('mPanel');
+    const err = document.getElementById('mErr');
+    if (!cass.value.trim() || !panel.value.trim()) {
+      err.textContent = 'Both a cassette and a panel are needed.';
+      return;
+    }
+
+    /* READ EVERYTHING BEFORE REDRAWING. render() replaces the panel, so
+       a field fetched after it is a fresh, empty one -- which is how the
+       reason was being dropped on every request. */
+    const body = {
+      cassetteNo: cass.value.trim(),
+      panelNo: panel.value.trim(),
+      reason: ((document.getElementById('mReason') || {}).value || '').trim(),
+    };
+
+    state.busy = true;
+    render();
+    try {
+      await CasaApi.samples.requestMove(state.sample.id, body);
+      state.busy = false;
+      state.moveOpen = false;
+      toast('The move is waiting for an Admin. The sample has not moved yet.');
+      await openSample(state.sample.id);
+    } catch (e) {
+      state.busy = false;
+      render();
+      toast((e && e.message) || 'The request could not be sent.', true);
+    }
+  }
+
+  async function sendRemoval() {
+    // Read before redrawing, for the same reason as sendMove.
+    const body = {
+      reason: ((document.getElementById('rReason') || {}).value || '').trim(),
+    };
+
+    state.busy = true;
+    render();
+    try {
+      await CasaApi.samples.requestRemoval(state.sample.id, body);
+      state.busy = false;
+      state.removeOpen = false;
+      toast('The removal is waiting for an Admin. Nothing has been deleted.');
+      await openSample(state.sample.id);
+    } catch (e) {
+      state.busy = false;
+      render();
+      toast((e && e.message) || 'The request could not be sent.', true);
+    }
+  }
+
+  // ── registering ─────────────────────────────────────────────────
+
+  async function loadProducts(keepFocus) {
+    state.productsLoading = true;
+    render();
+    try {
+      // The ERP's own product list -- nothing here keeps a copy of it.
+      const data = await CasaApi.tiles.list({ search: state.productQuery, limit: 24 });
+      state.products = data.tiles || data || [];
+    } catch (err) {
+      state.products = [];
+      toast((err && err.message) || 'The ERP catalogue could not be read.', true);
+    }
+    state.productsLoading = false;
+    render();
+    if (keepFocus) {
+      const el = document.getElementById(keepFocus);
+      if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
+    }
+  }
+
+  async function chooseProduct(id) {
+    state.product = state.products.find((p) => p.id === id) || null;
+    state.picked = {};
+    state.confirming = false;
+    if (!state.product) { render(); return; }
+
+    state.coloursLoading = true;
+    state.coloursError = '';
+    render();
+    try {
+      const data = await CasaApi.samples.colours(id);
+      state.colours = data.colours || [];
+      state.product = data.product || state.product;
+    } catch (err) {
+      state.colours = [];
+      state.coloursError = (err && err.message) || 'The colours could not be read.';
+    }
+    state.coloursLoading = false;
+    render();
+  }
+
+  async function addColour() {
+    const name = document.getElementById('ncName');
+    if (!name.value.trim()) { name.classList.add('bad'); return; }
+    name.classList.remove('bad');
+
+    try {
+      await CasaApi.samples.upsertColour({
+        productId: state.product.id,
+        colourName: name.value.trim(),
+        colourCode: (document.getElementById('ncCode') || {}).value || '',
+        availability: (document.getElementById('ncAvail') || {}).value || 'NOT_AVAILABLE',
+      });
+      toast('Colour saved.');
+      await chooseProduct(state.product.id);
+    } catch (err) {
+      toast((err && err.message) || 'The colour could not be saved.', true);
+    }
+  }
+
+  async function saveBulk() {
+    const colours = Object.entries(state.picked).map(([colourId, over]) => {
+      const entry = { colourId };
+      if (over.cassetteNo && over.cassetteNo.trim()) entry.cassetteNo = over.cassetteNo.trim();
+      if (over.panelNo && over.panelNo.trim()) entry.panelNo = over.panelNo.trim();
+      return entry;
+    });
+
+    state.busy = true;
+    render();
+    try {
+      const data = await CasaApi.samples.registerForColours({
+        productId: state.product.id,
+        cassetteNo: state.shared.cassetteNo.trim(),
+        panelNo: state.shared.panelNo.trim(),
+        note: state.shared.note,
+      }, colours, state.photo);
+
+      const made = data.registered.length;
+      const skipped = data.skipped.length;
+      toast(made + (made === 1 ? ' sample registered' : ' samples registered')
+        + (skipped ? ', ' + skipped + ' skipped: '
+          + data.skipped.map((s) => s.colourName + ' — ' + s.reason).join('; ') : '')
+        + (data.registered.some((r) => r.photoError)
+          ? ' · some photographs were not stored' : ''), skipped > 0);
+
+      state.busy = false;
+      state.confirming = false;
+      state.picked = {};
+      state.photo = null;
+      state.shared = { cassetteNo: '', panelNo: '', note: '' };
+      await chooseProduct(state.product.id);
+    } catch (err) {
+      state.busy = false;
+      state.confirming = false;
+      render();
+      toast((err && err.message) || 'They could not be registered.', true);
+    }
+  }
+
+  // ── approvals ───────────────────────────────────────────────────
+
+  async function loadRequests() {
+    state.view = 'approvals';
+    state.requestsLoading = true;
+    state.requestsError = '';
+    render();
+    try {
+      const data = await CasaApi.samples.requests({ status: 'PENDING', limit: 100 });
+      state.requests = data.requests || [];
+      state.pendingCount = data.total;
+    } catch (err) {
+      state.requests = [];
+      state.requestsError = (err && err.message) || 'The queue could not be read.';
+    }
+    state.requestsLoading = false;
+    render();
+  }
+
+  async function decide(id, approving) {
+    const note = (document.getElementById('note-' + id) || {}).value || '';
+    if (!approving && !note.trim()) {
+      toast('Refusing a request needs a reason — say why in the note.', true);
+      return;
+    }
+
+    state.busy = true;
+    render();
+    try {
+      if (approving) await CasaApi.samples.approve(id, note);
+      else await CasaApi.samples.reject(id, note);
+      toast(approving ? 'Approved. The new placement is now the current one.' : 'Refused. Nothing moved.');
+    } catch (err) {
+      toast((err && err.message) || 'That could not be decided.', true);
+    }
+    state.busy = false;
+    await loadRequests();
+  }
+
+  // ── opening the page ────────────────────────────────────────────
+
+  async function init() {
+    const user = await CasaApi.requireAuth();
+
+    document.getElementById('profileInitials').textContent = CasaApi.initials(user.name);
+    document.getElementById('profileName').textContent = user.name || user.email;
+    document.getElementById('profileRole').textContent = (user.role || '').toUpperCase();
+
+    renderNav();
+    document.getElementById('logoutBtn').addEventListener('click', async () => {
+      await CasaApi.auth.logout();
+      location.href = 'login.html';
+    });
+
+    /* WHAT THIS PERSON MAY DO, decided from the permissions the server
+       gave them -- and '*' counts, which is how the Owner is not locked
+       out of their own feature. The server checks all of it again. */
+    const perms = Array.isArray(user.permissions) ? user.permissions : [];
+    state.canWrite = perms.indexOf('*') !== -1 || perms.indexOf('tiles:write') !== -1;
+    const role = String(user.role || '').toUpperCase();
+    state.canApprove = role === 'OWNER' || role === 'ADMIN';
+
+    if (state.canApprove) {
+      CasaApi.samples.requests({ status: 'PENDING', limit: 1 })
+        .then((d) => { state.pendingCount = d.total; render(); })
+        .catch(() => { /* the tab simply shows no number */ });
+    }
+
+    load();
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>

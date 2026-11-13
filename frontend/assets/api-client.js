@@ -2000,6 +2000,144 @@
   };
 
   // ============================================================
+  // PHYSICAL SAMPLES (placement & barcode tracking — authenticated;
+  // used by sample-placement.html)
+  //
+  // The ERP's own product and colour data is read through the existing
+  // `tiles` namespace below; nothing here duplicates it. These calls
+  // only ever concern where a physical piece sits and how to find it.
+  // ============================================================
+
+  const samples = {
+    availability() {
+      return apiFetch('/samples/availability').then((r) => r.data);
+    },
+
+    /** One product's colours, with what the studio holds of each. */
+    colours(productId) {
+      return apiFetch(
+        `/samples/colours?productId=${encodeURIComponent(productId)}`
+      ).then((r) => r.data);
+    },
+
+    upsertColour(body) {
+      return apiFetch('/samples/colours', { method: 'POST', body }).then((r) => r.data);
+    },
+
+    /** Every registered sample, searchable and paged. */
+    list(params) {
+      const q = new URLSearchParams();
+      Object.entries(params || {}).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') q.set(key, value);
+      });
+      const query = q.toString();
+      return apiFetch(`/samples${query ? `?${query}` : ''}`).then((r) => r.data);
+    },
+
+    byBarcode(code) {
+      return apiFetch(`/samples/by-barcode/${encodeURIComponent(code)}`).then((r) => r.data);
+    },
+
+    history(id) {
+      return apiFetch(`/samples/${encodeURIComponent(id)}/history`).then((r) => r.data);
+    },
+
+    contents(cassetteNo, panelNo) {
+      const q = new URLSearchParams({ cassetteNo });
+      if (panelNo) q.set('panelNo', panelNo);
+      return apiFetch(`/samples/contents?${q.toString()}`).then((r) => r.data);
+    },
+
+    requestMove(id, body) {
+      return apiFetch(`/samples/${encodeURIComponent(id)}/relocation-requests`, {
+        method: 'POST', body,
+      }).then((r) => r.data);
+    },
+
+    requestRemoval(id, body) {
+      return apiFetch(`/samples/${encodeURIComponent(id)}/removal-requests`, {
+        method: 'POST', body,
+      }).then((r) => r.data);
+    },
+
+    requests(params) {
+      const q = new URLSearchParams();
+      Object.entries(params || {}).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') q.set(key, value);
+      });
+      const query = q.toString();
+      return apiFetch(`/samples/relocation-requests${query ? `?${query}` : ''}`).then((r) => r.data);
+    },
+
+    approve(id, note) {
+      return apiFetch(`/samples/relocation-requests/${encodeURIComponent(id)}/approve`, {
+        method: 'POST', body: { note: note || '' },
+      }).then((r) => r.data);
+    },
+
+    reject(id, note) {
+      return apiFetch(`/samples/relocation-requests/${encodeURIComponent(id)}/reject`, {
+        method: 'POST', body: { note },
+      }).then((r) => r.data);
+    },
+
+    /**
+     * Register the piece on the panel. Multipart, because it carries
+     * the photograph -- which the server requires, not merely accepts.
+     */
+    registerSample(colourId, fields, file) {
+      return postMultipart(
+        `/samples/colours/${encodeURIComponent(colourId)}/sample`,
+        fields,
+        file
+      );
+    },
+
+    /**
+     * DUPLICATE FOR OTHER COLOURS. One photograph, several samples --
+     * each still its own record with its own id and barcode.
+     */
+    registerForColours(fields, colours, file) {
+      return postMultipart(
+        '/samples/colours/bulk',
+        { ...fields, colours: JSON.stringify(colours) },
+        file
+      );
+    }
+  };
+
+  /**
+   * One multipart POST, with the access token attached.
+   *
+   * Written here rather than through apiFetch because apiFetch sets a
+   * JSON content type; a FormData body has to set its own boundary, so
+   * the header is left to the browser.
+   */
+  function postMultipart(path, fields, file) {
+    const form = new FormData();
+    Object.entries(fields || {}).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') form.append(key, value);
+    });
+    if (file) form.append('file', file, file.name || 'sample.png');
+
+    const token = getAccessToken();
+
+    return fetch(`${API_BASE}${path}`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      credentials: 'include',
+      body: form
+    }).then(async (res) => {
+      let body = {};
+      try { body = await res.json(); } catch { body = {}; }
+      if (!res.ok) {
+        throw new ApiError(body.message || `Request failed (${res.status})`, res.status, body);
+      }
+      return body.data;
+    });
+  }
+
+  // ============================================================
   // TILES (plain browse/search — Catalog page's Surface Archive.
   // Distinct from moodBoards.tiles() above, which resolves specific
   // ids referenced by a generated combination.)
@@ -4007,6 +4145,8 @@ const ai = {
     clientWishlist,
 
     clientRegister,
+
+    samples,
 
     tiles,
 

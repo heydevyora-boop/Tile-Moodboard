@@ -91,36 +91,39 @@ model ErrorLog {
 }
 
 model User {
-  id                         String               @id @default(cuid())
+  id                         String                   @id @default(cuid())
   name                       String
-  email                      String               @unique
+  email                      String                   @unique
   passwordHash               String
   roleId                     String
-  isActive                   Boolean              @default(true)
+  isActive                   Boolean                  @default(true)
   lastLoginAt                DateTime?
-  createdAt                  DateTime             @default(now())
-  updatedAt                  DateTime             @updatedAt
+  createdAt                  DateTime                 @default(now())
+  updatedAt                  DateTime                 @updatedAt
   activityLogs               ActivityLog[]
-  apiKeysCreated             ApiKey[]             @relation("ApiKeyCreatedBy")
-  catalogsUploaded           Catalog[]            @relation("CatalogUploadedBy")
-  favoritesCreated           CustomerFavorite[]   @relation("CustomerFavoriteCreatedBy")
-  customersCreated           Customer[]           @relation("CustomerCreatedBy")
-  designRulesUpdated         DesignRule[]         @relation("DesignRuleUpdatedBy")
+  apiKeysCreated             ApiKey[]                 @relation("ApiKeyCreatedBy")
+  catalogsUploaded           Catalog[]                @relation("CatalogUploadedBy")
+  favoritesCreated           CustomerFavorite[]       @relation("CustomerFavoriteCreatedBy")
+  customersCreated           Customer[]               @relation("CustomerCreatedBy")
+  designRulesUpdated         DesignRule[]             @relation("DesignRuleUpdatedBy")
   errorLogs                  ErrorLog[]
-  jobsCreated                Job[]                @relation("JobCreatedBy")
+  jobsCreated                Job[]                    @relation("JobCreatedBy")
   loginAttempts              LoginAttempt[]
-  moodBoardsCreated          MoodBoard[]          @relation("MoodBoardCreatedBy")
-  moodBoardSharesCreated     MoodBoardShare[]     @relation("MoodBoardShareCreatedBy")
+  moodBoardsCreated          MoodBoard[]              @relation("MoodBoardCreatedBy")
+  moodBoardSharesCreated     MoodBoardShare[]         @relation("MoodBoardShareCreatedBy")
   passwordResetTokens        PasswordResetToken[]
-  printBoardTemplatesCreated PrintBoardTemplate[] @relation("PrintBoardTemplateCreatedBy")
-  printBoardsCreated         PrintBoard[]         @relation("PrintBoardCreatedBy")
-  referenceImages            ReferenceImage[]     @relation("ReferenceImageUploadedBy")
+  printBoardTemplatesCreated PrintBoardTemplate[]     @relation("PrintBoardTemplateCreatedBy")
+  printBoardsCreated         PrintBoard[]             @relation("PrintBoardCreatedBy")
+  referenceImages            ReferenceImage[]         @relation("ReferenceImageUploadedBy")
   refreshTokens              RefreshToken[]
   webauthnCredentials        WebAuthnCredential[]
-  libraryReferences          LibraryReference[]   @relation("LibraryReferenceUploadedBy")
-  ruleVersionsCreated        RuleVersion[]        @relation("RuleVersionCreatedBy")
-  settingsUpdated            Setting[]            @relation("SettingUpdatedBy")
-  role                       Role                 @relation(fields: [roleId], references: [id])
+  libraryReferences          LibraryReference[]       @relation("LibraryReferenceUploadedBy")
+  ruleVersionsCreated        RuleVersion[]            @relation("RuleVersionCreatedBy")
+  settingsUpdated            Setting[]                @relation("SettingUpdatedBy")
+  samplePlacements           SamplePlacement[]        @relation("SamplePlacementPlacedBy")
+  placementRequestsRaised    PlacementChangeRequest[] @relation("PlacementRequestRequestedBy")
+  placementRequestsDecided   PlacementChangeRequest[] @relation("PlacementRequestDecidedBy")
+  role                       Role                     @relation(fields: [roleId], references: [id])
 
   @@index([roleId])
   @@map("users")
@@ -221,6 +224,7 @@ model Tile {
   imageBbox      Json?
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
+  colours        ProductColour[]
   favoritedBy    CustomerFavorite[]
   moodBoardTiles MoodBoardTile[]
   brand          Brand              @relation(fields: [brandId], references: [id], onDelete: Cascade)
@@ -753,4 +757,189 @@ enum JobStatus {
   PROCESSING
   COMPLETED
   FAILED
+}
+
+/// WHAT THE SHOWROOM ACTUALLY HOLDS OF ONE COLOUR.
+///
+/// A product comes in several colours and the studio holds each of them
+/// differently: a real cut piece on a panel, a page in a catalogue, a
+/// cutout, or nothing at all. That distinction is the whole point of
+/// this table -- "do we have it" is the first question a client asks,
+/// and before this it could only be answered by walking to the rack.
+///
+/// One row per product-and-colour, enforced by the unique constraint,
+/// so the same colour cannot be entered twice for one product.
+model ProductColour {
+  id           String             @id @default(cuid())
+  productId    String
+  /// As the studio names it -- "Heritage Green", "Carrara White".
+  colourName   String
+  /// The manufacturer's own code for it, where there is one.
+  colourCode   String?
+  availability SampleAvailability @default(NOT_AVAILABLE)
+  notes        String?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  product Tile            @relation(fields: [productId], references: [id], onDelete: Cascade)
+  /// At most one physical sample per colour. A colour that is
+  /// catalogue-only or a cutout has none, which is why this is optional
+  /// rather than a required pair.
+  sample  PhysicalSample?
+
+  @@unique([productId, colourName])
+  @@index([productId])
+  @@index([availability])
+  @@map("product_colours")
+}
+
+/// THE PIECE ON THE PANEL, AND HOW TO FIND IT AGAIN.
+///
+/// One per colour, with its OWN id and its OWN barcode -- never shared
+/// with the product or with a sibling colour, because a scanner reads
+/// one piece of tile and has to come back with that colour and no
+/// other.
+///
+/// Both ids are generated on the server and both are unique in the
+/// database rather than only in the code that writes them: two members
+/// of staff registering the same colour at the same moment is exactly
+/// the case an application-level check loses.
+model PhysicalSample {
+  id               String       @id @default(cuid())
+  colourId         String       @unique
+  /// The short one a person says out loud and writes on paper.
+  sampleId         String       @unique
+  /// The one a scanner reads. Separate from sampleId because it is
+  /// printed as a machine-readable symbol and never retyped.
+  barcode          String       @unique
+  /// The sample's own photograph, in the studio's Drive. Nullable
+  /// because Drive is allowed to fail without costing the studio the
+  /// sample record -- see sample.service.
+  photoDriveFileId String?
+  photoUrl         String?
+  /// ACTIVE or REMOVED. A removed sample is NOT deleted: its record,
+  /// its barcode and its whole movement history stay exactly as they
+  /// were, because "this used to be in cassette 4 until March" is still
+  /// worth knowing -- and because the same piece may be put back later
+  /// through an approved placement request.
+  status           SampleStatus @default(ACTIVE)
+  removedAt        DateTime?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  colour         ProductColour            @relation(fields: [colourId], references: [id], onDelete: Cascade)
+  placements     SamplePlacement[]
+  changeRequests PlacementChangeRequest[]
+
+  @@map("physical_samples")
+}
+
+/// WHERE A SAMPLE HAS BEEN, INCLUDING NOW.
+///
+/// A RELOCATION INSERTS A ROW; IT NEVER UPDATES ONE. That is what makes
+/// the history complete: the old placement keeps its cassette, its
+/// panel and the moment it stopped being current, so "where was this in
+/// March" has an answer. Only `isCurrent` moves, and only inside the
+/// same transaction that writes the new row.
+model SamplePlacement {
+  id               String    @id @default(cuid())
+  physicalSampleId String
+  cassetteNo       String
+  panelNo          String
+  /// Exactly one row per sample carries this. The service keeps it so
+  /// inside a transaction; nothing else writes it.
+  isCurrent        Boolean   @default(true)
+  placedAt         DateTime  @default(now())
+  /// When this placement stopped being the current one. Null while it
+  /// is current.
+  endedAt          DateTime?
+  placedById       String?
+  note             String?
+
+  sample   PhysicalSample @relation(fields: [physicalSampleId], references: [id], onDelete: Cascade)
+  placedBy User?          @relation("SamplePlacementPlacedBy", fields: [placedById], references: [id])
+
+  @@index([physicalSampleId, isCurrent])
+  @@index([cassetteNo, panelNo])
+  @@map("sample_placements")
+}
+
+/// A MOVE THAT HAS BEEN ASKED FOR BUT NOT YET ALLOWED.
+///
+/// Moving a sample that is already on a panel needs the Admin's
+/// agreement, so the asking and the doing are two separate things and
+/// this table is the gap between them. Nothing about the sample's
+/// placement changes while a request sits here; approving it is what
+/// writes the new placement, in one transaction, and rejecting it
+/// writes nothing at all but is still recorded.
+///
+/// A sample's FIRST placement needs no request -- there is nothing to
+/// disturb yet -- which is why this table is only ever reached for a
+/// sample that already sits somewhere.
+model PlacementChangeRequest {
+  id                String                 @id @default(cuid())
+  /// A MOVE asks for a new cassette and panel; a REMOVAL asks for the
+  /// sample to come off the shelf altogether. Both need the Admin's
+  /// agreement and both are kept forever, so they are one queue and
+  /// one history rather than two half-built ones.
+  requestType       PlacementRequestType   @default(MOVE)
+  physicalSampleId  String
+  /// The placement this asks to move away from, as it stood when the
+  /// request was made. Kept so a request raised against a placement
+  /// that has since changed can be told apart from a fresh one.
+  fromPlacementId   String?
+  fromCassetteNo    String?
+  fromPanelNo       String?
+  /// Null on a REMOVAL: it names nowhere to go.
+  toCassetteNo      String?
+  toPanelNo         String?
+  reason            String?
+  status            PlacementRequestStatus @default(PENDING)
+  requestedById     String?
+  requestedAt       DateTime               @default(now())
+  decidedById       String?
+  decidedAt         DateTime?
+  decisionNote      String?
+  /// The placement an approval created, once there is one.
+  resultPlacementId String?
+
+  sample      PhysicalSample @relation(fields: [physicalSampleId], references: [id], onDelete: Cascade)
+  requestedBy User?          @relation("PlacementRequestRequestedBy", fields: [requestedById], references: [id])
+  decidedBy   User?          @relation("PlacementRequestDecidedBy", fields: [decidedById], references: [id])
+
+  @@index([physicalSampleId])
+  @@index([status])
+  @@index([requestedAt])
+  @@map("placement_change_requests")
+}
+
+/// HOW THE STUDIO HOLDS ONE COLOUR. The four answers a client's
+/// question can have, and the reason ProductColour exists.
+enum SampleAvailability {
+  /// A real piece, on a panel, findable by its cassette and panel number.
+  PHYSICAL_SAMPLE
+  /// Only a page in a catalogue.
+  CATALOGUE_ONLY
+  /// Only a cutout.
+  CUTOUT_ONLY
+  /// Not held in any form.
+  NOT_AVAILABLE
+}
+
+enum PlacementRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum PlacementRequestType {
+  MOVE
+  REMOVAL
+}
+
+/// Whether the piece is still on a shelf. A REMOVED sample keeps its
+/// id, its barcode and its history -- nothing about it is deleted.
+enum SampleStatus {
+  ACTIVE
+  REMOVED
 }
