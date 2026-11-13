@@ -44,6 +44,10 @@ import {
   registerSampleSchema,
   relocationRequestSchema,
   decisionSchema,
+  rejectionSchema,
+  bulkRegisterSchema,
+  removalRequestSchema,
+  sampleListQuerySchema,
   coloursQuerySchema,
   requestsQuerySchema,
   contentsQuerySchema,
@@ -82,7 +86,27 @@ router.post(
   controller.registerSample,
 );
 
+/* DUPLICATE FOR OTHER COLOURS -- one photograph, several samples, each
+   still its own record. Declared before '/:id' like every other static
+   path here. */
+router.post(
+  '/colours/bulk',
+  requirePermission('tiles:write'),
+  uploadReferenceImage,
+  validate(bulkRegisterSchema),
+  controller.registerForColours,
+);
+
 router.get('/by-barcode/:code', requirePermission('tiles:read'), controller.byBarcode);
+
+/* The Sample Placement screen's own listing: searchable, filterable and
+   paged, because a showroom's sample library gets long. */
+router.get(
+  '/',
+  requirePermission('tiles:read'),
+  validate(sampleListQuerySchema, 'query'),
+  controller.listSamples,
+);
 
 router.get(
   '/contents',
@@ -108,7 +132,7 @@ router.post(
 router.post(
   '/relocation-requests/:id/reject',
   authorize('OWNER', 'ADMIN'),
-  validate(decisionSchema),
+  validate(rejectionSchema),
   controller.reject,
 );
 
@@ -123,6 +147,19 @@ router.post(
   controller.requestRelocation,
 );
 
-router.delete('/:id', requirePermission('tiles:write'), controller.removeSample);
+/* REMOVAL IS A REQUEST, NOT A DELETE.
+ *
+ * There is deliberately no DELETE route on a sample. Taking one off the
+ * shelf changes an existing placement, so it goes through the same
+ * Admin approval as a move -- and approving it marks the sample
+ * REMOVED while keeping its id, its barcode and its whole history, so
+ * the piece can be put back later through an ordinary placement
+ * request. Nothing in this module deletes a sample record. */
+router.post(
+  '/:id/removal-requests',
+  requirePermission('tiles:read'),
+  validate(removalRequestSchema),
+  controller.requestRemoval,
+);
 
 export default router;

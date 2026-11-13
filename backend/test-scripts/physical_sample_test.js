@@ -150,10 +150,10 @@ async function main() {
     return res.body?.data?.accessToken || res.body?.data?.tokens?.accessToken;
   }
 
-  async function registerSample(colourId, cassetteNo, panelNo, token, withPhoto) {
+  async function registerSample(colourId, cassetteNo, panelNo, token, withPhoto = true) {
     const form = new FormData();
-    form.set('cassetteNo', cassetteNo);
-    form.set('panelNo', panelNo);
+    if (cassetteNo !== null) form.set('cassetteNo', cassetteNo);
+    if (panelNo !== null) form.set('panelNo', panelNo);
     if (withPhoto) form.set('file', new Blob([PHOTO], { type: 'image/png' }), 'sample.png');
     const res = await fetch(`${base}/samples/colours/${colourId}/sample`, {
       method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form,
@@ -230,6 +230,19 @@ async function main() {
       && [...folders.values()].some((f) => f.name === 'Physical Samples' && f.parent === LIBRARY_FOLDER),
       { photoError: first.body?.data?.photoError });
 
+    /* ALL THREE OR NOTHING -- the spec's "do not allow physical sample
+       registration without these required fields". */
+    const noPhotoAtAll = await registerSample(made['Nero Marquina'].id, '4', 'A-99', adminJwt, false);
+    check('2c-i. a sample cannot be registered without a photograph',
+      noPhotoAtAll.status === 400 && /photograph/i.test(noPhotoAtAll.body?.message || ''),
+      noPhotoAtAll.body?.message);
+    const noCassette = await registerSample(made['Nero Marquina'].id, null, 'A-99', adminJwt);
+    check('2c-ii. ...nor without a cassette number', noCassette.status === 400, noCassette.status);
+    const noPanel = await registerSample(made['Nero Marquina'].id, '4', null, adminJwt);
+    check('2c-iii. ...nor without a panel number', noPanel.status === 400, noPanel.status);
+    check('2c-iv. ...and none of those attempts left anything behind',
+      (await prisma.physicalSample.count({ where: { colourId: made['Nero Marquina'].id } })) === 0);
+
     const second = await registerSample(made['Statuario Grey'].id, '4', 'A-13', adminJwt, true);
     check('2d. a second colour of the SAME product gets a different sample and barcode',
       second.body.data.sample.sampleId !== first.body.data.sample.sampleId
@@ -240,7 +253,7 @@ async function main() {
       (await prisma.productColour.findUnique({ where: { id: made['Carrara White'].id } })).availability
         === 'PHYSICAL_SAMPLE');
 
-    const again = await registerSample(made['Carrara White'].id, '5', 'B-1', adminJwt, false);
+    const again = await registerSample(made['Carrara White'].id, '5', 'B-1', adminJwt);
     check('2f. a colour cannot be given a second sample',
       again.status === 400 && /already has a registered sample/i.test(again.body?.message || ''),
       again.body?.message);
@@ -396,6 +409,56 @@ async function main() {
         note: rejected.body?.data?.request?.decisionNote,
       });
 
+    // ══ 5n. NOBODY DECIDES THEIR OWN REQUEST ═════════════════════
+    step('5n. nobody decides their own request');
+
+    const ownRequest = await api('POST', `/samples/${sampleId}/relocation-requests`,
+      { cassetteNo: '31', panelNo: 'Q-1', reason: 'Admin moving it themselves' }, adminJwt);
+    check('5n-i. an admin may raise a request', ownRequest.status === 201, ownRequest.body?.message);
+
+    const selfApprove = await api('POST',
+      `/samples/relocation-requests/${ownRequest.body.data.request.id}/approve`, {}, adminJwt);
+    check('5n-ii. ...but may NOT approve the one they raised',
+      selfApprove.status === 403 && /somebody else/i.test(selfApprove.body?.message || ''),
+      selfApprove.body?.message);
+
+    const selfReject = await api('POST',
+      `/samples/relocation-requests/${ownRequest.body.data.request.id}/reject`,
+      { note: 'changed my mind' }, adminJwt);
+    check('5n-iii. ...nor reject it', selfReject.status === 403, selfReject.status);
+
+    const stillThere = await prisma.samplePlacement.findFirst({
+      where: { physicalSampleId: sampleId, isCurrent: true },
+    });
+    check('5n-iv. ...and the sample has not moved',
+      stillThere.cassetteNo === '7' && stillThere.panelNo === 'C-3',
+      `${stillThere.cassetteNo}/${stillThere.panelNo}`);
+
+    // Somebody else decides it, which is the whole point.
+    const otherDecides = await api('POST',
+      `/samples/relocation-requests/${ownRequest.body.data.request.id}/approve`, {}, ownerJwt);
+    check('5n-v. somebody else can', otherDecides.status === 200, otherDecides.body?.message);
+
+    // Put it back where the later checks expect it.
+    const backRequest = await api('POST', `/samples/${sampleId}/relocation-requests`,
+      { cassetteNo: '7', panelNo: 'C-3' }, staffJwt);
+    await api('POST', `/samples/relocation-requests/${backRequest.body.data.request.id}/approve`,
+      {}, adminJwt);
+
+    // A refusal must say why.
+    const mute = await api('POST', `/samples/${sampleId}/relocation-requests`,
+      { cassetteNo: '44', panelNo: 'X-1' }, staffJwt);
+    const muteReject = await api('POST',
+      `/samples/relocation-requests/${mute.body.data.request.id}/reject`, {}, adminJwt);
+    check('5n-vi. a refusal with no reason is refused, and decides nothing',
+      muteReject.status === 400
+      && (await prisma.placementChangeRequest.findUnique({
+        where: { id: mute.body.data.request.id },
+      })).status === 'PENDING',
+      muteReject.body?.message);
+    await api('POST', `/samples/relocation-requests/${mute.body.data.request.id}/reject`,
+      { note: 'Stays where it is' }, adminJwt);
+
     // ══ 6. the history ═══════════════════════════════════════════
     step('6. everywhere it has been');
 
@@ -408,19 +471,33 @@ async function main() {
     const hist = await api('GET', `/samples/${sampleId}/history`, undefined, staffJwt);
     const trail = hist.body.data.placements.map((p) => `${p.cassetteNo}/${p.panelNo}`);
     check('6a. every placement it has ever had is kept, newest first',
-      hist.status === 200 && trail.length === 4
-      && trail[0] === '15/B-4' && trail[3] === '4/A-12', trail);
+      hist.status === 200 && trail.length === 6
+      && trail[0] === '15/B-4' && trail[trail.length - 1] === '4/A-12', trail);
     check('6b. ...with exactly one current, and the rest ended',
       hist.body.data.placements.filter((p) => p.isCurrent).length === 1
-      && hist.body.data.placements.filter((p) => p.endedAt).length === 3);
+      && hist.body.data.placements.filter((p) => p.endedAt).length === 5);
     check('6c. every request is kept too, approved and rejected alike',
-      hist.body.data.requests.length === 4
-      && hist.body.data.requests.filter((r) => r.status === 'APPROVED').length === 3
-      && hist.body.data.requests.filter((r) => r.status === 'REJECTED').length === 1,
+      hist.body.data.requests.length === 7
+      && hist.body.data.requests.filter((r) => r.status === 'APPROVED').length === 5
+      && hist.body.data.requests.filter((r) => r.status === 'REJECTED').length === 2,
       hist.body.data.requests.map((r) => r.status));
-    check('6d. ...naming who asked and who decided',
-      hist.body.data.requests.every((r) => r.requestedBy && r.requestedBy.name === 'Floor Staff')
-      && hist.body.data.requests.every((r) => r.decidedBy && r.decidedBy.name));
+    /* THE FOUR THINGS, NAMED SEPARATELY. A pending request is never the
+       current location -- the whole reason approval exists. */
+    check('6c-ii. the current placement is named on its own',
+      hist.body.data.currentPlacement.cassetteNo === '15'
+      && hist.body.data.pendingRequest === null,
+      { current: hist.body.data.currentPlacement, pending: hist.body.data.pendingRequest });
+    check('6c-iii. ...and so is "when it last moved", apart from when it was registered',
+      !!hist.body.data.lastMovementAt && !!hist.body.data.registeredAt
+      && new Date(hist.body.data.lastMovementAt) > new Date(hist.body.data.registeredAt),
+      { last: hist.body.data.lastMovementAt, registered: hist.body.data.registeredAt });
+    check('6d. ...naming who asked, and who decided each one that was decided',
+      hist.body.data.requests.every((r) => r.requestedBy && r.requestedBy.name)
+      && hist.body.data.requests.filter((r) => r.status !== 'PENDING')
+        .every((r) => r.decidedBy && r.decidedBy.name)
+      && hist.body.data.requests.some((r) => r.requestedBy.name === 'Floor Staff')
+      && hist.body.data.requests.some((r) => r.requestedBy.name === 'Shop Admin'),
+      hist.body.data.requests.map((r) => [r.requestedBy && r.requestedBy.name, r.status]));
 
     // ══ 7. Drive is not allowed to cost a sample ═════════════════
     step('7. Drive failing costs the studio nothing');
@@ -451,7 +528,7 @@ async function main() {
     const staffColour = await api('POST', '/samples/colours',
       { productId: other.id, colourName: 'Staff Should Not', availability: 'CATALOGUE_ONLY' }, staffJwt);
     check('8b. ...but may not add a colour', staffColour.status === 403, staffColour.status);
-    const staffSample = await registerSample(made['Nero Marquina'].id, '1', '1', staffJwt, false);
+    const staffSample = await registerSample(made['Nero Marquina'].id, '1', '1', staffJwt);
     check('8c. ...nor register a sample', staffSample.status === 403, staffSample.status);
     const staffQueue = await api('GET', '/samples/relocation-requests', undefined, staffJwt);
     check('8d. ...nor read the approval queue', staffQueue.status === 403, staffQueue.status);
@@ -475,16 +552,64 @@ async function main() {
       (await prisma.tile.count()) === 2
       && (await prisma.tile.findUnique({ where: { id: product.id } })).name === 'Carrara Statuario');
 
-    // Removing a sample frees the colour but keeps the trail.
-    const removed = await api('DELETE', `/samples/${second.body.data.sample.id}`, undefined, adminJwt);
-    check('9d. a sample can be taken off the panel',
-      removed.status === 200
-      && (await prisma.productColour.findUnique({ where: { id: made['Statuario Grey'].id } })).availability
+    // ── removal is a request, and deletes nothing ────────────────
+    const greySample = second.body.data.sample.id;
+    const greyBarcode = second.body.data.sample.barcode;
+
+    check('9d. there is no DELETE route on a sample at all',
+      (await api('DELETE', `/samples/${greySample}`, undefined, adminJwt)).status === 404);
+
+    const removalAsk = await api('POST', `/samples/${greySample}/removal-requests`,
+      { reason: 'Piece has cracked' }, staffJwt);
+    check('9d-i. a removal can be asked for', removalAsk.status === 201
+      && removalAsk.body.data.request.requestType === 'REMOVAL', removalAsk.body?.message);
+
+    const greyWhilePending = await prisma.samplePlacement.findFirst({
+      where: { physicalSampleId: greySample, isCurrent: true },
+    });
+    check('9d-ii. ...and while it waits the sample stays exactly where it is',
+      !!greyWhilePending && greyWhilePending.cassetteNo === '4'
+      && (await prisma.physicalSample.findUnique({ where: { id: greySample } })).status === 'ACTIVE',
+      greyWhilePending && `${greyWhilePending.cassetteNo}/${greyWhilePending.panelNo}`);
+
+    const removalDone = await api('POST',
+      `/samples/relocation-requests/${removalAsk.body.data.request.id}/approve`,
+      { note: 'Agreed, take it off' }, adminJwt);
+    check('9d-iii. an Admin approves the removal', removalDone.status === 200, removalDone.body?.message);
+
+    const greyAfter = await prisma.physicalSample.findUnique({
+      where: { id: greySample },
+      include: { placements: true, changeRequests: true },
+    });
+    check('9d-iv. NOTHING IS DELETED: the record, the barcode and the history all stay',
+      !!greyAfter && greyAfter.barcode === greyBarcode
+      && greyAfter.status === 'REMOVED' && !!greyAfter.removedAt
+      && greyAfter.placements.length === 1 && greyAfter.changeRequests.length === 1,
+      greyAfter && { status: greyAfter.status, placements: greyAfter.placements.length });
+    check('9d-v. ...its placement is closed, so it is on no panel',
+      greyAfter.placements.every((p) => !p.isCurrent && !!p.endedAt));
+    check('9d-vi. ...the colour drops back to not-available',
+      (await prisma.productColour.findUnique({ where: { id: made['Statuario Grey'].id } })).availability
         === 'NOT_AVAILABLE');
-    check('9e. ...and the colour can then be re-stated as catalogue-only',
-      (await api('POST', '/samples/colours',
-        { productId: product.id, colourName: 'Statuario Grey', availability: 'CATALOGUE_ONLY' },
-        adminJwt)).status === 201);
+    check('9d-vii. ...and its barcode still finds it',
+      (await api('GET', `/samples/by-barcode/${greyBarcode}`, undefined, staffJwt)).body
+        .data.sample.status === 'REMOVED');
+
+    // ...and the same piece can be put back, with the same id.
+    const backOn = await api('POST', `/samples/${greySample}/relocation-requests`,
+      { cassetteNo: '6', panelNo: 'F-2', reason: 'Replaced with a fresh piece' }, staffJwt);
+    await api('POST', `/samples/relocation-requests/${backOn.body.data.request.id}/approve`,
+      {}, adminJwt);
+    const greyBack = await prisma.physicalSample.findUnique({
+      where: { id: greySample },
+      include: { placements: { where: { isCurrent: true } } },
+    });
+    check('9e. a removed sample can be put back, keeping its id and barcode',
+      greyBack.status === 'ACTIVE' && greyBack.barcode === greyBarcode
+      && greyBack.sampleId === second.body.data.sample.sampleId
+      && greyBack.placements[0].cassetteNo === '6'
+      && (await prisma.samplePlacement.count({ where: { physicalSampleId: greySample } })) === 2,
+      { status: greyBack.status, at: greyBack.placements[0] && greyBack.placements[0].cassetteNo });
 
     // The activity log carries the whole story, for the audit trail the
     // rest of this application already relies on.
@@ -496,9 +621,167 @@ async function main() {
       ['sample_colour.created', 'sample_placement.requested',
         'sample_placement.approved', 'sample_placement.rejected'].every((a) => actions.has(a)),
       [...actions]);
-    check('9g. ...including registering and removing a sample',
-      (await prisma.activityLog.count({ where: { action: 'physical_sample.registered' } })) === 3
-      && (await prisma.activityLog.count({ where: { action: 'physical_sample.removed' } })) === 1);
+    check('9g. ...including the removal, asked for and approved',
+      (await prisma.activityLog.count({ where: { action: 'sample_placement.removal_requested' } })) === 1
+      && (await prisma.activityLog.count({ where: { action: 'sample_placement.removal_approved' } })) === 1);
+    // ══ 10. duplicate for other colours ══════════════════════════
+    step('10. duplicate for other colours');
+
+    const bulkProduct = await prisma.tile.create({
+      data: { name: 'Marble Onyx', brandId: brand.id, productCode: 'KAJ-MO-900' },
+    });
+    const bulkColours = {};
+    for (const name of ['Orange', 'Grey', 'Yellow', 'Beige', 'Charcoal']) {
+      const r = await api('POST', '/samples/colours',
+        { productId: bulkProduct.id, colourName: name, availability: 'NOT_AVAILABLE' }, adminJwt);
+      bulkColours[name] = r.body.data.colour;
+    }
+
+    async function bulk(productId, colours, cassetteNo, panelNo, token) {
+      const form = new FormData();
+      form.set('productId', productId);
+      form.set('cassetteNo', cassetteNo);
+      form.set('panelNo', panelNo);
+      form.set('colours', JSON.stringify(colours));
+      form.set('file', new Blob([PHOTO], { type: 'image/png' }), 'sample.png');
+      const res = await fetch(`${base}/samples/colours/bulk`, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form,
+      });
+      let json = null;
+      try { json = await res.json(); } catch { /* no body */ }
+      return { status: res.status, body: json };
+    }
+
+    const many = await bulk(bulkProduct.id, [
+      { colourId: bulkColours.Orange.id },
+      { colourId: bulkColours.Grey.id },
+      // ...with one corrected before saving, which is the point of
+      // letting each row be edited.
+      { colourId: bulkColours.Yellow.id, panelNo: 'P-09' },
+    ], 'C01', 'P05', adminJwt);
+
+    check('10a. several colours are registered from one action',
+      many.status === 201 && many.body.data.registered.length === 3
+      && many.body.data.skipped.length === 0, many.body?.data?.skipped);
+    check('10b. the shared cassette and panel are copied across',
+      many.body.data.registered.filter((r) => r.cassetteNo === 'C01').length === 3
+      && many.body.data.registered.filter((r) => r.panelNo === 'P05').length === 2,
+      many.body.data.registered.map((r) => `${r.cassetteNo}/${r.panelNo}`));
+    check('10c. ...and a per-colour correction is honoured',
+      many.body.data.registered.find((r) => r.colourName === 'Yellow').panelNo === 'P-09');
+
+    const ids = many.body.data.registered.map((r) => r.sampleId);
+    const codes = many.body.data.registered.map((r) => r.barcode);
+    check('10d. EACH COLOUR GOT ITS OWN SAMPLE ID AND ITS OWN BARCODE',
+      new Set(ids).size === 3 && new Set(codes).size === 3, { ids, codes });
+    check('10e. ...and its own record, not one shared between colours',
+      (await prisma.physicalSample.count({
+        where: { colour: { productId: bulkProduct.id } },
+      })) === 3);
+    check('10f. ...each still scanning to its own colour',
+      (await api('GET', `/samples/by-barcode/${codes[0]}`, undefined, staffJwt))
+        .body.data.sample.colour.colourName
+      !== (await api('GET', `/samples/by-barcode/${codes[1]}`, undefined, staffJwt))
+        .body.data.sample.colour.colourName);
+
+    // Doing it again must not register anything twice.
+    const twiceOver = await bulk(bulkProduct.id, [
+      { colourId: bulkColours.Orange.id },
+      { colourId: bulkColours.Beige.id },
+    ], 'C01', 'P06', adminJwt);
+    check('10g. a colour already registered is skipped, with the reason',
+      twiceOver.body.data.skipped.length === 1
+      && /already registered/i.test(twiceOver.body.data.skipped[0].reason)
+      && twiceOver.body.data.registered.length === 1,
+      twiceOver.body?.data);
+    check('10h. ...and the one that could be registered still was',
+      twiceOver.body.data.registered[0].colourName === 'Beige'
+      && (await prisma.physicalSample.count({
+        where: { colour: { productId: bulkProduct.id } },
+      })) === 4);
+
+    const foreignColour = await bulk(bulkProduct.id,
+      [{ colourId: made['Verde Alpi'].id }], 'C01', 'P07', adminJwt);
+    check('10i. a colour of another product is refused, not quietly registered',
+      foreignColour.body.data.skipped.length === 1
+      && /different product/i.test(foreignColour.body.data.skipped[0].reason),
+      foreignColour.body?.data?.skipped);
+
+    const staffBulk = await bulk(bulkProduct.id,
+      [{ colourId: bulkColours.Charcoal.id }], 'C01', 'P08', staffJwt);
+    check('10j. floor staff may not bulk-register', staffBulk.status === 403, staffBulk.status);
+
+    // ══ 11. the placement list, searched and filtered ════════════
+    step('11. the Sample Placement listing');
+
+    const all = await api('GET', '/samples?limit=100', undefined, staffJwt);
+    check('11a. every active sample is listed',
+      all.status === 200 && all.body.data.samples.length === all.body.data.total
+      && all.body.data.total >= 6, all.body?.data?.total);
+    check('11b. ...each with its product, colour, ids, placement and photo',
+      all.body.data.samples.every((x) => x.product && x.product.name && x.colour.colourName
+        && x.sampleId && x.barcode && x.registeredAt)
+      && all.body.data.samples.some((x) => x.placement && x.placement.cassetteNo));
+
+    const byName = await api('GET', '/samples?q=Marble', undefined, staffJwt);
+    check('11c. searching by product name', byName.body.data.total === 4,
+      byName.body?.data?.total);
+    const byColour = await api('GET', '/samples?q=Yellow', undefined, staffJwt);
+    check('11d. ...by colour', byColour.body.data.total === 1
+      && byColour.body.data.samples[0].colour.colourName === 'Yellow');
+    const bySampleId = await api('GET', `/samples?q=${ids[0]}`, undefined, staffJwt);
+    check('11e. ...by sample id', bySampleId.body.data.total === 1
+      && bySampleId.body.data.samples[0].sampleId === ids[0]);
+    const byCode = await api('GET', `/samples?q=${codes[1]}`, undefined, staffJwt);
+    check('11f. ...by barcode', byCode.body.data.total === 1
+      && byCode.body.data.samples[0].barcode === codes[1]);
+    const byCassette = await api('GET', '/samples?cassetteNo=C01', undefined, staffJwt);
+    check('11g. ...by cassette, on the CURRENT placement only',
+      byCassette.body.data.total === 4
+      && byCassette.body.data.samples.every((x) => x.placement.cassetteNo === 'C01'),
+      byCassette.body?.data?.total);
+    const byPanel = await api('GET', '/samples?cassetteNo=C01&panelNo=P-09', undefined, staffJwt);
+    check('11h. ...and by panel', byPanel.body.data.total === 1);
+    const byStatus = await api('GET', '/samples?status=REMOVED', undefined, staffJwt);
+    check('11i. ...and removed samples only when asked for',
+      byStatus.body.data.total === 0, byStatus.body?.data?.total);
+
+    const paged = await api('GET', '/samples?limit=2&page=2', undefined, staffJwt);
+    check('11j. the list pages rather than returning everything',
+      paged.body.data.samples.length === 2 && paged.body.data.page === 2
+      && paged.body.data.pages === Math.ceil(paged.body.data.total / 2),
+      { page: paged.body?.data?.page, pages: paged.body?.data?.pages });
+
+    // A pending move must never read as the current location.
+    const pendingAsk = await api('POST', `/samples/${sampleId}/relocation-requests`,
+      { cassetteNo: '99', panelNo: 'Z-99' }, staffJwt);
+    const listedWhilePending = await api('GET', `/samples?q=${first.body.data.sample.sampleId}`,
+      undefined, staffJwt);
+    const row = listedWhilePending.body.data.samples[0];
+    check('11k. a pending move is shown as pending, never as the location',
+      row.placement.cassetteNo === '15' && !!row.pendingRequest
+      && row.pendingRequest.to.cassetteNo === '99',
+      { at: row.placement, pending: row.pendingRequest });
+    await api('POST', `/samples/relocation-requests/${pendingAsk.body.data.request.id}/reject`,
+      { note: 'No' }, adminJwt);
+
+    // ══ 12. ERP stock is not touched ═════════════════════════════
+    step('12. the ERP\u2019s own numbers');
+
+    const stockNow = await prisma.tile.findMany({
+      select: { id: true, inStock: true, name: true, productCode: true },
+      orderBy: { name: 'asc' },
+    });
+    check('12a. no product\u2019s stock flag was changed by any of this',
+      stockNow.every((t) => t.inStock === true), stockNow.map((t) => [t.name, t.inStock]));
+    check('12b. no product row was added or renamed by the sample module',
+      stockNow.length === 3
+      && stockNow.map((t) => t.productCode).sort().join(',') === 'KAJ-CS-600,KAJ-MO-900,KAJ-TC-800',
+      stockNow.map((t) => t.productCode));
+    const moduleSource = fs.readFileSync(path.join(ROOT, 'src/services/sample.service.ts'), 'utf8')
+      + fs.readFileSync(path.join(ROOT, 'src/services/samplePlacement.service.ts'), 'utf8');
+    check('12c. ...and the module has no way to: it never writes to a product',
+      !/prisma\.tile\.(update|create|delete|upsert)|tx\.tile\./.test(moduleSource));
   } finally {
     server.close();
     await prisma.$disconnect();

@@ -805,20 +805,27 @@ model ProductColour {
 /// of staff registering the same colour at the same moment is exactly
 /// the case an application-level check loses.
 model PhysicalSample {
-  id               String   @id @default(cuid())
-  colourId         String   @unique
+  id               String       @id @default(cuid())
+  colourId         String       @unique
   /// The short one a person says out loud and writes on paper.
-  sampleId         String   @unique
+  sampleId         String       @unique
   /// The one a scanner reads. Separate from sampleId because it is
   /// printed as a machine-readable symbol and never retyped.
-  barcode          String   @unique
+  barcode          String       @unique
   /// The sample's own photograph, in the studio's Drive. Nullable
   /// because Drive is allowed to fail without costing the studio the
   /// sample record -- see sample.service.
   photoDriveFileId String?
   photoUrl         String?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  /// ACTIVE or REMOVED. A removed sample is NOT deleted: its record,
+  /// its barcode and its whole movement history stay exactly as they
+  /// were, because "this used to be in cassette 4 until March" is still
+  /// worth knowing -- and because the same piece may be put back later
+  /// through an approved placement request.
+  status           SampleStatus @default(ACTIVE)
+  removedAt        DateTime?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
 
   colour         ProductColour            @relation(fields: [colourId], references: [id], onDelete: Cascade)
   placements     SamplePlacement[]
@@ -871,6 +878,11 @@ model SamplePlacement {
 /// sample that already sits somewhere.
 model PlacementChangeRequest {
   id                String                 @id @default(cuid())
+  /// A MOVE asks for a new cassette and panel; a REMOVAL asks for the
+  /// sample to come off the shelf altogether. Both need the Admin's
+  /// agreement and both are kept forever, so they are one queue and
+  /// one history rather than two half-built ones.
+  requestType       PlacementRequestType   @default(MOVE)
   physicalSampleId  String
   /// The placement this asks to move away from, as it stood when the
   /// request was made. Kept so a request raised against a placement
@@ -878,8 +890,9 @@ model PlacementChangeRequest {
   fromPlacementId   String?
   fromCassetteNo    String?
   fromPanelNo       String?
-  toCassetteNo      String
-  toPanelNo         String
+  /// Null on a REMOVAL: it names nowhere to go.
+  toCassetteNo      String?
+  toPanelNo         String?
   reason            String?
   status            PlacementRequestStatus @default(PENDING)
   requestedById     String?
@@ -917,4 +930,16 @@ enum PlacementRequestStatus {
   PENDING
   APPROVED
   REJECTED
+}
+
+enum PlacementRequestType {
+  MOVE
+  REMOVAL
+}
+
+/// Whether the piece is still on a shelf. A REMOVED sample keeps its
+/// id, its barcode and its history -- nothing about it is deleted.
+enum SampleStatus {
+  ACTIVE
+  REMOVED
 }

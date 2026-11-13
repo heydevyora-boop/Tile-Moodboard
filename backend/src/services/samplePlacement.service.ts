@@ -27,10 +27,15 @@ import { Request } from 'express';
 import { prisma } from '@db/connection';
 import { AppError } from '@utils/AppError';
 import { logActivity } from './activityLog.service';
+import { applyRemoval } from './sample.service';
 
 export interface RelocationInput {
   cassetteNo: string;
   panelNo: string;
+  reason?: string;
+}
+
+export interface RemovalInput {
   reason?: string;
 }
 
@@ -80,9 +85,12 @@ export async function requestRelocation(
   });
   if (pending) {
     throw AppError.badRequest(
-      `A move for ${sample.sampleId} is already waiting for the Admin’s approval `
-      + `(to cassette ${pending.toCassetteNo}, panel ${pending.toPanelNo}). `
-      + 'That one has to be decided first.',
+      pending.requestType === 'REMOVAL'
+        ? `A removal of ${sample.sampleId} is already waiting for the Admin’s approval. `
+          + 'That one has to be decided first.'
+        : `A move for ${sample.sampleId} is already waiting for the Admin’s approval `
+          + `(to cassette ${pending.toCassetteNo}, panel ${pending.toPanelNo}). `
+          + 'That one has to be decided first.',
     );
   }
 
@@ -108,6 +116,74 @@ export async function requestRelocation(
       sampleId: sample.sampleId,
       from: current ? `${current.cassetteNo}/${current.panelNo}` : null,
       to: `${toCassetteNo}/${toPanelNo}`,
+    },
+    req,
+  });
+
+  return request;
+}
+
+/**
+ * Ask for a sample to be taken off the shelf.
+ *
+ * The same shape as a move, and under the same approval, because
+ * removing a placement IS a change to an existing placement -- and
+ * because nothing is deleted when it is approved. The sample keeps its
+ * id, its barcode and its history; it is marked REMOVED and can be put
+ * back later through an ordinary placement request.
+ */
+export async function requestRemoval(
+  physicalSampleId: string,
+  input: RemovalInput,
+  userId?: string,
+  req?: Request,
+) {
+  const id = String(physicalSampleId ?? '').trim();
+
+  const sample = await prisma.physicalSample.findUnique({
+    where: { id },
+    include: { placements: { where: { isCurrent: true }, take: 1 } },
+  });
+  if (!sample) throw AppError.notFound('That sample is not on record.');
+  if (sample.status === 'REMOVED') {
+    throw AppError.badRequest(`${sample.sampleId} has already been removed from the shelf.`);
+  }
+
+  const pending = await prisma.placementChangeRequest.findFirst({
+    where: { physicalSampleId: id, status: 'PENDING' },
+  });
+  if (pending) {
+    throw AppError.badRequest(
+      `A change to ${sample.sampleId} is already waiting for the Admin’s approval. `
+      + 'That one has to be decided first.',
+    );
+  }
+
+  const current = sample.placements[0] ?? null;
+
+  const request = await prisma.placementChangeRequest.create({
+    data: {
+      requestType: 'REMOVAL',
+      physicalSampleId: id,
+      fromPlacementId: current?.id ?? null,
+      fromCassetteNo: current?.cassetteNo ?? null,
+      fromPanelNo: current?.panelNo ?? null,
+      // A removal names nowhere to go.
+      toCassetteNo: null,
+      toPanelNo: null,
+      reason: input.reason?.trim() || null,
+      requestedById: userId ?? null,
+    },
+  });
+
+  await logActivity({
+    userId: userId ?? null,
+    action: 'sample_placement.removal_requested',
+    entityType: 'PlacementChangeRequest',
+    entityId: request.id,
+    metadata: {
+      sampleId: sample.sampleId,
+      from: current ? `${current.cassetteNo}/${current.panelNo}` : null,
     },
     req,
   });
@@ -161,6 +237,7 @@ export async function listRequests(status = 'PENDING', page = 1, limit = 25) {
   return {
     requests: rows.map((row) => ({
       id: row.id,
+      requestType: row.requestType,
       status: row.status,
       sampleId: row.sample.sampleId,
       barcode: row.sample.barcode,
@@ -168,7 +245,7 @@ export async function listRequests(status = 'PENDING', page = 1, limit = 25) {
       colourName: row.sample.colour.colourName,
       product: row.sample.colour.product,
       from: row.fromCassetteNo ? { cassetteNo: row.fromCassetteNo, panelNo: row.fromPanelNo } : null,
-      to: { cassetteNo: row.toCassetteNo, panelNo: row.toPanelNo },
+      to: row.toCassetteNo ? { cassetteNo: row.toCassetteNo, panelNo: row.toPanelNo } : null,
       reason: row.reason,
       requestedBy: row.requestedBy,
       requestedAt: row.requestedAt,
@@ -199,13 +276,52 @@ export async function approveRequest(requestId: string, userId: string, note?: s
   const result = await prisma.$transaction(async (tx) => {
     const request = await tx.placementChangeRequest.findUnique({
       where: { id },
-      include: { sample: { select: { id: true, sampleId: true } } },
+      include: { sample: { select: { id: true, sampleId: true, colourId: true } } },
     });
     if (!request) throw AppError.notFound('That request is not on record.');
     if (request.status !== 'PENDING') {
       throw AppError.badRequest(
         `That request was already ${request.status.toLowerCase()}.`,
       );
+    }
+
+    /* NOBODY APPROVES THEIR OWN REQUEST, whatever role they hold.
+       An Admin who moves a sample still needs a second pair of eyes --
+       otherwise the approval step is a formality they perform on
+       themselves, and the history records an agreement that never
+       happened. Checked HERE, inside the transaction, so no route and
+       no client can be arranged to skip it. */
+    if (request.requestedById && request.requestedById === userId) {
+      throw AppError.forbidden(
+        'You raised this request, so somebody else has to decide it.',
+      );
+    }
+
+    if (request.requestType === 'REMOVAL') {
+      // Nothing is deleted: the sample is marked off-shelf and its
+      // current placement is closed. See sample.service.applyRemoval.
+      await applyRemoval(tx as never, request.physicalSampleId, request.sample.colourId);
+
+      const decided = await tx.placementChangeRequest.update({
+        where: { id },
+        data: {
+          status: 'APPROVED',
+          decidedById: userId,
+          decidedAt: new Date(),
+          decisionNote: note?.trim() || null,
+        },
+      });
+
+      return {
+        request: decided,
+        placement: null,
+        sampleId: request.sample.sampleId,
+        requestType: 'REMOVAL' as const,
+      };
+    }
+
+    if (!request.toCassetteNo || !request.toPanelNo) {
+      throw AppError.badRequest('That move names no cassette or panel to go to.');
     }
 
     // The old placement stops being current, and is stamped with when.
@@ -225,6 +341,19 @@ export async function approveRequest(requestId: string, userId: string, note?: s
       },
     });
 
+    /* A SAMPLE PUT BACK IS ON THE SHELF AGAIN. An approved move for a
+       sample that had been removed restores it, which is what "allow
+       the same sample to be reassigned later" means -- with the same
+       id, the same barcode and its whole history intact. */
+    await tx.physicalSample.update({
+      where: { id: request.physicalSampleId },
+      data: { status: 'ACTIVE', removedAt: null },
+    });
+    await tx.productColour.update({
+      where: { id: request.sample.colourId },
+      data: { availability: 'PHYSICAL_SAMPLE' },
+    });
+
     const decided = await tx.placementChangeRequest.update({
       where: { id },
       data: {
@@ -236,18 +365,27 @@ export async function approveRequest(requestId: string, userId: string, note?: s
       },
     });
 
-    return { request: decided, placement, sampleId: request.sample.sampleId };
+    return {
+      request: decided,
+      placement,
+      sampleId: request.sample.sampleId,
+      requestType: 'MOVE' as const,
+    };
   });
 
   await logActivity({
     userId,
-    action: 'sample_placement.approved',
+    action: result.requestType === 'REMOVAL'
+      ? 'sample_placement.removal_approved'
+      : 'sample_placement.approved',
     entityType: 'PlacementChangeRequest',
     entityId: id,
     metadata: {
       sampleId: result.sampleId,
-      to: `${result.placement.cassetteNo}/${result.placement.panelNo}`,
-      placementId: result.placement.id,
+      to: result.placement
+        ? `${result.placement.cassetteNo}/${result.placement.panelNo}`
+        : null,
+      placementId: result.placement?.id ?? null,
     },
   });
 
@@ -266,6 +404,15 @@ export async function rejectRequest(requestId: string, userId: string, note?: st
   if (request.status !== 'PENDING') {
     throw AppError.badRequest(`That request was already ${request.status.toLowerCase()}.`);
   }
+  if (request.requestedById && request.requestedById === userId) {
+    throw AppError.forbidden('You raised this request, so somebody else has to decide it.');
+  }
+  /* A REFUSAL HAS TO SAY WHY. The person who asked is going to read
+     this and act on it, and "rejected" on its own tells them nothing
+     they can do differently. */
+  if (!note || !note.trim()) {
+    throw AppError.badRequest('Rejecting a request needs a reason.');
+  }
 
   const decided = await prisma.placementChangeRequest.update({
     where: { id },
@@ -273,7 +420,7 @@ export async function rejectRequest(requestId: string, userId: string, note?: st
       status: 'REJECTED',
       decidedById: userId,
       decidedAt: new Date(),
-      decisionNote: note?.trim() || null,
+      decisionNote: note.trim(),
     },
   });
 
@@ -325,12 +472,35 @@ export async function history(physicalSampleId: string) {
   });
   if (!sample) throw AppError.notFound('That sample is not on record.');
 
+  const current = sample.placements.find((p) => p.isCurrent) ?? null;
+  const pending = sample.changeRequests.find((r) => r.status === 'PENDING') ?? null;
+
   return {
     id: sample.id,
     sampleId: sample.sampleId,
     barcode: sample.barcode,
     photoUrl: sample.photoUrl,
+    status: sample.status,
+    removedAt: sample.removedAt,
+    registeredAt: sample.createdAt,
+    lastMovementAt: current ? current.placedAt : null,
     colour: sample.colour,
+    /* THE FOUR THINGS, NAMED SEPARATELY, so no screen has to work out
+       which is which -- and so a pending request can never be mistaken
+       for where the sample actually is. */
+    currentPlacement: current
+      ? { id: current.id, cassetteNo: current.cassetteNo, panelNo: current.panelNo, placedAt: current.placedAt }
+      : null,
+    pendingRequest: pending
+      ? {
+        id: pending.id,
+        requestType: pending.requestType,
+        to: pending.toCassetteNo
+          ? { cassetteNo: pending.toCassetteNo, panelNo: pending.toPanelNo }
+          : null,
+        requestedAt: pending.requestedAt,
+      }
+      : null,
     placements: sample.placements.map((p) => ({
       id: p.id,
       cassetteNo: p.cassetteNo,
@@ -343,9 +513,10 @@ export async function history(physicalSampleId: string) {
     })),
     requests: sample.changeRequests.map((r) => ({
       id: r.id,
+      requestType: r.requestType,
       status: r.status,
       from: r.fromCassetteNo ? { cassetteNo: r.fromCassetteNo, panelNo: r.fromPanelNo } : null,
-      to: { cassetteNo: r.toCassetteNo, panelNo: r.toPanelNo },
+      to: r.toCassetteNo ? { cassetteNo: r.toCassetteNo, panelNo: r.toPanelNo } : null,
       reason: r.reason,
       requestedBy: r.requestedBy,
       requestedAt: r.requestedAt,

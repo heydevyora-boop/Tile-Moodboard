@@ -272,6 +272,12 @@ export async function registerSample(
 
   if (!cassetteNo) throw AppError.badRequest('A sample needs the cassette it sits in.');
   if (!panelNo) throw AppError.badRequest('A sample needs the panel it sits on.');
+  /* ALL THREE OR NOTHING. A sample without a photograph is one nobody
+     can recognise when they get to the panel, so the three fields are
+     required together rather than the photo being a nicety added
+     later. Drive failing afterwards is a different matter -- the
+     record survives that; see below. */
+  if (!photo) throw AppError.badRequest('A physical sample needs a photograph of it.');
 
   const colour = await prisma.productColour.findUnique({
     where: { id },
@@ -474,6 +480,13 @@ export async function findByBarcode(code: string) {
     sampleId: sample.sampleId,
     barcode: sample.barcode,
     photoUrl: sample.photoUrl,
+    status: sample.status,
+    /* WHEN IT LAST MOVED, which is not the same as when it was
+       registered: the current placement's placedAt IS the moment of the
+       last approved move, and equals the registration date only while
+       the sample has never moved. */
+    lastMovementAt: current ? current.placedAt : null,
+    registeredAt: sample.createdAt,
     colour: {
       id: sample.colour.id,
       colourName: sample.colour.colourName,
@@ -489,52 +502,337 @@ export async function findByBarcode(code: string) {
 }
 
 /**
- * Take a sample off the panel.
+ * APPLY AN APPROVED REMOVAL. Nothing is deleted.
  *
- * The colour drops back to NOT_AVAILABLE and the placement history is
- * kept, because "this used to be in cassette 4 until March" is still
- * worth knowing after the piece is gone.
+ * The sample keeps its id, its barcode and every placement it has ever
+ * had; it is marked REMOVED, its current placement is closed with the
+ * moment it ended, and the colour drops back to NOT_AVAILABLE so the
+ * record and the shelf agree again.
+ *
+ * This is NOT reachable from a route. Removal is a request like any
+ * other change to an existing placement, and only
+ * samplePlacement.service.approveRequest calls this -- which is what
+ * makes "removal requires Admin approval" true of the system rather
+ * than of the user interface.
  */
-export async function removeSample(physicalSampleId: string, userId?: string, req?: Request) {
-  const id = String(physicalSampleId ?? '').trim();
-  const sample = await prisma.physicalSample.findUnique({
-    where: { id },
-    select: { id: true, sampleId: true, colourId: true },
-  });
-  if (!sample) throw AppError.notFound('That sample is not on record.');
+export async function applyRemoval(
+  tx: {
+    samplePlacement: { updateMany: (args: unknown) => Promise<unknown> };
+    physicalSample: { update: (args: unknown) => Promise<unknown> };
+    productColour: { update: (args: unknown) => Promise<unknown> };
+  },
+  physicalSampleId: string,
+  colourId: string,
+) {
+  const now = new Date();
 
-  await prisma.$transaction(async (tx) => {
-    await tx.samplePlacement.updateMany({
-      where: { physicalSampleId: id, isCurrent: true },
-      data: { isCurrent: false, endedAt: new Date() },
-    });
-    await tx.placementChangeRequest.updateMany({
-      where: { physicalSampleId: id, status: 'PENDING' },
-      data: {
-        status: 'REJECTED',
-        decidedById: userId ?? null,
-        decidedAt: new Date(),
-        decisionNote: 'The sample was removed from the library.',
-      },
-    });
-    await tx.productColour.update({
-      where: { id: sample.colourId },
-      data: { availability: 'NOT_AVAILABLE' },
-    });
-    // The sample row goes, its placements with it by cascade -- but the
-    // history above was closed off first so the activity log and any
-    // report built from it still read correctly.
-    await tx.physicalSample.delete({ where: { id } });
+  await tx.samplePlacement.updateMany({
+    where: { physicalSampleId, isCurrent: true },
+    data: { isCurrent: false, endedAt: now },
   });
+
+  await tx.physicalSample.update({
+    where: { id: physicalSampleId },
+    data: { status: 'REMOVED', removedAt: now },
+  });
+
+  await tx.productColour.update({
+    where: { id: colourId },
+    data: { availability: 'NOT_AVAILABLE' },
+  });
+}
+
+export interface BulkColourTarget {
+  /** An existing colour of the same product. */
+  colourId: string;
+  /** Overrides the shared cassette for this one colour, if given. */
+  cassetteNo?: string;
+  /** Overrides the shared panel for this one colour, if given. */
+  panelNo?: string;
+}
+
+export interface BulkResult {
+  registered: Array<{
+    colourId: string; colourName: string; sampleId: string; barcode: string;
+    cassetteNo: string; panelNo: string; photoError: string;
+  }>;
+  skipped: Array<{ colourId: string; colourName: string; reason: string }>;
+}
+
+/**
+ * DUPLICATE FOR OTHER COLOURS.
+ *
+ * A studio that has just put Orange in C01/P05 usually puts Grey and
+ * Yellow on the next panels in the same breath. This copies the
+ * placement across colours the caller picks, and each one still gets
+ * its OWN sample record, its OWN sample id and its OWN barcode -- the
+ * convenience is in the typing, never in the tracking. A per-colour
+ * cassette or panel override is allowed so the one that actually went
+ * somewhere else can be corrected before saving.
+ *
+ * EACH COLOUR IS ITS OWN TRANSACTION. One colour that cannot be
+ * registered -- because it already has a sample, or is not a colour of
+ * this product -- is reported and skipped; it does not throw away the
+ * ones that worked. Registering nine colours and losing all nine
+ * because the tenth was already on a shelf is the behaviour this
+ * avoids.
+ */
+export async function registerForColours(
+  productId: string,
+  colours: BulkColourTarget[],
+  shared: RegisterSampleInput,
+  photo: { buffer: Buffer; mimetype: string; originalname: string },
+  userId?: string,
+  req?: Request,
+): Promise<BulkResult> {
+  const pid = String(productId ?? '').trim();
+  if (!pid) throw AppError.badRequest('Which product?');
+  if (!Array.isArray(colours) || !colours.length) {
+    throw AppError.badRequest('Choose at least one colour to register.');
+  }
+  if (!photo) throw AppError.badRequest('A physical sample needs a photograph of it.');
+
+  const wanted = colours.map((c) => String(c.colourId ?? '').trim()).filter(Boolean);
+  if (!wanted.length) throw AppError.badRequest('Choose at least one colour to register.');
+
+  // One query for every colour asked for, rather than one per colour.
+  const rows = await prisma.productColour.findMany({
+    where: { id: { in: wanted } },
+    include: { sample: { select: { sampleId: true } } },
+  });
+  const byId = new Map(rows.map((r) => [r.id, r]));
+
+  const registered: BulkResult['registered'] = [];
+  const skipped: BulkResult['skipped'] = [];
+
+  for (const target of colours) {
+    const colourId = String(target.colourId ?? '').trim();
+    const row = byId.get(colourId);
+
+    if (!row) {
+      skipped.push({ colourId, colourName: '', reason: 'That colour is not on record.' });
+      continue;
+    }
+    /* A COLOUR OF ANOTHER PRODUCT IS NOT A DUPLICATE OF THIS ONE. The
+       request names a product, and every colour in it has to belong to
+       that product -- otherwise a mistyped id would quietly register a
+       sample against something else entirely. */
+    if (row.productId !== pid) {
+      skipped.push({
+        colourId,
+        colourName: row.colourName,
+        reason: 'That colour belongs to a different product.',
+      });
+      continue;
+    }
+    if (row.sample) {
+      skipped.push({
+        colourId,
+        colourName: row.colourName,
+        reason: `Already registered as ${row.sample.sampleId}.`,
+      });
+      continue;
+    }
+
+    const cassetteNo = String(target.cassetteNo ?? shared.cassetteNo ?? '').trim();
+    const panelNo = String(target.panelNo ?? shared.panelNo ?? '').trim();
+    if (!cassetteNo || !panelNo) {
+      skipped.push({
+        colourId,
+        colourName: row.colourName,
+        reason: 'No cassette or panel was given for this colour.',
+      });
+      continue;
+    }
+
+    try {
+      const made = await registerSample(
+        colourId,
+        { cassetteNo, panelNo, note: shared.note },
+        photo,
+        userId,
+        req,
+      );
+      registered.push({
+        colourId,
+        colourName: row.colourName,
+        sampleId: made.sample.sampleId,
+        barcode: made.sample.barcode,
+        cassetteNo: made.placement.cassetteNo,
+        panelNo: made.placement.panelNo,
+        photoError: made.photoError,
+      });
+    } catch (error) {
+      skipped.push({
+        colourId,
+        colourName: row.colourName,
+        reason: error instanceof AppError ? error.message : 'It could not be registered.',
+      });
+    }
+  }
 
   await logActivity({
     userId: userId ?? null,
-    action: 'physical_sample.removed',
-    entityType: 'PhysicalSample',
-    entityId: id,
-    metadata: { sampleId: sample.sampleId, colourId: sample.colourId },
+    action: 'physical_sample.bulk_registered',
+    entityType: 'Tile',
+    entityId: pid,
+    metadata: {
+      registered: registered.length,
+      skipped: skipped.length,
+      sampleIds: registered.map((r) => r.sampleId),
+    },
     req,
   });
 
-  return { removed: true, sampleId: sample.sampleId };
+  return { registered, skipped };
+}
+
+export interface SampleListQuery {
+  q?: string;
+  colourName?: string;
+  cassetteNo?: string;
+  panelNo?: string;
+  availability?: string;
+  status?: string;
+  page?: number;
+  limit?: number;
+}
+
+/**
+ * EVERY REGISTERED SAMPLE, searchable.
+ *
+ * What the Sample Placement screen reads. Two queries for a page -- the
+ * rows and the total -- with the colour, the product and the current
+ * placement joined in, so a thousand samples cost the same two round
+ * trips as ten.
+ *
+ * `q` searches the things a person actually has in front of them: the
+ * sample id, the barcode, the product name and the colour name.
+ */
+export async function listSamples(query: SampleListQuery) {
+  const page = Math.max(1, Number(query.page) || 1);
+  const limit = Math.min(100, Math.max(1, Number(query.limit) || 25));
+
+  const where: Record<string, unknown> = {};
+  const and: Array<Record<string, unknown>> = [];
+
+  const q = String(query.q ?? '').trim();
+  if (q) {
+    and.push({
+      OR: [
+        { sampleId: { contains: q, mode: 'insensitive' } },
+        { barcode: { contains: q, mode: 'insensitive' } },
+        { colour: { colourName: { contains: q, mode: 'insensitive' } } },
+        { colour: { colourCode: { contains: q, mode: 'insensitive' } } },
+        { colour: { product: { name: { contains: q, mode: 'insensitive' } } } },
+        { colour: { product: { productCode: { contains: q, mode: 'insensitive' } } } },
+      ],
+    });
+  }
+
+  const colourName = String(query.colourName ?? '').trim();
+  if (colourName) {
+    and.push({ colour: { colourName: { contains: colourName, mode: 'insensitive' } } });
+  }
+
+  const availability = String(query.availability ?? '').trim().toUpperCase();
+  if (availability && availability !== 'ALL') {
+    if (!AVAILABILITIES.includes(availability as Availability)) {
+      throw AppError.badRequest(`"${availability}" is not one of: ${AVAILABILITIES.join(', ')}.`);
+    }
+    and.push({ colour: { availability: availability as Availability } });
+  }
+
+  const status = String(query.status ?? 'ACTIVE').trim().toUpperCase();
+  if (status !== 'ALL') {
+    if (!['ACTIVE', 'REMOVED'].includes(status)) {
+      throw AppError.badRequest('status must be ACTIVE, REMOVED or ALL.');
+    }
+    and.push({ status: status as 'ACTIVE' | 'REMOVED' });
+  }
+
+  /* CASSETTE AND PANEL FILTER ON THE CURRENT PLACEMENT ONLY. A sample
+     that USED to be in C01 is not in C01, and a filter that said
+     otherwise would send somebody to the wrong shelf. */
+  const cassetteNo = String(query.cassetteNo ?? '').trim();
+  const panelNo = String(query.panelNo ?? '').trim();
+  if (cassetteNo || panelNo) {
+    and.push({
+      placements: {
+        some: {
+          isCurrent: true,
+          ...(cassetteNo ? { cassetteNo: { contains: cassetteNo, mode: 'insensitive' } } : {}),
+          ...(panelNo ? { panelNo: { contains: panelNo, mode: 'insensitive' } } : {}),
+        },
+      },
+    });
+  }
+
+  if (and.length) where.AND = and;
+
+  const [rows, total] = await Promise.all([
+    prisma.physicalSample.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      skip: (page - 1) * limit,
+      take: limit,
+      include: {
+        colour: {
+          select: {
+            id: true,
+            colourName: true,
+            colourCode: true,
+            availability: true,
+            product: { select: { id: true, name: true, productCode: true } },
+          },
+        },
+        placements: { where: { isCurrent: true }, take: 1 },
+        changeRequests: { where: { status: 'PENDING' }, take: 1 },
+      },
+    }),
+    prisma.physicalSample.count({ where }),
+  ]);
+
+  return {
+    samples: rows.map((row) => {
+      const current = row.placements[0] ?? null;
+      const pending = row.changeRequests[0] ?? null;
+      return {
+        id: row.id,
+        sampleId: row.sampleId,
+        barcode: row.barcode,
+        photoUrl: row.photoUrl,
+        status: row.status,
+        registeredAt: row.createdAt,
+        lastMovementAt: current ? current.placedAt : null,
+        colour: {
+          id: row.colour.id,
+          colourName: row.colour.colourName,
+          colourCode: row.colour.colourCode,
+          availability: row.colour.availability,
+        },
+        product: row.colour.product,
+        /* THE CURRENT PLACEMENT, AND SEPARATELY WHETHER A MOVE IS
+           WAITING. A pending request is never shown as the location --
+           that is the whole reason approval exists. */
+        placement: current
+          ? { cassetteNo: current.cassetteNo, panelNo: current.panelNo, placedAt: current.placedAt }
+          : null,
+        pendingRequest: pending
+          ? {
+            id: pending.id,
+            requestType: pending.requestType,
+            to: pending.toCassetteNo
+              ? { cassetteNo: pending.toCassetteNo, panelNo: pending.toPanelNo }
+              : null,
+            requestedAt: pending.requestedAt,
+          }
+          : null,
+      };
+    }),
+    page,
+    limit,
+    total,
+    pages: Math.max(1, Math.ceil(total / limit)),
+  };
 }

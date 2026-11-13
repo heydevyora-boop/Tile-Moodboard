@@ -117,9 +117,19 @@ function main() {
 
     return new Promise((resolve) => setTimeout(() => {
       const doc = dom.window.document;
+      // The sidebar is drawn and carries the workspace, named rather
+      // than counted: a hard-coded total breaks every time a feature is
+      // added, which says nothing about whether the sidebar works.
+      // (Client Wishlists is owner-only and this stub is STAFF, so it
+      // is deliberately not expected here.)
+      const navLabels = Array.from(doc.querySelectorAll('.nav-item'))
+        .map((el) => el.textContent.trim());
       check('4. the page draws its sidebar',
-        doc.querySelectorAll('.nav-item').length === 6,
-        doc.querySelectorAll('.nav-item').length);
+        navLabels.length >= 6
+        && ['Dashboard', 'Mood Board', 'Catalog', 'Sample Placement']
+          .every((label) => navLabels.indexOf(label) !== -1)
+        && navLabels.some((label) => /Library/.test(label)),
+        navLabels);
       check('5. ...with De’vyora Library as the active item',
         /Library/.test((doc.querySelector('.nav-item.active') || {}).textContent || ''),
         (doc.querySelector('.nav-item.active') || {}).textContent);

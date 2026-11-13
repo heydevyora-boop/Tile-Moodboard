@@ -71,11 +71,65 @@ export const byBarcode = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
-export const removeSample = catchAsync(async (req: Request, res: Response) => {
+/**
+ * DUPLICATE FOR OTHER COLOURS.
+ *
+ * The colours arrive as JSON in a multipart field, because the
+ * photograph rides in the same request -- one upload, several samples,
+ * each still its own record with its own id and barcode.
+ */
+export const registerForColours = catchAsync(async (req: Request, res: Response) => {
+  const body = req.body as {
+    productId: string; cassetteNo: string; panelNo: string; note?: string; colours: string;
+  };
+  if (!req.file) throw AppError.badRequest('A physical sample needs a photograph of it.');
+
+  let colours;
+  try {
+    colours = JSON.parse(String(body.colours ?? '[]'));
+  } catch {
+    throw AppError.badRequest('The list of colours could not be read.');
+  }
+  if (!Array.isArray(colours)) throw AppError.badRequest('`colours` must be a list.');
+
+  const result = await samples.registerForColours(
+    body.productId,
+    colours,
+    { cassetteNo: body.cassetteNo, panelNo: body.panelNo, note: body.note },
+    { buffer: req.file.buffer, mimetype: req.file.mimetype, originalname: req.file.originalname },
+    req.user!.id,
+    req,
+  );
+
+  // 207-ish in spirit, 201 in fact: some colours may have been skipped
+  // with a reason, and the caller is told which rather than being given
+  // an error that suggests none of it worked.
+  res.status(201).json({ success: true, data: result });
+});
+
+/** Every registered sample, searchable -- what the placement screen reads. */
+export const listSamples = catchAsync(async (req: Request, res: Response) => {
   res.status(200).json({
     success: true,
-    data: await samples.removeSample(String(req.params.id), req.user!.id, req),
+    data: await samples.listSamples(req.query as samples.SampleListQuery),
   });
+});
+
+/**
+ * Ask for a sample to come off the shelf.
+ *
+ * A request, not a deletion: nothing happens until an Admin agrees, and
+ * when they do the record, the barcode and the history all stay.
+ */
+export const requestRemoval = catchAsync(async (req: Request, res: Response) => {
+  const body = (req.body ?? {}) as { reason?: string };
+  const request = await placements.requestRemoval(
+    String(req.params.id),
+    { reason: body.reason },
+    req.user?.id,
+    req,
+  );
+  res.status(201).json({ success: true, data: { request } });
 });
 
 export const history = catchAsync(async (req: Request, res: Response) => {
@@ -132,9 +186,3 @@ export const reject = catchAsync(async (req: Request, res: Response) => {
   const request = await placements.rejectRequest(String(req.params.id), req.user!.id, body.note);
   res.status(200).json({ success: true, data: { request } });
 });
-
-/** Guard for a route that should never be reached without a user. */
-export function requireUser(req: Request): string {
-  if (!req.user?.id) throw AppError.unauthorized('Authentication required');
-  return req.user.id;
-}
