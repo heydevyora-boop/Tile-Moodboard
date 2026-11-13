@@ -29,6 +29,7 @@ import { describeRoom } from './rooms.service';
 import { isStarterId, starterById, asReference, STARTER_ROOMS } from './libraryStarters';
 import { normalizeDriveImageUrl } from './referenceImages.service';
 import * as library from './library.service';
+import { syncWishlistToDrive, folderUrlFor } from './clientWishlistDrive.service';
 
 /**
  * The short code a person can say across a showroom floor.
@@ -264,7 +265,24 @@ export async function submit(token: string, req?: Request) {
   const wishlist = await requireWishlist(token);
 
   if (wishlist.status === 'SUBMITTED') {
-    return { wishlist, alreadySubmitted: true };
+    /* ALREADY SENT -- but perhaps Drive was not reachable when it was.
+       The database has always been the record; the folder is a
+       convenience on top of it, so a second tap is the natural moment
+       to finish the part that did not happen. When it already
+       happened, nothing is done at all: syncWishlistToDrive finds the
+       same folder and skips every picture that carries a copy. */
+    const drive = wishlist.driveSyncedAt
+      ? {
+        ok: true,
+        folderId: wishlist.driveFolderId || '',
+        folderUrl: folderUrlFor(wishlist.driveFolderId || ''),
+        copied: 0,
+        alreadyThere: wishlist.items.length,
+        reason: '',
+      }
+      : await syncWishlistToDrive(wishlist.id);
+
+    return { wishlist, alreadySubmitted: true, drive };
   }
 
   if (!wishlist.items.length) {
@@ -289,7 +307,22 @@ export async function submit(token: string, req?: Request) {
     req,
   });
 
-  return { wishlist: updated, alreadySubmitted: false };
+  /* THE SUBMISSION HAS ALREADY SUCCEEDED by this line, and nothing
+     below may undo that. syncWishlistToDrive never throws: at worst it
+     returns a reason, which is written to driveError for the owner to
+     see and retry. A studio whose Drive is down still gets every
+     wishlist its clients send. */
+  const drive = await syncWishlistToDrive(wishlist.id);
+
+  const after = await prisma.clientWishlist.findUnique({
+    where: { id: wishlist.id },
+    include: {
+      customer: { select: { id: true, name: true, phone: true, createdAt: true } },
+      items: { orderBy: { createdAt: 'asc' } },
+    },
+  });
+
+  return { wishlist: after ?? updated, alreadySubmitted: false, drive };
 }
 
 /**
@@ -411,6 +444,7 @@ export function toPublicShape(wishlist: NonNullable<Awaited<ReturnType<typeof wi
     status: wishlist.status,
     submittedAt: wishlist.submittedAt,
     driveFolderId: wishlist.driveFolderId,
+    driveFolderUrl: folderUrlFor(wishlist.driveFolderId || ''),
     items: wishlist.items.map((item) => ({
       imageId: item.imageId,
       themeId: item.themeId,

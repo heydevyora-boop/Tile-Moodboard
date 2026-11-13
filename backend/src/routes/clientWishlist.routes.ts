@@ -26,7 +26,7 @@
  */
 
 import { Router } from 'express';
-import { authenticate, requirePermission } from '@middlewares/auth';
+import { authenticate, authorize } from '@middlewares/auth';
 import { validate } from '@middlewares/validate';
 import {
   clientWishlistRateLimiter,
@@ -73,11 +73,25 @@ router.post('/:token/submit', clientWishlistRateLimiter, controller.submit);
 
 router.use(authenticate);
 
-// The existing customers:* permissions rather than new wishlist:* ones:
-// a wishlist is a customer telling the studio what they like, every
-// role that may read customers should be able to read it, and a new
-// permission would have to be seeded onto every role to be useful.
-router.get('/studio/all', requirePermission('customers:read'), controller.list);
-router.get('/studio/:id', requirePermission('customers:read'), controller.getOne);
+/**
+ * OWNER AND ADMIN ONLY, and by role rather than by permission.
+ *
+ * Chunk 2 gated these on customers:read, which the seeded STAFF role
+ * also holds -- so every member of floor staff could have read every
+ * client's selection and phone number. A client register is the
+ * studio's own book, so it is gated the way the other owner-only
+ * surfaces already are (admin, settings, api keys, integrations):
+ * authorize(), on the role itself. No new permission is introduced,
+ * so no role has to be re-seeded for this to work.
+ */
+router.use('/studio', authorize('OWNER', 'ADMIN'));
+
+router.get('/studio/all', controller.list);
+router.get('/studio/:id', controller.getOne);
+
+/* Build or finish a client's Drive folder. A write, so it is a POST,
+ * and it is idempotent: when nothing is outstanding it changes
+ * nothing and says so. */
+router.post('/studio/:id/drive-sync', controller.driveSync);
 
 export default router;

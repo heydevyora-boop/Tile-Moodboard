@@ -13,6 +13,8 @@ import { catchAsync } from '@utils/catchAsync';
 import { prisma } from '@db/connection';
 import { AppError } from '@utils/AppError';
 import * as wishlist from '@services/clientWishlist.service';
+import { syncWishlistToDrive, folderUrlFor } from '@services/clientWishlistDrive.service';
+import { isStarterId } from '@services/libraryStarters';
 
 // ============================================================
 // Client-facing. No login; the token in the URL is the credential.
@@ -103,56 +105,198 @@ export const images = catchAsync(async (req: Request, res: Response) => {
 // ============================================================
 
 /**
- * Submitted wishlists, newest first -- the point of submitting one.
+ * EVERY CLIENT WHO HAS REGISTERED, newest first.
  *
- * Drafts are included only when asked for: a wishlist a client is
- * still working through is not yet a message to the studio.
+ * One query for the page and one for the total, with the picture
+ * count coming back from the database as a count rather than as rows
+ * -- so a hundred wishlists of fifty pictures each cost two queries,
+ * not a hundred and one. Nothing here loads an image.
  */
 export const list = catchAsync(async (req: Request, res: Response) => {
-  const status = String(req.query.status ?? 'SUBMITTED').toUpperCase();
+  const q = String(req.query.q ?? '').trim();
+  const status = String(req.query.status ?? 'ALL').toUpperCase();
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 25));
+
   if (!['SUBMITTED', 'DRAFT', 'ALL'].includes(status)) {
     throw AppError.badRequest('status must be SUBMITTED, DRAFT or ALL.');
   }
 
-  const rows = await prisma.clientWishlist.findMany({
-    where: status === 'ALL' ? {} : { status: status as 'DRAFT' | 'SUBMITTED' },
-    orderBy: [{ submittedAt: 'desc' }, { createdAt: 'desc' }],
-    take: 200,
-    include: {
-      customer: { select: { id: true, name: true, phone: true, createdAt: true } },
-      _count: { select: { items: true } },
-    },
-  });
+  const where: Record<string, unknown> = {};
+  if (status !== 'ALL') where.status = status;
+
+  /* SEARCHED BY WHAT A PERSON ACTUALLY HAS IN FRONT OF THEM: the name
+     a client gave, the DV- code they were shown, or the client id from
+     a link. Case-insensitive on the name, because nobody types a
+     showroom name the way it was entered. */
+  if (q) {
+    where.OR = [
+      { customer: { name: { contains: q, mode: 'insensitive' } } },
+      { customer: { phone: { contains: q } } },
+      { code: { contains: q.toUpperCase() } },
+      { customerId: q },
+      { id: q },
+    ];
+  }
+
+  // Registration date, inclusive of both ends. `to` is pushed to the
+  // end of its day so that from=to=today means "today", which is what
+  // a person picking one date in a date field means by it.
+  const from = String(req.query.from ?? '').trim();
+  const to = String(req.query.to ?? '').trim();
+  if (from || to) {
+    const range: Record<string, Date> = {};
+    if (from) {
+      const d = new Date(from);
+      if (Number.isNaN(d.getTime())) throw AppError.badRequest('`from` is not a date.');
+      range.gte = d;
+    }
+    if (to) {
+      const d = new Date(to);
+      if (Number.isNaN(d.getTime())) throw AppError.badRequest('`to` is not a date.');
+      d.setHours(23, 59, 59, 999);
+      range.lte = d;
+    }
+    where.createdAt = range;
+  }
+
+  const [rows, total] = await Promise.all([
+    prisma.clientWishlist.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      skip: (page - 1) * limit,
+      take: limit,
+      include: {
+        customer: { select: { id: true, name: true, phone: true, createdAt: true } },
+        _count: { select: { items: true } },
+      },
+    }),
+    prisma.clientWishlist.count({ where }),
+  ]);
 
   res.status(200).json({
     success: true,
     data: {
-      wishlists: rows.map((row) => ({
-        id: row.id,
-        code: row.code,
-        status: row.status,
-        submittedAt: row.submittedAt,
-        createdAt: row.createdAt,
-        itemCount: row._count.items,
-        client: row.customer,
-        // The token is a client's credential, not studio reading
-        // material, so it is not in this response.
-      })),
+      wishlists: rows.map(summarize),
+      page,
+      limit,
+      total,
+      pages: Math.max(1, Math.ceil(total / limit)),
     },
   });
 });
 
-/** One wishlist in full, by its own id -- the studio's view, not a token's. */
+/** What the studio's list shows of one client. Never their token. */
+function summarize(row: {
+  id: string; code: string; status: string; submittedAt: Date | null; createdAt: Date;
+  driveFolderId: string | null; driveSyncedAt: Date | null; driveError: string | null;
+  customer: { id: string; name: string; phone: string | null; createdAt: Date };
+  _count: { items: number };
+}) {
+  return {
+    id: row.id,
+    clientId: row.customer.id,
+    code: row.code,
+    name: row.customer.name,
+    phone: row.customer.phone,
+    registeredAt: row.customer.createdAt,
+    status: row.status,
+    submittedAt: row.submittedAt,
+    createdAt: row.createdAt,
+    itemCount: row._count.items,
+    drive: {
+      folderId: row.driveFolderId,
+      folderUrl: folderUrlFor(row.driveFolderId || ''),
+      syncedAt: row.driveSyncedAt,
+      error: row.driveError,
+    },
+    // The token is a client's credential, not studio reading material,
+    // so it is in no studio response.
+  };
+}
+
+/** One client's wishlist in full -- the studio's view, not a token's. */
 export const getOne = catchAsync(async (req: Request, res: Response) => {
   const row = await prisma.clientWishlist.findUnique({
     where: { id: String(req.params.id) },
     include: {
       customer: { select: { id: true, name: true, phone: true, createdAt: true } },
-      items: { orderBy: { createdAt: 'asc' } },
+      items: {
+        orderBy: { createdAt: 'asc' },
+        // THE ORIGINAL LIBRARY REFERENCE, joined in one query rather
+        // than fetched per picture. A wishlist of fifty rooms is one
+        // round trip, not fifty-one.
+        include: {
+          reference: {
+            select: { id: true, title: true, themeId: true, room: true, driveFileId: true, isActive: true },
+          },
+        },
+      },
     },
   });
   if (!row) throw AppError.notFound('That wishlist no longer exists.');
 
-  const shape = wishlist.toPublicShape(row);
-  res.status(200).json({ success: true, data: { id: row.id, ...shape } });
+  res.status(200).json({
+    success: true,
+    data: {
+      id: row.id,
+      clientId: row.customer.id,
+      code: row.code,
+      name: row.customer.name,
+      phone: row.customer.phone,
+      registeredAt: row.customer.createdAt,
+      status: row.status,
+      submittedAt: row.submittedAt,
+      createdAt: row.createdAt,
+      drive: {
+        folderId: row.driveFolderId,
+        folderUrl: folderUrlFor(row.driveFolderId || ''),
+        syncedAt: row.driveSyncedAt,
+        error: row.driveError,
+      },
+      items: row.items.map((item) => ({
+        imageId: item.imageId,
+        themeId: item.themeId,
+        title: item.title,
+        imageUrl: item.imageUrl,
+        room: item.room,
+        selectedAt: item.createdAt,
+        /* WHAT THE CLIENT CHOSE, AND WHAT THE LIBRARY STILL HOLDS,
+           side by side. They can differ: a picture deleted from the
+           library leaves the choice intact with `reference` null,
+           which is the whole point of storing the choice rather than
+           a pointer. */
+        driveFileId: item.driveFileId,
+        driveCopyId: item.driveCopyId,
+        reference: item.reference
+          ? {
+            id: item.reference.id,
+            title: item.reference.title,
+            themeId: item.reference.themeId,
+            room: item.reference.room,
+            driveFileId: item.reference.driveFileId,
+            isActive: item.reference.isActive,
+          }
+          : null,
+        isStarter: isStarterId(item.imageId),
+      })),
+    },
+  });
+});
+
+/**
+ * Build or finish this client's Drive folder, on demand.
+ *
+ * The same call submission makes, exposed to the owner so a sync that
+ * failed -- Drive down, the connection expired, the folder unshared --
+ * can be retried once the cause is fixed, without asking the client to
+ * submit anything again. Doing it when nothing is outstanding is free
+ * and changes nothing.
+ */
+export const driveSync = catchAsync(async (req: Request, res: Response) => {
+  const row = await prisma.clientWishlist.findUnique({ where: { id: String(req.params.id) } });
+  if (!row) throw AppError.notFound('That wishlist no longer exists.');
+
+  const result = await syncWishlistToDrive(row.id);
+  res.status(200).json({ success: true, data: { drive: result } });
 });

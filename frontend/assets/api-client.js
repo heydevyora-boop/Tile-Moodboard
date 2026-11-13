@@ -1955,6 +1955,51 @@
   };
 
   // ============================================================
+  // CLIENT REGISTER (the studio's own view of the wishlists —
+  // authenticated, Owner/Admin only on the server; used by
+  // client-wishlists.html)
+  // ============================================================
+
+  const clientRegister = {
+    list(params) {
+      const q = new URLSearchParams();
+      Object.entries(params || {}).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') q.set(key, value);
+      });
+      const query = q.toString();
+
+      return apiFetch(
+        `/client-wishlists/studio/all${query ? `?${query}` : ''}`
+      ).then(
+        (r) =>
+          r.data
+      );
+    },
+
+    get(id) {
+      return apiFetch(
+        `/client-wishlists/studio/${encodeURIComponent(id)}`
+      ).then(
+        (r) =>
+          r.data
+      );
+    },
+
+    /** Build or finish this client's Drive folder. Safe to repeat. */
+    driveSync(id) {
+      return apiFetch(
+        `/client-wishlists/studio/${encodeURIComponent(id)}/drive-sync`,
+        {
+          method: 'POST'
+        }
+      ).then(
+        (r) =>
+          r.data
+      );
+    }
+  };
+
+  // ============================================================
   // TILES (plain browse/search — Catalog page's Surface Archive.
   // Distinct from moodBoards.tiles() above, which resolves specific
   // ids referenced by a generated combination.)
@@ -3960,6 +4005,8 @@ const ai = {
     shared,
 
     clientWishlist,
+
+    clientRegister,
 
     tiles,
 

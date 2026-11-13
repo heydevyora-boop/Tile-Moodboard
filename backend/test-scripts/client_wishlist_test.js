@@ -306,22 +306,36 @@ async function main() {
     const jwt = login.body?.data?.accessToken || login.body?.data?.tokens?.accessToken;
     check('50. the studio can log in', !!jwt, login.body);
 
-    const studio = await call('GET', `${W}/studio/all`, undefined, jwt);
+    // Submitted only, asked for by name. The register's own default is
+    // every client who has registered -- see check 54.
+    const studio = await call('GET', `${W}/studio/all?status=SUBMITTED`, undefined, jwt);
     const sent = studio.body?.data?.wishlists || [];
     check('51. the studio sees what clients have sent',
       studio.status === 200 && sent.length === 1 && sent[0].status === 'SUBMITTED',
       sent.map((w) => w.status));
+    // Flat -- name, phone and clientId on the row itself, the same
+    // shape the single-wishlist endpoint answers with. It used to nest
+    // them under `client`; the two disagreeing was the kind of
+    // difference a page gets wrong once and nobody notices.
     check('52. with the client’s name, their code and how many rooms',
-      sent[0]?.client?.name === 'Aarti Mehta' && /^DV-/.test(sent[0]?.code || '')
-      && sent[0]?.itemCount === 1, sent[0]);
+      sent[0]?.name === 'Aarti Mehta' && /^DV-/.test(sent[0]?.code || '')
+      && sent[0]?.itemCount === 1 && sent[0]?.clientId === a.body.data.clientId, sent[0]);
     check('53. a client’s token is never in the studio’s view',
       !JSON.stringify(studio.body).includes(tokenA)
       && !JSON.stringify(studio.body).includes(tokenB));
 
     const drafts = await call('GET', `${W}/studio/all?status=ALL`, undefined, jwt);
-    check('54. drafts are there when asked for, and not before',
+    check('54. drafts are there when asked for',
       (drafts.body?.data?.wishlists || []).length > 1,
       (drafts.body?.data?.wishlists || []).length);
+
+    // ...and by default, because a register that hid the clients still
+    // choosing would not be a register of clients.
+    const everyone = await call('GET', `${W}/studio/all`, undefined, jwt);
+    check('54b. ...and by default the register shows every client who registered',
+      (everyone.body?.data?.wishlists || []).length
+        === (drafts.body?.data?.wishlists || []).length,
+      { byDefault: (everyone.body?.data?.wishlists || []).length });
 
     const one = await call('GET', `${W}/studio/${sent[0].id}`, undefined, jwt);
     check('55. one wishlist can be opened in full',
