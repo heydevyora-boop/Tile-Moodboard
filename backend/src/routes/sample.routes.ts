@@ -34,8 +34,8 @@
  * ["*"] was not matched by a named-permission check.
  */
 
-import { Router, Request, Response, NextFunction } from 'express';
-import { AppError } from '@utils/AppError';
+import { Router } from 'express';
+import { explainMissingTable } from '@middlewares/explainMissingTable';
 import { authenticate, authorize, requirePermission } from '@middlewares/auth';
 import { validate } from '@middlewares/validate';
 import { uploadReferenceImage } from '@middlewares/uploadReferenceImage';
@@ -163,38 +163,9 @@ router.post(
   controller.requestRemoval,
 );
 
-/**
- * A MISSING TABLE, EXPLAINED RATHER THAN NUMBERED.
- *
- * vercel.json's buildCommand is `prisma generate` alone, so a deploy
- * ships this module and none of its four tables until somebody runs the
- * migration. Prisma answers P2021, the global handler turns any code it
- * does not recognise into "Database request error (P2021)", and that is
- * what reached the owner's screen -- a number that names neither the
- * cause nor the cure, on every screen of the feature at once.
- *
- * The De'vyora Library already learned this and says so in words
- * (library.service.describeStorageFailure). This is the same answer for
- * the same question, given once for the whole router rather than
- * wrapped around every call in it.
- *
- * Registered AFTER the routes, so it only ever sees their errors;
- * anything it does not recognise goes on to the global handler
- * untouched.
- */
-router.use((error: unknown, _req: Request, _res: Response, next: NextFunction) => {
-  const code = (error as { code?: string } | null)?.code;
-
-  if (code === 'P2021' || code === 'P2022') {
-    next(AppError.badRequest(
-      'The physical-sample tables have not been created in this database yet. Run '
-      + '`cd backend && npx prisma migrate deploy` against it \u2014 this project\u2019s '
-      + 'build runs `prisma generate` only, so a deployment does not create them.',
-    ));
-    return;
-  }
-
-  next(error);
-});
+/* A missing table, explained rather than numbered -- see
+   middlewares/explainMissingTable. Registered after the routes, so it
+   only ever sees theirs. */
+router.use(explainMissingTable('physical-sample'));
 
 export default router;

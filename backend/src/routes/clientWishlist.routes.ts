@@ -26,6 +26,7 @@
  */
 
 import { Router } from 'express';
+import { explainMissingTable } from '@middlewares/explainMissingTable';
 import { authenticate, authorize } from '@middlewares/auth';
 import { validate } from '@middlewares/validate';
 import {
@@ -93,5 +94,12 @@ router.get('/studio/:id', controller.getOne);
  * and it is idempotent: when nothing is outstanding it changes
  * nothing and says so. */
 router.post('/studio/:id/drive-sync', controller.driveSync);
+
+/* A missing table, explained rather than numbered. Without this the
+   register and every client-facing screen answered
+   "Database request error (P2021)" -- which is how a migration that had
+   not reached this deployment's database looked like a broken feature.
+   See middlewares/explainMissingTable. */
+router.use(explainMissingTable('client wishlist'));
 
 export default router;

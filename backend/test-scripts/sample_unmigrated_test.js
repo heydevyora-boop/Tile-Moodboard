@@ -1,5 +1,6 @@
 /**
- * Sample Placement, on a deployment where the migration never ran.
+ * Sample Placement AND Client Wishlists, on a deployment where the
+ * migration never ran -- or ran against a different database.
  *
  * THE CODE SHIPS WITHOUT THE TABLES. vercel.json's buildCommand is
  * `prisma generate` alone, so a deploy carries the sample module and
@@ -93,6 +94,8 @@ async function main() {
   execFileSync('psql', [DB_URL, '-c',
     'drop table if exists "placement_change_requests", "sample_placements", '
     + '"physical_samples", "product_colours" cascade'], { stdio: 'ignore' });
+  execFileSync('psql', [DB_URL, '-c',
+    'drop table if exists "wishlist_items", "client_wishlists" cascade'], { stdio: 'ignore' });
 
   const express = require('express');
   const host = express();
@@ -142,6 +145,31 @@ async function main() {
     check('5. ...and so does asking what a cassette holds',
       namesTheRemedy(contents.body?.message), contents.body?.message);
 
+    // ── THE CLIENT REGISTER, which is the screen in the report ───
+    const register = await api('GET', '/client-wishlists/studio/all?status=ALL&page=1&limit=25',
+      undefined, jwt);
+    check('5b. the client register says the migration has not reached this database',
+      namesTheRemedy(register.body?.message), register.body?.message);
+
+    const clientThemes = await api('GET', '/client-wishlists/browse/themes');
+    check('5c. ...and so does the client\u2019s own page, which has no login',
+      clientThemes.status === 200 || namesTheRemedy(clientThemes.body?.message),
+      clientThemes.body?.message);
+
+    const registerAttempt = await api('POST', '/client-wishlists/register', { name: 'Aarti Mehta' });
+    check('5d. ...and so does trying to start a wishlist',
+      namesTheRemedy(registerAttempt.body?.message), registerAttempt.body?.message);
+
+    // ── the message names BOTH ways of getting here ──────────────
+    check('5e. the message says the migration may have reached a different database',
+      /different database/i.test(String(register.body?.message || ''))
+      && /DIRECT_URL/.test(String(register.body?.message || ''))
+      && /DATABASE_URL/.test(String(register.body?.message || '')),
+      register.body?.message);
+    check('5f. ...and names the Vercel environment trap by name',
+      /Production is not visible to a Preview/i.test(String(register.body?.message || '')),
+      register.body?.message);
+
     // ── and nothing else is harmed ───────────────────────────────
     const tiles = await api('GET', '/tiles?limit=5', undefined, jwt);
     check('6. the ERP catalogue still answers — the sample tables cost only the samples',
@@ -184,6 +212,13 @@ async function main() {
         (await page.$$('#retryBtn')).length === 1);
       check('13. ...with the rest of the workspace still reachable from the sidebar',
         (await page.$$eval('#navItems .nav-item', (els) => els.length)) >= 6);
+
+      await page.goto(`${origin}/client-wishlists.html`);
+      await page.waitForSelector('.note.bad', { timeout: 20000 });
+      const onRegister = (await page.textContent('.note.bad')).replace(/\s+/g, ' ');
+      check('14. the client register page says it too, instead of printing P2021',
+        /migrate deploy/.test(onRegister) && !/P2021/.test(onRegister),
+        onRegister.slice(0, 160));
     } finally {
       await browser.close();
     }
