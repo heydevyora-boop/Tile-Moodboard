@@ -40,6 +40,7 @@
     "test:client-wishlist-e2e": "node test-scripts/client_wishlist_e2e_test.js",
     "test:physical-sample": "node test-scripts/physical_sample_test.js",
     "test:sample-placement-page": "node test-scripts/sample_placement_page_test.js",
+    "test:sample-unmigrated": "node test-scripts/sample_unmigrated_test.js",
     "test:passkey-e2e": "node test-scripts/passkey_e2e_test.js",
     "test:scene-progress": "node test-scripts/scene_progress_test.js",
     "test:recent-generations-page": "node test-scripts/recent_generations_page_wiring_test.js",
