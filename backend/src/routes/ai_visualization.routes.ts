@@ -36,9 +36,6 @@ import {
  * returned untouched.
  */
 function sceneImageUrlFor(imageUrl: string, req: Request): string {
-  const fileId = driveFileIdFromUrl(imageUrl);
-  if (!fileId) return imageUrl;
-
   // The request's own origin, for the reason given where the starters
   // build theirs: a configured one is stale by the next deployment.
   const host = req.get('host');
@@ -46,7 +43,46 @@ function sceneImageUrlFor(imageUrl: string, req: Request): string {
     ? `${req.protocol}://${host}`
     : (config.backend.publicUrl || '').replace(/\/+$/, '');
 
-  return `${origin}/static/library-reference/${fileId}`;
+  const fileId = driveFileIdFromUrl(imageUrl);
+  // A starter is ALREADY an absolute url on this host; an uploaded
+  // picture becomes one. Either way the fetch comes back in through
+  // this deployment's own front door, so both need what follows.
+  const url = fileId ? `${origin}/static/library-reference/${fileId}` : imageUrl;
+
+  return withProtectionBypass(url, origin);
+}
+
+/**
+ * A PROTECTED PREVIEW ANSWERS THE FETCHER WITH ITS SIGN-IN PAGE.
+ *
+ * Vercel's Deployment Protection sits at the edge, in FRONT of every
+ * function. The Python service fetches the chosen room from this
+ * deployment's own address over the public internet, so on a preview
+ * that request is redirected to Vercel's SSO page -- and urlopen
+ * follows redirects, so what comes back is HTML with a 200.
+ *
+ * That is why the failure reads "the remote scene image did not
+ * contain a valid image file": a non-2xx would have raised, and this
+ * route never answers 200 with anything but image bytes. The studio
+ * was shown a message blaming the picture for a project setting.
+ *
+ * Vercel's own way out, for a fetcher that cannot set headers -- which
+ * main_step6_complete.py cannot -- is the same token as a query
+ * parameter. The secret arrives as VERCEL_AUTOMATION_BYPASS_SECRET
+ * once Protection Bypass for Automation is switched on.
+ *
+ * With nothing set this adds nothing, which is the right answer on
+ * production and on a laptop: there is no protection there to bypass.
+ * And it is only ever added to a url on THIS deployment's own host,
+ * so the token cannot be carried to anybody else.
+ */
+function withProtectionBypass(url: string, origin: string): string {
+  const secret = (process.env.VERCEL_AUTOMATION_BYPASS_SECRET || '').trim();
+  if (!secret || !origin || !url.startsWith(origin)) return url;
+
+  return url
+    + (url.includes('?') ? '&' : '?')
+    + `x-vercel-protection-bypass=${encodeURIComponent(secret)}`;
 }
 
 const router = Router();
