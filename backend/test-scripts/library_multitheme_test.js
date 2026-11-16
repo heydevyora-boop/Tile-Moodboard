@@ -185,6 +185,20 @@ async function main() {
     await page.waitForTimeout(120);
   };
 
+  /**
+   * The mood board, having been sent here by the Library.
+   *
+   * It starts generating on arrival rather than showing the seven
+   * steps. THIS fixture seeds no catalogue, so that generation cannot
+   * finish -- which is fine and is not what is being asked here: what
+   * matters is that the wizard was skipped and the brief is still one
+   * click away. Both endings offer that click, under different ids.
+   */
+  const settleOnBoards = async () => {
+    await page.waitForSelector('.board-card, .error-box', { timeout: 40000 });
+    return (await page.locator('#editBriefBtn').count()) ? '#editBriefBtn' : '#editBtn';
+  };
+
   /** Idempotent: clicking an open switcher would close it again. */
   const openSwitcher = async () => {
     if (await page.locator('.lib-switch.open').count()) return;
@@ -673,13 +687,20 @@ async function main() {
     // matches the catalogue against a real theme and a real colour.
     const mixTitle = (await shownTitles())[0];
     await page.locator('.lib-card').first().click();
-    await page.waitForURL('**/mood-board.html', { timeout: 20000 });
+    await page.waitForURL('**/mood-board.html*', { timeout: 20000 });
     const fromMix = await page.evaluate(
       () => JSON.parse(localStorage.getItem('casa_library_selection') || 'null'));
     check('9A. a picture chosen from the Mix carries its OWN theme, never the Mix',
       fromMix && fromMix.themeId !== '__mix__' && fromMix.themeLabel !== 'De\u2019vyora Mix'
       && !!fromMix.themeLabel && fromMix.title === mixTitle, fromMix);
-    check('9B. ...so the wizard opens on that theme\u2019s own room',
+    // The boards are built on arrival now, so the seven steps are one
+    // click behind them rather than in front of them.
+    const backFromMix = await settleOnBoards();
+    check('9B0. the seven steps were skipped',
+      await page.locator('.room-card').count() === 0);
+    await page.click(backFromMix);
+    await page.waitForSelector('.room-card', { timeout: 20000 });
+    check('9B. ...and the brief behind them stands on that picture\u2019s own room',
       await page.getAttribute('.room-card.selected', 'data-room') === 'Bathroom',
       await page.getAttribute('.room-card.selected', 'data-room'));
 
@@ -718,9 +739,9 @@ async function main() {
 
     const pickTitle = (await shownTitles())[0];
     await page.locator('.lib-card').first().click();
-    await page.waitForURL('**/mood-board.html', { timeout: 20000 });
+    await page.waitForURL('**/mood-board.html*', { timeout: 20000 });
     check('11b. tapping it goes straight to the mood board',
-      page.url().endsWith('/mood-board.html'), page.url());
+      page.url().includes('/mood-board.html'), page.url());
 
     const carried = await page.evaluate(
       () => JSON.parse(localStorage.getItem('casa_library_selection') || 'null'));
@@ -730,16 +751,28 @@ async function main() {
       carried && carried.themeLabel === 'British'
       && /bathroom/i.test(carried.roomWizard || carried.room || ''), carried);
 
-    await page.waitForSelector('.libref', { timeout: 20000 });
-    check('11e. ...and the wizard opens standing on that very picture',
-      (await page.textContent('.libref')).includes(pickTitle),
-      await page.textContent('.libref'));
+    // THE BOARDS THEMSELVES, not the brief. Every step carries a
+    // default and the picture filled in the two that decide the most,
+    // so there is nothing left to ask before there is something to
+    // look at.
+    const backFromPick = await settleOnBoards();
+    check('11e. ...and it went straight to building them, with no step in between',
+      await page.locator('.room-card').count() === 0
+      && await page.locator('.step-tabs').count() === 0);
     // The wizard opens on its ROOM step, and the room the picture is a
     // reference for is already the chosen one -- the studio is not
     // asked a question the picture has already answered.
-    check('11f. ...with the room already chosen, not asked for again',
+    check('11f. ...with a way back to the brief, so nothing is fixed',
+      !!backFromPick && await page.locator(backFromPick).count() === 1, backFromPick);
+
+    await page.click(backFromPick);
+    await page.waitForSelector('.room-card', { timeout: 20000 });
+    check('11g. ...where the room was already chosen, not asked for again',
       await page.getAttribute('.room-card.selected', 'data-room') === 'Bathroom',
       await page.getAttribute('.room-card.selected', 'data-room'));
+    check('11h. ...and the picture is still the reference it is working against',
+      (await page.textContent('.libref')).includes(pickTitle),
+      await page.textContent('.libref'));
 
     check('Z. no page threw at any point', pageErrors.length === 0, pageErrors.slice(0, 3));
   } finally {

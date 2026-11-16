@@ -1630,7 +1630,16 @@
 
     const iterateBoxHtml = state.viewOnly
       ? '<div class="iterate-box"><h3 class="serif" style="margin:0; font-size:clamp(20px,2vw,26px)">Saved project</h3><p style="margin:8px 0 0; font-size:14px; color:var(--text2); line-height:1.55">Viewing a previously saved mood board.</p><div class="iterate-actions"><button class="btn-dashed mono" id="backToProjectsBtn">← BACK TO PROJECTS</button></div></div>'
-      : '<div class="iterate-box"><h3 class="serif" style="margin:0; font-size:clamp(20px,2vw,26px)">Iterate the design</h3><p style="margin:8px 0 0; font-size:14px; color:var(--text2); line-height:1.55">Keeps the same room, feature and budget while generating a fresh set.</p><div class="iterate-actions"><button class="btn-amber mono" id="regenBtn">↻ TRY ' + boardCount() + ' MORE VARIATIONS</button></div></div>';
+      : '<div class="iterate-box"><h3 class="serif" style="margin:0; font-size:clamp(20px,2vw,26px)">Iterate the design</h3><p style="margin:8px 0 0; font-size:14px; color:var(--text2); line-height:1.55">Keeps the same room, feature and budget while generating a fresh set.</p><div class="iterate-actions"><button class="btn-amber mono" id="regenBtn">↻ TRY ' + boardCount() + ' MORE VARIATIONS</button>'
+        // THE WAY BACK TO THE BRIEF.
+        //
+        // The results used to be reachable only THROUGH the seven
+        // steps, so there was always one behind you. A picture chosen
+        // in the Library now builds the boards on arrival, and without
+        // this there would be no way from here to change the budget,
+        // the size or the view -- only to ask for more of the same.
+        + '<button class="btn-dashed mono" id="editBriefBtn">◇ EDIT DESIGN DNA</button>'
+        + '</div></div>';
 
     main.innerHTML =
       '<div class="stage">' +
@@ -1697,6 +1706,11 @@
       document.getElementById('backToProjectsBtn').addEventListener('click', () => { location.href = 'projects.html'; });
     } else {
       document.getElementById('regenBtn').addEventListener('click', runGenerate);
+      document.getElementById('editBriefBtn').addEventListener('click', () => {
+        state.stage = 'wizard';
+        state.step = 1;
+        render();
+      });
     }
   }
 
@@ -2570,7 +2584,10 @@
     document.getElementById('profileName').textContent = user.name || user.email;
     document.getElementById('profileRole').textContent = (user.role || '').toUpperCase();
 
-    const boardId = new URLSearchParams(location.search).get('boardId');
+    const query = new URLSearchParams(location.search);
+    const boardId = query.get('boardId');
+    /** The Library asking for the boards themselves, not the brief. */
+    const fromLibrary = query.get('generate') === '1';
 
     // THE REFERENCE THE CLIENT LEFT THE LIBRARY WITH.
     //
@@ -2616,9 +2633,33 @@
 
     if (boardId) {
       loadBoardFromId(boardId);
-    } else {
-      render();
+      return;
     }
+
+    // STRAIGHT TO THE BOARDS, WHEN THE LIBRARY SENT THEM HERE.
+    //
+    // Choosing a picture is a whole instruction on its own: this room,
+    // matched. Every step of the brief already carries a default, and
+    // the reference has just filled in the two that decide the most --
+    // the room and the theme -- so there is nothing left to ask before
+    // there is something to look at.
+    //
+    // Nothing is hidden by this. The brief it was built from is
+    // printed above the results, and EDIT DESIGN DNA goes back to the
+    // seven steps to change any of it and build again.
+    //
+    // THE FLAG IS SPENT, NOT REMEMBERED. Generation is a paid call, so
+    // it is taken out of the address before it runs: a refresh, or a
+    // Back onto this page, must not buy a second one.
+    if (fromLibrary && state.libraryRef) {
+      query.delete('generate');
+      const rest = query.toString();
+      history.replaceState(null, '', location.pathname + (rest ? '?' + rest : ''));
+      runGenerate();
+      return;
+    }
+
+    render();
   }
 
   init();

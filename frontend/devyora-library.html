@@ -1336,14 +1336,13 @@
       roomWizard: inRoom ? inRoom.wizard : '',
     });
 
-    // STRAIGHT ON TO THE MOOD BOARD.
+    // STRAIGHT ON TO THE BOARDS.
     //
     // The choice is already stored -- CasaApi.library.select writes it
     // where the wizard reads it -- so there is nothing left to do on
-    // this page. The wizard pre-selects this picture's theme and its
-    // room from the same record, ranks the catalogue against the
-    // picture's own colour, and builds the combination from there.
-    location.href = 'mood-board.html';
+    // this page. ?generate=1 says the rest out loud: do not stop on
+    // the brief, build the boards from this picture and show them.
+    location.href = 'mood-board.html?generate=1';
   }
 
   function clearChoice() {
