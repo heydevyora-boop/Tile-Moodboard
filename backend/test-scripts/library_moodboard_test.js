@@ -244,9 +244,11 @@ async function main() {
     // migration.
     await page.locator('.lib-card').first().click();
 
-    // ONE ACT, NOT TWO. Tapping the picture is choosing it AND opening
-    // the mood board; there is no second button to find in between.
-    await page.waitForURL('**/mood-board.html', { timeout: 20000 });
+    // ONE ACT, NOT THREE. Tapping the picture chooses it, opens the
+    // mood board AND builds the boards: the seven steps all carry a
+    // default, and the picture has just filled in the two that decide
+    // the most, so there is nothing left to ask first.
+    await page.waitForURL('**/mood-board.html*', { timeout: 20000 });
     check('1a. tapping the room lands on the mood board', true);
 
     const kept = await page.evaluate(() => JSON.parse(localStorage.getItem('casa_library_selection')));
@@ -257,8 +259,31 @@ async function main() {
     check('1d. ...and the room it is a reference FOR',
       kept.roomWizard === 'Bathroom' || /bathroom/i.test(kept.room || ''), kept);
 
+    await page.waitForSelector('.board-card', { timeout: 40000 });
+    check('1e. ...and the boards are already built, with no step in between',
+      await page.locator('.board-card').count() >= 1);
+    check('1f. ...from the picture that was tapped',
+      sentBodies.generate
+      && sentBodies.generate.libraryReferenceId === 'starter:moroccan-bathroom',
+      sentBodies.generate && sentBodies.generate.libraryReferenceId);
+
+    // GENERATION IS A PAID CALL. The flag that asked for it is spent on
+    // the way in, so a refresh or a Back onto this page cannot buy a
+    // second one.
+    check('1g. ...and the address no longer asks for another',
+      !page.url().includes('generate=1'), page.url());
+
+    // Nothing is hidden by skipping the steps: the brief is on screen
+    // and there is a way back into it.
+    const spec = await page.locator('.step-sub').first().textContent() || '';
+    check('1h. the brief it was built from is stated above the boards',
+      /Bathroom/.test(spec) && /Moroccan/.test(spec), spec);
+    check('1i. ...with a way back to change any of it',
+      await page.locator('#editBriefBtn').count() === 1);
+
+    await page.click('#editBriefBtn');
     await page.waitForSelector('.room-card', { timeout: 20000 });
-    check('1e. ...and the wizard is standing on its first step', true);
+    check('1j. ...which lands on the first of the seven steps', true);
   }
 
   // ════════════════════════════════════════════════════════════════
@@ -268,8 +293,14 @@ async function main() {
       await page.locator('.libref').count() === 1);
     const banner = await page.locator('.libref').textContent() || '';
     check('2b. ...named', /Cobalt Zellige/.test(banner) && /Bathroom/.test(banner), banner);
-    check('2c. ...saying what it will be used for',
-      /TILES AND THE IMAGE WILL BOTH BE MATCHED/.test(banner), banner);
+    // The banner reports what ACTUALLY happened once there has been a
+    // generation, and what WILL happen before there has been one. The
+    // Library now builds the boards on arrival, so by the time these
+    // seven steps are reached it is the first of those -- either way
+    // it says the reference is what the tiles are matched to.
+    check('2c. ...saying what it is used for',
+      /TILES MATCHED TO THIS ROOM/.test(banner)
+      || /TILES AND THE IMAGE WILL BOTH BE MATCHED/.test(banner), banner);
     check('2d. ...with a way to change it and a way to drop it',
       await page.locator('.libref-acts a[href="devyora-library.html"]').count() === 1
       && await page.locator('#librefClear').count() === 1);
