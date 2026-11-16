@@ -156,8 +156,10 @@ async function main() {
     await signIn('priya@example.test');
     await openLibrary();
 
+    // The themes come from the studio's theme file, not the database,
+    // and so does the Mix built out of them: ten cards either way.
     check('1a. the themes are listed anyway',
-      await page.locator('.lib-theme-card').count() === 9,
+      await page.locator('.lib-theme-card').count() === 10,
       await page.locator('.lib-theme-card').count());
     check('1b. ...and the page is NOT the empty state that was reported',
       await page.locator('.lib-empty').count() === 0);

@@ -160,8 +160,10 @@ async function main() {
   // ════════════════════════════════════════════════════════════════
   console.log('\n1. the themes, and choosing one');
   await openLibrary();
+  // Nine themes and the Mix. Nothing is filed under the Mix, which the
+  // upload checks below are the ones that actually prove.
   check('1a. every theme is offered, read from the server',
-    await page.locator('.lib-theme-card').count() === 9,
+    await page.locator('.lib-theme-card').count() === 10,
     await page.locator('.lib-theme-card').count());
   check('1b. no upload control until a theme is chosen',
     await page.locator('#libFiles').count() === 0);

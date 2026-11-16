@@ -140,8 +140,10 @@ function main() {
       check('5. ...with De’vyora Library as the active item',
         /Library/.test((doc.querySelector('.nav-item.active') || {}).textContent || ''),
         (doc.querySelector('.nav-item.active') || {}).textContent);
+      // Two stubbed themes, and De'vyora Mix built from them.
       check('6. the themes are the first thing shown',
-        doc.querySelectorAll('.lib-theme-card').length === 2,
+        doc.querySelectorAll('.lib-theme-card').length === 3
+        && doc.querySelectorAll('.lib-theme-cell.is-mix').length === 1,
         doc.querySelectorAll('.lib-theme-card').length);
       check('7. ...and the page says what choosing one is for',
         /the scene is generated from that same picture/.test(doc.body.textContent));
