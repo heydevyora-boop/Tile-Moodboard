@@ -243,24 +243,22 @@ async function main() {
     // the one that has to work on a deployment with no Drive and no
     // migration.
     await page.locator('.lib-card').first().click();
-    await page.waitForSelector('#libActive', { timeout: 10000 });
 
-    check('1a. the chosen room is shown as the active reference',
-      /Cobalt Zellige/.test(await page.locator('#libActive').textContent() || ''),
-      await page.locator('#libActive').textContent());
-    check('1b. ...with a way to go and use it',
-      await page.locator('.lib-active-go').count() === 1);
+    // ONE ACT, NOT TWO. Tapping the picture is choosing it AND opening
+    // the mood board; there is no second button to find in between.
+    await page.waitForURL('**/mood-board.html', { timeout: 20000 });
+    check('1a. tapping the room lands on the mood board', true);
 
     const kept = await page.evaluate(() => JSON.parse(localStorage.getItem('casa_library_selection')));
-    check('1c. the choice carries the reference’s id',
+    check('1b. the choice carries the reference’s id',
       kept.id === 'starter:moroccan-bathroom', kept.id);
-    check('1d. ...and its theme’s LABEL, which is what the wizard works in',
+    check('1c. ...and its theme’s LABEL, which is what the wizard works in',
       kept.themeLabel === 'Moroccan', kept);
+    check('1d. ...and the room it is a reference FOR',
+      kept.roomWizard === 'Bathroom' || /bathroom/i.test(kept.room || ''), kept);
 
-    await page.locator('.lib-active-go').click();
-    await page.waitForURL('**/mood-board.html', { timeout: 20000 });
     await page.waitForSelector('.room-card', { timeout: 20000 });
-    check('1e. ...and that link lands on the mood board', true);
+    check('1e. ...and the wizard is standing on its first step', true);
   }
 
   // ════════════════════════════════════════════════════════════════

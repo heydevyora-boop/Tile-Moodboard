@@ -314,51 +314,66 @@ async function main() {
   }
 
   // ════════════════════════════════════════════════════════════════
-  console.log('\n3. choosing one');
+  console.log('\n3. choosing one, which is now the whole act');
   {
     check('3a. nothing is chosen to begin with',
       await page.locator('#libActive').count() === 0);
 
+    // THE STEP THAT NO LONGER EXISTS. Choosing a picture used to leave
+    // the studio on this page with a USE IN A MOOD BOARD link to find;
+    // the tap is the act now, so there is no such link to find.
+    check('3a2. there is no "use this" button to hunt for afterwards',
+      await page.locator('.lib-active-go').count() === 0);
+
     const firstTitle = (await page.locator('.lib-card .lib-title').first().textContent() || '').trim();
     await page.locator('.lib-card').first().click();
-    await page.waitForSelector('#libActive', { timeout: 10000 });
-    const banner = await page.locator('#libActive').textContent() || '';
-    check('3b. the chosen picture is named as the active reference',
-      /ACTIVE REFERENCE IMAGE/.test(banner) && banner.includes(firstTitle),
-      { banner, firstTitle });
-    check('3c. ...with the theme it came from',
-      /Moroccan/.test(banner), banner);
-    check('3d. ...and the card itself is marked',
-      await page.locator('.lib-card.chosen').count() === 1
-      && await page.locator('.lib-chosen-flag').count() === 1);
-    check('3e. ...and says so to a screen reader too',
-      await page.locator('.lib-card.chosen').getAttribute('aria-pressed') === 'true');
+    await page.waitForURL('**/mood-board.html', { timeout: 20000 });
+    check('3b. tapping a picture goes straight to the mood board',
+      page.url().endsWith('/mood-board.html'), page.url());
 
     const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('casa_library_selection') || 'null'));
     // The first card in a theme is a STARTER, so this is the record for
     // one of those: its picture is served by this backend rather than
     // by Drive, and its id is prefixed so nothing downstream can
     // mistake it for a database row.
-    check('3f. the choice is the whole record the generator will need',
+    check('3c. ...carrying the whole record the generator will need',
       stored && stored.themeId === 'moroccan' && stored.title === firstTitle
       && !!stored.id && stored.themeLabel === 'Moroccan'
       && /^\/static\/library-starters\//.test(stored.imageUrl || ''), stored);
-    check('3f2. ...and a starter is marked as one by its id',
+    check('3c2. ...and a starter is marked as one by its id',
       stored.id.startsWith('starter:'), stored.id);
+
+    // The banner is what the studio sees on the way BACK.
+    await openLibrary();
+    await openThemeRoom('moroccan', 'bathroom');
+    const banner = await page.locator('#libActive').textContent() || '';
+    check('3d. coming back, that picture is named as the active reference',
+      /ACTIVE REFERENCE IMAGE/.test(banner) && banner.includes(firstTitle),
+      { banner, firstTitle });
+    check('3e. ...with the theme it came from',
+      /Moroccan/.test(banner), banner);
+    check('3f. ...and the card itself is marked',
+      await page.locator('.lib-card.chosen').count() === 1
+      && await page.locator('.lib-chosen-flag').count() === 1);
+    check('3f2. ...and says so to a screen reader too',
+      await page.locator('.lib-card.chosen').getAttribute('aria-pressed') === 'true');
 
     // Choosing another replaces it; there is only ever one.
     const secondTitle = (await page.locator('.lib-card .lib-title').nth(1).textContent() || '').trim();
     await page.locator('.lib-card').nth(1).click();
-    await page.waitForFunction(
-      (wanted) => {
-        const el = document.getElementById('libActive');
-        return !!el && el.textContent.indexOf(wanted) !== -1;
-      },
-      secondTitle, { timeout: 10000 },
-    );
+    await page.waitForURL('**/mood-board.html', { timeout: 20000 });
+    const now = await page.evaluate(() => JSON.parse(localStorage.getItem('casa_library_selection') || 'null'));
     check('3g. choosing another replaces it, never adds a second',
-      await page.locator('.lib-card.chosen').count() === 1,
-      await page.locator('.lib-card.chosen').count());
+      now && now.title === secondTitle && now.title !== firstTitle,
+      now && now.title);
+
+    // ...and back into the room, which is where the next part starts.
+    await openLibrary();
+    await openThemeRoom('moroccan', 'bathroom');
+    check('3h. the newly chosen one is the marked card now',
+      await page.locator('.lib-card.chosen').count() === 1
+      && (await page.locator('.lib-card.chosen .lib-title').textContent() || '').trim() === secondTitle,
+      await page.locator('.lib-card.chosen .lib-title').textContent());
   }
 
   // ════════════════════════════════════════════════════════════════
@@ -447,9 +462,13 @@ async function main() {
       await page.locator('.lib-card:has(.lib-starter-flag) [data-delete]').count() === 0);
 
     // Removing the one that is currently chosen must not leave a
-    // selection pointing at something that no longer exists.
-    const own = page.locator('.lib-card:not(:has(.lib-starter-flag))').first();
-    await own.click();
+    // selection pointing at something that no longer exists. Choosing
+    // leaves this page now, so the picture is chosen and then returned
+    // to before it is removed.
+    await page.locator('.lib-card:not(:has(.lib-starter-flag))').first().click();
+    await page.waitForURL('**/mood-board.html', { timeout: 20000 });
+    await openLibrary();
+    await openThemeRoom('british', 'unsorted');
     await page.waitForSelector('#libActive', { timeout: 10000 });
     page.on('dialog', (d) => d.accept());
     await page.locator('.lib-card.chosen [data-delete]').click();
@@ -460,12 +479,17 @@ async function main() {
       await page.locator('#libActive').count() === 0
       && await page.evaluate(() => localStorage.getItem('casa_library_selection')) === null);
 
-    // ...and choosing is still the client's action, not the studio's
-    // REMOVE button.
+    // ...and choosing is still the studio's own action, not only the
+    // client's. It simply goes on to the mood board now.
+    const nextTitle = (await page.locator('.lib-card .lib-title').first().textContent() || '').trim();
     await page.locator('.lib-card').first().click();
-    await page.waitForSelector('#libActive', { timeout: 10000 });
+    await page.waitForURL('**/mood-board.html', { timeout: 20000 });
     check('5d. the studio can choose a reference too',
-      await page.locator('.lib-card.chosen').count() === 1);
+      await page.evaluate(
+        () => (JSON.parse(localStorage.getItem('casa_library_selection') || '{}')).title
+      ) === nextTitle, nextTitle);
+
+    await openLibrary();
   }
 
   // ════════════════════════════════════════════════════════════════

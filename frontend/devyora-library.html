@@ -165,8 +165,6 @@
      Pushed to the end of the banner together, so the name beside it
      stays the thing the eye lands on. */
   .lib-active-acts { margin-left:auto; flex:0 0 auto; display:flex; align-items:center; gap:14px; }
-  .lib-active-go { flex:0 0 auto; font-size:9px; letter-spacing:.14em; color:var(--gold); text-decoration:none; border:1px solid var(--gold-light); border-radius:9px; padding:7px 11px; white-space:nowrap; }
-  .lib-active-go:hover { color:var(--ink); border-color:var(--gold); }
   .lib-active-clear { flex:0 0 auto; background:none; border:none; padding:0; color:var(--muted); font-size:9px; letter-spacing:.14em; cursor:pointer; text-decoration:underline; }
   .lib-active-clear:hover { color:var(--err); }
 
@@ -225,23 +223,48 @@
   .lib-theme-go { font-size:8.5px; letter-spacing:.16em; color:var(--muted); }
   .lib-theme-card:hover .lib-theme-go { color:var(--ink); }
 
-  /* ── which of a theme's five rooms hold anything ── */
-  .lib-theme-rooms { display:flex; gap:4px; }
-  .lib-room-dot { width:17px; height:17px; border-radius:5px; display:grid; place-items:center;
-                  font-size:8px; letter-spacing:0; color:var(--muted);
-                  background:var(--sand); border:1px solid var(--line); }
-  .lib-room-dot.has { background:var(--gold); border-color:var(--gold); color:#FFF8EC; }
+  /* ── A THEME'S ROOMS, NAMED AND OPENABLE ──
+     These used to be six one-letter dots. Bathroom, Bedroom and
+     Balcony all read "B", so the row told the studio nothing it could
+     act on. Each is now a named button that opens that theme's room
+     directly -- which is why they sit below the card rather than in
+     it: the card is itself a <button>. */
+  .lib-theme-rooms { display:flex; flex-wrap:wrap; gap:6px;
+                     padding:11px 14px 13px; border-top:1px solid var(--line); }
+  .lib-room-chip { display:inline-flex; align-items:center; gap:7px; padding:5px 9px;
+                   border:1px solid var(--line); border-radius:8px; background:var(--paper);
+                   color:var(--text2); font:inherit; font-size:10.5px; letter-spacing:.03em;
+                   cursor:pointer; transition:border-color .16s ease, color .16s ease,
+                   background-color .16s ease; }
+  .lib-room-chip:hover { border-color:var(--gold); color:var(--ink); background:var(--card); }
+  .lib-room-chip:focus-visible { outline:2px solid var(--gold); outline-offset:2px; }
+  .lib-room-chip .n { font-family:'JetBrains Mono',monospace; font-size:9px;
+                      letter-spacing:.06em; color:var(--muted); }
+  .lib-room-chip.has { border-color:var(--gold-light); color:var(--ink); }
+  .lib-room-chip.has .n { color:var(--gold); }
 
   /* ── THE WORKING SET ──
      A theme card is itself a <button> that opens the theme, and a
      button cannot hold another one, so the tick that puts a theme in
      the working set sits BESIDE the card in a wrapper rather than
      inside it. The card's own markup, art and click are untouched. */
-  .lib-theme-cell { position:relative; display:flex; }
-  .lib-theme-cell > .lib-theme-card { flex:1 1 auto; width:100%; }
-  .lib-theme-cell.is-picked > .lib-theme-card { border-color:var(--gold);
+  /* The cell carries the frame now, not the card: the room buttons
+     below the card have to sit INSIDE the same outline, and they
+     cannot sit inside the card itself. Scoped to the cell, so the room
+     cards in the next view -- which are .lib-theme-card with no cell
+     around them -- keep their own frame exactly as they had it. */
+  .lib-theme-cell { position:relative; display:flex; flex-direction:column;
+                    background:var(--card); border:1px solid var(--line); border-radius:18px;
+                    overflow:hidden; box-shadow:0 1px 2px rgba(26,21,18,.04);
+                    transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease; }
+  .lib-theme-cell:hover { transform:translateY(-3px); border-color:var(--gold-light);
+                          box-shadow:0 14px 30px -14px rgba(26,21,18,.28); }
+  .lib-theme-cell > .lib-theme-card { flex:0 0 auto; width:100%;
+                                      background:none; border:0; border-radius:0; box-shadow:none; }
+  .lib-theme-cell > .lib-theme-card:hover { transform:none; box-shadow:none; }
+  .lib-theme-cell.is-picked { border-color:var(--gold);
       box-shadow:0 0 0 2px var(--gold), 0 14px 30px -16px rgba(26,21,18,.3); }
-  .lib-theme-cell.is-picked > .lib-theme-card:hover { transform:none; }
+  .lib-theme-cell.is-picked:hover { transform:none; }
   .lib-pick { position:absolute; top:12px; right:12px; z-index:2; width:28px; height:28px;
               padding:0; border-radius:9px; display:grid; place-items:center; cursor:pointer;
               background:rgba(255,248,236,.92); border:1px solid rgba(26,21,18,.18);
@@ -644,15 +667,14 @@
       + '<span class="lib-active-meta mono">' + escapeHtml(
         [where ? where.label : state.chosen.themeId, state.chosen.room].filter(Boolean).join(' · ')
       ) + '</span></span>'
-      // WHERE THE CHOICE IS ACTUALLY USED.
+      // THERE IS NO "USE IN A MOOD BOARD" BUTTON ANY MORE.
       //
-      // Choosing a room here and then finding the way to generate from
-      // it was the one step the client had to work out on their own:
-      // this page keeps the choice, the mood board spends it. The link
-      // closes that gap, and the wizard picks the choice up from the
-      // same place whether they arrive through it or not.
+      // Choosing a picture IS using it: tapping one now selects it and
+      // opens the mood board in the same movement, so the step the
+      // studio used to have to find for themselves no longer exists.
+      // This banner is what they see on the way BACK -- which picture
+      // is currently the reference, and the way to drop it.
       + '<span class="lib-active-acts">'
-      + '<a class="lib-active-go mono" href="mood-board.html">USE IN A MOOD BOARD \u2192</a>'
       + '<button type="button" class="lib-active-clear mono" id="libClearChoice">CLEAR</button>'
       + '</span>'
       + '</div>';
@@ -831,16 +853,20 @@
         + '<span class="lib-theme-count mono">'
         + (n === null ? 'COUNT UNAVAILABLE' : n + (n === 1 ? ' PICTURE' : ' PICTURES'))
         + '</span>'
-        // The five room types, with the ones that hold something lit.
-        // It tells the studio at a glance where the gaps are, which is
-        // the question a Theme -> Room library exists to answer.
-        + '<span class="lib-theme-rooms mono">'
+        + '<span class="lib-theme-go mono">OPEN \u2192</span>'
+        + '</span></button>'
+        // Every room this theme has, named in full and counted, each
+        // one a way straight into it. Empty rooms are listed too -- an
+        // empty Kitchen is a real answer, and it is also where the
+        // studio would upload the first one.
+        + '<span class="lib-theme-rooms">'
         + (t.rooms || []).map((r) =>
-          '<span class="lib-room-dot' + (r.count ? ' has' : '') + '" title="'
-          + escapeHtml(r.label + ' \u00b7 ' + r.count) + '">'
-          + escapeHtml(r.label.slice(0, 1)) + '</span>').join('')
-        + '</span>'
-        + '</span></button></div>';
+          '<button type="button" class="lib-room-chip' + (r.count ? ' has' : '')
+          + '" data-open="' + escapeHtml(t.id + '|' + r.id) + '">'
+          + '<span class="lbl">' + escapeHtml(r.label) + '</span>'
+          + '<span class="n mono">' + (r.count || 0) + '</span>'
+          + '</button>').join('')
+        + '</span></div>';
     }).join('') + '</div>';
   }
 
@@ -1212,7 +1238,15 @@
       // same reason themeLabel does.
       roomWizard: inRoom ? inRoom.wizard : '',
     });
-    render();
+
+    // STRAIGHT ON TO THE MOOD BOARD.
+    //
+    // The choice is already stored -- CasaApi.library.select writes it
+    // where the wizard reads it -- so there is nothing left to do on
+    // this page. The wizard pre-selects this picture's theme and its
+    // room from the same record, ranks the catalogue against the
+    // picture's own colour, and builds the combination from there.
+    location.href = 'mood-board.html';
   }
 
   function clearChoice() {
@@ -1382,6 +1416,17 @@
       btn.addEventListener('click', () => openRoom(btn.dataset.room));
     });
 
+    // The named room chips under a theme card, each a way straight in.
+    document.querySelectorAll('[data-open]').forEach((btn) => {
+      btn.addEventListener('click', (event) => {
+        // The chip sits under the card, not in it -- but a stray bubble
+        // reaching the grid must not also open the theme.
+        event.stopPropagation();
+        const [themeId, roomId] = String(btn.dataset.open).split('|');
+        openThemeRoom(themeId, roomId);
+      });
+    });
+
     // ── the working set ──
     document.querySelectorAll('[data-pick]').forEach((btn) => {
       btn.addEventListener('click', (event) => {
@@ -1546,6 +1591,21 @@
     state.switchOpen = false;
     state.loading = false;
     render();
+  }
+
+  /**
+   * STRAIGHT INTO ONE THEME'S ROOM, from the theme grid.
+   *
+   * What the named chips under each theme card do. Two steps collapsed
+   * into one, and the same rule about the working set as opening a
+   * theme card: browsing starts no set, but if there is one, the theme
+   * being opened belongs in it.
+   */
+  async function openThemeRoom(themeId, roomId) {
+    if (!themeId || !roomId) return;
+    if (state.picked.length && !isPicked(themeId)) state.picked.push(themeId);
+    state.themeId = themeId;
+    await openRoom(roomId);
   }
 
   /**
