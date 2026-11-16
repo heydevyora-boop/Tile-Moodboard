@@ -627,8 +627,14 @@ async function main() {
 
     const cardNames = await page.$$eval('.lib-theme-card .lib-theme-name',
       (els) => els.map((e) => e.textContent.trim()));
-    check('9p. there is a tenth card, and it is the Mix',
-      cardNames.length === 10 && cardNames[9] === 'De\u2019vyora Mix', cardNames);
+    // THE MIX LEADS. It is the widest thing on the page -- every
+    // theme's pictures in one grid -- so a client with nothing
+    // particular in mind meets it first rather than after all nine.
+    // The studio's own order follows it, British first.
+    check('9p. there is a tenth card, and the Mix is the FIRST of them',
+      cardNames.length === 10 && cardNames[0] === 'De\u2019vyora Mix', cardNames);
+    check('9p2. ...with the studio\u2019s own order behind it, British leading',
+      cardNames[1] === 'British', cardNames);
 
     check('9q. it carries no tick: it is already every theme, not one to combine with them',
       await count('.lib-theme-cell.is-mix') === 1
