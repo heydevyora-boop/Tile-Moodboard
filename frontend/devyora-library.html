@@ -232,6 +232,107 @@
                   background:var(--sand); border:1px solid var(--line); }
   .lib-room-dot.has { background:var(--gold); border-color:var(--gold); color:#FFF8EC; }
 
+  /* ── THE WORKING SET ──
+     A theme card is itself a <button> that opens the theme, and a
+     button cannot hold another one, so the tick that puts a theme in
+     the working set sits BESIDE the card in a wrapper rather than
+     inside it. The card's own markup, art and click are untouched. */
+  .lib-theme-cell { position:relative; display:flex; }
+  .lib-theme-cell > .lib-theme-card { flex:1 1 auto; width:100%; }
+  .lib-theme-cell.is-picked > .lib-theme-card { border-color:var(--gold);
+      box-shadow:0 0 0 2px var(--gold), 0 14px 30px -16px rgba(26,21,18,.3); }
+  .lib-theme-cell.is-picked > .lib-theme-card:hover { transform:none; }
+  .lib-pick { position:absolute; top:12px; right:12px; z-index:2; width:28px; height:28px;
+              padding:0; border-radius:9px; display:grid; place-items:center; cursor:pointer;
+              background:rgba(255,248,236,.92); border:1px solid rgba(26,21,18,.18);
+              color:var(--ink); -webkit-backdrop-filter:blur(3px); backdrop-filter:blur(3px);
+              transition:background-color .18s ease, border-color .18s ease, color .18s ease; }
+  .lib-pick:hover { border-color:var(--gold); }
+  .lib-pick:focus-visible { outline:2px solid var(--gold); outline-offset:2px; }
+  .lib-pick svg { width:14px; height:14px; display:block; opacity:0; transition:opacity .15s ease; }
+  .lib-theme-cell.is-picked .lib-pick { background:var(--gold); border-color:var(--gold); color:#FFF8EC; }
+  .lib-theme-cell.is-picked .lib-pick svg { opacity:1; }
+
+  /* ...and the set itself, named and counted. */
+  .lib-picked { display:flex; flex-wrap:wrap; align-items:center; gap:10px 16px;
+                margin:16px 0 0; padding:12px 15px; border:1px solid var(--line);
+                border-radius:14px; background:var(--card); }
+  .lib-picked.has { border-color:var(--gold-light); }
+  .lib-picked-k { font-size:8.5px; letter-spacing:.17em; color:var(--gold); flex:none; }
+  .lib-picked.empty .lib-picked-k { color:var(--muted); }
+  .lib-picked-names { flex:1 1 220px; min-width:0; font-size:12.5px; line-height:1.5; color:var(--text2); }
+  .lib-picked-acts { display:flex; align-items:center; gap:9px; flex-wrap:wrap; }
+  .lib-go { display:inline-flex; align-items:center; gap:7px; padding:9px 15px; border:none;
+            border-radius:10px; background:var(--ink); color:#FFF8EC; cursor:pointer;
+            font-size:9px; letter-spacing:.15em; transition:background-color .2s ease; }
+  .lib-go:hover { background:var(--gold); }
+  .lib-go:disabled { background:var(--line); color:var(--muted); cursor:not-allowed; }
+  .lib-go:focus-visible { outline:2px solid var(--gold); outline-offset:3px; }
+  .lib-quiet { background:none; border:none; padding:6px 2px; cursor:pointer; color:var(--muted);
+               font-size:9px; letter-spacing:.14em; }
+  .lib-quiet:hover { color:var(--ink); }
+  .lib-quiet:disabled { color:var(--line); cursor:not-allowed; }
+
+  /* ── THE THEME SWITCHER ──
+     Which of the chosen themes the gallery below is showing. It is not
+     the upload card's THEME dropdown: that one says where the next
+     batch of files is filed, and still does. */
+  .lib-switch { position:relative; display:inline-block; margin-top:14px; }
+  .lib-switch-btn { display:inline-flex; align-items:center; gap:11px; padding:9px 13px;
+                    border:1px solid var(--line); border-radius:11px; background:var(--card);
+                    color:var(--ink); font:inherit; cursor:pointer;
+                    transition:border-color .18s ease; }
+  .lib-switch-btn:hover { border-color:var(--gold-light); }
+  .lib-switch-btn:focus-visible { outline:2px solid var(--gold); outline-offset:2px; }
+  .lib-switch-now { display:flex; flex-direction:column; align-items:flex-start; gap:2px; min-width:0; }
+  .lib-switch-k { font-size:8px; letter-spacing:.18em; color:var(--muted); }
+  .lib-switch-name { font-size:15px; line-height:1.2; }
+  .lib-switch-caret { flex:none; width:11px; height:7px; color:var(--muted);
+                      transition:transform .18s ease; }
+  .lib-switch.open .lib-switch-caret { transform:rotate(180deg); }
+  .lib-switch-menu { position:absolute; top:calc(100% + 6px); left:0; z-index:30; min-width:248px;
+                     padding:5px; border:1px solid var(--line); border-radius:13px;
+                     background:var(--card); box-shadow:0 18px 40px -18px rgba(26,21,18,.42);
+                     display:none; }
+  .lib-switch.open .lib-switch-menu { display:block; }
+  /* A row, not a single button: the cross that takes a theme out of
+     the set is a control of its own, and a button cannot hold one. */
+  .lib-switch-row { display:flex; align-items:stretch; gap:2px; }
+  .lib-switch-item { display:flex; align-items:center; justify-content:space-between; gap:12px;
+                     flex:1 1 auto; min-width:0; padding:9px 11px; border:none; border-radius:9px;
+                     background:none; color:var(--ink); font:inherit; font-size:13px;
+                     text-align:left; cursor:pointer; }
+  .lib-switch-item:hover { background:var(--sand); }
+  .lib-switch-x { flex:none; width:28px; border:none; border-radius:9px; background:none;
+                  color:var(--muted); font:inherit; font-size:15px; line-height:1; cursor:pointer; }
+  .lib-switch-x:hover { background:var(--sand); color:var(--err); }
+  .lib-switch-x:focus-visible { outline:2px solid var(--gold); outline-offset:-2px; }
+  .lib-switch-item:focus-visible { outline:2px solid var(--gold); outline-offset:-2px; }
+  .lib-switch-item.active { background:var(--sand); }
+  .lib-switch-item.active .lib-switch-lbl { color:var(--gold); }
+  .lib-switch-n { font-size:8.5px; letter-spacing:.14em; color:var(--muted); flex:none; }
+
+  /* ── THE ACTION BAR ──
+     Sticky inside .main, which is the column that scrolls, so it rides
+     the gallery and never reaches across the sidebar. Being the last
+     thing in the stage, it settles into place at the end of the scroll
+     rather than covering the final row. */
+  .lib-dock { position:sticky; bottom:14px; z-index:20; margin-top:22px;
+              display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between;
+              gap:12px 18px; padding:13px 17px; border:1px solid var(--line); border-radius:16px;
+              background:rgba(255,253,249,.94); -webkit-backdrop-filter:blur(10px);
+              backdrop-filter:blur(10px); box-shadow:0 18px 40px -20px rgba(26,21,18,.45); }
+  .lib-dock-text { display:flex; flex-direction:column; gap:3px; min-width:0; }
+  .lib-dock-k { font-size:8.5px; letter-spacing:.17em; color:var(--gold); }
+  .lib-dock-sub { font-size:11.5px; line-height:1.45; color:var(--muted); }
+  .lib-dock-acts { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+
+  @media (max-width:560px) {
+    .lib-dock { bottom:10px; padding:12px 14px; }
+    .lib-dock-acts { width:100%; justify-content:space-between; }
+    .lib-go { flex:1 1 auto; justify-content:center; }
+  }
+
   /* ── the upload, with the two things a picture is filed under ── */
   .lib-upload { margin-top:18px; padding:15px 16px 16px; border:1px solid var(--line);
                 border-radius:16px; background:var(--card); display:flex; flex-direction:column;
@@ -408,6 +509,32 @@
     view: 'themes',
     themes: [],
     themeId: null,
+    /**
+     * THE WORKING SET -- the themes the studio is looking across.
+     *
+     * Browsing moves between these; it never narrows them. themeId is
+     * which ONE of them the gallery below is currently showing, so
+     * switching changes themeId and nothing else.
+     *
+     * Held as a bag of ids. Everywhere it is SHOWN -- the bar, the
+     * switcher -- it is read back in the theme grid's own order, so the
+     * switcher lists them the way the studio just saw them. Order of
+     * ticking would mean un-ticking Floral and ticking it again moved
+     * it to the end of the list, which is a surprise and no use to
+     * anybody.
+     */
+    picked: [],
+    /**
+     * "themeId|roomId" -> { references, start, visible, storageError,
+     * loaded }.
+     *
+     * One entry per gallery actually opened. Coming back to a theme
+     * restores where it was left instead of asking the server for a
+     * list it already has.
+     */
+    galleries: {},
+    /** Is the switcher's menu open. */
+    switchOpen: false,
     rooms: [],
     roomId: null,
     references: [],
@@ -441,6 +568,67 @@
   const theme = (id) => state.themes.find((t) => t.id === (id || state.themeId)) || null;
   const roomsOf = (id) => (theme(id) || {}).rooms || [];
   const room = (id) => roomsOf().find((r) => r.id === (id || state.roomId)) || null;
+
+  /* HOW A GALLERY IS PAGED.
+     Ten to begin with, ten more on request, and never more than twenty
+     on screen at once -- then on to the next set. A theme and room can
+     hold a hundred pictures, and a hundred <img> elements is a hundred
+     downloads the moment the room opens. */
+  const PAGE = 10;
+  const SET = 20;
+
+  const galKey = (t, r) => String(t == null ? state.themeId : t)
+    + '|' + String(r == null ? state.roomId : r);
+  const gallery = () => state.galleries[galKey()] || null;
+  const isPicked = (id) => state.picked.indexOf(id) !== -1;
+  const pickedThemes = () => state.themes.filter((t) => isPicked(t.id));
+  /** The first of the chosen themes, in the order they are shown. */
+  const firstPicked = () => (pickedThemes()[0] || {}).id || null;
+
+  /** A tick, for the control that puts a theme in the working set. */
+  const TICK = '<svg viewBox="0 0 14 14" fill="none" aria-hidden="true">'
+    + '<path d="M2.5 7.3 5.6 10.4 11.5 4.2" stroke="currentColor" stroke-width="2" '
+    + 'stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+  /**
+   * The active gallery's pictures, under the name the rest of this page
+   * already uses -- and pointing at the SAME array the cache holds, so
+   * choosing, removing and uploading go on working exactly as they did.
+   */
+  function setReferences(list) {
+    state.references = list;
+    const g = gallery();
+    if (g) g.references = list;
+  }
+
+  /** What is actually drawn: one set's worth, at most. */
+  function visibleRefs() {
+    const g = gallery();
+    if (!g) return state.references;
+    return g.references.slice(g.start, g.start + g.visible);
+  }
+
+  /**
+   * Every room in the working set, counted across ALL of its themes.
+   *
+   * One room chooser, not one per theme: the studio picks Bathroom
+   * once and it means Bathroom in every theme they chose.
+   */
+  function mergedRooms() {
+    const ids = state.picked.length
+      ? state.picked
+      : (state.themeId ? [state.themeId] : []);
+    const order = [];
+    const byId = {};
+    ids.forEach((id) => roomsOf(id).forEach((r) => {
+      if (!byId[r.id]) {
+        byId[r.id] = { id: r.id, label: r.label, slug: r.slug, blurb: r.blurb, count: 0 };
+        order.push(r.id);
+      }
+      byId[r.id].count += r.count || 0;
+    }));
+    return order.map((id) => byId[id]);
+  }
 
   // ── pieces ────────────────────────────────────────────────────────
 
@@ -566,6 +754,37 @@
       + '</div>';
   }
 
+  /**
+   * THE WORKING SET, NAMED AND COUNTED.
+   *
+   * Shown empty too, because "no themes selected" is the state the tick
+   * is there to change, and a studio that has never seen the control
+   * has no way to learn it exists.
+   */
+  function pickedHtml() {
+    if (state.loading || !state.themes.length) return '';
+    const chosen = pickedThemes();
+
+    if (!chosen.length) {
+      return '<div class="lib-picked empty">'
+        + '<span class="lib-picked-k mono">NO THEMES SELECTED</span>'
+        + '<span class="lib-picked-names">Tick one or more themes to work across them at '
+        + 'once \u2014 you can switch between them while browsing without losing the '
+        + 'others. Opening a theme selects it too.</span>'
+        + '</div>';
+    }
+
+    return '<div class="lib-picked has">'
+      + '<span class="lib-picked-k mono">' + chosen.length
+      + (chosen.length === 1 ? ' THEME SELECTED' : ' THEMES SELECTED') + '</span>'
+      + '<span class="lib-picked-names">'
+      + chosen.map((t) => escapeHtml(t.label)).join(' \u00b7 ') + '</span>'
+      + '<span class="lib-picked-acts">'
+      + '<button type="button" class="lib-quiet mono" id="libPickNone">CLEAR</button>'
+      + '<button type="button" class="lib-go mono" id="libPickGo">CHOOSE A ROOM \u2192</button>'
+      + '</span></div>';
+  }
+
   function themesHtml() {
     if (state.loading) return skeletonsHtml(6);
     if (!state.themes.length) {
@@ -579,7 +798,15 @@
     }
     return '<div class="lib-theme-grid">' + state.themes.map((t) => {
       const n = t.count === null || t.count === undefined ? null : t.count;
-      return '<button type="button" class="lib-theme-card" data-theme="' + escapeHtml(t.id) + '">'
+      const picked = isPicked(t.id);
+      return '<div class="lib-theme-cell' + (picked ? ' is-picked' : '') + '">'
+        // The card is a <button>, and a button cannot hold another one,
+        // so the tick is its sibling rather than its child.
+        + '<button type="button" class="lib-pick" data-pick="' + escapeHtml(t.id) + '"'
+        + ' aria-pressed="' + (picked ? 'true' : 'false') + '"'
+        + ' aria-label="' + escapeHtml((picked ? 'Remove ' : 'Add ') + t.label
+          + (picked ? ' from the selection' : ' to the selection')) + '">' + TICK + '</button>'
+        + '<button type="button" class="lib-theme-card" data-theme="' + escapeHtml(t.id) + '">'
         // A ROOM, not a swatch. The theme's first starter is what the
         // client is actually going to be choosing between, so it is
         // what the card shows -- the page used to lead with an abstract
@@ -613,7 +840,7 @@
           + escapeHtml(r.label + ' \u00b7 ' + r.count) + '">'
           + escapeHtml(r.label.slice(0, 1)) + '</span>').join('')
         + '</span>'
-        + '</span></button>';
+        + '</span></button></div>';
     }).join('') + '</div>';
   }
 
@@ -629,7 +856,10 @@
   function roomsHtml() {
     if (state.loading) return skeletonsHtml(5);
     const current = theme();
-    const list = roomsOf();
+    // Counted across every theme in the working set, so the number
+    // beside Bathroom is how many bathrooms the studio is choosing
+    // between -- not how many one of the themes happens to hold.
+    const list = mergedRooms();
 
     if (!list.length) {
       return '<div class="lib-empty"><h3 class="serif">No room types</h3>'
@@ -745,6 +975,100 @@
         + '</div>').join('') + '</div></div>';
   }
 
+  /**
+   * WHICH OF THE CHOSEN THEMES THE GALLERY BELOW IS SHOWING.
+   *
+   * Not the upload card's THEME dropdown further down the page: that
+   * one says where the next batch of files is filed, and still does.
+   * This one only changes what is on screen, and leaves the working
+   * set exactly as it was.
+   */
+  function switchHtml() {
+    const chosen = pickedThemes();
+    if (!chosen.length) return '';
+    const current = theme();
+    const caret = '<svg class="lib-switch-caret" viewBox="0 0 12 8" fill="none" aria-hidden="true">'
+      + '<path d="M1 1l5 5 5-5" stroke="currentColor" stroke-width="1.6" '
+      + 'stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+    return '<div class="lib-switch' + (state.switchOpen ? ' open' : '') + '" id="libSwitch">'
+      + '<button type="button" class="lib-switch-btn" id="libSwitchBtn" aria-haspopup="true"'
+      + ' aria-expanded="' + (state.switchOpen ? 'true' : 'false') + '">'
+      + '<span class="lib-switch-now">'
+      + '<span class="lib-switch-k mono">BROWSING</span>'
+      + '<span class="lib-switch-name serif" id="libSwitchName">'
+      + escapeHtml(current ? current.label : '') + '</span></span>'
+      + caret + '</button>'
+      + '<div class="lib-switch-menu" role="menu">'
+      + chosen.map((t) => {
+        const g = state.galleries[galKey(t.id, state.roomId)];
+        const known = g && g.loaded ? g.references.length : null;
+        return '<div class="lib-switch-row">'
+          + '<button type="button" class="lib-switch-item'
+          + (t.id === state.themeId ? ' active' : '') + '" role="menuitem"'
+          + ' data-switch="' + escapeHtml(t.id) + '"'
+          + ' aria-current="' + (t.id === state.themeId ? 'true' : 'false') + '">'
+          + '<span class="lib-switch-lbl">' + escapeHtml(t.label) + '</span>'
+          + '<span class="lib-switch-n mono">' + (known === null
+            ? escapeHtml(t.palette.split(',')[0].toUpperCase())
+            : known + (known === 1 ? ' PICTURE' : ' PICTURES')) + '</span>'
+          + '</button>'
+          // A theme leaves the set from here too, which is the only
+          // place it can be done while a gallery is open. Never the
+          // last one: that would leave nothing to show.
+          + (chosen.length > 1
+            ? '<button type="button" class="lib-switch-x" data-unpick="' + escapeHtml(t.id) + '"'
+              + ' aria-label="' + escapeHtml('Remove ' + t.label + ' from the selection')
+              + '" title="Remove from the selection">\u00d7</button>'
+            : '')
+          + '</div>';
+      }).join('')
+      + '</div></div>';
+  }
+
+  /**
+   * THE ACTION BAR, and the only way past the first ten pictures.
+   *
+   * Ten, then twenty, then the next set of twenty. The count is of the
+   * pictures this theme and room actually hold -- the list came down in
+   * one request when the room opened, and what is paged here is how
+   * many of them the browser is asked to DOWNLOAD, which is the part
+   * that costs anything.
+   */
+  function dockHtml() {
+    const g = gallery();
+    if (state.loading || !g || !g.references.length) return '';
+
+    const total = g.references.length;
+    const from = g.start + 1;
+    const to = Math.min(g.start + g.visible, total);
+    const moreInSet = g.visible < SET && total > g.start + g.visible;
+    const nextSet = total > g.start + SET;
+    const current = theme();
+    const here = [current ? current.label : '', room() ? room().label : '']
+      .filter(Boolean).join(' \u00b7 ');
+
+    return '<div class="lib-dock" id="libDock">'
+      + '<span class="lib-dock-text">'
+      + '<span class="lib-dock-k mono">SHOWING ' + from + '\u2013' + to + ' OF ' + total
+      + (here ? ' \u00b7 ' + escapeHtml(here.toUpperCase()) : '') + '</span>'
+      + '<span class="lib-dock-sub" id="libDockSub">'
+      + (moreInSet || nextSet
+        ? 'Twenty at a time, so the room opens without fetching every picture in it.'
+        : 'You\u2019ve explored all available images.')
+      + '</span></span>'
+      + '<span class="lib-dock-acts">'
+      + (g.start > 0
+        ? '<button type="button" class="lib-quiet mono" id="libPrevSet">\u2190 PREVIOUS SET</button>'
+        : '')
+      + (moreInSet
+        ? '<button type="button" class="lib-go mono" id="libMore">LOAD MORE IMAGES</button>'
+        : nextSet
+          ? '<button type="button" class="lib-go mono" id="libNextSet">EXPLORE NEXT SET \u2192</button>'
+          : '')
+      + '</span></div>';
+  }
+
   function referencesHtml() {
     if (state.loading) return skeletonsHtml(8);
     if (!state.references.length) {
@@ -756,7 +1080,7 @@
             + 'studio’s Google Drive.')
         + '</p></div>';
     }
-    return '<div class="lib-grid">' + state.references.map((ref) => {
+    return '<div class="lib-grid">' + visibleRefs().map((ref) => {
       const chosen = state.chosen && state.chosen.id === ref.id;
       return '<figure class="lib-card' + (chosen ? ' chosen' : '') + '" data-choose="'
         + escapeHtml(ref.id) + '" tabindex="0" role="button" aria-pressed="' + (chosen ? 'true' : 'false') + '">'
@@ -808,19 +1132,29 @@
           + storageHtml()
           + uploadBlockedHtml()
           + addHintHtml()
+          + pickedHtml()
           + themesHtml()
         : state.view === 'rooms'
         ? '<button type="button" class="lib-back mono" id="libBack">← ALL THEMES</button>'
           + '<div class="lib-head">'
-          + '<h1 class="step-h1 serif" style="margin:0">' + escapeHtml(current ? current.label : '') + '</h1>'
-          + '<span class="lib-meta mono">' + escapeHtml(current ? current.palette : '') + '</span>'
+          + '<h1 class="step-h1 serif" style="margin:0">'
+          + escapeHtml(state.picked.length > 1 ? 'Room types' : (current ? current.label : ''))
+          + '</h1>'
+          + '<span class="lib-meta mono">' + escapeHtml(state.picked.length > 1
+            ? pickedThemes().map((t) => t.label).join(' \u00b7 ')
+            : (current ? current.palette : '')) + '</span>'
           + '</div>'
-          + '<p class="step-sub">Choose the room you are designing.</p>'
+          + '<p class="step-sub">' + (state.picked.length > 1
+            ? 'Choose the room you are designing. The number beside each one counts every '
+              + 'selected theme \u2014 inside, you switch between them without losing any.'
+            : 'Choose the room you are designing.') + '</p>'
           + activeHtml()
           + storageHtml()
           + roomsHtml()
         : '<button type="button" class="lib-back mono" id="libBack">← '
-          + escapeHtml((current ? current.label : 'ALL THEMES').toUpperCase()) + '</button>'
+          + escapeHtml(state.picked.length > 1
+            ? 'ROOM TYPES'
+            : (current ? current.label : 'ALL THEMES').toUpperCase()) + '</button>'
           + '<div class="lib-head">'
           + '<h1 class="step-h1 serif" style="margin:0">'
           + escapeHtml(room() ? room().label : '') + '</h1>'
@@ -829,13 +1163,15 @@
             .filter(Boolean).join(' · ')) + '</span>'
           + '</div>'
           + '<p class="step-sub">Tap a picture to make it the reference image.</p>'
+          + switchHtml()
           + activeHtml()
           + storageHtml()
           + uploadBlockedHtml()
           + uploadHtml(current)
           + '<div class="alert" id="libAlert" style="display:none"></div>'
           + queueHtml()
-          + referencesHtml())
+          + referencesHtml()
+          + dockHtml())
       + '</div>';
     wire();
   }
@@ -918,7 +1254,12 @@
             },
           });
           item.status = 'done';
-          if (saved && state.themeId === into) state.references.unshift(saved);
+          // BOTH, not just the theme. Standing in British > Kitchen and
+          // filing a batch into British > Bathroom used to put the new
+          // bathroom pictures into the kitchen gallery on screen.
+          if (saved && state.themeId === into && state.roomId === intoRoom) {
+            state.references.unshift(saved);
+          }
         } catch (err) {
           item.status = 'failed';
           item.error = (err && err.message) || 'Upload failed.';
@@ -955,6 +1296,21 @@
         // The pictures went up; only the counts are stale. Not worth
         // failing an upload over, and the next page load fixes it.
       }
+
+      const filed = state.galleries[galKey(into, intoRoom)];
+      if (filed) {
+        if (state.themeId === into && state.roomId === intoRoom) {
+          // The new pictures went to the front of the list; showing the
+          // first set again is how the studio sees what they just added.
+          filed.start = 0;
+          filed.visible = PAGE;
+        } else {
+          // Filed somewhere the studio is not standing. That gallery's
+          // cached list is now short by a batch, so it is asked for
+          // again the next time it is opened rather than shown stale.
+          filed.loaded = false;
+        }
+      }
     }
 
     render();
@@ -982,7 +1338,13 @@
     btn.textContent = 'REMOVING…';
     try {
       const result = await CasaApi.library.remove(id);
-      state.references = state.references.filter((r) => r.id !== id);
+      setReferences(state.references.filter((r) => r.id !== id));
+      // Removing the last picture of a set would otherwise leave a
+      // blank gallery under a bar reading "21-20 of 20".
+      const g = gallery();
+      if (g && g.start && g.start >= g.references.length) {
+        g.start = Math.max(0, g.start - SET);
+      }
       // A reference that no longer exists must not stay selected.
       if (state.chosen && state.chosen.id === id) {
         CasaApi.library.clearSelection();
@@ -1019,6 +1381,49 @@
     document.querySelectorAll('[data-room]').forEach((btn) => {
       btn.addEventListener('click', () => openRoom(btn.dataset.room));
     });
+
+    // ── the working set ──
+    document.querySelectorAll('[data-pick]').forEach((btn) => {
+      btn.addEventListener('click', (event) => {
+        // The tick sits over the card. Ticking a theme is not opening it.
+        event.stopPropagation();
+        togglePick(btn.dataset.pick);
+      });
+    });
+    const pickGo = document.getElementById('libPickGo');
+    if (pickGo) pickGo.addEventListener('click', () => openTheme(firstPicked()));
+    const pickNone = document.getElementById('libPickNone');
+    if (pickNone) {
+      pickNone.addEventListener('click', () => { state.picked = []; render(); });
+    }
+
+    // ── the switcher ──
+    const switchBtn = document.getElementById('libSwitchBtn');
+    if (switchBtn) {
+      switchBtn.addEventListener('click', (event) => {
+        event.stopPropagation();
+        state.switchOpen = !state.switchOpen;
+        render();
+      });
+    }
+    document.querySelectorAll('[data-switch]').forEach((btn) => {
+      btn.addEventListener('click', () => switchTheme(btn.dataset.switch));
+    });
+    document.querySelectorAll('[data-unpick]').forEach((btn) => {
+      btn.addEventListener('click', (event) => {
+        // Taking a theme out of the set is not choosing it.
+        event.stopPropagation();
+        togglePick(btn.dataset.unpick);
+      });
+    });
+
+    // ── the action bar ──
+    const more = document.getElementById('libMore');
+    if (more) more.addEventListener('click', loadMore);
+    const onward = document.getElementById('libNextSet');
+    if (onward) onward.addEventListener('click', nextSet);
+    const back2 = document.getElementById('libPrevSet');
+    if (back2) back2.addEventListener('click', prevSet);
 
     // Back goes up ONE level, not all the way out: from a room to its
     // theme's rooms, and from there to the themes.
@@ -1110,22 +1515,45 @@
     state.roomId = null;
     state.references = [];
     state.queue = [];
+    state.switchOpen = false;
     state.loading = false;
+    // The working set survives coming back out: it is what the studio
+    // chose to work across, not where they happen to be standing.
     render();
   }
 
-  /** A theme opens its ROOMS now, which need no request: the counts
-   *  came down with the themes. */
+  /**
+   * A theme opens its ROOMS, which need no request: the counts came
+   * down with the themes.
+   *
+   * OPENING A THEME IS BROWSING, NOT CHOOSING. On its own it starts no
+   * working set, so a studio that never touches a tick gets exactly the
+   * Library it had before: one theme, its own room counts, its own
+   * pictures, and no switcher to wonder about.
+   *
+   * But if there IS a set, the theme just opened belongs in it --
+   * otherwise the switcher above the gallery would be offering themes,
+   * none of them the one actually on screen.
+   */
   function openTheme(themeId) {
+    if (!themeId) return;
+    if (state.picked.length && !isPicked(themeId)) state.picked.push(themeId);
     state.view = 'rooms';
     state.themeId = themeId;
     state.roomId = null;
     state.references = [];
     state.queue = [];
+    state.switchOpen = false;
     state.loading = false;
     render();
   }
 
+  /**
+   * A room, for whichever theme in the set is active.
+   *
+   * Choosing a room is an explicit fresh start, so the paging goes back
+   * to the first set even when the pictures are already in hand.
+   */
   async function openRoom(roomId) {
     state.view = 'room';
     state.roomId = roomId;
@@ -1133,27 +1561,150 @@
     // which is nearly always the one they want to file into.
     state.uploadThemeId = state.themeId;
     state.uploadRoomId = roomId === 'unsorted' ? (state.uploadRoomId || '') : roomId;
-    state.references = [];
     state.queue = [];
-    state.loading = true;
-    render();
-    try {
-      const answer = await CasaApi.library.references(state.themeId, roomId);
-      state.references = answer.references;
-      // The starters are files and always arrive; only the studio's own
-      // uploads need the database, so this now costs those alone rather
-      // than emptying the theme.
-      state.storageError = answer.storage.ok ? '' : answer.storage.reason;
-    } catch (err) {
-      state.references = [];
-      state.storageError = (err && err.message) || '';
+    state.switchOpen = false;
+    const already = state.galleries[galKey(state.themeId, roomId)];
+    if (already) { already.start = 0; already.visible = PAGE; }
+    await loadGallery(state.themeId, roomId);
+  }
+
+  /**
+   * SWITCHING THEMES CHANGES EXACTLY ONE THING: which of the chosen
+   * themes the gallery is showing.
+   *
+   * The working set, the room, and every other theme's place in its own
+   * gallery are left alone -- and a theme already fetched is not
+   * fetched again.
+   */
+  function switchTheme(themeId) {
+    state.switchOpen = false;
+    if (!themeId || themeId === state.themeId) { render(); return; }
+    state.themeId = themeId;
+    // The upload card follows the gallery, as it always has.
+    state.uploadThemeId = themeId;
+    loadGallery(themeId, state.roomId);
+  }
+
+  /**
+   * ONE THEME AND ROOM'S PICTURES.
+   *
+   * The server has no paging: /library/references answers with the
+   * whole list for a theme and room, and that list is rows, not
+   * pictures. So it is asked once per gallery and kept. What the bar at
+   * the bottom pages is how many of those rows become an <img> -- which
+   * is the part that actually costs a hundred downloads.
+   */
+  async function loadGallery(themeId, roomId) {
+    const key = galKey(themeId, roomId);
+    const cached = state.galleries[key];
+
+    if (cached && cached.loaded) {
+      state.references = cached.references;
+      state.storageError = cached.storageError;
       state.loading = false;
       render();
-      showAlert((err && err.message) || 'The library could not be read.');
       return;
     }
+
+    state.galleries[key] = cached
+      || { references: [], start: 0, visible: PAGE, storageError: '', loaded: false };
+    state.references = [];
+    state.loading = true;
+    render();
+
+    let answer = null;
+    let failure = '';
+    try {
+      answer = await CasaApi.library.references(themeId, roomId);
+    } catch (err) {
+      failure = (err && err.message) || 'The library could not be read.';
+    }
+
+    const g = state.galleries[key];
+    if (answer) {
+      g.references = answer.references;
+      // The starters are files and always arrive; only the studio's own
+      // uploads need the database, so this costs those alone rather
+      // than emptying the room.
+      g.storageError = answer.storage.ok ? '' : answer.storage.reason;
+      g.loaded = true;
+    } else {
+      g.references = [];
+      g.storageError = failure;
+    }
+    g.start = 0;
+    g.visible = PAGE;
+
+    // The studio may have switched again while this was in flight. The
+    // answer still belongs in the cache; it no longer belongs on screen.
+    if (galKey() !== key) return;
+
+    state.references = g.references;
+    state.storageError = g.storageError;
     state.loading = false;
     render();
+    if (failure) showAlert(failure);
+  }
+
+  /**
+   * A theme joins or leaves the working set.
+   *
+   * Leaving is the interesting half: if it was the one on screen,
+   * another of the chosen themes takes its place rather than leaving a
+   * gallery with nothing in it -- and if it was the last one, the
+   * studio goes back out to choose again.
+   */
+  function togglePick(themeId) {
+    const at = state.picked.indexOf(themeId);
+    if (at === -1) { state.picked.push(themeId); render(); return; }
+
+    state.picked.splice(at, 1);
+    if (state.themeId !== themeId) { render(); return; }
+
+    const next = firstPicked();
+    if (next) {
+      if (state.view === 'room') { switchTheme(next); return; }
+      openTheme(next);
+      return;
+    }
+    openThemes();
+  }
+
+  // ── a set at a time ───────────────────────────────────────────────
+
+  function toTopOfGallery() {
+    const grid = document.querySelector('.lib-grid');
+    if (grid && grid.scrollIntoView) {
+      grid.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    }
+  }
+
+  /** Ten more, up to the twenty a set holds. */
+  function loadMore() {
+    const g = gallery();
+    if (!g) return;
+    g.visible = Math.min(SET, g.visible + PAGE);
+    render();
+  }
+
+  /** On to the next twenty, starting with its first ten. */
+  function nextSet() {
+    const g = gallery();
+    if (!g) return;
+    g.start += SET;
+    g.visible = PAGE;
+    render();
+    toTopOfGallery();
+  }
+
+  /** Back to a set already browsed, shown whole rather than halved. */
+  function prevSet() {
+    const g = gallery();
+    if (!g || !g.start) return;
+    g.start = Math.max(0, g.start - SET);
+    g.visible = SET;
+    render();
+    toTopOfGallery();
   }
 
   async function init() {
@@ -1167,6 +1718,22 @@
     document.getElementById('logoutBtn').addEventListener('click', async () => {
       await CasaApi.auth.logout();
       location.href = 'login.html';
+    });
+
+    // The switcher's menu closes when attention goes elsewhere. Bound
+    // ONCE, here, rather than in wire(), which runs on every repaint
+    // and would stack a listener per draw.
+    document.addEventListener('click', (event) => {
+      if (!state.switchOpen) return;
+      if (event.target.closest && event.target.closest('#libSwitch')) return;
+      state.switchOpen = false;
+      render();
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && state.switchOpen) {
+        state.switchOpen = false;
+        render();
+      }
     });
 
     // Adding pictures is the studio's job, not the client's. The button

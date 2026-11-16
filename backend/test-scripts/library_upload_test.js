@@ -232,10 +232,17 @@ async function main() {
     check('2j. ...and who uploaded it, and when',
       !!sample.uploadedById && !!sample.createdAt);
 
-    await page.waitForSelector('.lib-card', { timeout: 20000 });
-    check('2k. the gallery shows them without a reload',
-      await page.locator('.lib-card').count() === 61,   // 60 uploaded + 1 starter
-      await page.locator('.lib-card').count());
+    await page.waitForSelector('#libDock', { timeout: 20000 });
+    // The gallery is paged: ten drawn, sixty-one counted. Drawing all
+    // sixty-one would be sixty-one downloads the instant a room opens,
+    // which is what the paging exists to stop.
+    const onScreen = await page.locator('.lib-card').count();
+    const dock = (await page.textContent('#libDock') || '').replace(/\s+/g, ' ');
+    check('2k. the gallery shows them without a reload, a set at a time',
+      onScreen === 10 && /SHOWING 1\u201310 OF 61/.test(dock), { onScreen, dock });
+    check('2k2. ...and what it shows is the batch that just went up',
+      (await page.$$eval('.lib-card .lib-title', (els) => els.map((e) => e.textContent.trim())))
+        .filter((t) => /^room-\d+$/.test(t)).length === 10);
     // Up one level: the ROOM card that was just filled.
     await page.click('#libBack');
     await page.waitForSelector('[data-room]', { timeout: 10000 });
@@ -385,8 +392,11 @@ async function main() {
     await signIn('viewer@example.test');
     await openLibrary();
     await openThemeRoom('british', 'bathroom');
-    check('6a. a reader sees the library', await page.locator('.lib-card').count() === 61,
-      await page.locator('.lib-card').count());
+    check('6a. a reader sees the library, paged the same way',
+      await page.locator('.lib-card').count() === 10
+      && /OF 61/.test((await page.textContent('#libDock') || '').replace(/\s+/g, ' ')),
+      { onScreen: await page.locator('.lib-card').count(),
+        dock: await page.textContent('#libDock') });
     check('6a2. ...and is told why there is no upload, rather than shown a gap',
       await page.locator('#libFiles').count() === 0
       && /reference_images:write/.test(await page.locator('.lib-note').textContent() || ''),
