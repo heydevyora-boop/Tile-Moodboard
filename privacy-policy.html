@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy Policy — De’vyora</title>
+<meta name="description" content="How the De’vyora studio application handles studio, client and Google account data.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600&family=Manrope:wght@400;500;600&family=Space+Mono:wght@400&display=swap" rel="stylesheet">
+<style>
+  /* ------------------------------------------------------------------
+     THE PRIVACY POLICY, SERVED WITHOUT A SIGN-IN.
+
+     Google's OAuth branding review fetches this page as an anonymous
+     visitor and reads it. So it is a plain static page at a plain URL:
+     no script decides what it says, and nothing here is behind a login.
+
+     Everything it states about Google account data was read out of this
+     repository, not assumed -- the scope from config/env.ts, the
+     storage from googleOAuth.service.ts, and what is sent on for
+     generation from catalog_processor/app/scene_image_generator.py.
+     ------------------------------------------------------------------ */
+  :root {
+    --paper:#FCF9F2; --card:#FFFFFF; --ink:#1C1C18; --text2:#4E453A;
+    --muted:#807569; --line:#D2C4B6; --gold:#755628;
+  }
+  * { box-sizing:border-box; }
+  html, body { margin:0; padding:0; }
+  body {
+    background:var(--paper); color:var(--ink);
+    font-family:'Manrope',system-ui,-apple-system,sans-serif;
+    font-size:16px; line-height:1.65; -webkit-font-smoothing:antialiased;
+  }
+  .wrap { max-width:760px; margin:0 auto; padding:40px 20px 88px; }
+  @media (min-width:768px) { .wrap { padding:64px 32px 110px; } }
+
+  header.top { display:flex; flex-wrap:wrap; align-items:baseline; gap:10px 18px;
+               padding-bottom:22px; border-bottom:1px solid var(--line); }
+  .mark { font-family:'Playfair Display',Georgia,serif; font-size:21px;
+          letter-spacing:.06em; text-transform:uppercase; }
+  .mark a { color:inherit; text-decoration:none; }
+  .mark a:hover { color:var(--gold); }
+  .kicker { font-family:'Space Mono',ui-monospace,monospace; font-size:11px;
+            letter-spacing:.14em; text-transform:uppercase; color:var(--muted); }
+
+  h1 { font-family:'Playfair Display',Georgia,serif; font-weight:400;
+       font-size:34px; line-height:1.18; letter-spacing:-.01em; margin:34px 0 6px; }
+  @media (min-width:768px) { h1 { font-size:42px; } }
+  .dated { font-family:'Space Mono',ui-monospace,monospace; font-size:12px;
+           letter-spacing:.06em; color:var(--muted); margin:0 0 30px; }
+
+  h2 { font-family:'Playfair Display',Georgia,serif; font-weight:500;
+       font-size:22px; line-height:1.3; margin:38px 0 10px; }
+  h3 { font-size:15px; font-weight:600; letter-spacing:.01em; margin:22px 0 6px; }
+  p, li { color:var(--text2); }
+  p { margin:0 0 14px; }
+  ul { margin:0 0 16px; padding-left:22px; }
+  li { margin:0 0 8px; }
+  a { color:var(--gold); }
+  strong { color:var(--ink); }
+  /* The scope is one long unbreakable string; on a phone it pushed the
+     whole page sideways until it was allowed to wrap. */
+  code { font-family:'Space Mono',ui-monospace,monospace; font-size:13.5px;
+         background:#F1EEE7; padding:1px 5px; border-radius:3px; color:var(--ink);
+         overflow-wrap:anywhere; word-break:break-word; }
+
+  .panel { background:var(--card); border:1px solid var(--line);
+           padding:18px 20px; margin:22px 0 26px; }
+  .panel p:last-child, .panel ul:last-child { margin-bottom:0; }
+  .panel .lbl { font-family:'Space Mono',ui-monospace,monospace; font-size:11px;
+                letter-spacing:.14em; text-transform:uppercase; color:var(--gold);
+                display:block; margin-bottom:8px; }
+
+  footer.end { margin-top:52px; padding-top:22px; border-top:1px solid var(--line);
+               font-family:'Space Mono',ui-monospace,monospace; font-size:11.5px;
+               letter-spacing:.05em; color:var(--muted); }
+  footer.end a { color:var(--muted); }
+  footer.end a:hover { color:var(--gold); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <span class="mark"><a href="/">De’vyora</a></span>
+    <span class="kicker">Natural Stone &amp; Architectural Atelier</span>
+  </header>
+
+  <h1>Privacy Policy</h1>
+  <p class="dated">Last updated 16 November 2026</p>
+
+  <p>
+    This policy covers the <strong>De’vyora studio application</strong> (also referred to as
+    Casa de Aurum), the private web tool the studio uses to keep its tile catalogue, build
+    mood boards, hold a reference image library and record client wishlists.
+  </p>
+
+  <p>
+    It is not a consumer product and it has no public sign-up. Accounts are created by the
+    studio for its own staff. This policy explains what the application holds, what it does
+    with a connected Google account, and what it never touches.
+  </p>
+
+  <h2>1. Who runs this application</h2>
+  <p>
+    The application is operated by the De’vyora studio for its own showroom and design work.
+    The studio is the controller of everything described below.
+  </p>
+
+  <h2>2. What the application stores</h2>
+
+  <h3>Staff accounts</h3>
+  <ul>
+    <li>Name, email address, role, and a one-way hash of the password (the password itself is
+      never stored).</li>
+    <li>Optionally, a passkey credential, if that member chose to enable one on their device.</li>
+    <li>Sign-in activity, so the studio can see who did what.</li>
+  </ul>
+
+  <h3>Studio content</h3>
+  <ul>
+    <li>Tile and catalogue records entered or extracted by the studio.</li>
+    <li>Mood boards, print boards and generated visualisations.</li>
+    <li>Reference images uploaded to the studio’s library.</li>
+    <li>Client wishlists: the client’s name, an optional mobile number, and the pictures that
+      client selected in the showroom. These are entered in the showroom by the client or by
+      staff, and are used only to prepare that client’s proposal.</li>
+  </ul>
+
+  <h2>3. Google account data</h2>
+
+  <p>
+    The application can be connected to <strong>one Google account — the studio’s own</strong>
+    — so that the pictures it holds are stored in the studio’s Google Drive rather than on this
+    server. The connection is made once, by the studio owner, from inside the application.
+    Nobody else is asked to sign in with Google, and clients are never asked for a Google
+    account.
+  </p>
+
+  <div class="panel">
+    <span class="lbl">The scope requested</span>
+    <p>
+      <code>https://www.googleapis.com/auth/drive.file</code>
+    </p>
+    <p>
+      This is Google’s narrowest Drive scope. It grants access <em>only</em> to files this
+      application itself creates, and to folders or files the account holder explicitly picks
+      and hands to it. It does not grant, and the application cannot obtain, a view of the rest
+      of that Google Drive.
+    </p>
+  </div>
+
+  <h3>What it does with that access</h3>
+  <ul>
+    <li>Creates folders inside the one folder the owner chose — by theme and room for the
+      reference library, and one folder per client for wishlists.</li>
+    <li>Uploads the studio’s pictures into those folders.</li>
+    <li>Reads back the identifier and the view or thumbnail link of each file it created, so
+      the pictures can be displayed inside the application.</li>
+    <li>Deletes a file it created, when a member of the studio removes that picture from the
+      library.</li>
+  </ul>
+
+  <h3>What is kept on this server</h3>
+  <ul>
+    <li>The identifier of the folder the owner chose.</li>
+    <li>The identifiers and links of the files the application created.</li>
+    <li>The Google <strong>refresh token</strong>, so uploading keeps working without the owner
+      reconnecting each time. It is <strong>encrypted at rest</strong> and is never shown in
+      the interface, written to logs, or sent to a browser.</li>
+  </ul>
+
+  <h3>What is never requested</h3>
+  <ul>
+    <li>The Google account’s email address, name or profile — no identity scope is requested at
+      all.</li>
+    <li>Gmail, Contacts, Calendar, Photos, or any other Google service.</li>
+    <li>Any file in Drive that the application did not create or was not explicitly given.</li>
+  </ul>
+
+  <h2>4. Where pictures are sent for generation</h2>
+  <p>
+    When a member of the studio generates a mood board or a room visualisation, the reference
+    picture they chose and the catalogue tile images are sent to <strong>Google’s Gemini
+    API</strong>, which produces the generated image. That is the only place studio pictures
+    are sent outside this application and the studio’s own Drive, it happens only when a member
+    of the studio asks for a generation, and the result comes back to the studio.
+  </p>
+
+  <h2>5. Limited Use</h2>
+  <div class="panel">
+    <p>
+      De’vyora’s use and transfer of information received from Google APIs to any other app
+      adheres to the
+      <a href="https://developers.google.com/terms/api-services-user-data-policy" rel="noopener">
+        Google API Services User Data Policy</a>, including the Limited Use requirements.
+    </p>
+  </div>
+  <p>
+    Concretely: data obtained through the Google Drive connection is used only to provide the
+    features described above. It is not sold, not transferred to anyone else, not used for
+    advertising, not used to build profiles, and not used to train any machine-learning model.
+    No human reads it except members of the studio using the application.
+  </p>
+
+  <h2>6. How long it is kept, and how to end it</h2>
+  <ul>
+    <li>Studio content is kept for as long as the studio keeps it, and is deleted when the
+      studio deletes it.</li>
+    <li>A client’s wishlist is deleted when the studio deletes that client.</li>
+    <li>The Google connection lasts until it is ended. The owner can disconnect it inside the
+      application, which deletes the stored refresh token; the account holder can also revoke
+      it at any time at
+      <a href="https://myaccount.google.com/permissions" rel="noopener">
+        myaccount.google.com/permissions</a>.</li>
+    <li>Files already uploaded belong to the studio’s own Google Drive and stay there after a
+      disconnection. Removing them is done in Drive.</li>
+  </ul>
+
+  <h2>7. Who else sees it</h2>
+  <p>
+    Nobody. The application does not sell or rent anything it holds, shows no advertising, and
+    runs no third-party tracking or analytics. It is served by a hosting provider and uses a
+    database and Google’s own APIs to do the work described above; those providers process data
+    on the studio’s behalf and for no other purpose.
+  </p>
+
+  <h2>8. Security</h2>
+  <ul>
+    <li>All traffic is served over HTTPS.</li>
+    <li>Passwords are stored only as one-way hashes.</li>
+    <li>Secrets, including the Google refresh token, are encrypted at rest.</li>
+    <li>Every screen beyond the sign-in page requires an authenticated session, and each action
+      is additionally checked against that member’s role.</li>
+  </ul>
+
+  <h2>9. Children</h2>
+  <p>
+    The application is a professional tool for the studio’s staff. It is not directed at
+    children and is not intended to be used by them.
+  </p>
+
+  <h2>10. Changes</h2>
+  <p>
+    If this policy changes, the date at the top of this page changes with it.
+  </p>
+
+  <h2>11. Contact</h2>
+  <div class="panel">
+    <span class="lbl">Questions about this policy, or about data held</span>
+    <p>
+      <strong>REPLACE-WITH-YOUR-CONTACT-EMAIL</strong>
+    </p>
+    <p style="margin-top:10px">
+      Requests to see, correct or delete anything this application holds about you are answered
+      at that address.
+    </p>
+  </div>
+
+  <footer class="end">
+    De’vyora · Natural Stone &amp; Architectural Atelier — <a href="/">Home</a>
+  </footer>
+
+</div>
+</body>
+</html>
