@@ -78,7 +78,8 @@
     "fix-product-codes": "ts-node prisma/fix-missing-product-codes.ts",
     "test:theme-text": "ts-node -r tsconfig-paths/register test-scripts/theme_text_matches_test.ts",
     "test:home-page": "node test-scripts/home_page_test.js",
-    "test:library-multitheme": "node test-scripts/library_multitheme_test.js"
+    "test:library-multitheme": "node test-scripts/library_multitheme_test.js",
+    "test:public-pages": "node test-scripts/public_pages_test.js"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
