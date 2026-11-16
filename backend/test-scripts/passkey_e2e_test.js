@@ -206,6 +206,15 @@ async function main() {
     await page.click('#submitBtn');
   };
 
+  // Signing out used to be one click on the dashboard's sidebar. The
+  // gateway that replaced it has no sidebar, so SIGN OUT lives behind
+  // the avatar in its header -- two clicks, same act.
+  const signOut = async (page) => {
+    await page.click('#avatarBtn');
+    await page.waitForSelector('#signOutBtn', { state: 'visible', timeout: 15000 });
+    await page.click('#signOutBtn');
+  };
+
   const credentialCount = (userId) => prisma.webAuthnCredential.count({ where: { userId } });
 
   // ════════════════════════════════════════════════════════════════
@@ -221,8 +230,8 @@ async function main() {
       await page.locator('#loginForm').isVisible());
 
     await signInWithPassword(page, 'priya@example.test', PASSWORD);
-    await page.waitForURL('**/dashboard.html', { timeout: 15000 }).catch(() => {});
-    check('1c. the password still signs in', page.url().includes('dashboard.html'), page.url());
+    await page.waitForURL('**/home.html', { timeout: 15000 }).catch(() => {});
+    check('1c. the password still signs in', page.url().includes('home.html'), page.url());
     check('1d. no enable offer was made', await credentialCount(primary.id) === 0);
     await context.close();
   }
@@ -262,8 +271,8 @@ async function main() {
       /Sign in faster next time/.test(await page.locator('#bioAsk').textContent()));
 
     await page.click('#bioEnable');
-    await page.waitForURL('**/dashboard.html', { timeout: 20000 });
-    check('3c. enabling it signs the visitor through to the dashboard', true);
+    await page.waitForURL('**/home.html', { timeout: 20000 });
+    check('3c. enabling it signs the visitor through to the home page', true);
     check('3d. exactly one key was created', await credentialCount(primary.id) === 1,
       await credentialCount(primary.id));
 
@@ -277,9 +286,9 @@ async function main() {
     const { context, page } = await newPage({ ua: UA.androidChrome, autofill: false });
     await context.addCookies(enrolledState.cookies);
     await page.goto(`${base}/login.html`, { waitUntil: 'domcontentloaded' });
-    await page.waitForURL('**/dashboard.html', { timeout: 15000 }).catch(() => {});
+    await page.waitForURL('**/home.html', { timeout: 15000 }).catch(() => {});
     check('4a. it goes straight in, with no login page',
-      page.url().includes('dashboard.html'), page.url());
+      page.url().includes('home.html'), page.url());
 
     const cookie = enrolledState.cookies.find((c) => c.name.includes('refresh'));
     const days = cookie ? (cookie.expires * 1000 - Date.now()) / 86400000 : 0;
@@ -301,10 +310,10 @@ async function main() {
     await signInWithPassword(page, 'priya@example.test', PASSWORD);
     await page.waitForSelector('#bioAsk', { timeout: 15000 });
     await page.click('#bioEnable');
-    await page.waitForURL('**/dashboard.html', { timeout: 20000 });
+    await page.waitForURL('**/home.html', { timeout: 20000 });
 
     // 5. sign out
-    await page.click('#logoutBtn');
+    await signOut(page);
     await page.waitForURL('**/login.html**', { timeout: 15000 });
     await page.waitForFunction(
       () => document.getElementById('checkingState').style.display === 'none',
@@ -318,8 +327,8 @@ async function main() {
     check('5c. ...and no prompt starts by itself', page.url().includes('login.html'), page.url());
 
     await page.click('#bioBtn');
-    await page.waitForURL('**/dashboard.html', { timeout: 20000 });
-    check('5d. one tap signs in', page.url().includes('dashboard.html'));
+    await page.waitForURL('**/home.html', { timeout: 20000 });
+    check('5d. one tap signs in', page.url().includes('home.html'));
     const whoami = await page.evaluate(async () => {
       const u = await window.CasaApi.me.get();
       return u && u.email;
@@ -328,12 +337,12 @@ async function main() {
 
     // 6. opening the login page later: the prompt starts by itself
     await page.evaluate(() => sessionStorage.clear());
-    await page.goto(`${base}/login.html?redirect=dashboard.html`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`${base}/login.html?redirect=home.html`, { waitUntil: 'domcontentloaded' });
     await page.evaluate(() => { localStorage.removeItem('casa_access_token'); });
     await page.goto(`${base}/login.html`, { waitUntil: 'domcontentloaded' });
-    await page.waitForURL('**/dashboard.html', { timeout: 20000 }).catch(() => {});
+    await page.waitForURL('**/home.html', { timeout: 20000 }).catch(() => {});
     check('6a. the prompt starts by itself and signs in',
-      page.url().includes('dashboard.html'), page.url());
+      page.url().includes('home.html'), page.url());
 
     // 7. a face that is not recognised
     await cdp.send('WebAuthn.setUserVerified', { authenticatorId, isUserVerified: false });
@@ -357,8 +366,8 @@ async function main() {
 
     await page.click('#bioAlt');
     await signInWithPassword(page, 'priya@example.test', PASSWORD);
-    await page.waitForURL('**/dashboard.html', { timeout: 20000 }).catch(() => {});
-    check('7c. the password still works', page.url().includes('dashboard.html'), page.url());
+    await page.waitForURL('**/home.html', { timeout: 20000 }).catch(() => {});
+    check('7c. the password still works', page.url().includes('home.html'), page.url());
     await context.close();
   }
 
@@ -370,7 +379,7 @@ async function main() {
     await signInWithPassword(page, 'priya@example.test', PASSWORD);
     await page.waitForSelector('#bioAsk', { timeout: 15000 });
     await page.click('#bioEnable');
-    await page.waitForURL('**/dashboard.html', { timeout: 20000 });
+    await page.waitForURL('**/home.html', { timeout: 20000 });
 
     // Capture a real, successful sign-in off the wire.
     let captured = null;
@@ -379,14 +388,14 @@ async function main() {
         captured = req.postData();
       }
     });
-    await page.click('#logoutBtn');
+    await signOut(page);
     await page.waitForURL('**/login.html**', { timeout: 15000 });
     await page.waitForFunction(
       () => document.getElementById('checkingState').style.display === 'none',
       { timeout: 15000 },
     );
     await page.click('#bioBtn');
-    await page.waitForURL('**/dashboard.html', { timeout: 20000 });
+    await page.waitForURL('**/home.html', { timeout: 20000 });
     check('8a. a sign-in was captured, as an attacker would', !!captured);
 
     const replay = await page.evaluate(async (body) => {
@@ -448,7 +457,7 @@ async function main() {
     await signInWithPassword(page, 'priya@example.test', PASSWORD);
     await page.waitForSelector('#bioAsk', { timeout: 15000 });
     await page.click('#bioEnable');
-    await page.waitForURL('**/dashboard.html', { timeout: 20000 });
+    await page.waitForURL('**/home.html', { timeout: 20000 });
 
     // The password changes, as it would after a reset.
     await prisma.user.update({
@@ -456,7 +465,7 @@ async function main() {
       data: { passwordHash: await hashPassword('dummy-password-changed') },
     });
 
-    await page.click('#logoutBtn');
+    await signOut(page);
     await page.waitForURL('**/login.html**', { timeout: 15000 });
     await page.waitForFunction(
       () => document.getElementById('checkingState').style.display === 'none',
@@ -482,7 +491,7 @@ async function main() {
       .then(() => true).catch(() => false);
     check('9e. signing in with the new password offers enrolment again', offeredAgain);
     await page.click('#bioEnable');
-    await page.waitForURL('**/dashboard.html', { timeout: 20000 });
+    await page.waitForURL('**/home.html', { timeout: 20000 });
 
     // And a deleted account takes its keys with it.
     const doomed = await prisma.user.create({
@@ -513,12 +522,12 @@ async function main() {
       .then(() => true).catch(() => false);
     if (first) {
       await page.click('#bioEnable');
-      await page.waitForURL('**/dashboard.html', { timeout: 20000 });
+      await page.waitForURL('**/home.html', { timeout: 20000 });
     }
     check('10a. the first account enrols on this device',
       await credentialCount(primary.id) >= 1, await credentialCount(primary.id));
 
-    await page.click('#logoutBtn');
+    await signOut(page);
     await page.waitForURL('**/login.html**', { timeout: 15000 });
     await page.waitForFunction(
       () => document.getElementById('checkingState').style.display === 'none',
@@ -535,7 +544,7 @@ async function main() {
     check('10c. a different account on an enrolled device is offered it too', offered);
 
     await page.click('#bioEnable');
-    await page.waitForURL('**/dashboard.html', { timeout: 20000 });
+    await page.waitForURL('**/home.html', { timeout: 20000 });
     check('10d. ...and gets its own key', await credentialCount(second.id) === 1,
       await credentialCount(second.id));
     check('10e. ...without disturbing the first account’s',
@@ -569,19 +578,19 @@ async function main() {
     let enabled = false;
     if (offered) {
       await page.click('#bioEnable');
-      enabled = await page.waitForURL('**/dashboard.html', { timeout: 20000 })
+      enabled = await page.waitForURL('**/home.html', { timeout: 20000 })
         .then(() => true).catch(() => false);
     }
     let signedIn = false;
     if (enabled) {
-      await page.click('#logoutBtn');
+      await signOut(page);
       await page.waitForURL('**/login.html**', { timeout: 15000 });
       await page.waitForFunction(
         () => document.getElementById('checkingState').style.display === 'none',
         { timeout: 15000 },
       );
       await page.click('#bioBtn');
-      signedIn = await page.waitForURL('**/dashboard.html', { timeout: 20000 })
+      signedIn = await page.waitForURL('**/home.html', { timeout: 20000 })
         .then(() => true).catch(() => false);
     }
     check(`11. ${name}: button, offer, enable and Face ID sign-in`,
@@ -626,7 +635,7 @@ async function main() {
     check(`13. ${name}: no enable offer is made there`,
       !(await page.locator('#bioLead').isVisible()));
     await signInWithPassword(page, 'arun@example.test', SECOND_PASSWORD);
-    const through = await page.waitForURL('**/dashboard.html', { timeout: 15000 })
+    const through = await page.waitForURL('**/home.html', { timeout: 15000 })
       .then(() => true).catch(() => false);
     check(`13. ${name}: the password still works`, through);
     await context.close();

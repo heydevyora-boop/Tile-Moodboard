@@ -229,7 +229,7 @@ async function main() {
   await page.fill('#email', 'priya@example.test');
   await page.fill('#password', PASSWORD);
   await page.click('#submitBtn');
-  await page.waitForURL('**/dashboard.html', { timeout: 20000 });
+  await page.waitForURL('**/home.html', { timeout: 20000 });
 
   // ════════════════════════════════════════════════════════════════
   console.log('\n1. the choice is made in the Library and spent elsewhere');

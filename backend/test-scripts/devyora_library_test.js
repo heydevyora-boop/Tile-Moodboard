@@ -43,8 +43,9 @@ const model = (schema.split('model LibraryReference {')[1] || '').split('\n}')[0
 function main() {
   // ── the menu item ────────────────────────────────────────────────
   const SIDEBAR_PAGES = [
-    'dashboard.html', 'mood-board.html', 'recent-generations.html',
-    'projects.html', 'catalog.html', 'devyora-library.html',
+    'mood-board.html', 'recent-generations.html', 'projects.html',
+    'catalog.html', 'devyora-library.html', 'sample-placement.html',
+    'client-wishlists.html',
   ];
 
   SIDEBAR_PAGES.forEach((page) => {
@@ -57,10 +58,12 @@ function main() {
     fs.existsSync(path.join(FRONTEND, 'devyora-library.html')));
 
   // ...and the label is the studio's own name, with its apostrophe.
-  const dash = fs.readFileSync(path.join(FRONTEND, 'dashboard.html'), 'utf8');
+  // (Read from the Catalog page: dashboard.html is gone -- the gateway
+  // replaced it, and the gateway deliberately has no sidebar.)
+  const sidebarPage = fs.readFileSync(path.join(FRONTEND, 'catalog.html'), 'utf8');
   check('3. the item is labelled De’vyora Library',
-    /De\\u2019vyora Library|De’vyora Library/.test(dash), 
-    (dash.match(/label: *["'][^"']*Library[^"']*["']/) || [])[0]);
+    /De\\u2019vyora Library|De’vyora Library/.test(sidebarPage),
+    (sidebarPage.match(/label: *["'][^"']*Library[^"']*["']/) || [])[0]);
 
   // ── the page renders, with the sidebar and no upload ─────────────
   {
@@ -126,9 +129,13 @@ function main() {
         .map((el) => el.textContent.trim());
       check('4. the page draws its sidebar',
         navLabels.length >= 6
-        && ['Dashboard', 'Mood Board', 'Catalog', 'Sample Placement']
+        && ['Mood Board', 'Recent Generations', 'Catalog', 'Sample Placement']
           .every((label) => navLabels.indexOf(label) !== -1)
-        && navLabels.some((label) => /Library/.test(label)),
+        && navLabels.some((label) => /Library/.test(label))
+        // The Dashboard is gone, and nothing took its place IN the
+        // sidebar: the gateway is where a sign-in lands, not somewhere
+        // you navigate to.
+        && navLabels.indexOf('Dashboard') === -1,
         navLabels);
       check('5. ...with De’vyora Library as the active item',
         /Library/.test((doc.querySelector('.nav-item.active') || {}).textContent || ''),

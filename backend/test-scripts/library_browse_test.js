@@ -132,7 +132,7 @@ async function main() {
     await page.fill('#email', email);
     await page.fill('#password', PASSWORD);
     await page.click('#submitBtn');
-    await page.waitForURL('**/dashboard.html', { timeout: 20000 });
+    await page.waitForURL('**/home.html', { timeout: 20000 });
   };
 
 
@@ -374,7 +374,7 @@ async function main() {
       chosenTitle);
 
     // The whole point: generation happens on another page.
-    await page.goto(`${base}/dashboard.html`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`${base}/home.html`, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(400);
     const afterLeaving = await page.evaluate(
       () => (window.CasaApi && window.CasaApi.library.selection()) || null

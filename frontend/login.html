@@ -132,7 +132,7 @@
 
   function getRedirectTarget() {
     const raw = new URLSearchParams(location.search).get('redirect');
-    return isSafeRedirect(raw) ? raw : 'dashboard.html';
+    return isSafeRedirect(raw) ? raw : 'home.html';
   }
 
   function showAlert(message) {

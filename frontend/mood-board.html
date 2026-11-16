@@ -23,7 +23,7 @@
   @keyframes spin { to{transform:rotate(360deg)} }
   @keyframes pulse { 0%,100%{opacity:.5} 50%{opacity:1} }
 
-  /* ---- shell (same as dashboard.html) ---- */
+  /* ---- shell (shared with the other sidebar pages) ---- */
   .layout { display:flex; height:100vh; overflow:hidden; }
   .sidebar { flex:0 0 auto; width:266px; height:100%; display:flex; flex-direction:column; background:#FCFAF6; border-right:1px solid var(--line); overflow-y:auto; }
   .brand { padding:26px 22px 20px; border-bottom:1px solid #EFE7DA; }
@@ -364,7 +364,7 @@
 <div class="layout">
   <aside class="sidebar">
     <div class="brand">
-      <div class="brand-row"><img class="brand-mark" src="img/devyora-mark.webp" alt="" width="30" height="30" decoding="async"><div class="brand name serif">DE’VYORA</div></div>
+      <a class="brand-row" href="home.html" aria-label="De’vyora home"><img class="brand-mark" src="img/devyora-mark.webp" alt="" width="30" height="30" decoding="async"><div class="brand name serif">DE’VYORA</div></a>
       <div class="brand tag mono">STUDIO &amp; SHOWROOM</div>
     </div>
     <div class="nav">
@@ -394,7 +394,7 @@
   'use strict';
 
   // ============================================================
-  // NAV (same pattern as dashboard.html)
+  // NAV (same pattern as the other sidebar pages)
   // ============================================================
 
   // How many combinations one generation produces. Read by the wizard's
@@ -404,7 +404,6 @@
   const COMBINATION_COUNT = 2;
 
   const NAV_ITEMS = [
-    { id: 'dashboard', label: 'Dashboard', href: 'dashboard.html', ready: true },
     { id: 'moodboard', label: 'Mood Board', href: 'mood-board.html', ready: true },
     { id: 'generations', label: 'Recent Generations', href: 'recent-generations.html', ready: true },
     { id: 'projects', label: 'Projects', href: 'projects.html', ready: true },
@@ -978,7 +977,7 @@
       '<p class="step-sub">' + meta.sub + '</p>' +
       '<div id="stepBody"></div>' +
       '<div class="step-actions">' +
-      '<button class="btn-back mono" id="prevBtn">← ' + (state.step === 1 ? 'DASHBOARD' : 'BACK') + '</button>' +
+      '<button class="btn-back mono" id="prevBtn">← ' + (state.step === 1 ? 'HOME' : 'BACK') + '</button>' +
       '<button class="btn-next mono" id="nextBtn"' + (stepValid(state.step) ? '' : ' disabled') + '><span style="width:6px;height:6px;border-radius:50%;background:#E3C58E"></span><span style="flex:1;text-align:left">' + (state.step === 7 ? 'GENERATE ' + boardCount() + ' MOOD BOARDS' : 'CONTINUE TO STEP ' + (state.step + 1)) + '</span><span>→</span></button>' +
       '</div>' +
       '</div>';
@@ -990,7 +989,7 @@
       btn.addEventListener('click', () => { state.step = parseInt(btn.dataset.gotoStep, 10); render(); });
     });
     document.getElementById('prevBtn').addEventListener('click', () => {
-      if (state.step === 1) { location.href = 'dashboard.html'; return; }
+      if (state.step === 1) { location.href = 'home.html'; return; }
       state.step -= 1; render();
     });
     document.getElementById('nextBtn').addEventListener('click', () => {
