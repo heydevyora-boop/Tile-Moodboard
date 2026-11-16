@@ -653,11 +653,23 @@
     };
   }
 
-  /** The themes the server sent, and the Mix that spans them. */
+  /**
+   * The themes the server sent, led by the Mix that spans them.
+   *
+   * THE MIX GOES FIRST. It is the widest thing on the page -- every
+   * theme's pictures in one grid -- so it is where a client with
+   * nothing particular in mind should start, not something they reach
+   * after scrolling past all nine. The real themes keep the order the
+   * server sent them in, which is the studio's own: British, then the
+   * rest.
+   *
+   * It carries no tick, so it never joins the working set and this
+   * order never reaches pickedThemes().
+   */
   function setThemes(list) {
     const real = (list || []).filter((t) => t.id !== MIX_ID);
     const mix = mixEntry(real);
-    state.themes = mix ? real.concat([mix]) : real;
+    state.themes = mix ? [mix].concat(real) : real;
   }
 
   const galKey = (t, r) => String(t == null ? state.themeId : t)

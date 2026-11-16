@@ -182,7 +182,11 @@ async function main() {
     // empty, which was the whole complaint.
     // One starter per room type, so the Theme x Room grid has no empty
     // cell at all -- which is the blank-page complaint, one level down.
-    const first = await page.locator('.lib-theme-card').first().textContent() || '';
+    // The FIRST REAL THEME, not the Mix that now leads the grid: the
+    // Mix spans all nine, so its count is nine rooms' worth and says
+    // nothing about whether one theme's six are each filled.
+    const first = await page.locator('.lib-theme-cell:not(.is-mix) .lib-theme-card')
+      .first().textContent() || '';
     check('2a. every theme shows a starter for each of its six rooms',
       /6 PICTURES/.test(first), first);
     check('2b. ...and none claims to be empty',
