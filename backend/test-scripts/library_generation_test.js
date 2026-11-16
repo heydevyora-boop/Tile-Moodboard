@@ -531,6 +531,80 @@ async function main() {
   }
 
   // ════════════════════════════════════════════════════════════════
+  // A VERCEL PREVIEW ANSWERS A SERVER WITH ITS SIGN-IN PAGE.
+  //
+  // Deployment Protection sits in front of every function, so the
+  // Python service fetching this deployment's own /static url is
+  // redirected to Vercel's SSO page and handed HTML with a 200 --
+  // which Pillow reports as "the remote scene image did not contain a
+  // valid image file", blaming the picture for a project setting.
+  //
+  // main_step6_complete.py sends fixed headers and cannot be asked for
+  // another, so the only form of Vercel's bypass that reaches it is
+  // the query parameter. These assert it goes on when the secret is
+  // there, stays off when it is not, and never travels anywhere else.
+  // ════════════════════════════════════════════════════════════════
+  console.log('\n7B. a protected preview deployment');
+  {
+    const ask = async (referenceId) => {
+      reset();
+      const out = await call('/ai/visualizations', {
+        product_id: tiles.TILE_BASE.id,
+        surface: 'WALL',
+        library_reference_id: referenceId,
+        materials: [{ role: 'base', tile_id: tiles.TILE_BASE.id }],
+        requirements: { room: 'BATHROOM', style: 'Moroccan' },
+      });
+      return { out, sent: pythonCalls[0] };
+    };
+
+    const BYPASS = 'dummy-bypass-secret-not-a-real-one';
+    delete process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+
+    const plain = await ask(reference.id);
+    check('7B1. with no protection to bypass, the url is left exactly as it was',
+      plain.out.status === 200
+      && !plain.sent.scene_image_url.includes('x-vercel-protection-bypass'),
+      plain.sent && plain.sent.scene_image_url);
+
+    process.env.VERCEL_AUTOMATION_BYPASS_SECRET = BYPASS;
+    try {
+      const guarded = await ask(reference.id);
+      check('7B2. with the secret set, the fetcher is let through the front door',
+        guarded.out.status === 200
+        && guarded.sent.scene_image_url.includes(
+          `x-vercel-protection-bypass=${BYPASS}`),
+        guarded.sent && guarded.sent.scene_image_url);
+      check('7B3. ...on the same url as before, not instead of it',
+        guarded.sent.scene_image_url.includes('/static/library-reference/')
+        && guarded.sent.scene_image_url.includes(driveIdOf(reference.imageUrl)),
+        guarded.sent && guarded.sent.scene_image_url);
+
+      // A STARTER IS BEHIND THE SAME DOOR. It is served by this very
+      // deployment too, so a fix that covered only uploaded pictures
+      // would have left every studio with nothing uploaded still
+      // unable to generate.
+      const starter = await ask('starter:moroccan-bathroom');
+      check('7B4. a starter room is let through it too',
+        starter.out.status === 200
+        && starter.sent.scene_image_url.includes(
+          `x-vercel-protection-bypass=${BYPASS}`)
+        && starter.sent.scene_image_url.includes('/static/library-starters/'),
+        starter.sent && starter.sent.scene_image_url);
+
+      check('7B5. the secret never reaches the browser that asked',
+        !JSON.stringify(guarded.out.body || {}).includes(BYPASS));
+    } finally {
+      delete process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+    }
+
+    const after = await ask(reference.id);
+    check('7B6. ...and taking it away takes it off the url again',
+      !after.sent.scene_image_url.includes('x-vercel-protection-bypass'),
+      after.sent && after.sent.scene_image_url);
+  }
+
+  // ════════════════════════════════════════════════════════════════
   console.log('\n8. the browser cannot name the scene it is handed');
   {
     reset();
