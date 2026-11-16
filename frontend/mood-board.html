@@ -458,6 +458,42 @@
   ];
 
   /*
+   * THE WIZARD'S NAME FOR A ROOM THE LIBRARY LABELS DIFFERENTLY.
+   *
+   * shared/rooms.json gives every room a `label` and a `wizard` name,
+   * and for two of the six they differ: drawing_room is labelled
+   * "Drawing Room" where this page says "Living Room", and kitchen
+   * "Kitchen" where this page says "Kitchen & Dining". A chosen
+   * reference carries the LABEL, so without these two a Drawing Room
+   * picture would arrive here with no room resolved at all.
+   */
+  const ROOM_LABEL_ALIASES = {
+    'drawing room': 'Living Room',
+    'kitchen': 'Kitchen & Dining',
+  };
+
+  /** The wizard room a reference names, by either of its names. */
+  function roomFromReference(ref) {
+    if (!ref) return null;
+    const names = [ref.roomWizard, ref.room];
+    for (let i = 0; i < names.length; i += 1) {
+      const wanted = String(names[i] || '').trim().toLowerCase();
+      if (!wanted) continue;
+      const aliased = (ROOM_LABEL_ALIASES[wanted] || '').toLowerCase();
+      const found = ROOMS.find((r) => {
+        const name = r.name.toLowerCase();
+        return name === wanted || (aliased && name === aliased);
+      });
+      if (found) return found.name;
+    }
+    // Deliberately null, not a guess. A picture filed under "unsorted"
+    // -- uploaded before rooms existed -- is a reference for no room
+    // this page knows, and saying "Bathroom" anyway would put a brief
+    // in front of the client that the picture does not support.
+    return null;
+  }
+
+  /*
    * The feature surfaces each room actually has.
    *
    * This was one flat list, so a kitchen and a bedroom were offered a
@@ -837,6 +873,15 @@
      * { id, themeId, title, imageUrl, room, chosenAt }
      */
     libraryRef: null,
+    /**
+     * TRUE WHILE THE PICTURE IS THE BRIEF.
+     *
+     * Set when the Library sent the studio straight to the boards, so
+     * nobody has been asked anything yet, and dropped the moment they
+     * open the seven steps -- from then on their answers are the brief,
+     * not the reference's reading of itself.
+     */
+    referenceLed: false,
     /**
      * What the server said it actually did with that reference --
      * { id, title, imageUrl, room, matched, dominantColour }.
@@ -1466,16 +1511,66 @@
     ].join(' ');
   }
 
+  /**
+   * THE BRIEF A PICTURE WRITES BY ITSELF.
+   *
+   * Used when the Library sent the studio straight to the boards. Every
+   * question the seven steps ask -- the tile module, the finish, the
+   * budget band, the viewpoint -- is answered by the reference instead
+   * of by a default nobody chose.
+   *
+   * It does NOT claim to have read a size out of the photograph; no
+   * page can. It does the honest equivalent: it stops imposing one, and
+   * says to take the module from the reference and from what the
+   * catalog actually stocks. The server then adds the picture's own
+   * reading, which ends "where the reference and the theme disagree,
+   * THE REFERENCE WINS" -- see libraryMatch.referenceBriefBlock.
+   */
+  function referenceBriefText() {
+    return [
+      'Design a ' + (state.room || 'room') + ' that matches the reference room above.',
+      'Take the tile module, the finish and the layout from that picture rather than from a '
+        + 'size named here, choosing from what the catalog stocks.',
+      'Take the feature wall from it too \u2014 whichever surface the reference itself '
+        + 'accents, or none at all if it accents none.',
+      'No budget band has been set: match the reference as closely as the listed stock allows.',
+      'Follow the reference room\u2019s own viewpoint for the handout.',
+      // The theme travels, because it is the reference's own --
+      // pre-selected in init from the choice the Library stored.
+      // This page's default GROUT does not: nobody chose it, and
+      // the reference shows its own. The rules already ask for a
+      // grout recommendation, so asking for one here costs nothing
+      // and stops "Ivory Matte" going out as the client's instruction.
+      'Theme: ' + state.theme
+        + '. Take the grout from the reference, or recommend one that suits it.',
+    ].join(' ');
+  }
+
   async function runGenerate() {
     state.stage = 'generating';
     render();
 
     try {
+      // Reference-led only until the studio opens the seven steps; from
+      // then on they are the ones answering, and their answers are used.
+      const led = state.referenceLed && !!state.libraryRef;
+
       const payload = {
-        text: buildBriefText(),
-        room: state.room,
+        text: led ? referenceBriefText() : buildBriefText(),
+        // NEVER NULL.
+        //
+        // The wizard starts with no room at all, and the schema takes a
+        // string or nothing -- `null` is rejected outright. That is the
+        // 400 the studio saw as "Validation failed" on a board they had
+        // not been asked a single question about: a picture filed under
+        // a room this page does not know left state.room untouched, and
+        // it went on the wire as null. Omitted, the room is simply not
+        // stated, which is what is true.
+        ...(state.room ? { room: state.room } : {}),
         style: state.theme,
-        budget: budgetBrief(),
+        // A band nobody chose is not a constraint anybody asked for.
+        // Reference-led, the picture is the constraint.
+        ...(led ? {} : { budget: budgetBrief() }),
         combinationCount: boardCount(),
         // THE CHOSEN REFERENCE ROOM. The id alone -- the server reads
         // the row and the picture itself, so nothing here can point it
@@ -1608,6 +1703,7 @@
     });
     document.getElementById('editBtn').addEventListener('click', () => {
       if (state.viewOnly) { location.href = 'projects.html'; return; }
+      state.referenceLed = false;
       state.stage = 'wizard'; state.step = 1; render();
     });
   }
@@ -1624,9 +1720,18 @@
 
   function renderResults() {
     const main = document.getElementById('mainContent');
+    // WHAT THE BOARDS ACTUALLY STAND ON.
+    //
+    // Reference-led, the module, the band, the feature wall and the
+    // camera were never chosen by anybody, so listing this page's
+    // defaults for them would tell the client the board was built to a
+    // brief they never gave.
     const specLine = state.viewOnly
       ? state.room + ' · ' + state.theme + (state.loadedBoard && state.loadedBoard.clientBrief ? ' — ' + state.loadedBoard.clientBrief : '')
-      : state.room + ' · ' + state.theme + ' · ' + budgetText() + ' · ' + sizeText() + ' · ' + featureText() + ' · ' + state.view;
+      : (state.referenceLed && state.libraryRef
+        ? (state.room ? state.room + ' · ' : '') + state.theme
+          + ' · module, finish, budget, feature wall and camera all taken from the reference room'
+        : state.room + ' · ' + state.theme + ' · ' + budgetText() + ' · ' + sizeText() + ' · ' + featureText() + ' · ' + state.view);
 
     const iterateBoxHtml = state.viewOnly
       ? '<div class="iterate-box"><h3 class="serif" style="margin:0; font-size:clamp(20px,2vw,26px)">Saved project</h3><p style="margin:8px 0 0; font-size:14px; color:var(--text2); line-height:1.55">Viewing a previously saved mood board.</p><div class="iterate-actions"><button class="btn-dashed mono" id="backToProjectsBtn">← BACK TO PROJECTS</button></div></div>'
@@ -1707,6 +1812,9 @@
     } else {
       document.getElementById('regenBtn').addEventListener('click', runGenerate);
       document.getElementById('editBriefBtn').addEventListener('click', () => {
+        // From here on the studio is answering, so the next board is
+        // built from their answers rather than from the picture alone.
+        state.referenceLed = false;
         state.stage = 'wizard';
         state.step = 1;
         render();
@@ -2619,10 +2727,8 @@
       // the room decides the whole brief, not just the palette.
       //
       // A default, not a lock: the client may still pick another.
-      if (state.libraryRef && state.libraryRef.roomWizard) {
-        const found = ROOMS.find((r) => r.name === state.libraryRef.roomWizard);
-        if (found) state.room = found.name;
-      }
+      const refRoom = roomFromReference(state.libraryRef);
+      if (refRoom) state.room = refRoom;
     }
 
     renderNav();
@@ -2652,6 +2758,17 @@
     // it is taken out of the address before it runs: a refresh, or a
     // Back onto this page, must not buy a second one.
     if (fromLibrary && state.libraryRef) {
+      // THE PICTURE ANSWERS THE SEVEN STEPS, not their defaults.
+      //
+      // Nobody has been asked anything, so nothing here may be
+      // presented as the client's choice: the module, the finish, the
+      // budget band and the viewpoint all come from the room in the
+      // picture. `auto` is the existing, honest way to say "no module
+      // was given" -- see the flag beside it in the brief text -- and
+      // it keeps the wizard's 600x1200 default off a brief the client
+      // never saw.
+      state.referenceLed = true;
+      state.sizeMode = 'auto';
       query.delete('generate');
       const rest = query.toString();
       history.replaceState(null, '', location.pathname + (rest ? '?' + rest : ''));

@@ -215,6 +215,22 @@ async function main() {
     } catch (err) { /* not JSON; not one of ours */ }
   });
 
+  /**
+   * WHAT THE SERVER ANSWERED, which is a different question.
+   *
+   * The body can carry the reference perfectly and still be refused:
+   * the brief schema takes `room` as a string or not at all, and the
+   * page once sent it as `null`, which came back 400 "Validation
+   * failed" on a board nobody had been asked a question about. Reading
+   * the status is the only check that sees that.
+   */
+  const generateStatuses = [];
+  page.on('response', (res) => {
+    if (res.request().method() === 'POST' && res.url().includes('/mood-boards/generate')) {
+      generateStatuses.push(res.status());
+    }
+  });
+
 
   /** Theme -> Room -> pictures: reaching a picture is two clicks now. */
   const openThemeRoom = async (themeId, roomId) => {
@@ -270,6 +286,9 @@ async function main() {
     // GENERATION IS A PAID CALL. The flag that asked for it is spent on
     // the way in, so a refresh or a Back onto this page cannot buy a
     // second one.
+    check('1f2. ...and the server ACCEPTED it, rather than refusing the brief',
+      generateStatuses.length === 1 && generateStatuses[0] === 200, generateStatuses);
+
     check('1g. ...and the address no longer asks for another',
       !page.url().includes('generate=1'), page.url());
 
@@ -449,6 +468,162 @@ async function main() {
     check('6c. ...and that the image still uses the room, which is true',
       /THE IMAGE STILL USES THIS ROOM/.test(banner), banner);
     driveDown = false;
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  console.log('\n7. the picture answers the brief, and `room` never goes as null');
+  {
+    /**
+     * THE EXACT SHAPE THAT BROKE.
+     *
+     * A picture filed under no room at all -- uploaded before the
+     * hierarchy existed, so it sits in "unsorted" -- carries no name
+     * this page can turn into one of its six rooms. The wizard was
+     * therefore left on its own starting value, which is null, and
+     * `room: null` went out on a brief nobody had been asked anything
+     * about: 400, "Validation failed", on the very first thing the
+     * studio sees after choosing a picture.
+     *
+     * So this chooses such a picture and asks for the boards the way
+     * the Library does.
+     */
+    const roomless = await prisma.libraryReference.create({
+      data: {
+        themeId: 'moroccan', title: 'Filed Before Rooms Existed',
+        imageUrl: 'https://drive.google.com/uc?export=download&id=ref-roomless',
+        driveFileId: 'ref-roomless', uploadedById: user.id,
+      },
+    });
+
+    sentBodies.generate = null;
+    sentBodies.scene = null;
+    generateStatuses.length = 0;
+    pythonCalls.length = 0;
+
+    await page.goto(`${base}/mood-board.html`, { waitUntil: 'domcontentloaded' });
+    await page.evaluate((ref) => {
+      localStorage.setItem('casa_library_selection', JSON.stringify({
+        id: ref.id, themeId: 'moroccan', themeLabel: 'Moroccan',
+        title: ref.title, imageUrl: ref.imageUrl,
+        // Both empty, which is what an unsorted picture really carries.
+        room: '', roomWizard: '', chosenAt: new Date().toISOString(),
+      }));
+    }, { id: roomless.id, title: roomless.title, imageUrl: roomless.imageUrl });
+
+    await page.goto(`${base}/mood-board.html?generate=1`, { waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('.board-card, .error-box', { timeout: 40000 });
+
+    check('7a. the boards are built from a picture that names no room',
+      await page.locator('.board-card').count() >= 1,
+      await page.locator('.error-box').textContent().catch(() => null));
+    check('7b. ...and the server accepted the brief',
+      generateStatuses.length === 1 && generateStatuses[0] === 200, generateStatuses);
+    // THE REGRESSION ITSELF. Absent is right; null is the bug.
+    check('7c. ...because `room` was left out, not sent as null',
+      sentBodies.generate && !('room' in sentBodies.generate),
+      sentBodies.generate && { room: sentBodies.generate.room, present: 'room' in sentBodies.generate });
+
+    /**
+     * AND NOTHING IS PRESENTED AS A CHOICE NOBODY MADE.
+     *
+     * The studio was asked nothing, so the budget band, the module, the
+     * finish and the camera cannot be stated as theirs. The brief says
+     * to take them from the picture instead.
+     */
+    const brief = (sentBodies.generate && sentBodies.generate.text) || '';
+    check('7d. no budget band is imposed on a brief nobody was asked for',
+      sentBodies.generate && sentBodies.generate.budget === undefined,
+      sentBodies.generate && sentBodies.generate.budget);
+    check('7e. the brief takes the module, the finish and the layout from the picture',
+      /tile module, the finish and the layout from that picture/.test(brief), brief);
+    check('7f. ...the viewpoint too',
+      /viewpoint for the handout/.test(brief), brief);
+    check('7g. ...and it still names the theme the picture belongs to',
+      /Theme: Moroccan/.test(brief), brief);
+    check('7g2. ...the feature wall taken from the picture, not from a default',
+      /feature wall from it too/.test(brief) && !/with no feature wall/.test(brief), brief);
+    check('7g3. ...and no grout stated as the client\u2019s instruction',
+      /recommend one that suits it/.test(brief) && !/Ivory Matte grout/.test(brief), brief);
+    check('7h. the reference is still what the board is matched to',
+      sentBodies.generate && sentBodies.generate.libraryReferenceId === roomless.id,
+      sentBodies.generate && sentBodies.generate.libraryReferenceId);
+
+    /**
+     * COMBINATIONS FIRST, THE IMAGE ON A BUTTON.
+     *
+     * Landing on the boards must not start a paid image generation of
+     * its own: the tiles are shown, and the render is asked for.
+     */
+    check('7i. the combinations are on screen',
+      await page.locator('.board-card .tile-row, .board-card').count() >= 1);
+    check('7j. ...and no scene image was generated without being asked for',
+      sentBodies.scene === null && pythonCalls.length === 0,
+      { scene: sentBodies.scene, python: pythonCalls.length });
+    check('7k. ...each board offering the button that does ask for one',
+      await page.locator('[data-generate-scene]').count() >= 1);
+
+    // The spec line must not read back a 600x1200 module and an
+    // ESSENTIAL band that were never chosen.
+    const spec = await page.locator('.step-sub').first().textContent() || '';
+    check('7l. the results say the specification came from the reference',
+      /taken from the reference room/.test(spec) && !/ESSENTIAL/.test(spec), spec);
+
+    /**
+     * A ROOM THE LIBRARY LABELS DIFFERENTLY STILL RESOLVES.
+     *
+     * shared/rooms.json labels drawing_room "Drawing Room" where this
+     * page says "Living Room". A reference that carries only the label
+     * -- no wizard name -- must still arrive on a room.
+     */
+    sentBodies.generate = null;
+    generateStatuses.length = 0;
+    await page.evaluate((ref) => {
+      localStorage.setItem('casa_library_selection', JSON.stringify({
+        id: ref.id, themeId: 'moroccan', themeLabel: 'Moroccan',
+        title: ref.title, imageUrl: ref.imageUrl,
+        room: 'Drawing Room', roomWizard: '', chosenAt: new Date().toISOString(),
+      }));
+    }, { id: roomless.id, title: roomless.title, imageUrl: roomless.imageUrl });
+
+    await page.goto(`${base}/mood-board.html?generate=1`, { waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('.board-card, .error-box', { timeout: 40000 });
+    check('7m. a "Drawing Room" reference generates as the wizard\u2019s Living Room',
+      sentBodies.generate && sentBodies.generate.room === 'Living Room',
+      sentBodies.generate && sentBodies.generate.room);
+    check('7n. ...and that brief was accepted too',
+      generateStatuses.length === 1 && generateStatuses[0] === 200, generateStatuses);
+
+    /**
+     * ONCE THE STUDIO ANSWERS, THEIR ANSWERS ARE THE BRIEF.
+     *
+     * EDIT DESIGN DNA is them taking it over, so the next board is
+     * built from the seven steps -- band and all -- not from the
+     * picture's reading of itself.
+     */
+    sentBodies.generate = null;
+    await page.click('#editBriefBtn');
+    await page.waitForSelector('.room-card', { timeout: 20000 });
+    await page.locator('[data-room]').first().click();
+    await page.click('[data-goto-step="7"]');
+    await page.waitForSelector('[data-view]', { timeout: 10000 });
+    await page.click('#nextBtn');
+    await page.waitForSelector('.board-card', { timeout: 40000 });
+    check('7o. after EDIT DESIGN DNA the brief is the studio\u2019s own again',
+      sentBodies.generate && typeof sentBodies.generate.budget === 'string'
+      && /Stay within:/.test(sentBodies.generate.text || '')
+      && /Client view requested for the handout:/.test(sentBodies.generate.text || ''),
+      sentBodies.generate && { budget: sentBodies.generate.budget, text: sentBodies.generate.text });
+    // AND THE WIZARD DOES NOT MISREPORT WHAT CAME BEFORE. The
+    // reference-led brief named no module, so step 3 stands on "let
+    // De'vyora choose" rather than on a 600x1200 preset the studio
+    // never picked -- selected and changeable, not hidden.
+    await page.click('#editBriefBtn');
+    await page.waitForSelector('.room-card', { timeout: 20000 });
+    await page.click('[data-goto-step="3"]');
+    await page.waitForSelector('[data-size-mode="auto"]', { timeout: 10000 });
+    check('7p. ...and step 3 shows the module was left open, not preset',
+      await page.locator('[data-size-mode="auto"].selected').count() === 1,
+      await page.locator('.chip.selected').allTextContents());
   }
 
   await browser.close();
