@@ -111,6 +111,18 @@ async function main() {
 
   const browser = await chromium.launch();
   const context = await browser.newContext();
+  // THE LIBRARY ASKS WHOSE SITTING THIS IS before it opens, once per
+  // tab. That question is what library_client_gate_test is for; here
+  // it is answered up front so these checks stay about what they were
+  // written for. Seeded with no userId, which matches whoever is
+  // signed in.
+  await context.addInitScript(() => {
+    try {
+      sessionStorage.setItem('casa_library_client', JSON.stringify({
+        name: 'Test Client', phone: '9876543210',
+      }));
+    } catch (err) { /* storage off; the page asks instead */ }
+  });
   const page = await context.newPage();
 
   // Drive is not reachable from here, so every <img> pointed at it would

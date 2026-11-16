@@ -114,6 +114,13 @@ function main() {
         clearSelection: () => {},
       },
     };
+    // THE LIBRARY ASKS WHOSE SITTING THIS IS before it opens, once per
+    // tab. library_client_gate_test is where that question is tested;
+    // here it is answered up front so these checks stay about the page
+    // behind it.
+    dom.window.sessionStorage.setItem('casa_library_client',
+      JSON.stringify({ name: 'Test Client', phone: '9876543210' }));
+
     const start = html.lastIndexOf('<script>');
     const end = html.indexOf('</script>', start);
     dom.window.eval(html.slice(start + '<script>'.length, end));

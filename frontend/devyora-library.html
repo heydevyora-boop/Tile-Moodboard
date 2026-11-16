@@ -360,6 +360,20 @@
     .lib-go { flex:1 1 auto; justify-content:center; }
   }
 
+  /* ── whose room this is: asked once, before the library opens ── */
+  .lib-gate { max-width:460px; margin-top:clamp(20px,2.4vw,30px); padding:clamp(20px,2.2vw,28px);
+              background:var(--card); border:1px solid var(--line); border-radius:20px;
+              display:flex; flex-direction:column; gap:16px; animation:rise .4s ease both; }
+  .lib-gate-field { display:flex; flex-direction:column; gap:6px; }
+  .lib-gate-k { font-size:8.5px; letter-spacing:.18em; color:var(--muted); }
+  .lib-gate-k .req { color:var(--err); margin-left:3px; font-size:12px; line-height:0; vertical-align:middle; }
+  .lib-gate input { width:100%; padding:11px 13px; font:inherit; font-size:14px; color:var(--ink);
+                    background:var(--paper); border:1px solid var(--line); border-radius:10px; }
+  .lib-gate input:focus-visible { outline:2px solid var(--gold); outline-offset:2px; }
+  .lib-gate input[aria-invalid="true"] { border-color:var(--err); background:#FDF4EF; }
+  .lib-gate-err { min-height:14px; font-size:11.5px; line-height:1.3; color:var(--err); }
+  .lib-gate-hint { margin:0; font-size:11.5px; line-height:1.5; color:var(--muted); }
+
   /* ── the upload, with the two things a picture is filed under ── */
   .lib-upload { margin-top:18px; padding:15px 16px 16px; border:1px solid var(--line);
                 border-radius:16px; background:var(--card); display:flex; flex-direction:column;
@@ -568,6 +582,16 @@
     loading: true,
     chosen: null,
     canAdd: false,
+    /** Whoever is signed in, so a client is never read across a sign-out. */
+    userId: '',
+    /**
+     * The client this sitting is for -- { name, phone, userId, atISO }.
+     *
+     * Asked for once, before the library opens, and then left alone.
+     * Nothing downstream reads it yet: it is held for the Clients &
+     * Detailings module to pick up when that exists.
+     */
+    client: null,
     /**
      * Why the library's own storage is not answering, when it is not.
      *
@@ -670,6 +694,60 @@
     const real = (list || []).filter((t) => t.id !== MIX_ID);
     const mix = mixEntry(real);
     state.themes = mix ? [mix].concat(real) : real;
+  }
+
+  /*
+   * WHOSE ROOM THIS IS.
+   *
+   * The library is browsed WITH a client sitting there, and every
+   * picture chosen from it becomes the reference a board is built on.
+   * Who that was is worth knowing, so the page asks once -- a name and
+   * a number -- before it opens, and not again for the rest of the
+   * sitting.
+   *
+   * KEPT ON THIS TAB ONLY. sessionStorage, not localStorage: a
+   * showroom tablet closing its tab should not open tomorrow still
+   * holding yesterday's client. Nothing is sent anywhere, no row is
+   * written, and no API is called -- the details sit here until the
+   * Clients & Detailings module exists to take them.
+   */
+  const CLIENT_KEY = 'casa_library_client';
+
+  /**
+   * The client on record for this sitting, or null.
+   *
+   * STAMPED WITH WHO WAS SIGNED IN. The tab outlives a sign-out, so
+   * without this the next staff member to sign in on the same tablet
+   * would inherit the last one's client and never be asked.
+   */
+  function clientOnRecord(userId) {
+    try {
+      const raw = sessionStorage.getItem(CLIENT_KEY);
+      if (!raw) return null;
+      const saved = JSON.parse(raw);
+      if (!saved || !saved.name || !saved.phone) return null;
+      if (userId && saved.userId && saved.userId !== userId) return null;
+      return saved;
+    } catch (err) {
+      // A tablet with storage switched off asks every time, which is
+      // the safe way round: it never silently skips the question.
+      return null;
+    }
+  }
+
+  /**
+   * An Indian mobile number, or ''.
+   *
+   * Typed numbers carry spaces, hyphens, +91 and a leading 0, and all
+   * of those mean the same ten digits. They are taken off, and what is
+   * left has to be a real mobile series -- 6, 7, 8 or 9 and nine more.
+   * A landline, a short number or eleven digits is not accepted.
+   */
+  function normalisePhone(value) {
+    let digits = String(value || '').replace(/\D+/g, '');
+    if (digits.length === 12 && digits.slice(0, 2) === '91') digits = digits.slice(2);
+    if (digits.length === 11 && digits.charAt(0) === '0') digits = digits.slice(1);
+    return /^[6-9][0-9]{9}$/.test(digits) ? digits : '';
   }
 
   const galKey = (t, r) => String(t == null ? state.themeId : t)
@@ -1236,6 +1314,108 @@
           : '')
         + '</figcaption></figure>';
     }).join('') + '</div>';
+  }
+
+  /**
+   * THE QUESTION THE LIBRARY ASKS FIRST.
+   *
+   * Drawn in place of the library, not over it: there is nothing
+   * behind this to click past, and no way on but through it.
+   *
+   * It leaves the rest of the page exactly as it is -- the sidebar,
+   * the profile, the sign-out are all already wired by the time this
+   * is drawn, so the studio can still go elsewhere.
+   */
+  function renderClientGate(onDone) {
+    document.getElementById('mainContent').innerHTML =
+      '<div class="stage">'
+      + '<div class="mono" style="font-size:10px; letter-spacing:.18em; color:var(--muted)">'
+      + 'BEFORE THE LIBRARY OPENS</div>'
+      + '<h1 class="page-h1 serif">Who is this sitting for?</h1>'
+      + '<p class="page-sub">Both are needed. The rooms chosen from here become the reference '
+      + 'a board is built on, so the library is opened in a client\u2019s name.</p>'
+      + '<form class="lib-gate" id="libGateForm" novalidate>'
+      + '<label class="lib-gate-field">'
+      + '<span class="lib-gate-k mono">CLIENT NAME<span class="req">*</span></span>'
+      + '<input type="text" id="libClientName" name="clientName" autocomplete="name" '
+      + 'required aria-required="true" aria-describedby="libClientNameErr" '
+      + 'placeholder="Full name">'
+      + '<span class="lib-gate-err mono" id="libClientNameErr" role="alert"></span>'
+      + '</label>'
+      + '<label class="lib-gate-field">'
+      + '<span class="lib-gate-k mono">PHONE NUMBER<span class="req">*</span></span>'
+      + '<input type="tel" id="libClientPhone" name="clientPhone" autocomplete="tel" '
+      + 'inputmode="numeric" required aria-required="true" aria-describedby="libClientPhoneErr" '
+      + 'placeholder="10-digit mobile number">'
+      + '<span class="lib-gate-err mono" id="libClientPhoneErr" role="alert"></span>'
+      + '</label>'
+      + '<button type="submit" class="lib-go mono" id="libGateGo">CONTINUE TO LIBRARY \u2192</button>'
+      + '<p class="lib-gate-hint">Kept on this device for this sitting only. Nothing is sent '
+      + 'anywhere and nothing is saved to the studio\u2019s records.</p>'
+      + '</form>'
+      + '</div>';
+
+    const form = document.getElementById('libGateForm');
+    const nameInput = document.getElementById('libClientName');
+    const phoneInput = document.getElementById('libClientPhone');
+    const nameErr = document.getElementById('libClientNameErr');
+    const phoneErr = document.getElementById('libClientPhoneErr');
+
+    /** Says what is wrong with a field, or clears it when nothing is. */
+    const complain = (input, slot, message) => {
+      slot.textContent = message;
+      input.setAttribute('aria-invalid', message ? 'true' : 'false');
+      return !message;
+    };
+
+    const checkName = (quiet) => {
+      const value = nameInput.value.trim();
+      if (quiet && !value) return false;
+      return complain(nameInput, nameErr, value ? '' : 'Client name is required.');
+    };
+
+    const checkPhone = (quiet) => {
+      const typed = phoneInput.value.trim();
+      if (quiet && !typed) return false;
+      if (!typed) return complain(phoneInput, phoneErr, 'Phone number is required.');
+      return complain(phoneInput, phoneErr, normalisePhone(typed)
+        ? '' : 'Enter a valid 10-digit Indian mobile number.');
+    };
+
+    // Re-checked as it is typed, so a message goes the moment it stops
+    // being true -- but QUIETLY while a field is still empty, because
+    // "required" shouted at somebody mid-sentence is just noise.
+    nameInput.addEventListener('input', () => checkName(true));
+    phoneInput.addEventListener('input', () => checkPhone(true));
+
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      // BOTH, every time. & would stop at the first failure and leave
+      // the second field silent about what is wrong with it.
+      const ok = [checkName(false), checkPhone(false)].every(Boolean);
+      if (!ok) {
+        (nameErr.textContent ? nameInput : phoneInput).focus();
+        return;
+      }
+
+      const client = {
+        name: nameInput.value.trim(),
+        phone: normalisePhone(phoneInput.value),
+        userId: state.userId || '',
+        atISO: new Date().toISOString(),
+      };
+      try {
+        sessionStorage.setItem(CLIENT_KEY, JSON.stringify(client));
+      } catch (err) {
+        // Storage refused, so the next visit asks again. That is a
+        // repeated question, not a closed door: the library still
+        // opens now.
+      }
+      state.client = client;
+      onDone();
+    });
+
+    nameInput.focus();
   }
 
   function render() {
@@ -1931,6 +2111,30 @@
 
     state.chosen = CasaApi.library.selection();
 
+    /*
+     * THE CLIENT COMES FIRST.
+     *
+     * Asked before anything is fetched, so a sitting that is never
+     * named costs the server nothing. Every way in lands here -- the
+     * home page's card, the sidebar on any page, the mood board's
+     * CHANGE link, a typed address -- because the question is asked by
+     * the library itself rather than by whatever opened it.
+     *
+     * Asked ONCE. A client already on record for this tab and this
+     * signed-in user goes straight through.
+     */
+    state.userId = user.id || '';
+    state.client = clientOnRecord(state.userId);
+    if (!state.client) {
+      renderClientGate(() => { openLibrary(); });
+      return;
+    }
+
+    await openLibrary();
+  }
+
+  /** The library itself, once there is a client to open it for. */
+  async function openLibrary() {
     render();
     try {
       const [answer, roomTypes] = await Promise.all([
