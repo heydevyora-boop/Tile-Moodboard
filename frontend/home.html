@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>De’vyora — The Gateway to Material Synthesis</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;1,400&family=Manrope:wght@400;500;600&family=Space+Mono:wght@400&display=swap" rel="stylesheet">
+<style>
+  /* ------------------------------------------------------------------
+     THE GATEWAY — the page a signed-in person lands on.
+
+     Converted from the Stitch package (code.html / screen.png /
+     DESIGN.md). Stitch emits Tailwind utility classes against a CDN
+     build; this application has no bundler and no Tailwind, so the
+     utilities are written out here as plain CSS against the very tokens
+     DESIGN.md declares. Nothing new is loaded to render this page but
+     the three type families the design asks for.
+
+     Three cards, and only two of them lead anywhere: Library and Select
+     are doors onto pages that already exist, so they are real anchors
+     and behave like links -- middle-click, open in a new tab, Back and
+     Forward all work without a line of script. Clients & Detailings has
+     nowhere to go yet, so it is a button, not an anchor with href="#".
+     ------------------------------------------------------------------ */
+
+  :root {
+    /* DESIGN.md, verbatim. */
+    --surface:#FCF9F2;
+    --surface-lowest:#FFFFFF;
+    --surface-low:#F6F3EC;
+    --surface-high:#EBE8E1;
+    --on-surface:#1C1C18;
+    --on-surface-variant:#4E453A;
+    --outline:#807569;
+    --outline-variant:#D2C4B6;
+    --primary:#755628;
+    --on-primary:#FFFFFF;
+    --primary-container:#916F3D;
+    --tertiary:#755717;
+    --inverse-surface:#31312C;
+    --inverse-on-surface:#F3F0E9;
+
+    --space-2xs:.25rem; --space-xs:.5rem;  --space-sm:.75rem; --space-md:1rem;
+    --space-lg:1.5rem;  --space-xl:2rem;   --space-2xl:3rem;  --space-3xl:4.5rem;
+    --margin-mobile:1.25rem; --margin-desktop:4rem;
+
+    --head-h:5rem;
+  }
+
+  * { box-sizing:border-box; }
+  html, body { margin:0; padding:0; }
+
+  body {
+    background:var(--surface);
+    color:var(--on-surface);
+    font-family:'Manrope',system-ui,-apple-system,sans-serif;
+    font-size:15px; line-height:24px;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  ::selection { background:#E6E2DE; color:#1C1B19; }
+
+  /* ---- type scale (DESIGN.md) ---- */
+  .serif { font-family:'Playfair Display',Georgia,serif; }
+  .caps {
+    font-size:11px; line-height:16px; letter-spacing:.15em;
+    font-weight:600; text-transform:uppercase;
+  }
+  .mono-spec {
+    font-family:'Space Mono',ui-monospace,SFMono-Regular,monospace;
+    font-size:12px; line-height:18px; letter-spacing:.04em;
+  }
+  .mono-micro {
+    font-family:'Space Mono',ui-monospace,SFMono-Regular,monospace;
+    font-size:10px; line-height:14px; letter-spacing:.08em;
+  }
+
+  /* ---- fixed header ---- */
+  .site-head {
+    position:fixed; top:0; left:0; right:0; z-index:50;
+    background:rgba(252,249,242,.85);
+    -webkit-backdrop-filter:blur(16px); backdrop-filter:blur(16px);
+    box-shadow:0 1px 8px rgba(25,24,22,.04);
+  }
+  .site-head .inner {
+    height:var(--head-h);
+    display:flex; align-items:center; justify-content:space-between;
+    gap:var(--space-md);
+    padding:0 var(--margin-mobile);
+  }
+  .wordmark { display:flex; flex-direction:column; justify-content:center; user-select:none; min-width:0; }
+  .wordmark .nm {
+    font-size:22px; line-height:30px; letter-spacing:-.01em;
+    font-weight:500; text-transform:uppercase; color:var(--on-surface);
+  }
+  .wordmark .sub {
+    color:var(--on-surface-variant); text-transform:uppercase;
+    letter-spacing:.11em; margin-top:2px;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+
+  .whoami { display:flex; align-items:center; gap:var(--space-md); flex:0 0 auto; }
+  .whoami .who { display:none; flex-direction:column; align-items:flex-end; text-align:right; }
+  .whoami .who .nm { letter-spacing:.11em; color:var(--on-surface); }
+  .whoami .who .rl { color:var(--tertiary); text-transform:uppercase; margin-top:1px; }
+
+  /* The avatar is the only control the header carries, so it is a real
+     button: it opens the sign-out sheet. Every other page keeps SIGN
+     OUT in its sidebar; this page has no sidebar, and a landing page
+     you cannot sign out of is a landing page you are stuck on. */
+  .usermenu { position:relative; flex:0 0 auto; }
+  .avatar {
+    width:32px; height:32px; border-radius:9999px;
+    background:var(--primary); color:var(--on-primary);
+    display:flex; align-items:center; justify-content:center;
+    border:0; padding:0; cursor:pointer;
+    font-family:'Playfair Display',Georgia,serif; font-size:12px; letter-spacing:.04em;
+  }
+  .avatar:focus-visible { outline:2px solid var(--on-surface); outline-offset:3px; }
+  .usermenu .sheet {
+    position:absolute; top:calc(100% + 10px); right:0; min-width:216px;
+    background:var(--surface-lowest); border:1px solid var(--outline-variant);
+    box-shadow:0 20px 48px -12px rgba(25,24,22,.08);
+    padding:var(--space-sm); display:none; z-index:60;
+  }
+  .usermenu.open .sheet { display:block; }
+  .usermenu .sheet .em {
+    color:var(--on-surface-variant); word-break:break-all;
+    padding-bottom:var(--space-sm); margin-bottom:var(--space-sm);
+    border-bottom:1px solid var(--outline-variant);
+  }
+  .usermenu .sheet button {
+    width:100%; text-align:left; background:transparent; cursor:pointer;
+    border:1px solid var(--on-surface); color:var(--on-surface);
+    padding:10px 14px; font-family:'Manrope',sans-serif;
+    transition:background-color .2s ease;
+  }
+  .usermenu .sheet button:hover { background:rgba(155,120,70,.06); }
+
+  /* ---- the gateway ---- */
+  main.gateway { padding-top:var(--head-h); background:var(--surface); }
+  .gate-inner {
+    display:flex; flex-direction:column; justify-content:space-between;
+    padding:var(--space-md) var(--margin-mobile) var(--space-lg);
+  }
+
+  .intro {
+    display:flex; flex-direction:column; gap:var(--space-xs);
+    flex:0 0 auto; padding-bottom:var(--space-sm);
+  }
+  .intro .lede { display:flex; flex-direction:column; max-width:42rem; min-width:0; }
+  .eyebrow { display:flex; align-items:center; gap:var(--space-xs); }
+  .eyebrow .dot { width:6px; height:6px; border-radius:9999px; background:var(--primary); flex:0 0 auto; }
+  .eyebrow .txt { letter-spacing:.2em; color:var(--primary); }
+  .intro h1 {
+    margin:var(--space-2xs) 0 0;
+    font-weight:400; font-size:22px; line-height:30px; letter-spacing:-.01em;
+    color:var(--on-surface);
+  }
+  .intro p {
+    margin:var(--space-2xs) 0 0; max-width:36rem;
+    font-size:13px; line-height:20px; letter-spacing:.01em;
+    color:var(--on-surface-variant);
+  }
+  .catalogue { display:none; }
+
+  /* ---- the three disciplines ---- */
+  .disciplines {
+    display:grid; grid-template-columns:1fr;
+    gap:var(--space-md); align-items:stretch;
+  }
+
+  .disc {
+    position:relative; display:flex; flex-direction:column; justify-content:space-between;
+    width:100%; margin:0; text-align:left; font:inherit; color:inherit;
+    background:var(--surface-lowest); border:0; border-radius:.75rem;
+    padding:var(--space-sm); cursor:pointer; text-decoration:none;
+    box-shadow:0 1px 2px rgba(25,24,22,.05);
+    transition:box-shadow .5s ease;
+  }
+  .disc:hover { box-shadow:0 20px 48px -12px rgba(25,24,22,.16); }
+  .disc:focus-visible { outline:2px solid var(--primary); outline-offset:3px; }
+
+  .disc .frame {
+    position:relative; width:100%; aspect-ratio:4/5;
+    border-radius:.5rem; overflow:hidden; background:var(--surface-high);
+  }
+  .disc .frame img {
+    display:block; width:100%; height:100%;
+    object-fit:cover; object-position:center;
+    transition:transform .7s cubic-bezier(.2,.6,.2,1);
+  }
+  .disc:hover .frame img { transform:scale(1.05); }
+  .disc .vignette {
+    position:absolute; inset:0; pointer-events:none;
+    background:linear-gradient(to top,rgba(28,28,24,.5),rgba(28,28,24,0) 55%);
+    opacity:.4; transition:opacity .5s ease;
+  }
+  .disc:hover .vignette { opacity:.2; }
+  .disc .plate {
+    position:absolute; top:var(--space-xs); left:var(--space-xs);
+    padding:4px 10px; border-radius:.25rem;
+    background:rgba(255,255,255,.9);
+    -webkit-backdrop-filter:blur(8px); backdrop-filter:blur(8px);
+    color:var(--on-surface); text-transform:uppercase; letter-spacing:.12em;
+  }
+
+  /* Clients & Detailings has no page yet. Rather than shift the card's
+     layout when it is clicked, the answer surfaces over the image. */
+  .disc .soon {
+    position:absolute; left:var(--space-xs); bottom:var(--space-xs);
+    padding:6px 12px; margin:0;
+    background:rgba(28,28,24,.92); color:var(--inverse-on-surface);
+    border:1px solid rgba(197,160,89,.3);
+    text-transform:uppercase; letter-spacing:.14em;
+    opacity:0; transform:translateY(6px); pointer-events:none;
+    transition:opacity .3s ease, transform .3s ease;
+  }
+  .disc.is-soon .soon { opacity:1; transform:none; }
+
+  .disc .body { display:flex; flex-direction:column; flex:0 0 auto; padding-top:var(--space-sm); min-width:0; }
+  .disc .ref {
+    display:flex; align-items:center; justify-content:space-between;
+    gap:var(--space-xs); padding-bottom:4px;
+  }
+  .disc .ref .l { color:rgba(78,69,58,.7); text-transform:uppercase; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .disc .ref .r { color:var(--primary); text-transform:uppercase; flex:0 0 auto; }
+  .disc h2 {
+    margin:0; font-weight:500; font-size:22px; line-height:30px; letter-spacing:.01em;
+    color:var(--on-surface); transition:color .3s ease;
+  }
+  .disc:hover h2 { color:var(--primary); }
+  .disc .tagline {
+    margin:2px 0 0; font-size:18px; line-height:28px; letter-spacing:-.01em;
+    color:var(--on-surface-variant);
+    display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden;
+  }
+
+  .disc .cta {
+    display:flex; align-items:center; justify-content:space-between; gap:var(--space-xs);
+    margin-top:var(--space-sm); padding-top:var(--space-xs);
+  }
+  .disc .cta .lbl {
+    display:flex; align-items:center; gap:var(--space-2xs);
+    color:var(--on-surface); transition:color .3s ease;
+  }
+  .disc:hover .cta .lbl { color:var(--primary); }
+  .disc .cta .arrow { display:block; transition:transform .3s ease; }
+  .disc:hover .cta .arrow { transform:translateX(6px); }
+  .disc .cta .glyph {
+    width:32px; height:32px; border-radius:9999px; flex:0 0 auto;
+    background:var(--surface-high); color:var(--on-surface);
+    display:flex; align-items:center; justify-content:center;
+    transition:background-color .3s ease, color .3s ease;
+  }
+  .disc:hover .cta .glyph { background:var(--primary); color:var(--on-primary); }
+
+  /* ---- provenance bar ---- */
+  .provenance {
+    flex:0 0 auto; display:flex; align-items:center; justify-content:space-between;
+    gap:var(--space-md); flex-wrap:wrap;
+    padding-top:var(--space-md); padding-bottom:var(--space-2xs);
+    color:var(--on-surface-variant);
+  }
+  .provenance .grp { display:flex; align-items:center; gap:var(--space-sm); min-width:0; }
+  .provenance .wide { display:none; }
+  /* On a phone the two halves have no room to sit opposite each other,
+     and splitting the difference wraps the coordinate mid-number. */
+  @media (max-width:639px) {
+    .provenance { flex-direction:column; align-items:flex-start; gap:var(--space-xs); }
+  }
+  .provenance .tint { color:var(--outline); text-transform:uppercase; letter-spacing:.12em; }
+  .provenance .gold { color:var(--tertiary); }
+
+  /* ---- footer ---- */
+  .site-foot {
+    background:var(--surface-low); box-shadow:0 1px 8px rgba(25,24,22,.03);
+    padding:var(--space-xl) 0; margin-top:var(--space-2xl);
+  }
+  .site-foot .inner {
+    padding:0 var(--margin-mobile);
+    display:flex; flex-direction:column; align-items:center; justify-content:space-between;
+    gap:var(--space-md); text-align:center; color:var(--on-surface-variant);
+  }
+  .site-foot .mark { display:flex; flex-direction:column; align-items:center; gap:var(--space-xs); }
+  .site-foot .mark .nm { font-size:15px; text-transform:uppercase; letter-spacing:.06em; color:var(--on-surface); }
+  .site-foot .slash { display:none; }
+
+  /* =================================================================
+     TABLET — two columns, the third card running the full width.
+     The design jumps straight from one column to three at 768px, which
+     at that width leaves three 230px cards; the brief asks for two.
+     ================================================================= */
+  @media (min-width:768px) {
+    .site-head .inner, .gate-inner, .site-foot .inner { padding-left:var(--space-xl); padding-right:var(--space-xl); }
+    .whoami .who { display:flex; }
+    .intro { flex-direction:row; align-items:flex-end; justify-content:space-between; }
+    .disciplines { grid-template-columns:repeat(2,1fr); }
+    .disc:last-child { grid-column:1 / -1; }
+    .disc:last-child .frame { aspect-ratio:16/9; }
+    .provenance .wide { display:inline; }
+    .site-foot .inner { flex-direction:row; text-align:left; }
+    .site-foot .mark { flex-direction:row; align-items:center; gap:var(--space-md); }
+    .site-foot .slash { display:inline; color:var(--outline); opacity:.4; }
+  }
+
+  /* =================================================================
+     DESKTOP — the design as drawn: three equal columns filling one
+     screen, image heights driven by what is left over.
+
+     The Stitch original pins the block to calc(100vh - 5rem) and hides
+     the overflow, which on a short window silently crops a card. A
+     min-height and no clipping keeps every card whole and lets a short
+     window scroll instead.
+     ================================================================= */
+  @media (min-width:1024px) {
+    .site-head .inner, .gate-inner, .site-foot .inner {
+      padding-left:var(--margin-desktop); padding-right:var(--margin-desktop);
+    }
+    .gate-inner {
+      height:calc(100vh - var(--head-h)); min-height:640px;
+      padding-top:var(--space-lg); padding-bottom:var(--space-lg);
+    }
+    .intro h1 { font-size:28px; line-height:36px; }
+    .catalogue { display:flex; flex-direction:column; align-items:flex-end; text-align:right; flex:0 0 auto; }
+    .catalogue .row { display:flex; align-items:center; gap:var(--space-xs); margin-top:2px; }
+    .catalogue .pip { width:8px; height:8px; border-radius:9999px; background:var(--primary-container); animation:gatePulse 2s ease-in-out infinite; }
+
+    .disciplines {
+      grid-template-columns:repeat(3,1fr); gap:var(--space-lg);
+      flex:1 1 auto; min-height:0; margin:auto 0; padding:var(--space-2xs) 0;
+    }
+    .disc { height:100%; padding:var(--space-md); }
+    .disc:last-child { grid-column:auto; }
+    .disc .frame, .disc:last-child .frame { aspect-ratio:auto; flex:1 1 auto; min-height:0; }
+    .disc .body { padding-top:var(--space-md); }
+    .disc .tagline { -webkit-line-clamp:1; }
+    .site-foot { margin-top:var(--space-3xl); }
+  }
+
+  @media (min-width:1280px) {
+    .intro h1 { font-size:40px; line-height:48px; letter-spacing:-.015em; }
+  }
+
+  @keyframes gatePulse { 0%,100% { opacity:.4; } 50% { opacity:1; } }
+
+  @media (prefers-reduced-motion: reduce) {
+    .disc, .disc .frame img, .disc .vignette, .disc .cta .arrow,
+    .disc .cta .glyph, .disc h2, .disc .cta .lbl, .disc .soon { transition:none; }
+    .disc:hover .frame img { transform:none; }
+    .catalogue .pip { animation:none; }
+  }
+</style>
+</head>
+<body>
+
+<header class="site-head">
+  <div class="inner">
+    <div class="wordmark">
+      <span class="nm serif">DE’VYORA</span>
+      <span class="sub mono-micro">SHOWROOM ATELIER · MILANO // FOLIO 01</span>
+    </div>
+
+    <div class="whoami">
+      <div class="who">
+        <span class="nm caps" id="whoName">—</span>
+        <span class="rl mono-micro" id="whoTag">MILANO HOST</span>
+      </div>
+      <div class="usermenu" id="userMenu">
+        <button class="avatar" type="button" id="avatarBtn"
+                aria-haspopup="true" aria-expanded="false" aria-label="Account">··</button>
+        <div class="sheet" id="userSheet" role="menu">
+          <div class="em mono-spec" id="whoEmail">—</div>
+          <button type="button" class="caps" id="signOutBtn" role="menuitem">Sign out</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main class="gateway">
+  <div class="gate-inner">
+
+    <!-- Editorial intro -->
+    <header class="intro">
+      <div class="lede">
+        <div class="eyebrow">
+          <span class="dot" aria-hidden="true"></span>
+          <span class="txt caps">Architectural Atelier · Material Specification</span>
+        </div>
+        <h1 class="serif">The Gateway to Material Synthesis</h1>
+        <p>Select an atelier discipline to enter our curated archives, bespoke mood board generator, or technical detailing studio.</p>
+      </div>
+      <div class="catalogue">
+        <span class="mono-micro tint">CATALOGUE DIVISION · MMXXIV</span>
+        <div class="row">
+          <span class="mono-spec">3 DISCIPLINES ACTIVE</span>
+          <span class="pip" aria-hidden="true"></span>
+        </div>
+      </div>
+    </header>
+
+    <!-- The three disciplines -->
+    <div class="disciplines">
+
+      <!-- 01 — the De'vyora Library, exactly the page the sidebar opens -->
+      <a class="disc" id="cardLibrary" href="devyora-library.html">
+        <div class="frame">
+          <img id="imgLibrary"
+               src="https://lh3.googleusercontent.com/aida-public/AB6AXuApohi5KCE32rC-F36CKvCz_ZGpFdnGqDGPzHKvuY3OFQAyXfxjzV9bMEPLKZ4OwCFdzw3j5gZyxdsa-BoPWVoIW9AIS4-3CdslmWyZ-VBJWavkz4_4O96fCzMNnx472_wkXvirGrnfLC5AsiCeikvJ-802GZnY2fVe_8wOBPEiq4flXrRzn-JBObG6Zzld6o_KA8aDVTGvHatfMW5hoYB-41_8Ttn_T9YIj5jzp1g"
+               alt="A stone showroom atelier: fluted limestone columns and travertine walls under museum spotlights.">
+          <div class="vignette" aria-hidden="true"></div>
+          <span class="plate mono-micro">ATELIER 01</span>
+        </div>
+        <div class="body">
+          <div class="ref">
+            <span class="l mono-micro">REF. DVY-LIB // ARCHIVAL 01</span>
+            <span class="r mono-micro">COLLECTION</span>
+          </div>
+          <h2 class="serif">DEVYORA LIBRARY</h2>
+          <p class="tagline">Explore materials, Discover possibilities.</p>
+          <div class="cta">
+            <span class="lbl caps">
+              Explore Library
+              <svg class="arrow" width="17" height="12" viewBox="0 0 17 12" fill="none" aria-hidden="true">
+                <path d="M1 6h14M10.5 1.5 15 6l-4.5 4.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
+            <span class="glyph" aria-hidden="true">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none">
+                <path d="M3 5.5A1.5 1.5 0 0 1 4.5 4H9a3 3 0 0 1 3 3v12a2.5 2.5 0 0 0-2.5-2.5H3V5.5ZM21 5.5A1.5 1.5 0 0 0 19.5 4H15a3 3 0 0 0-3 3v12a2.5 2.5 0 0 1 2.5-2.5H21V5.5Z"
+                      stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+              </svg>
+            </span>
+          </div>
+        </div>
+      </a>
+
+      <!-- 02 — De'vyora Select: the way in to the existing Mood Board -->
+      <a class="disc" id="cardSelect" href="mood-board.html">
+        <div class="frame">
+          <img id="imgSelect"
+               src="https://lh3.googleusercontent.com/aida-public/AB6AXuDcnJ1aP6NUkcJgDPrh30H0mOK_pUjzmIgX_4r0QJRKmodyWWXlFyWUhBM5nRq27EoF7Fv1x4LaXNeqaH9Q2nFsoxnJQOBQaR8hmK6vXCIjbve6ZMU29Y3IaBYM8hRzIWIZSuAsde0LYq7rSsc-_53w3lSqtGiceR8kFZyKEgJYmzQIPaLn70Pr8MghCbVFafOkUJlfjlqqCCYd0PwNM9Bs_79lwXGREtCXZdVbJ-A"
+               alt="A De’vyora materials study laid out flat: marble, travertine, terrazzo and fabric swatches with a brass weight.">
+          <div class="vignette" aria-hidden="true"></div>
+          <span class="plate mono-micro">CURATION 02</span>
+        </div>
+        <div class="body">
+          <div class="ref">
+            <span class="l mono-micro">REF. DVY-SEL // SYNTHESIS 02</span>
+            <span class="r mono-micro">BESPOKE</span>
+          </div>
+          <h2 class="serif">DEVYORA SELECT</h2>
+          <p class="tagline">Curated mood board, Just for you.</p>
+          <div class="cta">
+            <span class="lbl caps">
+              Discover Select
+              <svg class="arrow" width="17" height="12" viewBox="0 0 17 12" fill="none" aria-hidden="true">
+                <path d="M1 6h14M10.5 1.5 15 6l-4.5 4.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
+            <span class="glyph" aria-hidden="true">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none">
+                <path d="M4 4h7v7H4V4Zm9 0h7v7h-7V4ZM4 13h7v7H4v-7Zm9 0h7v7h-7v-7Z"
+                      stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+              </svg>
+            </span>
+          </div>
+        </div>
+      </a>
+
+      <!-- 03 — Clients & Detailings: nothing to open yet, so it is a
+           button and not an anchor pointing at a page that does not
+           exist. It says so when asked, and goes nowhere. -->
+      <button class="disc" id="cardClients" type="button">
+        <div class="frame">
+          <img id="imgClients"
+               src="https://lh3.googleusercontent.com/aida-public/AB6AXuBJUvVQZm_XlyJwHbzwXhL-FV2jeEGb66j66IsD9kYnkcHm1YT_oOtvObYBSpgHNAgTKoNCVD5QcNy6HthmxeKFjMkmIdm2Tix-YybpEy1xErfV6ITQ8AJym5g-fdWV6ArHbUuCMY5R70DnUd2Vusj1yZXqzjAnVk1K1hubxTLx1ofZvneZgjdTR-_9r1Cbb-csup82pipzFy993Hv40jb6Tl9ST1vD0-m2DIAFzVA"
+               alt="A technical axonometric section on a blueprint grid: walnut joinery, a cantilevered stone stair and marble cladding, annotated with dimensions.">
+          <div class="vignette" aria-hidden="true"></div>
+          <span class="plate mono-micro">TECHNICAL 03</span>
+          <p class="soon mono-micro" id="soonNote" role="status">Coming soon</p>
+        </div>
+        <div class="body">
+          <div class="ref">
+            <span class="l mono-micro">REF. DVY-DTL // TECHNICAL 03</span>
+            <span class="r mono-micro">ENGINEERING</span>
+          </div>
+          <h2 class="serif">CLIENTS &amp; DETAILINGS</h2>
+          <p class="tagline">Your vision, Our detailed execution.</p>
+          <div class="cta">
+            <span class="lbl caps">
+              Explore Services
+              <svg class="arrow" width="17" height="12" viewBox="0 0 17 12" fill="none" aria-hidden="true">
+                <path d="M1 6h14M10.5 1.5 15 6l-4.5 4.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
+            <span class="glyph" aria-hidden="true">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none">
+                <path d="M12 3 4 20M12 3l8 17M7.2 14h9.6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
+          </div>
+        </div>
+      </button>
+
+    </div>
+
+    <!-- Provenance -->
+    <div class="provenance">
+      <div class="grp">
+        <span class="mono-micro tint">FOLIO ARCHIVE / VOL. VIII</span>
+        <span class="mono-micro wide tint" aria-hidden="true">·</span>
+        <span class="mono-micro wide" style="text-transform:uppercase">QUARRY DISPATCH: MILANO // VERONA // TUSCANY</span>
+      </div>
+      <div class="grp">
+        <span class="mono-micro gold">MATERIAL SYNTHESIS SUITE</span>
+        <span class="mono-spec tint">45.4642° N, 9.1900° E</span>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<footer class="site-foot">
+  <div class="inner">
+    <div class="mark">
+      <span class="nm serif">De’vyora</span>
+      <span class="slash mono-micro" aria-hidden="true">/</span>
+      <span class="mono-spec">Natural Stone &amp; Architectural Atelier</span>
+    </div>
+    <div class="mono-micro" style="letter-spacing:.14em;text-transform:uppercase">© 2024 DE’VYORA. ALL RIGHTS RESERVED.</div>
+  </div>
+</footer>
+
+<script src="assets/api-client.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  /* A card's picture is hosted outside this application. If one ever
+     stops answering, the warm stone panel behind it is what shows --
+     not a browser's broken-image glyph on top of it. */
+  ['imgLibrary', 'imgSelect', 'imgClients'].forEach(function (id) {
+    var img = document.getElementById(id);
+    if (img) img.addEventListener('error', function () { img.style.display = 'none'; });
+  });
+
+  /* ---- Clients & Detailings: reserved, and it says so ---- */
+  var clients = document.getElementById('cardClients');
+  var soonTimer = null;
+  clients.addEventListener('click', function () {
+    clients.classList.add('is-soon');
+    window.clearTimeout(soonTimer);
+    soonTimer = window.setTimeout(function () { clients.classList.remove('is-soon'); }, 2600);
+  });
+
+  /* ---- the account sheet ---- */
+  var menu = document.getElementById('userMenu');
+  var avatar = document.getElementById('avatarBtn');
+
+  function closeMenu() {
+    menu.classList.remove('open');
+    avatar.setAttribute('aria-expanded', 'false');
+  }
+
+  avatar.addEventListener('click', function (event) {
+    event.stopPropagation();
+    var open = !menu.classList.contains('open');
+    menu.classList.toggle('open', open);
+    avatar.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
+  document.addEventListener('click', function (event) {
+    if (!menu.contains(event.target)) closeMenu();
+  });
+  document.addEventListener('keydown', function (event) {
+    if (event.key === 'Escape') closeMenu();
+  });
+
+  document.getElementById('signOutBtn').addEventListener('click', async function () {
+    await CasaApi.auth.logout();
+    location.href = 'login.html';
+  });
+
+  async function init() {
+    var user = await CasaApi.requireAuth();
+
+    var first = String(user.name || user.email || '').trim().split(/\s+/)[0] || '';
+    var role = String(user.role || '').toUpperCase();
+
+    document.getElementById('whoName').textContent = role ? (role + ' — ' + first) : first;
+    document.getElementById('whoEmail').textContent = user.email || user.name || '';
+    document.getElementById('avatarBtn').textContent = CasaApi.initials(user.name || user.email);
+    document.getElementById('avatarBtn').setAttribute(
+      'aria-label', 'Account — ' + (user.name || user.email || ''));
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>

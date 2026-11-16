@@ -3865,14 +3865,15 @@ const ai = {
         "You don't have permission to view this page."
       );
 
-      // Route staff back to the actual tool (their only real home) and
-      // everyone else to the dashboard — never back into another
-      // admin-only page, or a STAFF user denied on any admin page would
-      // bounce endlessly between two pages that both reject them.
-      location.href =
-        user.role === 'STAFF'
-          ? 'tool-dashboard.html'
-          : 'admin-dashboard.html';
+      // Send them home -- never back into another admin-only page, or a
+      // STAFF user denied on any admin page would bounce endlessly
+      // between two pages that both reject them.
+      //
+      // This used to name tool-dashboard.html and admin-dashboard.html.
+      // Neither has ever existed in this frontend, so being refused a
+      // page sent you to a 404; home.html is the one page every signed-
+      // in role may open.
+      location.href = 'home.html';
 
       return new Promise(
         () => {}

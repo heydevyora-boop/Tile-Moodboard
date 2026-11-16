@@ -107,3 +107,16 @@ body.sb-closed .sidebar { display: none; }
 @media (prefers-reduced-motion: reduce) {
   .sb-toggle, .sidebar, .sb-backdrop, .sb-toggle span { transition: none; }
 }
+
+/* ------------------------------------------------------------------
+   THE WORDMARK IS THE WAY HOME.
+
+   The sidebar has no Home item -- the gateway is not one workspace
+   page among others, it is what you land on. So the wordmark at the
+   top of the sidebar carries the link instead, on every page that has
+   one, and the sidebar's list stays exactly as long as the work it
+   covers.
+   ------------------------------------------------------------------ */
+a.brand-row { text-decoration: none; color: inherit; }
+a.brand-row:hover .name { color: #8A6A3B; }
+a.brand-row:focus-visible { outline: 2px solid #8A6A3B; outline-offset: 4px; }

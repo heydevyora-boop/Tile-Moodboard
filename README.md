@@ -52,7 +52,7 @@ using this outside local development.
 | 1–2. Project setup & database | ✅ | — |
 | 3. Authentication | ✅ | `login.html` |
 | 4. User management | ✅ | `03-user-staff-management.html` (fully wired) |
-| 5. Dashboard | ✅ | `dashboard.html` (fully wired) |
+| 5. Home (the gateway) | ✅ | `home.html` (replaced `dashboard.html`) |
 | 6–7. Catalog Extractor + PDF Processing (real Python extraction, duplicate detection, queue, processing logs) | ✅ | `catalog-upload.html` (fully wired) |
 | 9–10. Design Rules + Version History (create/edit/draft/publish/preview/compare/restore) | ✅ | `design-rules.html` (fully wired) |
 | 11. Reference Image Library (upload/replace/delete/search/filter/categories) | ✅ | `reference-images.html` (fully wired) |

@@ -133,7 +133,7 @@ async function main() {
     await page.fill('#email', email);
     await page.fill('#password', PASSWORD);
     await page.click('#submitBtn');
-    await page.waitForURL('**/dashboard.html', { timeout: 20000 });
+    await page.waitForURL('**/home.html', { timeout: 20000 });
   };
 
 

@@ -76,7 +76,8 @@
     "test:supabase-readiness": "node test-scripts/supabase_readiness_test.js",
     "test:logging-system": "node test-scripts/logging_system_e2e.js",
     "fix-product-codes": "ts-node prisma/fix-missing-product-codes.ts",
-    "test:theme-text": "ts-node -r tsconfig-paths/register test-scripts/theme_text_matches_test.ts"
+    "test:theme-text": "ts-node -r tsconfig-paths/register test-scripts/theme_text_matches_test.ts",
+    "test:home-page": "node test-scripts/home_page_test.js"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"

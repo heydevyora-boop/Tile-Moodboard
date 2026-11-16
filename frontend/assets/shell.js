@@ -19,11 +19,10 @@
   'use strict';
 
   const ROLE_LABEL = { OWNER: 'Admin Panel', ADMIN: 'Admin Panel', STAFF: 'User Panel' };
-  const ROLE_HOME = { OWNER: 'admin-dashboard.html', ADMIN: 'admin-dashboard.html', STAFF: 'tool-dashboard.html' };
+  const ROLE_HOME = { OWNER: 'home.html', ADMIN: 'home.html', STAFF: 'home.html' };
 
   const ADMIN_NAV = [
     { group: 'Overview' },
-    { href: 'admin-dashboard.html', label: 'Dashboard' },
     { group: 'Catalog Pipeline' },
     { href: 'admin-extraction-status.html', label: 'Extraction Status' },
     { href: 'admin-catalog-detail.html', label: 'Catalog Detail' },
@@ -54,7 +53,6 @@
   const NAV = {
     STAFF: [
       { group: 'Moodboard' },
-      { href: 'tool-dashboard.html', label: 'Dashboard' },
       { href: 'moodboard-wizard.html', label: 'New Moodboard' },
       { href: 'moodboard-results.html', label: 'Results' },
       { href: 'scene-angles.html', label: 'Scene & Angles' },
