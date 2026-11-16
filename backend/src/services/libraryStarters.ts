@@ -322,6 +322,22 @@ export function startersForTheme(themeId: string, roomId?: unknown): StarterRoom
   return inTheme.filter((entry) => entry.roomId === room.id);
 }
 
+/**
+ * EVERY THEME'S STARTERS FOR ONE ROOM.
+ *
+ * What a listing across all themes needs -- the Library's own Mix, and
+ * the client's Others. startersForTheme answers for one theme; this is
+ * the same question asked of all of them, and it follows the same rule
+ * about an unrecognised room: nothing, rather than everything.
+ */
+export function startersForRoom(roomId?: unknown): StarterRoom[] {
+  if (!roomId) return STARTER_ROOMS;
+
+  const room = describeRoom(roomId);
+  if (!room) return [];
+  return STARTER_ROOMS.filter((entry) => entry.roomId === room.id);
+}
+
 /** How many starters each theme has, to add to the gallery's counts. */
 export function starterCounts(): Record<string, number> {
   const counts: Record<string, number> = {};

@@ -201,6 +201,10 @@
                           box-shadow:0 14px 30px -14px rgba(26,21,18,.28); }
   .lib-theme-card:focus-visible { outline:2px solid var(--gold); outline-offset:3px; }
   .lib-theme-art { position:relative; aspect-ratio:4/3; background:var(--sand); overflow:hidden; }
+  /* The Mix is not one theme, so it does not show one theme's room. */
+  .lib-theme-art.mix { display:flex; gap:2px; }
+  .lib-theme-art.mix > img { width:0; flex:1 1 0; }
+  .lib-theme-cell.is-mix { border-color:var(--gold-light); }
   .lib-theme-art > img { width:100%; height:100%; object-fit:cover; display:block;
                          transition:transform .5s cubic-bezier(.2,.7,.3,1); }
   .lib-theme-card:hover .lib-theme-art > img { transform:scale(1.045); }
@@ -600,6 +604,62 @@
   const PAGE = 10;
   const SET = 20;
 
+  /**
+   * DE'VYORA MIX -- every theme at once.
+   *
+   * NOT a tenth theme. Nothing is filed under it, it has no Drive
+   * folder and no palette of its own: it is a card that opens the
+   * whole library in one place, so the studio can look across
+   * everything without choosing a theme first.
+   *
+   * A picture chosen from it keeps the theme it actually belongs to.
+   * That matters: the mood board ranks the catalogue against the
+   * chosen picture's own theme and colour, so a British bathroom
+   * picked out of the Mix is still matched as a British bathroom.
+   */
+  const MIX_ID = '__mix__';
+  const isMix = (id) => (id === undefined ? state.themeId : id) === MIX_ID;
+  const realThemes = () => state.themes.filter((t) => t.id !== MIX_ID);
+
+  function mixEntry(real) {
+    if (!real.length) return null;
+
+    // Its rooms are every theme's rooms, added up -- the same shape a
+    // theme's own room list has, so everything downstream (the room
+    // chooser, the chips, the counts) works on it unchanged.
+    const order = [];
+    const byId = {};
+    real.forEach((t) => (t.rooms || []).forEach((r) => {
+      if (!byId[r.id]) {
+        byId[r.id] = {
+          id: r.id, label: r.label, slug: r.slug, blurb: r.blurb,
+          count: 0, starterCount: 0,
+        };
+        order.push(r.id);
+      }
+      byId[r.id].count += r.count || 0;
+      byId[r.id].starterCount += r.starterCount || 0;
+    }));
+
+    return {
+      id: MIX_ID,
+      label: 'De\u2019vyora Mix',
+      slug: real[0].slug,
+      palette: 'Every theme at once \u2014 the whole library in one place',
+      count: real.reduce((n, t) => n + (t.count || 0), 0),
+      starterCount: real.reduce((n, t) => n + (t.starterCount || 0), 0),
+      rooms: order.map((id) => byId[id]),
+      isMix: true,
+    };
+  }
+
+  /** The themes the server sent, and the Mix that spans them. */
+  function setThemes(list) {
+    const real = (list || []).filter((t) => t.id !== MIX_ID);
+    const mix = mixEntry(real);
+    state.themes = mix ? real.concat([mix]) : real;
+  }
+
   const galKey = (t, r) => String(t == null ? state.themeId : t)
     + '|' + String(r == null ? state.roomId : r);
   const gallery = () => state.galleries[galKey()] || null;
@@ -638,9 +698,12 @@
    * once and it means Bathroom in every theme they chose.
    */
   function mergedRooms() {
-    const ids = state.picked.length
-      ? state.picked
-      : (state.themeId ? [state.themeId] : []);
+    // Inside the Mix the rooms are the Mix's own. It is already every
+    // theme, so a working set has nothing to add to it -- and adding
+    // it would count every room twice.
+    const ids = isMix()
+      ? [MIX_ID]
+      : (state.picked.length ? state.picked : (state.themeId ? [state.themeId] : []));
     const order = [];
     const byId = {};
     ids.forEach((id) => roomsOf(id).forEach((r) => {
@@ -733,10 +796,13 @@
    */
   function totalsHtml() {
     if (state.loading || !state.themes.length) return '';
-    const known = state.themes.filter((t) => typeof t.count === 'number');
+    // The Mix is every theme added up, so counting it as a theme would
+    // say ten, and counting its rooms would count them all twice.
+    const real = realThemes();
+    const known = real.filter((t) => typeof t.count === 'number');
     const rooms = known.reduce((n, t) => n + t.count, 0);
     return '<div class="lib-stat">'
-      + '<span><span class="lib-stat-n serif">' + state.themes.length + '</span>'
+      + '<span><span class="lib-stat-n serif">' + real.length + '</span>'
       + '<span class="lib-stat-k mono">THEMES</span></span>'
       + (known.length
         ? '<span><span class="lib-stat-n serif">' + rooms + '</span>'
@@ -821,13 +887,19 @@
     return '<div class="lib-theme-grid">' + state.themes.map((t) => {
       const n = t.count === null || t.count === undefined ? null : t.count;
       const picked = isPicked(t.id);
-      return '<div class="lib-theme-cell' + (picked ? ' is-picked' : '') + '">'
+      return '<div class="lib-theme-cell' + (picked ? ' is-picked' : '')
+        + (t.isMix ? ' is-mix' : '') + '">'
         // The card is a <button>, and a button cannot hold another one,
         // so the tick is its sibling rather than its child.
-        + '<button type="button" class="lib-pick" data-pick="' + escapeHtml(t.id) + '"'
-        + ' aria-pressed="' + (picked ? 'true' : 'false') + '"'
-        + ' aria-label="' + escapeHtml((picked ? 'Remove ' : 'Add ') + t.label
-          + (picked ? ' from the selection' : ' to the selection')) + '">' + TICK + '</button>'
+        //
+        // The Mix carries no tick: it is already every theme, and
+        // ticking it alongside British would be asking for everything
+        // and for one of them at the same time.
+        + (t.isMix ? ''
+          : '<button type="button" class="lib-pick" data-pick="' + escapeHtml(t.id) + '"'
+            + ' aria-pressed="' + (picked ? 'true' : 'false') + '"'
+            + ' aria-label="' + escapeHtml((picked ? 'Remove ' : 'Add ') + t.label
+              + (picked ? ' from the selection' : ' to the selection')) + '">' + TICK + '</button>')
         + '<button type="button" class="lib-theme-card" data-theme="' + escapeHtml(t.id) + '">'
         // A ROOM, not a swatch. The theme's first starter is what the
         // client is actually going to be choosing between, so it is
@@ -838,13 +910,22 @@
         // <theme>-<room>.png. It used to ask for <theme>-1.png, which
         // is what the starters were called before they were filed by
         // room: nine cards, nine 404s, nine empty frames.
-        + '<span class="lib-theme-art">'
-        + '<img src="' + escapeHtml(CasaApi.resolveBackendImageUrl(
-          '/static/library-starters/' + t.slug + '-bathroom.png')) + '" alt="" loading="lazy" decoding="async">'
-        // ...with the pattern plate kept as a small inset, because the
-        // surface is still the thing being chosen.
-        + '<span class="lib-theme-plate"><img src="img/themes/' + escapeHtml(t.slug)
-        + '.svg" alt="" loading="lazy"></span>'
+        + '<span class="lib-theme-art' + (t.isMix ? ' mix' : '') + '">'
+        // The Mix shows three themes side by side rather than one
+        // theme's room, because showing one of them would be a claim
+        // about which theme it is.
+        + (t.isMix
+          ? realThemes().slice(0, 3).map((o) =>
+            '<img src="' + escapeHtml(CasaApi.resolveBackendImageUrl(
+              '/static/library-starters/' + o.slug + '-bathroom.png'))
+            + '" alt="" loading="lazy" decoding="async">').join('')
+          : '<img src="' + escapeHtml(CasaApi.resolveBackendImageUrl(
+            '/static/library-starters/' + t.slug + '-bathroom.png'))
+            + '" alt="" loading="lazy" decoding="async">'
+            // ...with the pattern plate kept as a small inset, because
+            // the surface is still the thing being chosen.
+            + '<span class="lib-theme-plate"><img src="img/themes/' + escapeHtml(t.slug)
+            + '.svg" alt="" loading="lazy"></span>')
         + '<span class="lib-theme-over">'
         + '<span class="lib-theme-name serif">' + escapeHtml(t.label) + '</span>'
         + '<span class="lib-theme-pal">' + escapeHtml(t.palette) + '</span>'
@@ -942,10 +1023,22 @@
     }
     if (!current) return '';
 
+    // NOTHING IS FILED UNDER THE MIX. It has no Drive folder, so an
+    // upload form here would have nowhere to put the pictures. Said,
+    // rather than silently leaving a gap where the card usually is.
+    if (isMix()) {
+      return '<div class="lib-note">'
+        + '<span class="lib-note-k mono">ADDING PICTURES</span>'
+        + '<span>De\u2019vyora Mix is every theme at once, not a theme of its own \u2014 '
+        + 'there is nowhere under it to file a picture. Open the theme the picture belongs '
+        + 'to and the upload is at the top of its room.</span>'
+        + '</div>';
+    }
+
     const chosenRoom = state.uploadRoomId || state.roomId;
     const chosenTheme = state.uploadThemeId || state.themeId;
 
-    const themeOptions = state.themes.map((t) =>
+    const themeOptions = realThemes().map((t) =>
       '<option value="' + escapeHtml(t.id) + '"' + (t.id === chosenTheme ? ' selected' : '') + '>'
       + escapeHtml(t.label) + '</option>').join('');
 
@@ -1010,6 +1103,9 @@
    * set exactly as it was.
    */
   function switchHtml() {
+    // Nothing to switch between inside the Mix: it is already all of
+    // them, and the way out is the way back.
+    if (isMix()) return '';
     const chosen = pickedThemes();
     if (!chosen.length) return '';
     const current = theme();
@@ -1164,13 +1260,14 @@
         ? '<button type="button" class="lib-back mono" id="libBack">← ALL THEMES</button>'
           + '<div class="lib-head">'
           + '<h1 class="step-h1 serif" style="margin:0">'
-          + escapeHtml(state.picked.length > 1 ? 'Room types' : (current ? current.label : ''))
+          + escapeHtml(!isMix() && state.picked.length > 1
+            ? 'Room types' : (current ? current.label : ''))
           + '</h1>'
-          + '<span class="lib-meta mono">' + escapeHtml(state.picked.length > 1
+          + '<span class="lib-meta mono">' + escapeHtml(!isMix() && state.picked.length > 1
             ? pickedThemes().map((t) => t.label).join(' \u00b7 ')
             : (current ? current.palette : '')) + '</span>'
           + '</div>'
-          + '<p class="step-sub">' + (state.picked.length > 1
+          + '<p class="step-sub">' + (!isMix() && state.picked.length > 1
             ? 'Choose the room you are designing. The number beside each one counts every '
               + 'selected theme \u2014 inside, you switch between them without losing any.'
             : 'Choose the room you are designing.') + '</p>'
@@ -1178,7 +1275,7 @@
           + storageHtml()
           + roomsHtml()
         : '<button type="button" class="lib-back mono" id="libBack">← '
-          + escapeHtml(state.picked.length > 1
+          + escapeHtml(!isMix() && state.picked.length > 1
             ? 'ROOM TYPES'
             : (current ? current.label : 'ALL THEMES').toUpperCase()) + '</button>'
           + '<div class="lib-head">'
@@ -1323,7 +1420,7 @@
     if (done) {
       try {
         const fresh = await CasaApi.library.themes();
-        state.themes = fresh.themes;
+        setThemes(fresh.themes);
         state.storageError = fresh.storage.ok ? '' : fresh.storage.reason;
         state.uploadError = fresh.uploads.ok ? '' : fresh.uploads.reason;
       } catch (err) {
@@ -1582,7 +1679,11 @@
    */
   function openTheme(themeId) {
     if (!themeId) return;
-    if (state.picked.length && !isPicked(themeId)) state.picked.push(themeId);
+    // The Mix never joins the working set -- it IS every theme, and the
+    // switcher is for moving between the chosen few.
+    if (!isMix(themeId) && state.picked.length && !isPicked(themeId)) {
+      state.picked.push(themeId);
+    }
     state.view = 'rooms';
     state.themeId = themeId;
     state.roomId = null;
@@ -1603,7 +1704,9 @@
    */
   async function openThemeRoom(themeId, roomId) {
     if (!themeId || !roomId) return;
-    if (state.picked.length && !isPicked(themeId)) state.picked.push(themeId);
+    if (!isMix(themeId) && state.picked.length && !isPicked(themeId)) {
+      state.picked.push(themeId);
+    }
     state.themeId = themeId;
     await openRoom(roomId);
   }
@@ -1675,7 +1778,10 @@
     let answer = null;
     let failure = '';
     try {
-      answer = await CasaApi.library.references(themeId, roomId);
+      // No themeId means every theme, which is exactly what the Mix
+      // wants: the server answers with all their starters and all
+      // their uploads for this room.
+      answer = await CasaApi.library.references(isMix(themeId) ? null : themeId, roomId);
     } catch (err) {
       failure = (err && err.message) || 'The library could not be read.';
     }
@@ -1823,7 +1929,7 @@
         // cannot disagree about what a room is.
         CasaApi.library.rooms().catch(() => []),
       ]);
-      state.themes = answer.themes;
+      setThemes(answer.themes);
       state.roomTypes = roomTypes;
       state.storageError = answer.storage.ok ? '' : answer.storage.reason;
       state.uploadError = answer.uploads.ok ? '' : answer.uploads.reason;

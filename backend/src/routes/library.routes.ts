@@ -30,6 +30,7 @@ import {
   starterCounts,
   starterRoomCounts,
   startersForTheme,
+  startersForRoom,
   asReference,
   isStarterId,
 } from '@services/libraryStarters';
@@ -230,9 +231,16 @@ router.get(
       ? req.query.roomId
       : undefined;
 
+    // NO THEME MEANS ALL OF THEM, NOT NONE OF THEM.
+    //
+    // This used to answer with no starters at all when themeId was
+    // omitted, which made an across-the-themes listing quietly
+    // incomplete: the studio's own uploads came back and the rooms
+    // that ship with the application did not. Nothing called it that
+    // way before the Mix, so this only ever adds.
     const starters = (themeId
       ? startersForTheme(library.resolveThemeId(themeId), roomId)
-      : []
+      : startersForRoom(roomId)
     ).map(asReference);
 
     let uploaded: unknown[] = [];

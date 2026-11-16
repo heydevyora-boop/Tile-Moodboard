@@ -175,7 +175,11 @@ async function main() {
     await context.unroute('**/api/v1/library/themes');
 
     await page.waitForSelector('.lib-theme-card', { timeout: 20000 });
-    check('1b. every theme is listed', await page.locator('.lib-theme-card').count() === 9,
+    // Ten cards: the studio's nine themes, and De'vyora Mix, which is
+    // all nine at once rather than a tenth theme.
+    check('1b. every theme is listed, and the Mix that spans them',
+      await page.locator('.lib-theme-card').count() === 10
+      && await page.locator('.lib-theme-cell.is-mix').count() === 1,
       await page.locator('.lib-theme-card').count());
     const british = page.locator('.lib-theme-card[data-theme="british"]');
     // FOUR UPLOADED PLUS THE TWO STARTERS THAT SHIP WITH THE APP.
@@ -217,9 +221,11 @@ async function main() {
     const missingOnThemes = await missingArt();
     check('1f. every theme card’s picture is a file that exists',
       missingOnThemes.length === 0, missingOnThemes);
+    // Asked as "every card has one" rather than "the counts match":
+    // the Mix card carries three, because it is three themes.
     check('1g. ...and there is one on every card',
-      await page.locator('.lib-theme-art > img').count()
-        === await page.locator('.lib-theme-card').count());
+      await page.$$eval('.lib-theme-card',
+        (els) => els.every((e) => !!e.querySelector('.lib-theme-art > img'))));
 
     await page.click('[data-theme="british"]');
     await page.waitForSelector('[data-room]', { timeout: 20000 });

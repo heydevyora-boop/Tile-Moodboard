@@ -232,8 +232,10 @@ async function main() {
     // ══ 1. several themes at once ══════════════════════════════════
     step('1. TEST 1 — British + Floral + Roman Touch, all three held');
 
+    // Ten cards, nine ticks: the tenth is De’vyora Mix, which is
+    // every theme at once and so is not one to combine with them.
     check('1a. every theme card is still there, each with a way to select it',
-      await count('.lib-theme-card') === 9 && await count('.lib-pick') === 9,
+      await count('.lib-theme-card') === 10 && await count('.lib-pick') === 9,
       { cards: await count('.lib-theme-card'), ticks: await count('.lib-pick') });
 
     check('1b. nothing is selected to begin with, and the page says so rather than staying mute',
@@ -245,7 +247,7 @@ async function main() {
       await page.getAttribute('.lib-pick[data-pick="british"]', 'aria-pressed') === 'true'
       && await count('.lib-theme-cell.is-picked') === 1);
     check('1d. ...and ticking it did not open it',
-      await count('.lib-theme-card') === 9 && await count('[data-room]') === 0);
+      await count('.lib-theme-card') === 10 && await count('[data-room]') === 0);
 
     await pick('floral');
     await pick('roman_touch');
@@ -604,6 +606,84 @@ async function main() {
     await page.click('#libBack');
     await page.waitForSelector('[data-room]', { timeout: 20000 });
     await page.click('#libBack');
+    await waitForThemeGrid();
+
+    // ══ 9c. De'vyora Mix ═══════════════════════════════════════════
+    step('9c. De\u2019vyora Mix — one card that is every theme at once');
+
+    const cardNames = await page.$$eval('.lib-theme-card .lib-theme-name',
+      (els) => els.map((e) => e.textContent.trim()));
+    check('9p. there is a tenth card, and it is the Mix',
+      cardNames.length === 10 && cardNames[9] === 'De\u2019vyora Mix', cardNames);
+
+    check('9q. it carries no tick: it is already every theme, not one to combine with them',
+      await count('.lib-theme-cell.is-mix') === 1
+      && await count('.lib-theme-cell.is-mix .lib-pick') === 0
+      && await count('.lib-pick') === 9,
+      { ticks: await count('.lib-pick') });
+
+    const realTotal = await page.$$eval('.lib-theme-cell:not(.is-mix) .lib-theme-count',
+      (els) => els.reduce((n, e) => n + parseInt(e.textContent, 10), 0));
+    const mixTotal = parseInt(
+      await page.textContent('.lib-theme-cell.is-mix .lib-theme-count'), 10);
+    check('9r. ...counted as every theme added up',
+      mixTotal === realTotal, { mixTotal, realTotal });
+
+    check('9s. ...while the headline still says nine themes, not ten',
+      /9/.test(await page.textContent('.lib-stat')), await page.textContent('.lib-stat'));
+
+    const mixChips = await page.$$eval('.lib-theme-cell.is-mix .lib-room-chip .lbl',
+      (els) => els.map((e) => e.textContent.trim()));
+    check('9t. its rooms are every theme\u2019s rooms, named the same way',
+      mixChips.includes('Bathroom') && mixChips.includes('Kitchen')
+      && mixChips.length === chipText.length, mixChips);
+
+    const mixBath = parseInt(await page.textContent(
+      '.lib-theme-cell.is-mix [data-open$="|bathroom"] .n'), 10);
+    const mixBathExpected = Object.values(SEEDED).reduce((a, b) => a + b, 0)
+      + starters.startersForRoom('bathroom').length;
+    check('9u. ...counted across all of them',
+      mixBath === mixBathExpected, { mixBath, mixBathExpected });
+
+    await page.click('.lib-theme-cell.is-mix [data-open$="|bathroom"]');
+    await page.waitForSelector('#libDock', { timeout: 20000 });
+    await settle();
+
+    check('9v. one grid now holds EVERY theme\u2019s bathroom at once',
+      await count('.lib-card .lib-starter-flag')
+        === starters.startersForRoom('bathroom').length,
+      await count('.lib-card .lib-starter-flag'));
+    check('9w. ...paged exactly like any other room',
+      await count('.lib-card') === 10
+      && (await dockText()).includes(`OF ${mixBathExpected}`), await dockText());
+    check('9x. ...and it says so above the grid',
+      /Mix/.test(await page.textContent('.lib-head')), await page.textContent('.lib-head'));
+
+    check('9y. there is no theme switcher inside it -- it is already all of them',
+      await count('#libSwitchBtn') === 0);
+    // Several notes share this class, so read them all rather than
+    // whichever happens to be first on the page.
+    const notes = await page.$$eval('.lib-note', (els) => els.map((e) => e.textContent).join(' | '));
+    check('9z. and no upload form, because nothing is filed under the Mix',
+      await count('#libFiles') === 0 && /nowhere under it to file a picture/.test(notes),
+      notes.slice(0, 200));
+
+    // THE POINT OF THE WHOLE THING: a picture chosen out of the Mix
+    // keeps the theme it actually belongs to, so the mood board still
+    // matches the catalogue against a real theme and a real colour.
+    const mixTitle = (await shownTitles())[0];
+    await page.locator('.lib-card').first().click();
+    await page.waitForURL('**/mood-board.html', { timeout: 20000 });
+    const fromMix = await page.evaluate(
+      () => JSON.parse(localStorage.getItem('casa_library_selection') || 'null'));
+    check('9A. a picture chosen from the Mix carries its OWN theme, never the Mix',
+      fromMix && fromMix.themeId !== '__mix__' && fromMix.themeLabel !== 'De\u2019vyora Mix'
+      && !!fromMix.themeLabel && fromMix.title === mixTitle, fromMix);
+    check('9B. ...so the wizard opens on that theme\u2019s own room',
+      await page.getAttribute('.room-card.selected', 'data-room') === 'Bathroom',
+      await page.getAttribute('.room-card.selected', 'data-room'));
+
+    await page.goto(`${base}/devyora-library.html`, { waitUntil: 'domcontentloaded' });
     await waitForThemeGrid();
 
     // ══ 10. in the hand ════════════════════════════════════════════
