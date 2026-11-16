@@ -489,18 +489,9 @@ async function main() {
     await page.waitForSelector('.lib-card', { timeout: 20000 });
     await page.waitForSelector('#libDock', { timeout: 20000 });
 
-    const firstTitle = (await shownTitles())[0];
-    await page.locator('.lib-card').first().click();
-    await page.waitForSelector('#libActive', { timeout: 10000 });
-    check('8a. a picture can still be made the reference image',
-      (await page.textContent('#libActive')).includes(firstTitle),
-      await page.textContent('#libActive'));
-    check('8b. ...and it survives leaving the page, as generation needs',
-      await page.evaluate(() => {
-        const kept = JSON.parse(localStorage.getItem('casa_library_selection') || '{}');
-        return kept && kept.title;
-      }) === firstTitle);
-
+    // Choosing a picture leaves this page now -- it opens the mood
+    // board -- and leaving it empties the working set, which the next
+    // part still needs. So that is asked at the very end instead.
     check('8c. the upload card is still there, with its own theme and room dropdowns',
       await count('#libTheme') === 1 && await count('#libRoom') === 1 && await count('#libFiles') === 1);
     check('8d. ...and the upload’s THEME dropdown is a destination, not the switcher',
@@ -568,6 +559,53 @@ async function main() {
       await count('.lib-picked.empty') === 1 && await count('.lib-theme-cell.is-picked') === 0
       && await count('[data-room]') === 0);
 
+    // ══ 9b. the rooms on a theme card ══════════════════════════════
+    step('9b. a theme card names its rooms, and each one opens');
+
+    const chipText = await page.$$eval('.lib-theme-card[data-theme="british"]'
+      + ' ~ .lib-theme-rooms .lib-room-chip .lbl',
+    (els) => els.map((e) => e.textContent.trim()));
+    check('9i. the rooms are named in full, not lettered',
+      chipText.includes('Bathroom') && chipText.includes('Bedroom')
+      && chipText.includes('Kitchen') && chipText.every((t) => t.length > 1),
+      chipText);
+    check('9j. ...so Bathroom and Bedroom are no longer both "B"',
+      chipText.indexOf('Bathroom') !== chipText.indexOf('Bedroom'), chipText);
+
+    check('9k. ...each carrying its own count',
+      await page.$$eval('.lib-theme-card[data-theme="british"]'
+        + ' ~ .lib-theme-rooms .lib-room-chip .n',
+      (els) => els.length) === chipText.length);
+
+    // Every theme ships a starter for each of its rooms, so no room is
+    // ever truly empty -- but the point stands: the chips are the
+    // theme's WHOLE room list, not only the rooms the studio happens
+    // to have uploaded to.
+    const rtChips = await page.$$eval('.lib-theme-card[data-theme="roman_touch"]'
+      + ' ~ .lib-theme-rooms .lib-room-chip .lbl',
+    (els) => els.map((e) => e.textContent.trim()));
+    check('9l. a theme the studio never uploaded to still offers every one of its rooms',
+      rtChips.length === chipText.length && rtChips.includes('Kitchen'), rtChips);
+
+    check('9m. every one of them is a real button, not a decoration',
+      await page.$$eval('.lib-room-chip',
+        (els) => els.every((e) => e.tagName === 'BUTTON' && !!e.dataset.open)));
+
+    await page.click('[data-open="british|bedroom"]');
+    await page.waitForSelector('.lib-grid, .lib-empty', { timeout: 20000 });
+    check('9n. clicking one opens THAT theme\u2019s room in a single step',
+      /Bedroom/.test(await page.textContent('.lib-head'))
+      && /British/.test(await page.textContent('.lib-head')),
+      await page.textContent('.lib-head'));
+    check('9o. ...and the upload follows it there',
+      await page.inputValue('#libTheme') === 'british'
+      && await page.inputValue('#libRoom') === 'bedroom');
+
+    await page.click('#libBack');
+    await page.waitForSelector('[data-room]', { timeout: 20000 });
+    await page.click('#libBack');
+    await waitForThemeGrid();
+
     // ══ 10. in the hand ════════════════════════════════════════════
     step('10. TEST 12 — on a phone');
 
@@ -591,6 +629,37 @@ async function main() {
 
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.waitForTimeout(300);
+
+    // ══ 11. choosing a picture ═════════════════════════════════════
+    step('11. choosing a picture is one act, not two');
+
+    check('11a. there is no "use this in a mood board" button to hunt for',
+      await count('.lib-active-go') === 0);
+
+    const pickTitle = (await shownTitles())[0];
+    await page.locator('.lib-card').first().click();
+    await page.waitForURL('**/mood-board.html', { timeout: 20000 });
+    check('11b. tapping it goes straight to the mood board',
+      page.url().endsWith('/mood-board.html'), page.url());
+
+    const carried = await page.evaluate(
+      () => JSON.parse(localStorage.getItem('casa_library_selection') || 'null'));
+    check('11c. ...carrying the picture the studio actually tapped',
+      carried && carried.title === pickTitle, { carried: carried && carried.title, pickTitle });
+    check('11d. ...with the theme LABEL and the room the wizard works in',
+      carried && carried.themeLabel === 'British'
+      && /bathroom/i.test(carried.roomWizard || carried.room || ''), carried);
+
+    await page.waitForSelector('.libref', { timeout: 20000 });
+    check('11e. ...and the wizard opens standing on that very picture',
+      (await page.textContent('.libref')).includes(pickTitle),
+      await page.textContent('.libref'));
+    // The wizard opens on its ROOM step, and the room the picture is a
+    // reference for is already the chosen one -- the studio is not
+    // asked a question the picture has already answered.
+    check('11f. ...with the room already chosen, not asked for again',
+      await page.getAttribute('.room-card.selected', 'data-room') === 'Bathroom',
+      await page.getAttribute('.room-card.selected', 'data-room'));
 
     check('Z. no page threw at any point', pageErrors.length === 0, pageErrors.slice(0, 3));
   } finally {
