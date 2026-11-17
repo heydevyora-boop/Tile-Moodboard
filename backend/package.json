@@ -34,6 +34,7 @@
     "test:library-moodboard": "node test-scripts/library_moodboard_test.js",
     "test:library-client-gate": "node test-scripts/library_client_gate_test.js",
     "test:library-reference-prompt": "cd ../catalog_processor && GEMINI_API_KEY=${GEMINI_API_KEY:-test-key-not-used} PYTHONPATH=. python3.13 app/test_library_reference_prompt.py",
+    "test:scene-image-inline": "cd ../catalog_processor && PYTHONPATH=. python3.13 app/test_scene_image_inline.py",
     "test:library-upload": "node test-scripts/library_upload_test.js",
     "test:devyora-library": "node test-scripts/devyora_library_test.js",
     "test:client-wishlist": "node test-scripts/client_wishlist_test.js",

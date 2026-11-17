@@ -187,6 +187,18 @@ const boardsFor = (tiles) => [{
   reason_for_selection: 'The cream limestone answers the reference floor; the cobalt zellige answers its dado.',
 }];
 
+/**
+ * The bytes inside a data: url, or null if it is not one.
+ *
+ * The generator is handed the picture itself now rather than an
+ * address to fetch it from, so "did the right picture travel?" is
+ * answered by decoding what was sent.
+ */
+function inlineBytes(value) {
+  const match = /^data:([^;,]+);base64,(.*)$/s.exec(String(value || ''));
+  return match ? { mime: match[1], bytes: Buffer.from(match[2], 'base64') } : null;
+}
+
 /** The Drive file id inside any of the URL shapes a row may carry. */
 function driveIdOf(url) {
   return (/[?&]id=([^&]+)/.exec(String(url || '')) || [])[1] || '';
@@ -499,6 +511,10 @@ async function main() {
 
     check('7a. the scene is generated', out.status === 200, out.body);
     const sent = pythonCalls[0];
+    // THE ADDRESS, because THIS fixture's Drive cannot be read: the
+    // bytes could not be fetched here, so the generator is given the
+    // place to get them from, exactly as it was before. Section 15
+    // walks the other half, where the picture itself travels.
     check('7b. the reference’s own file is the scene image',
       sent.scene_image_url.includes(driveIdOf(reference.imageUrl)),
       sent && sent.scene_image_url);
@@ -580,17 +596,24 @@ async function main() {
         && guarded.sent.scene_image_url.includes(driveIdOf(reference.imageUrl)),
         guarded.sent && guarded.sent.scene_image_url);
 
-      // A STARTER IS BEHIND THE SAME DOOR. It is served by this very
-      // deployment too, so a fix that covered only uploaded pictures
-      // would have left every studio with nothing uploaded still
-      // unable to generate.
+      // A STARTER NEEDS NO DOOR AT ALL ANY MORE.
+      //
+      // Its file is in this function's own bundle, so the bytes ride
+      // along in the request and the generator makes no fetch to be
+      // stopped at. The bypass above is for the fallback -- a picture
+      // this deployment could not read for itself -- and a starter is
+      // never that.
       const starter = await ask('starter:moroccan-bathroom');
-      check('7B4. a starter room is let through it too',
+      const carried = inlineBytes(starter.sent.scene_image_url);
+      check('7B4. a starter does not go through the door: it travels with the request',
         starter.out.status === 200
-        && starter.sent.scene_image_url.includes(
-          `x-vercel-protection-bypass=${BYPASS}`)
-        && starter.sent.scene_image_url.includes('/static/library-starters/'),
-        starter.sent && starter.sent.scene_image_url);
+        && !!carried
+        && carried.mime === 'image/png'
+        && carried.bytes.subarray(0, 8).toString('hex') === '89504e470d0a1a0a',
+        { ok: starter.out.status, inline: !!carried,
+          head: String(starter.sent.scene_image_url).slice(0, 40) });
+      check('7B5b. ...so no secret is on it, because there is no fetch to let through',
+        !String(starter.sent.scene_image_url).includes(BYPASS));
 
       check('7B5. the secret never reaches the browser that asked',
         !JSON.stringify(guarded.out.body || {}).includes(BYPASS));
@@ -793,13 +816,19 @@ async function main() {
 
     check('12a. the scene is generated', res.status === 200, res.text && res.text.slice(0, 200));
     const sent = pythonCalls[0];
-    check('12b. the scene image is an absolute URL',
-      /^https?:\/\/[^/]+\/static\/library-starters\/moroccan-bathroom\.png$/.test(
-        (sent && sent.scene_image_url) || ''),
-      sent && sent.scene_image_url);
-    check('12c. ...built from the host the request actually arrived on',
-      String((sent || {}).scene_image_url || '').includes('casa-de-aurum.example.test'),
-      sent && sent.scene_image_url);
+    // THE FILE ITSELF, out of this function's own bundle. It used to
+    // be an absolute address built from the request's Host, so that a
+    // deployment whose BACKEND_PUBLIC_URL had gone stale still sent a
+    // reachable one. Nothing is fetched now, so there is no host to
+    // get right -- which is a stronger answer to the same problem.
+    const carried12 = inlineBytes((sent || {}).scene_image_url);
+    check('12b. the scene image is the starter\u2019s own bytes, carried along',
+      !!carried12 && carried12.mime === 'image/png'
+      && carried12.bytes.subarray(0, 8).toString('hex') === '89504e470d0a1a0a',
+      { inline: !!carried12, head: String((sent || {}).scene_image_url).slice(0, 40) });
+    check('12c. ...so no host, stale or otherwise, has to be got right',
+      !/^https?:/.test(String((sent || {}).scene_image_url || '')),
+      String((sent || {}).scene_image_url || '').slice(0, 40));
     check('12d. ...and the room-inventing step does not run',
       sent && sent.generate_random_scene === false);
     check('12e. the generator is told whose room it is',
@@ -916,17 +945,22 @@ async function main() {
       'base64',
     );
     const asked = [];
+    // Drive is readable here, which is the normal case and the one the
+    // studio is in: the bytes can be read, so they travel.
+    let driveReadable = true;
     drive.googleDriveClient.isConfigured = () => true;
     drive.googleDriveClient.downloadFile = async (fileId) => {
       asked.push(fileId);
+      if (!driveReadable) throw new Error('Drive refused (fixture)');
       return { bytes: PNG, mimeType: 'image/png' };
     };
 
     const origin = `http://127.0.0.1:${server.address().port}`;
 
     /**
-     * One row, one generation, one fetch of whatever Python was given.
-     * Returns what the generator was handed and what came back from it.
+     * One row, one generation. Returns what the generator was handed,
+     * and -- when that is an address rather than the picture -- what
+     * fetching it gives back.
      */
     const walk = async (label, driveFileId, imageUrl, themeId) => {
       const row = await prisma.libraryReference.create({
@@ -947,20 +981,25 @@ async function main() {
       });
 
       const url = (pythonCalls[0] || {}).scene_image_url || '';
-      // Fetched with NO login, as the Python function would.
-      const served = url.startsWith('http')
+      const inline = inlineBytes(url);
+
+      // Fetched with NO login, as the Python function would -- only
+      // when an address is what it was given.
+      const served = !inline && url.startsWith('http')
         ? await realFetch(url.replace(/^https?:\/\/[^/]+/, origin))
         : null;
-      const bytes = served && served.status === 200
-        ? Buffer.from(await served.arrayBuffer())
-        : Buffer.alloc(0);
 
       return {
         status: out.status,
         url,
+        inline,
+        bytes: inline
+          ? inline.bytes
+          : (served && served.status === 200
+            ? Buffer.from(await served.arrayBuffer())
+            : Buffer.alloc(0)),
         servedStatus: served ? served.status : 0,
-        contentType: served ? (served.headers.get('content-type') || '') : '',
-        bytes,
+        contentType: inline ? inline.mime : (served ? (served.headers.get('content-type') || '') : ''),
         askedFor: asked[asked.length - 1] || '',
       };
     };
@@ -989,32 +1028,61 @@ async function main() {
         'shape-lh3', 'https://lh3.googleusercontent.com/d/shape-lh3', 'floral'],
     ];
 
+    // ── the picture travels ────────────────────────────────────
+    //
+    // Whatever shape the stored url is in, the generator is handed the
+    // BYTES, read here from the file the COLUMN names. The shape stops
+    // mattering because nothing is parsed out of it and nothing is
+    // fetched.
     for (const [label, driveFileId, imageUrl, themeId] of SHAPES) {
       const got = await walk(label, driveFileId, imageUrl, themeId);
-      check(`${label} — served as an image`,
+      check(`${label} — carried to the generator as its own bytes`,
         got.status === 200
-        && got.url.includes(`/static/library-reference/${driveFileId}`)
-        && got.servedStatus === 200
+        && !!got.inline
         && got.contentType.startsWith('image/')
         && got.bytes.equals(PNG)
         && got.askedFor === driveFileId,
         {
           viz: got.status,
-          url: got.url.replace(origin, ''),
-          served: got.servedStatus,
+          inline: !!got.inline,
           type: got.contentType,
           len: got.bytes.length,
           drive: got.askedFor,
+          head: String(got.url).slice(0, 40),
         });
     }
 
-    // AND NOT A DRIVE LINK, for any of them. main_step6_complete.py
-    // rewrites anything on a Drive host back to uc?export=download
-    // before fetching it, so a Drive address never survives the trip
-    // whichever shape it left here in.
+    // NOTHING FOR THE GENERATOR TO FETCH, so none of the things that
+    // could stop a fetch can stop it: no Drive host to be rewritten to
+    // uc?export=download, and no address on this deployment for a
+    // preview's Deployment Protection to answer with its sign-in page.
     const lastUrl = (pythonCalls[0] || {}).scene_image_url || '';
-    check('15f. ...and never as a Drive address, which is rewritten downstream',
-      !/google(usercontent)?\.com/.test(lastUrl), lastUrl);
+    check('15f. ...and never as an address, so there is no fetch to be stopped',
+      !/^https?:/.test(lastUrl) && !/google(usercontent)?\.com/.test(lastUrl),
+      String(lastUrl).slice(0, 40));
+
+    // ── and the address is still there when it has to be ───────────
+    //
+    // A deployment that cannot read the bytes for itself -- an expired
+    // Drive credential, a file since removed -- behaves exactly as it
+    // did before: it sends the place to get them from, built from the
+    // COLUMN, and that address answers. This is what keeps the two
+    // earlier fixes honest now that the happy path no longer uses them.
+    driveReadable = false;
+    const fellBack = await walk(
+      '15f2. fallback', 'fallback-column', 'https://lh3.googleusercontent.com/d/fallback-url-id', 'british',
+    );
+    driveReadable = true;
+    check('15f2. a deployment that cannot read the bytes sends the address instead',
+      fellBack.status === 200
+      && fellBack.url.includes('/static/library-reference/fallback-column'),
+      String(fellBack.url).slice(0, 90));
+    const fallbackServed = await realFetch(
+      `${origin}/static/library-reference/fallback-column`);
+    check('15f3. ...and that address answers with the picture',
+      fallbackServed.status === 200
+      && (fallbackServed.headers.get('content-type') || '').startsWith('image/'),
+      { status: fallbackServed.status, type: fallbackServed.headers.get('content-type') });
 
     // THE GUARD IS UNCHANGED. Reading a row's url to find it is a
     // second way to name a row this library holds, not a second set of
