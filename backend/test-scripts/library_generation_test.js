@@ -1037,6 +1037,83 @@ async function main() {
     check('15h. ...and so is any other file in the studio\u2019s Drive',
       strangerStill.status === 404, strangerStill.status);
 
+    // A REAL-SHAPED ID, AND THE WILDCARD HIDING IN IT.
+    //
+    // Drive ids are base64url: 33 characters of letters, digits, `-`
+    // and `_`. That last one is a SQL LIKE wildcard, and Prisma does
+    // not escape the needle it builds for `contains` -- so looking a
+    // row up by a url that mentions an id ending in `_` also matched
+    // every id differing only in that position. The row being looked
+    // for could then sit behind the decoys, and the studio would be
+    // told their picture is not in their library.
+    //
+    // Two rows that differ ONLY where the underscore is, and the
+    // address built by the old code -- the id from the url -- asked
+    // for by the one that really carries it.
+    const WILD = '19-mf2fQy-I9bfJSpq7pdxvVD-aB8FHm_';
+    const DECOY = '19-mf2fQy-I9bfJSpq7pdxvVD-aB8FHmZ';
+
+    // ENOUGH LOOK-ALIKES TO HIDE BEHIND. A handful would be found by a
+    // capped search too, and this would pass against the bug it is
+    // here for. Twenty-five of them do not fit behind any cap worth
+    // writing, which is the point: a search that cannot be trusted to
+    // be exact cannot be trusted to be capped either.
+    const decoyRows = [];
+    for (let i = 0; i < 25; i += 1) {
+      decoyRows.push(await prisma.libraryReference.create({
+        data: {
+          themeId: 'floral', title: `One character apart ${i}`, room: 'Bathroom',
+          imageUrl: 'https://drive.google.com/uc?export=download&id='
+            + WILD.slice(0, -1) + 'abcdefghijklmnopqrstuvwxy'.charAt(i),
+          driveFileId: `decoy-column-id-${i}`, uploadedById: user.id,
+        },
+      }));
+    }
+    // The one that really carries it, written LAST so nothing but an
+    // exact answer can put it first.
+    const wildRow = await prisma.libraryReference.create({
+      data: {
+        themeId: 'british', title: 'Underscored id', room: 'Bathroom',
+        imageUrl: `https://drive.google.com/uc?export=download&id=${WILD}`,
+        driveFileId: 'wild-column-id', uploadedById: user.id,
+      },
+    });
+    const decoyRow = await prisma.libraryReference.create({
+      data: {
+        themeId: 'floral', title: 'One character apart', room: 'Bathroom',
+        imageUrl: `https://drive.google.com/uc?export=download&id=${DECOY}`,
+        driveFileId: 'decoy-column-id', uploadedById: user.id,
+      },
+    });
+
+    asked.length = 0;
+    const wild = await realFetch(`${origin}/static/library-reference/${WILD}`);
+    check('15k. a real-shaped id ending in `_` resolves past its look-alikes',
+      wild.status === 200 && (wild.headers.get('content-type') || '').startsWith('image/'),
+      { status: wild.status, type: wild.headers.get('content-type') });
+    check('15l. ...and it is THAT row\u2019s file that is read, not the look-alike\u2019s',
+      asked.includes(WILD) && !asked.includes(DECOY), asked);
+
+    // The look-alike still answers for its OWN id, and for nothing else.
+    asked.length = 0;
+    const decoy = await realFetch(`${origin}/static/library-reference/${DECOY}`);
+    check('15m. the look-alike answers for its own id alone',
+      decoy.status === 200 && asked.includes(DECOY) && !asked.includes(WILD), asked);
+
+    await prisma.libraryReference.delete({ where: { id: wildRow.id } });
+    await prisma.libraryReference.delete({ where: { id: decoyRow.id } });
+    for (const row of decoyRows) {
+      await prisma.libraryReference.delete({ where: { id: row.id } });
+    }
+
+    // AND AN ID MADE ONLY OF WILDCARDS reads no rows at all, rather
+    // than matching everything through an empty search.
+    asked.length = 0;
+    const wildcardsOnly = await realFetch(`${origin}/static/library-reference/___`);
+    check('15n. an id of nothing but wildcards is refused, and reads nothing',
+      wildcardsOnly.status === 404 && asked.length === 0,
+      { status: wildcardsOnly.status, asked });
+
     // A LINK ALREADY IN THE WORLD. An address built by the old code
     // carries the id from the url, not the column; a saved board or a
     // cached fetch may still ask for it, and it has to answer.

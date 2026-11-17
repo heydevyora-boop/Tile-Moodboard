@@ -39,18 +39,47 @@ import { driveFileIdFromUrl } from '@services/referenceImages.service';
 import { isRealImageBuffer } from '@utils/fileSignature';
 
 /**
+ * The longest run of an id that holds no SQL LIKE wildcard.
+ *
+ * `contains` compiles to LIKE, and Prisma does not escape the needle,
+ * so an `_` in it matches ANY character. Drive ids are base64url and
+ * routinely end in one -- "19-mf2fQy-I9bfJSpq7pdxvVD-aB8FHm_" -- which
+ * makes such a search match every id differing only in that position.
+ *
+ * Narrowing on a wildcard-free run of the id instead keeps the search
+ * a plain substring search. It can only ever match MORE rows than the
+ * whole id would, never fewer, and the caller confirms each one
+ * exactly -- so this cannot hide the row it is looking for.
+ */
+function likeSafeFragment(fileId: string): string {
+  return fileId
+    .split(/[%_\\]/)
+    .reduce((longest, part) => (part.length > longest.length ? part : longest), '');
+}
+
+/**
  * The active row whose `imageUrl` carries this Drive id, or null.
  *
- * Narrowed in SQL to rows whose url mentions the id at all, then
- * confirmed with the same reader that built the address, so a row is
- * never matched on a substring that happens to appear inside a longer
- * id.
+ * Narrowed in SQL to rows whose url mentions the id, then confirmed
+ * with the same reader that built the address -- so a row is never
+ * matched on a fragment that happens to appear inside a longer id.
+ *
+ * Not capped. A cap would be a silent wrong answer rather than a slow
+ * one: the row being looked for could sit outside it and this would
+ * report, in the studio's own words, that their picture is not in
+ * their library. A library holds hundreds of rows, this runs only when
+ * the id column did not already answer, and the select is two columns.
  */
 async function byImageUrlId(fileId: string): Promise<{ id: string } | null> {
+  const fragment = likeSafeFragment(fileId);
+  // Nothing to search on: no Drive id is made only of wildcards, and a
+  // bare `contains: ''` would read the whole table for an id that
+  // cannot be one.
+  if (!fragment) return null;
+
   const candidates = await prisma.libraryReference.findMany({
-    where: { isActive: true, imageUrl: { contains: fileId } },
+    where: { isActive: true, imageUrl: { contains: fragment } },
     select: { id: true, imageUrl: true },
-    take: 20,
   });
 
   const match = candidates.find((row) => driveFileIdFromUrl(row.imageUrl) === fileId);
