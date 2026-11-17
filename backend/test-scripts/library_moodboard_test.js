@@ -396,15 +396,21 @@ async function main() {
     check('4a. the scene request carried the reference’s id',
       sentBodies.scene && sentBodies.scene.library_reference_id === 'starter:moroccan-bathroom',
       sentBodies.scene && sentBodies.scene.library_reference_id);
-    // A starter is a file this server hosts, so Python -- a separate
-    // function fetching over the public internet -- needs it as an
-    // ABSOLUTE url. A relative path would be choosable and then fail
-    // at the one moment it mattered.
-    check('4b. ...and the server turned it into an absolute URL Python can fetch',
-      /^https?:\/\/[^/]+\/static\/library-starters\/moroccan-bathroom\.png$/.test(
-        (pythonCalls[0] && pythonCalls[0].scene_image_url) || ''),
-      pythonCalls[0] && pythonCalls[0].scene_image_url);
-    // Which HOST that absolute URL carries is checked in
+    // THE PICTURE ITSELF, not an address for it. A starter is a file
+    // this server holds, so its bytes ride along in the request and
+    // Python -- a separate function -- makes no fetch of its own.
+    // There is nothing left to be stopped by a Drive download page, a
+    // url rewritten downstream, or a preview's Deployment Protection
+    // answering that fetch with its sign-in page.
+    const scene4 = (pythonCalls[0] && pythonCalls[0].scene_image_url) || '';
+    const carried4 = /^data:(image\/[a-z]+);base64,(.+)$/s.exec(scene4);
+    check('4b. ...and the picture travelled with it, rather than an address to fetch',
+      !!carried4 && carried4[1] === 'image/png'
+      && Buffer.from(carried4[2], 'base64').subarray(0, 8).toString('hex')
+        === '89504e470d0a1a0a',
+      scene4.slice(0, 48));
+    // Which HOST an address carries, for the fallback that still sends
+    // one, is checked in
     // library_generation_test, where the request headers can be set:
     // from a browser on localhost, python-ai.service deliberately
     // rewrites a loopback origin to BACKEND_PUBLIC_URL, and that is

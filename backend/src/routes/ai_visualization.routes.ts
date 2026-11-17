@@ -8,6 +8,7 @@ import { prisma } from '@db/connection';
 import { logActivity } from '@services/activityLog.service';
 import { normalizeDriveImageUrl, driveFileIdFromUrl } from '@services/referenceImages.service';
 import { isStarterId, starterById, STARTER_PATH } from '@services/libraryStarters';
+import { inlineSceneImageFor } from '@services/sceneImage.service';
 import { config } from '@config/index';
 
 import { authenticate, requirePermission } from '@middlewares/auth';
@@ -352,6 +353,8 @@ router.post(
         id: string; title: string; imageUrl: string; room: string | null;
         /** Null for a starter: it is a file this server ships, not a Drive one. */
         driveFileId?: string | null;
+        /** Set for a starter: the file in this function's own bundle. */
+        starterFile?: string | null;
       } | null = null;
 
       if (typeof library_reference_id === 'string' && library_reference_id.trim()) {
@@ -403,6 +406,7 @@ router.post(
             title: starter.title,
             imageUrl: `${origin}${STARTER_PATH}/${starter.file}`,
             room: starter.room,
+            starterFile: starter.file,
           };
         }
 
@@ -443,6 +447,27 @@ router.post(
           ? `"${libraryScene.title}"${libraryScene.room ? ` (${libraryScene.room})` : ''}`
           : '';
 
+      /*
+       * THE PICTURE ITSELF, NOT AN ADDRESS FOR IT.
+       *
+       * Read here -- from Drive with this deployment's own credential,
+       * or from the starter in this function's bundle -- and sent
+       * inline, so the generator makes no request of its own. That
+       * removes every way the fetch could be stopped: the Drive
+       * download page, the url rewrite downstream, a file that was
+       * never shared, and a Vercel preview's Deployment Protection
+       * answering the fetch with its sign-in page carrying a 200 --
+       * which is what the studio has been reading as "the remote
+       * scene image did not contain a valid image file".
+       *
+       * The address remains the fallback, so a deployment that cannot
+       * read the bytes behaves exactly as it did before.
+       */
+      const sceneImage = libraryScene
+        ? (await inlineSceneImageFor(libraryScene))
+          ?? sceneImageUrlFor(libraryScene.imageUrl, req, libraryScene.driveFileId)
+        : '';
+
       // ========================================================
       // NODE → PYTHON
       // ========================================================
@@ -469,7 +494,7 @@ router.post(
 
           scene_image_url:
             libraryScene
-              ? sceneImageUrlFor(libraryScene.imageUrl, req, libraryScene.driveFileId)
+              ? sceneImage
               : typeof scene_image_url ===
                 'string'
                 ? scene_image_url.trim()
