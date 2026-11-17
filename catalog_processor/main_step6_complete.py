@@ -498,12 +498,34 @@ def resolve_scene_image(
     source: str,
     scene_id: Optional[str] = None,
 ) -> Path:
-    """Resolve a local path or download an HTTP/Google Drive scene image."""
+    """Resolve a local path, a data URL, or an HTTP/Google Drive image."""
 
     source = str(source).strip().replace("\\", "/")
     parsed = urlparse(source)
 
-    if parsed.scheme in {"http", "https"}:
+    if parsed.scheme in {"http", "https", "data"}:
+        # "data" BECAUSE THE PICTURE NOW TRAVELS WITH THE REQUEST.
+        #
+        # The Node backend used to send an address for the chosen
+        # reference room and leave this service to fetch it. It now
+        # sends the bytes inline instead, because every address it
+        # could send was stopped by something: Drive answering a
+        # server with its download page, _build_remote_download_url
+        # rewriting any Drive URL back to exactly that, and a Vercel
+        # preview's Deployment Protection answering the fetch with its
+        # sign-in page carrying a 200 -- which arrived here as
+        # "the remote scene image did not contain a valid image file".
+        #
+        # Without this, a data URL fell through to the path branch
+        # below and was looked up on disk, which raised either
+        # "[Errno 36] File name too long" for a large one or
+        # "Scene image not found" for a small one. The size was never
+        # the point; the routing was.
+        #
+        # _download_scene_image already reads one: urlopen handles the
+        # data scheme natively, _extract_google_drive_file_id ignores
+        # it, _build_remote_download_url leaves it alone, and Pillow
+        # validates the bytes exactly as it would a download.
         return _download_scene_image(source, scene_id=scene_id)
 
     # Support file:// URLs as well as normal Windows/Linux paths.
