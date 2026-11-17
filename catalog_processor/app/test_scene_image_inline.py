@@ -47,6 +47,7 @@ WANTED = (
     "_validate_downloaded_image",
     "_download_drive_file_authenticated",
     "_download_scene_image",
+    "resolve_scene_image",
 )
 
 PNG = base64.b64decode(
@@ -146,7 +147,54 @@ def main() -> None:
     check("2c. ...with the extension the bytes earned", resolved.suffix == ".png", resolved.suffix)
     check("2d. ...and byte for byte the picture that was sent", on_disk == PNG, len(on_disk))
 
-    print("\n3. the failure this replaces, for the record")
+    print("\n3. and the resolver routes it there, whatever its size")
+    # THE ROUTING, which is the whole of it. resolve_scene_image sends
+    # only http/https to the downloader; everything else it looks up on
+    # disk. A data: URL fell through to that branch and was read as a
+    # file name, which raised "[Errno 36] File name too long" for a
+    # large one and "Scene image not found" for a small one. The size
+    # was never the point -- BOTH had to work, and both are checked
+    # here so neither can regress into the other's failure.
+    large = "data:image/jpeg;base64," + base64.b64encode(b"x" * 300_000).decode()
+
+    try:
+        resolved_small = pipeline["resolve_scene_image"](data_url, "routing-small")
+        check(
+            "3a. a small picture carried inline resolves to a real file",
+            resolved_small.exists() and resolved_small.read_bytes() == PNG,
+            resolved_small,
+        )
+    except Exception as exc:
+        # Caught rather than allowed to end the run: without the
+        # routing it raises here, and a traceback says less than the
+        # one line that names what went wrong.
+        check(
+            "3a. a small picture carried inline resolves to a real file",
+            False,
+            f"{type(exc).__name__}: {str(exc)[:110]}",
+        )
+
+    # 400 KB of base64: comfortably past the 255-byte file name limit
+    # that produced Errno 36, and not a real image, so it must fail on
+    # the BYTES rather than on the file name. That is the proof it
+    # reached the decoder at all.
+    try:
+        pipeline["resolve_scene_image"](large, "routing-large")
+        check("3b. a large one gets as far as the decoder", False, "it was accepted")
+    except OSError as exc:
+        check(
+            "3b. a large one gets as far as the decoder, not the file system",
+            False,
+            f"still read as a path: {exc}",
+        )
+    except ValueError as exc:
+        check(
+            "3b. a large one gets as far as the decoder, not the file system",
+            "did not contain a valid image file" in str(exc),
+            str(exc)[:110],
+        )
+
+    print("\n4. the failure this replaces, for the record")
     # WHAT AN ADDRESS USED TO BRING BACK on a protected preview: a
     # sign-in page, answered with a 200, which is why the studio was
     # told their photograph was not an image.
@@ -154,15 +202,15 @@ def main() -> None:
     source = "https://casa-de-aurum-preview.vercel.app/static/library-reference/1AbC"
     try:
         pipeline["_validate_downloaded_image"](sso_page, source)
-        check("3a. an html page answered with 200 is refused", False, "it was accepted")
+        check("4a. an html page answered with 200 is refused", False, "it was accepted")
     except ValueError as exc:
         check(
-            "3a. an html page answered with 200 is refused, in the studio's own words",
+            "4a. an html page answered with 200 is refused, in the studio's own words",
             "did not contain a valid image file" in str(exc),
             str(exc)[:120],
         )
     check(
-        "3b. ...and that address was never rewritten, so nothing else explains it",
+        "4b. ...and that address was never rewritten, so nothing else explains it",
         pipeline["_build_remote_download_url"](source) == source,
     )
 
