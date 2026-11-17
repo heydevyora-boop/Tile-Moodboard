@@ -885,6 +885,178 @@ async function main() {
       notAnImage.status === 400, notAnImage.status);
   }
 
+  // ═════════════════════════════════════════════════════════════
+  // WHICH FILE A REFERENCE IS, ASKED ONCE.
+  //
+  // The address handed to Python used to be built by reading an id
+  // back out of `imageUrl` -- a display string -- while the route that
+  // serves it looks a row up by `driveFileId`, the column. Two ways of
+  // answering one question, and the studio met both of the ways they
+  // can disagree:
+  //
+  //   - a row whose imageUrl carries a different id than its column
+  //     produced an address nothing could resolve, and the generator
+  //     came back holding this library's own refusal, which reads as
+  //     though the picture had been removed;
+  //   - a row on drive.usercontent.google.com or
+  //     lh3.googleusercontent.com -- the hosts Drive content is served
+  //     from -- yielded no id at all, so the raw Drive url went to
+  //     Python, which rewrote it to uc?export=download, fetched an
+  //     HTML page and reported "did not contain a valid image file".
+  //
+  // Both are the same bug. The column is now what names the file, so
+  // the shape of the display url stops mattering -- which is what
+  // these walk, one row per shape, all the way to the bytes.
+  // ═════════════════════════════════════════════════════════════
+  console.log('\n15. whatever shape the stored url is in, the file is reached');
+  {
+    const drive = require(path.join(ROOT, 'src/services/googleDrive.service'));
+    const PNG = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+      'base64',
+    );
+    const asked = [];
+    drive.googleDriveClient.isConfigured = () => true;
+    drive.googleDriveClient.downloadFile = async (fileId) => {
+      asked.push(fileId);
+      return { bytes: PNG, mimeType: 'image/png' };
+    };
+
+    const origin = `http://127.0.0.1:${server.address().port}`;
+
+    /**
+     * One row, one generation, one fetch of whatever Python was given.
+     * Returns what the generator was handed and what came back from it.
+     */
+    const walk = async (label, driveFileId, imageUrl, themeId) => {
+      const row = await prisma.libraryReference.create({
+        data: {
+          themeId, title: label, room: 'Bathroom',
+          imageUrl, driveFileId, uploadedById: user.id,
+        },
+      });
+
+      reset();
+      asked.length = 0;
+      const out = await call('/ai/visualizations', {
+        product_id: tiles.TILE_BASE.id,
+        surface: 'WALL',
+        library_reference_id: row.id,
+        materials: [{ role: 'base', tile_id: tiles.TILE_BASE.id }],
+        requirements: { room: 'BATHROOM', style: 'Moroccan' },
+      });
+
+      const url = (pythonCalls[0] || {}).scene_image_url || '';
+      // Fetched with NO login, as the Python function would.
+      const served = url.startsWith('http')
+        ? await realFetch(url.replace(/^https?:\/\/[^/]+/, origin))
+        : null;
+      const bytes = served && served.status === 200
+        ? Buffer.from(await served.arrayBuffer())
+        : Buffer.alloc(0);
+
+      return {
+        status: out.status,
+        url,
+        servedStatus: served ? served.status : 0,
+        contentType: served ? (served.headers.get('content-type') || '') : '',
+        bytes,
+        askedFor: asked[asked.length - 1] || '',
+      };
+    };
+
+    // TWO THEMES, so nothing here can pass by knowing one of them.
+    // The fix names a file by the column that holds it and has no
+    // notion of a theme at all; these make that visible.
+    const SHAPES = [
+      // The shape today's upload writes. It has always worked, and is
+      // here so a change that fixes the others cannot quietly break it.
+      ['15a. the download form the upload writes',
+        'shape-download', 'https://drive.google.com/uc?export=download&id=shape-download', 'moroccan'],
+      // THE ONE THE STUDIO HIT. The column and the url name different
+      // files; the column is the one that is right.
+      ['15b. a url naming a DIFFERENT file than the column',
+        'shape-column', 'https://drive.google.com/uc?export=download&id=shape-stale-and-wrong', 'british'],
+      // Drive's own webViewLink, which is what some writers store.
+      ['15c. the /file/d/<id>/view form',
+        'shape-view', 'https://drive.google.com/file/d/shape-view/view?usp=drivesdk', 'moroccan'],
+      // THE HOSTS DRIVE ACTUALLY SERVES FROM. Neither contains the
+      // string "drive.google.com", so neither yielded an id at all.
+      ['15d. a url on drive.usercontent.google.com',
+        'shape-usercontent',
+        'https://drive.usercontent.google.com/download?id=shape-usercontent&export=download', 'british'],
+      ['15e. a url on lh3.googleusercontent.com',
+        'shape-lh3', 'https://lh3.googleusercontent.com/d/shape-lh3', 'floral'],
+    ];
+
+    for (const [label, driveFileId, imageUrl, themeId] of SHAPES) {
+      const got = await walk(label, driveFileId, imageUrl, themeId);
+      check(`${label} — served as an image`,
+        got.status === 200
+        && got.url.includes(`/static/library-reference/${driveFileId}`)
+        && got.servedStatus === 200
+        && got.contentType.startsWith('image/')
+        && got.bytes.equals(PNG)
+        && got.askedFor === driveFileId,
+        {
+          viz: got.status,
+          url: got.url.replace(origin, ''),
+          served: got.servedStatus,
+          type: got.contentType,
+          len: got.bytes.length,
+          drive: got.askedFor,
+        });
+    }
+
+    // AND NOT A DRIVE LINK, for any of them. main_step6_complete.py
+    // rewrites anything on a Drive host back to uc?export=download
+    // before fetching it, so a Drive address never survives the trip
+    // whichever shape it left here in.
+    const lastUrl = (pythonCalls[0] || {}).scene_image_url || '';
+    check('15f. ...and never as a Drive address, which is rewritten downstream',
+      !/google(usercontent)?\.com/.test(lastUrl), lastUrl);
+
+    // THE GUARD IS UNCHANGED. Reading a row's url to find it is a
+    // second way to name a row this library holds, not a second set of
+    // ids that may be read.
+    //
+    // An id only an old url mentions DOES answer while the row that
+    // mentions it is live -- that is 15i, and it is the point. What
+    // must not happen is it outliving the row: unpublishing the
+    // picture has to close that door too.
+    await prisma.libraryReference.updateMany({
+      where: { driveFileId: 'shape-column' }, data: { isActive: false },
+    });
+    const unpublished = await realFetch(`${origin}/static/library-reference/shape-stale-and-wrong`);
+    check('15g. an id an unpublished row\u2019s url mentions is refused with the row',
+      unpublished.status === 404, unpublished.status);
+    await prisma.libraryReference.updateMany({
+      where: { driveFileId: 'shape-column' }, data: { isActive: true },
+    });
+    const strangerStill = await realFetch(`${origin}/static/library-reference/1AnotherDriveFile`);
+    check('15h. ...and so is any other file in the studio\u2019s Drive',
+      strangerStill.status === 404, strangerStill.status);
+
+    // A LINK ALREADY IN THE WORLD. An address built by the old code
+    // carries the id from the url, not the column; a saved board or a
+    // cached fetch may still ask for it, and it has to answer.
+    const legacy = await prisma.libraryReference.create({
+      data: {
+        themeId: 'moroccan', title: 'Legacy link', room: 'Bathroom',
+        imageUrl: 'https://drive.google.com/uc?export=download&id=legacy-url-id',
+        driveFileId: 'legacy-column-id', uploadedById: user.id,
+      },
+    });
+    asked.length = 0;
+    const old = await realFetch(`${origin}/static/library-reference/legacy-url-id`);
+    check('15i. an address the old code built still resolves to its row',
+      old.status === 200 && (old.headers.get('content-type') || '').startsWith('image/'),
+      { status: old.status, type: old.headers.get('content-type') });
+    check('15j. ...and it is that row\u2019s file that is read',
+      asked.includes('legacy-url-id'), asked);
+    await prisma.libraryReference.delete({ where: { id: legacy.id } });
+  }
+
   server.close();
   await prisma.$disconnect();
 

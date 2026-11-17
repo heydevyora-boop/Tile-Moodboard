@@ -34,8 +34,32 @@ import {
  *
  * A starter's imageUrl is already an absolute url on this host and is
  * returned untouched.
+ *
+ * WHICH FILE, FROM THE COLUMN THAT HOLDS IT.
+ *
+ * `driveFileId` is what the row actually stores the file under, and
+ * what /static/library-reference looks a row up by. This used to
+ * re-read the id out of `imageUrl` instead -- a display string -- so
+ * the address was built from one field and resolved against another.
+ * Two ways of answering the same question, and a row where they
+ * disagree fails at exactly the point the studio sees it:
+ *
+ *   - A row whose imageUrl carries an older id than its driveFileId
+ *     produced a url nothing could resolve, and the fetch came back
+ *     with the library's own "that picture is not in the De'vyora
+ *     Library" refusal.
+ *   - A row whose imageUrl is on drive.usercontent.google.com or
+ *     lh3.googleusercontent.com -- the hosts Drive content is served
+ *     from -- yielded no id at all, because driveFileIdFromUrl matches
+ *     the string "drive.google.com" and nothing else. The raw Drive
+ *     url then went to Python, which rewrote it to uc?export=download,
+ *     fetched an HTML page and reported "did not contain a valid image
+ *     file".
+ *
+ * Passing the column removes both: whatever shape the display url
+ * happens to be in, the file is named by the field that names it.
  */
-function sceneImageUrlFor(imageUrl: string, req: Request): string {
+function sceneImageUrlFor(imageUrl: string, req: Request, driveFileId?: string | null): string {
   // The request's own origin, for the reason given where the starters
   // build theirs: a configured one is stale by the next deployment.
   const host = req.get('host');
@@ -43,7 +67,9 @@ function sceneImageUrlFor(imageUrl: string, req: Request): string {
     ? `${req.protocol}://${host}`
     : (config.backend.publicUrl || '').replace(/\/+$/, '');
 
-  const fileId = driveFileIdFromUrl(imageUrl);
+  // The column first. The url is read only when there is no column --
+  // a starter, which has no Drive file and wants its own path back.
+  const fileId = (driveFileId || '').trim() || driveFileIdFromUrl(imageUrl);
   // A starter is ALREADY an absolute url on this host; an uploaded
   // picture becomes one. Either way the fetch comes back in through
   // this deployment's own front door, so both need what follows.
@@ -322,7 +348,11 @@ router.post(
       // invented room instead would hand them a picture that is not of
       // the room they asked for, with nothing on it to say so.
 
-      let libraryScene: { id: string; title: string; imageUrl: string; room: string | null } | null = null;
+      let libraryScene: {
+        id: string; title: string; imageUrl: string; room: string | null;
+        /** Null for a starter: it is a file this server ships, not a Drive one. */
+        driveFileId?: string | null;
+      } | null = null;
 
       if (typeof library_reference_id === 'string' && library_reference_id.trim()) {
         const wanted = library_reference_id.trim();
@@ -380,7 +410,12 @@ router.post(
           ? null
           : await prisma.libraryReference.findFirst({
             where: { id: wanted, isActive: true },
-            select: { id: true, title: true, imageUrl: true, room: true },
+            select: {
+              id: true, title: true, imageUrl: true, room: true,
+              // WHICH FILE THIS IS. Read, not re-derived -- see
+              // sceneImageUrlFor for what re-deriving it cost.
+              driveFileId: true,
+            },
           });
 
         if (!libraryScene && !row) {
@@ -434,7 +469,7 @@ router.post(
 
           scene_image_url:
             libraryScene
-              ? sceneImageUrlFor(libraryScene.imageUrl, req)
+              ? sceneImageUrlFor(libraryScene.imageUrl, req, libraryScene.driveFileId)
               : typeof scene_image_url ===
                 'string'
                 ? scene_image_url.trim()
