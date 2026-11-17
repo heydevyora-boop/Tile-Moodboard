@@ -35,7 +35,27 @@ import { prisma } from '@db/connection';
 import { catchAsync } from '@utils/catchAsync';
 import { AppError } from '@utils/AppError';
 import { googleDriveClient } from '@services/googleDrive.service';
+import { driveFileIdFromUrl } from '@services/referenceImages.service';
 import { isRealImageBuffer } from '@utils/fileSignature';
+
+/**
+ * The active row whose `imageUrl` carries this Drive id, or null.
+ *
+ * Narrowed in SQL to rows whose url mentions the id at all, then
+ * confirmed with the same reader that built the address, so a row is
+ * never matched on a substring that happens to appear inside a longer
+ * id.
+ */
+async function byImageUrlId(fileId: string): Promise<{ id: string } | null> {
+  const candidates = await prisma.libraryReference.findMany({
+    where: { isActive: true, imageUrl: { contains: fileId } },
+    select: { id: true, imageUrl: true },
+    take: 20,
+  });
+
+  const match = candidates.find((row) => driveFileIdFromUrl(row.imageUrl) === fileId);
+  return match ? { id: match.id } : null;
+}
 
 const router = Router();
 
@@ -47,10 +67,26 @@ router.get(
 
     // THE GUARD THAT KEEPS THIS FROM BEING AN OPEN PROXY. Only a file
     // this library actually holds can be read through here.
+    //
+    // BOTH OF THE PLACES A ROW NAMES ITS FILE.
+    //
+    // `driveFileId` is the column, and is the right answer. But an
+    // address already in the world may carry the id that was read out
+    // of `imageUrl` instead -- that is how this url used to be built
+    // (see sceneImageUrlFor), and a row whose two fields disagree then
+    // sent the studio a link this refused, reading as though the
+    // picture had been removed from the library.
+    //
+    // This widens WHICH ROW answers to an id, never WHICH IDS are
+    // allowed: the id must still be one some active row in this
+    // library names, so nothing else in the studio's Drive becomes
+    // readable through here.
     const reference = await prisma.libraryReference.findFirst({
       where: { driveFileId: fileId, isActive: true },
       select: { id: true },
-    });
+    })
+      ?? await byImageUrlId(fileId);
+
     if (!reference) throw AppError.notFound('That picture is not in the De’vyora Library.');
 
     const file = await googleDriveClient.downloadFile(fileId);
