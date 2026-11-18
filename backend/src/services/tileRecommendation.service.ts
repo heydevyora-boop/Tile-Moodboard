@@ -67,12 +67,22 @@ const STYLE_PROFILES: Record<string, StyleProfile> = {
   METALLIC: { finishes: ['glossy', 'polished'], colorFamilies: ['gold', 'dark', 'cool-neutral'], types: ['HIGHLIGHTER', 'ACCENT'] },
   RUSTIC: { finishes: ['matte', 'textured'], colorFamilies: ['earth', 'warm-neutral'], types: ['BASE', 'BORDER'] },
   MOROCCAN: { finishes: ['glossy', 'textured'], colorFamilies: ['blue', 'green', 'gold'], types: ['HIGHLIGHTER', 'ACCENT', 'BORDER'] },
-  // 'warm-neutral' is here for IVORY, which is the first word of this
-  // theme's own palette ("Ivory, ash, charcoal, black and white") and
-  // sits in that family, not in 'cool-neutral'. Without it an ivory tile
-  // scored 67 against a charcoal tile's 82 -- fifteen points behind, for
-  // being the colour the theme is named after. Measured, not assumed.
-  'BLACK & WHITE': { finishes: ['polished', 'matte'], colorFamilies: ['cool-neutral', 'warm-neutral', 'dark'], types: ['BASE', 'HIGHLIGHTER'] },
+  // IVORY IS IN THIS THEME'S PALETTE; BEIGE AND TAN ARE NOT.
+  //
+  // This carried 'warm-neutral' so that ivory -- the first word of the
+  // theme's own palette, "Ivory, ash, charcoal, black and white" --
+  // would not score fifteen points behind charcoal for being the colour
+  // the theme is named after. That was right about ivory and wrong
+  // about the company it keeps: 'warm-neutral' is ivory, cream, beige,
+  // champagne and tan, so four colours this theme has nothing to do
+  // with collected the same fifteen points. Measured against a stark
+  // black-and-white reference, a beige travertine scored 82 -- eighteen
+  // behind a white marble and forty-two ahead of a teal -- on a board
+  // that was supposed to be black and white.
+  //
+  // 'off-white' is ivory and only ivory, so ivory keeps exactly what it
+  // had and the other four lose what was never theirs.
+  'BLACK & WHITE': { finishes: ['polished', 'matte'], colorFamilies: ['cool-neutral', 'off-white', 'dark'], types: ['BASE', 'HIGHLIGHTER'] },
 };
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -84,6 +94,11 @@ const STYLE_PROFILES: Record<string, StyleProfile> = {
 
 const COLOR_FAMILIES: Record<string, string[]> = {
   'warm-neutral': ['ivory', 'cream', 'beige', 'champagne', 'tan'],
+  // Ivory on its own, for a theme that wants ivory without the rest of
+  // the warm neutrals. familiesFor returns EVERY family a tone matches,
+  // so an ivory tile is still warm-neutral everywhere it was before --
+  // this adds a name for it, it does not move it.
+  'off-white': ['ivory'],
   'cool-neutral': ['grey', 'gray', 'white', 'bianco', 'silver'],
   dark: ['black', 'charcoal', 'espresso'],
   earth: ['brown', 'terracotta', 'rust', 'bronze', 'copper'],
@@ -312,6 +327,30 @@ function scoreColor(tile: TileForRanking, requestedColor: string | undefined): {
   if (tileFamilies.some((f) => requestedFamilies.includes(f))) {
     return { points: 18, reasons: [`${tile.colorTone} is in the same color family as ${requestedColor}`] };
   }
+
+  // A COLOUR THAT DISAGREES IS NOT THE SAME AS NO COLOUR AT ALL.
+  //
+  // This returned zero for both, so a teal tile and a tile nobody has
+  // classified yet sat level, and the only thing separating the teal
+  // from a white one was the eighteen the white one gained. When a
+  // colour has actually been asked for -- which, on the mood board,
+  // means the client chose a reference room and this is the colour
+  // READ OUT OF THAT PHOTOGRAPH -- a recorded colour with nothing in
+  // common with it is evidence against the tile, not an absence of
+  // evidence.
+  //
+  // Ten, the same as scoreRoom charges for the wrong room, and for the
+  // same reason: enough to settle which of two otherwise equal tiles
+  // leads, not enough to bury a tile that is right in every other way.
+  // A tile with no colour recorded is untouched -- the early return
+  // above keeps absence out of this.
+  if (tileFamilies.length > 0 && requestedFamilies.length > 0) {
+    return {
+      points: -10,
+      reasons: [`${tile.colorTone} is nothing like ${requestedColor}`],
+    };
+  }
+
   return { points: 0, reasons: [] };
 }
 
