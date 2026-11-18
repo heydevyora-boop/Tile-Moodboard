@@ -182,6 +182,87 @@ function main() {
     check('18d. Nothing is flagged when no tile carries a timestamp', undated.every((t) => t.fromLatestExtraction === false));
   }
 
+  // ════════════════════════════════════════════════════════════════
+  // A BLACK & WHITE REFERENCE MUST PULL BLACK AND WHITE TILES.
+  //
+  // The client picks a reference room out of the De'vyora Library, the
+  // picture is read, and the colour it is built on is handed to this
+  // ranking so the whole catalog is searched for tiles that carry it.
+  // Two things were quietly undoing that.
+  //
+  // The BLACK & WHITE theme profile carried 'warm-neutral' so ivory --
+  // the first word of its own palette -- would score. That family is
+  // ivory, cream, beige, champagne and tan, so four colours the theme
+  // has nothing to do with collected the same fifteen points.
+  //
+  // And a colour that DISAGREED with the reference scored zero, exactly
+  // like a tile nobody had classified. Against a stark black-and-white
+  // reference a beige travertine came out at 82 -- eighteen behind a
+  // white marble, forty-two ahead of a teal -- on a board that was
+  // meant to be black and white.
+  // ════════════════════════════════════════════════════════════════
+  {
+    const catalog: TileForRanking[] = [
+      { id: 'white', name: 'Bianco Carrara', finish: 'polished', type: 'BASE', colorTone: 'White', bestRoom: 'Bathroom' },
+      { id: 'black', name: 'Nero Marquina', finish: 'polished', type: 'HIGHLIGHTER', colorTone: 'Black', bestRoom: 'Bathroom' },
+      { id: 'charcoal', name: 'Charcoal Subway', finish: 'matte', type: 'HIGHLIGHTER', colorTone: 'Charcoal', bestRoom: 'Bathroom' },
+      { id: 'grey', name: 'Grigio Field', finish: 'matte', type: 'BASE', colorTone: 'Grey', bestRoom: 'Bathroom' },
+      { id: 'ivory', name: 'Ivory Classic', finish: 'polished', type: 'BASE', colorTone: 'Ivory', bestRoom: 'Bathroom' },
+      { id: 'beige', name: 'Beige Travertine', finish: 'matte', type: 'BASE', colorTone: 'Beige', bestRoom: 'Bathroom' },
+      { id: 'tan', name: 'Tan Sandstone', finish: 'matte', type: 'BASE', colorTone: 'Tan', bestRoom: 'Bathroom' },
+      { id: 'teal', name: 'Teal Gloss', finish: 'glossy', type: 'ACCENT', colorTone: 'Teal', bestRoom: 'Bathroom' },
+      { id: 'unread', name: 'Just Extracted', type: 'BASE', colorTone: null, bestRoom: null },
+    ];
+
+    // Exactly what the mood board passes when a Library reference has
+    // been read: the theme label, the room, and the colour the vision
+    // step found in the photograph.
+    const ranked = rankTiles(catalog, {
+      room: 'BATHROOM',
+      style: 'Black & White',
+      colorTone: 'stark black and white',
+    });
+    const of = (id: string) => ranked.find((t) => t.id === id)!;
+
+    check('19. The four black-and-white tiles lead the pool',
+      ranked.slice(0, 4).map((t) => t.id).sort().join(',') === 'black,charcoal,grey,white',
+      ranked.map((t) => `${t.id}:${t.score}`));
+
+    check('20. Beige and tan rank below every one of them',
+      of('beige').score < of('charcoal').score && of('tan').score < of('charcoal').score,
+      { beige: of('beige').score, tan: of('tan').score, charcoal: of('charcoal').score });
+
+    // THE GAP IS THE POINT. Eighteen points let a beige tile sit in the
+    // same band as a white one; the model then chose between them on
+    // its own taste. Thirty is a different band.
+    check('21. ...by a margin a model cannot mistake for a tie',
+      of('white').score - of('beige').score >= 30,
+      { white: of('white').score, beige: of('beige').score });
+
+    // Ivory IS in this theme's palette, and keeping it there was the
+    // whole reason 'warm-neutral' was borrowed in the first place.
+    check('22. Ivory keeps its place: it is the theme\u2019s own first colour',
+      of('ivory').score > of('beige').score && of('ivory').score > of('teal').score,
+      { ivory: of('ivory').score, beige: of('beige').score, teal: of('teal').score });
+
+    check('23. A colour that disagrees with the reference is charged for it',
+      of('teal').matchReasons.some((r) => /nothing like stark black and white/i.test(r)),
+      of('teal').matchReasons);
+
+    // ABSENCE IS NOT DISAGREEMENT. A tile nobody has classified yet
+    // must not be charged for a colour it has never been given -- that
+    // would bury every freshly extracted product.
+    check('24. An unclassified tile is not charged for a colour it does not have',
+      of('unread').matchReasons.every((r) => !/nothing like/i.test(r)),
+      of('unread').matchReasons);
+
+    // AND WITH NO REFERENCE, NOTHING IS CHARGED. A board built from the
+    // seven steps alone passes no colour, and must rank as it always did.
+    const noReference = rankTiles(catalog, { room: 'BATHROOM', style: 'Black & White' });
+    check('25. With no reference colour, no tile is charged for its colour',
+      noReference.every((t) => t.matchReasons.every((r) => !/nothing like/i.test(r))));
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail > 0 ? 1 : 0);
 }
