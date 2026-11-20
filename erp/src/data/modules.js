@@ -53,5 +53,13 @@ export function moduleFor(pathname) {
   const hit = [...MODULES]
     .sort((a, b) => b.to.length - a.to.length)
     .find((m) => pathname === m.to || (m.to !== '/' && pathname.startsWith(m.to + '/')));
-  return hit || MODULES[0];
+  if (hit) return hit;
+
+  /* An address that matches nothing is not the dashboard. Returning
+     the dashboard module put "Dashboard" in the topbar above a page
+     that said "No such screen" -- a small lie, and the sort of one
+     that makes a reader stop trusting the rest of the headings. The
+     path still falls back to '/' so anything navigating onwards
+     lands somewhere real. */
+  return { to: '/', label: 'Not found', group: 'Overview', status: 'ready' };
 }

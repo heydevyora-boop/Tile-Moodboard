@@ -58,6 +58,16 @@
 .grid-4 { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
 .stack { display: grid; gap: 16px; }
 
+/* A GRID ITEM WILL NOT SHRINK BELOW ITS CONTENT unless told to.
+   `min-width: auto` is the default, so a wide table inside a grid
+   cell widens the whole track and pushes the page sideways --
+   defeating the scroll container the table is already sitting in.
+   It cost the categories page its phone layout, and it would have
+   cost every future screen that nests a table in a grid, so it is
+   fixed here once rather than per screen. */
+.grid-2 > *, .grid-3 > *, .grid-4 > *, .stack > * { min-width: 0; }
+.panel { min-width: 0; }
+
 /* ── buttons ──────────────────────────────────────────────── */
 
 .btn {
@@ -625,3 +635,26 @@
 .reconcile-op { font-size: 17px; color: var(--muted); }
 .reconcile .is-closing strong { color: var(--gold); }
 .reconcile p { margin: 0 0 0 auto; max-width: 30ch; text-align: right; }
+
+/* ============================================================
+   IMPORT / EXPORT ROWS
+   ============================================================ */
+
+.transfer-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+.transfer-row:last-child { border-bottom: 0; padding-bottom: 0; }
+.transfer-row p { margin: 3px 0 0; max-width: 46ch; }
+.transfer-actions { display: flex; gap: 6px; flex: 0 0 auto; flex-wrap: wrap; }
+
+/* ============================================================
+   OPEN DECISIONS
+   ============================================================ */
+
+.decisions { margin: 0; padding-left: 22px; max-width: 76ch; }
+.decisions li { margin-bottom: 9px; color: var(--text2); font-size: 13px; line-height: 1.55; }
