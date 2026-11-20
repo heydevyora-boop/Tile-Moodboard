@@ -1,10 +1,12 @@
+import MovementList from '../components/MovementList.jsx';
+
 export default function StockInward() {
   return (
-    <div className="panel">
-      <div className="empty">
-        <h3>Stock Inward</h3>
-        <p>This screen is being built.</p>
-      </div>
-    </div>
+    <MovementList
+      dir="in"
+      title="Inward"
+      recordLabel="Record a receipt"
+      intro="Everything that came in: purchase receipts, customer returns and upward adjustments. Each row is the same record the stock ledger shows — there is no separate inward register."
+    />
   );
 }

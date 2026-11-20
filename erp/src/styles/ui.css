@@ -197,7 +197,15 @@
   padding: 9px 12px;
   border-bottom: 1px solid var(--line);
   vertical-align: middle;
+  /* Sixteen columns in a 1200px window will wrap "Kitchen & Dining"
+     onto two lines and treble the height of every row, which turns a
+     25-row page into a page you have to scroll twice to read. The
+     table scrolls sideways inside its own panel instead -- the
+     reader moves one axis at a time. */
+  white-space: nowrap;
 }
+/* Opt back in where a cell is genuinely prose. */
+.table td.wrap { white-space: normal; }
 .table tbody tr:hover { background: #FCFAF6; }
 .table tbody tr.is-picked { background: rgba(227, 197, 142, 0.16); }
 .table td.right, .table th.right { text-align: right; }
@@ -455,3 +463,165 @@
 .notice-info   { background: var(--info-bg);   border-color: rgba(69, 96, 107, 0.22);  color: var(--info); }
 .notice-warn   { background: var(--warn-bg);   border-color: rgba(154, 107, 31, 0.24); color: var(--warn); }
 .notice-danger { background: var(--danger-bg); border-color: rgba(168, 85, 42, 0.24);  color: var(--danger); }
+
+/* ============================================================
+   ACTIVITY FEED
+   ============================================================ */
+
+.feed { list-style: none; margin: 0; padding: 0; }
+.feed li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+.feed li:last-child { border-bottom: 0; }
+.feed.is-tight li { padding: 8px 0; }
+
+.feed-text { min-width: 0; flex: 1; }
+.feed-text strong { font-weight: 600; }
+
+/* Direction, not sentiment. Stock arriving is not "good news" and
+   stock leaving is not "bad news" -- both are just the business
+   working -- so these are the two neutral tones, not green and red. */
+.feed-dir {
+  flex: 0 0 22px;
+  width: 22px; height: 22px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  font-size: 12px;
+  margin-top: 1px;
+}
+.feed-dir.is-in  { background: var(--info-bg); color: var(--info); }
+.feed-dir.is-out { background: var(--sand);    color: var(--text2); }
+
+/* ============================================================
+   DETAIL VIEW
+   ============================================================ */
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+  gap: 0 24px;
+}
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+.detail-label {
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+.detail-value { text-align: right; font-weight: 500; }
+
+/* Which system owns a field. Quiet on purpose -- it is an
+   annotation for whoever reviews the integration, not a label the
+   studio has to read past every day. */
+.origin {
+  font-size: 8.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 1px 5px;
+  border-radius: 3px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+.origin.is-erp { border-color: rgba(138, 106, 59, 0.3); color: var(--gold); }
+
+/* ============================================================
+   VIEW TABS
+   ============================================================
+   Saved views across the top of a list. Each carries its own count,
+   so the reader can see there is nothing to do without clicking
+   into an empty table to find out.
+   ============================================================ */
+
+.viewbar {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 16px 0 12px;
+}
+.viewtab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  font-size: 12.5px;
+  cursor: pointer;
+  color: var(--text2);
+}
+.viewtab:hover { background: var(--sand); color: var(--ink); }
+.viewtab .num {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--sand);
+  color: var(--muted);
+}
+.viewtab.is-on {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #fff;
+}
+.viewtab.is-on .num { background: rgba(255, 255, 255, 0.16); color: var(--gold-light); }
+
+/* ============================================================
+   SUMMARY STRIP
+   ============================================================
+   The two or three totals that belong above a list rather than
+   beside it in cards.
+   ============================================================ */
+
+.summary-strip {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  flex-wrap: wrap;
+  padding: 13px 18px;
+  margin-bottom: 14px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
+}
+.summary-strip > div { display: flex; flex-direction: column; gap: 2px; }
+.summary-strip strong { font-size: 18px; font-family: var(--font-display); font-weight: 600; }
+.summary-strip p { margin: 0 0 0 auto; }
+
+/* ============================================================
+   THE RECONCILIATION STRIP
+   ============================================================
+   Opening + in − out = on hand, written as the sum it is. The
+   point is that a reader can check every term of it against the
+   rows underneath.
+   ============================================================ */
+
+.reconcile {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 14px 18px;
+  margin-bottom: 14px;
+  background: var(--sand);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+}
+.reconcile > div { display: flex; flex-direction: column; gap: 1px; }
+.reconcile strong { font-family: var(--font-display); font-size: 20px; font-weight: 600; }
+.reconcile-op { font-size: 17px; color: var(--muted); }
+.reconcile .is-closing strong { color: var(--gold); }
+.reconcile p { margin: 0 0 0 auto; max-width: 30ch; text-align: right; }

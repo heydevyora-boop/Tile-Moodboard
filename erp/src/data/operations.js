@@ -21,9 +21,12 @@ function buildPurchases() {
   const orders = [];
   const live = PRODUCTS.filter((p) => p.status !== 'discontinued' && p.status !== 'draft');
 
-  for (let i = 0; i < 24; i += 1) {
+  /* Spread across six months, not three. The dashboard's trend
+     chart shows six, and a chart whose first three months sit at
+     zero reads as a broken feed rather than as a quiet summer. */
+  for (let i = 0; i < 46; i += 1) {
     const sup = r.pick(SUPPLIERS);
-    const placed = r.int(1, 85);
+    const placed = r.int(1, 178);
     const lines = [];
     for (let l = 0; l < r.int(1, 5); l += 1) {
       const p = r.pick(live);
@@ -40,8 +43,9 @@ function buildPurchases() {
     }
 
     // Older orders have had time to arrive; recent ones have not.
-    const status = placed > 45 ? (r.chance(0.9) ? 'received' : 'cancelled')
-      : placed > 18 ? r.pick(['received', 'part', 'ordered'])
+    // Older orders have had time to arrive; this week's have not.
+    const status = placed > 60 ? (r.chance(0.92) ? 'received' : 'cancelled')
+      : placed > 21 ? r.pick(['received', 'received', 'part', 'ordered'])
       : r.pick(['ordered', 'ordered', 'part', 'draft']);
 
     orders.push({
@@ -76,9 +80,9 @@ function buildSales() {
   const orders = [];
   const sellable = PRODUCTS.filter((p) => p.status !== 'draft');
 
-  for (let i = 0; i < 32; i += 1) {
+  for (let i = 0; i < 64; i += 1) {
     const cus = r.pick(CUSTOMERS);
-    const placed = r.int(0, 80);
+    const placed = r.int(0, 178);
     const lines = [];
     for (let l = 0; l < r.int(1, 4); l += 1) {
       const p = r.pick(sellable);
@@ -94,8 +98,8 @@ function buildSales() {
       });
     }
 
-    const status = placed > 30 ? r.pick(['delivered', 'delivered', 'invoiced'])
-      : placed > 10 ? r.pick(['invoiced', 'dispatched', 'confirmed'])
+    const status = placed > 40 ? r.pick(['delivered', 'delivered', 'invoiced'])
+      : placed > 12 ? r.pick(['invoiced', 'dispatched', 'confirmed'])
       : r.pick(['quote', 'confirmed', 'dispatched']);
 
     orders.push({

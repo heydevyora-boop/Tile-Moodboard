@@ -57,14 +57,14 @@ export function LineChart({ series, height = 190, format = money, label = 'Value
       <path d={path} fill="none" stroke={GOLD} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
 
       {series.map((d, i) => (
-        <circle key={d.label} cx={x(i)} cy={y(d.value)} r="2.6" fill={GOLD}>
+        <circle key={i} cx={x(i)} cy={y(d.value)} r="2.6" fill={GOLD}>
           <title>{d.label + ': ' + format(d.value)}</title>
         </circle>
       ))}
 
       {/* Every label would collide at this width; one in three reads. */}
       {series.map((d, i) => (i % Math.ceil(series.length / 6) === 0 ? (
-        <text key={d.label} x={x(i)} y={h - 8} textAnchor="middle" fontSize="9.5" fill={MUTED}>
+        <text key={i} x={x(i)} y={h - 8} textAnchor="middle" fontSize="9.5" fill={MUTED}>
           {d.label}
         </text>
       ) : null))}
@@ -102,7 +102,7 @@ export function BarChart({ series, height = 200, format = (n) => String(n), labe
         const bh = (d.value / max) * ih;
         const bx = pad.l + i * band + (band - bw) / 2;
         return (
-          <g key={d.label}>
+          <g key={i}>
             <rect
               x={bx} y={pad.t + ih - bh} width={bw} height={Math.max(bh, 1)}
               rx="3" fill={d.tone || GOLD} opacity={d.dim ? 0.42 : 1}

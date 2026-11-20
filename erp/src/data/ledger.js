@@ -25,7 +25,15 @@ import { BASE_PRODUCTS, SUPPLIERS, DEMO_TODAY } from './catalogue.js';
 
 const DAY = 86400000;
 const WINDOW = 90;
-const iso = (daysAgo) => new Date(DEMO_TODAY.getTime() - daysAgo * DAY).toISOString();
+
+/* A TIME OF DAY, NOT JUST A DATE.
+   Every movement used to land on midnight, which made the activity
+   feed a wall of identical timestamps -- a dozen rows all reading
+   "just now" -- and left same-day rows in whatever order they
+   happened to be generated. Stock moves during working hours, and a
+   stock card is read in the order things actually happened. */
+const iso = (daysAgo, hour = 11, minute = 0) =>
+  new Date(DEMO_TODAY.getTime() - daysAgo * DAY + (hour * 60 + minute) * 60000).toISOString();
 
 export const WAREHOUSE = {
   id: 'wh-main',
@@ -59,6 +67,28 @@ export const CUSTOMERS = [
 
 const STAFF = ['Devyora Admin', 'Store Keeper', 'Studio Manager'];
 
+/* WHO THE OTHER PARTY IS, BY REASON -- not by direction.
+   Direction is the wrong question. A customer return and a purchase
+   receipt both come IN, but one is from a customer and the other
+   from a supplier; a breakage goes OUT and has no counterparty at
+   all. Keying this off `dir` put "Damage / breakage — Mehta
+   Residence" and "Customer return — Somany Ceramics Ltd." on the
+   stock card, both of which name the wrong kind of party. */
+function partyFor(reason, product, r, suppliers) {
+  switch (reason) {
+    case 'purchase':
+      return (suppliers.find((s) => s.id === product.supplier) || suppliers[0]).name;
+    case 'sale':
+    case 'sample':
+    case 'return_in':
+      return r.pick(CUSTOMERS).name;
+    // Breakages and stock-take adjustments happen inside the
+    // building. There is nobody on the other side of them.
+    default:
+      return WAREHOUSE.name;
+  }
+}
+
 /* How many movements a product sees across the window, by how fast
    it moves. A slow mover with daily dispatches is not a slow mover. */
 const PACE_EVENTS = { fast: [14, 26], steady: [6, 13], slow: [2, 6] };
@@ -77,7 +107,8 @@ function buildLedger() {
     seq += 1;
     rows.push({
       id: 'MV-' + String(10000 + seq),
-      at: iso(daysAgo),
+      // Overwritten by the caller. See the note on ordering below.
+      at: iso(daysAgo, 9, 0),
       productCode: p.productCode,
       productName: p.name,
       brand: p.brand,
@@ -101,13 +132,41 @@ function buildLedger() {
       continue;
     }
 
-    let balance = r.int(40, 260);
+    /* WHERE THIS PRODUCT SHOULD END UP, decided before anything
+       else, because the opening balance depends on it.
+
+       An opening balance drawn at random and a target chosen
+       independently can be hundreds of boxes apart, and the
+       difference then has to be worked off in corrections at the end
+       of the window -- which buried the activity feed under a dozen
+       identical closing dispatches and ranked "most dispatched" by
+       the size of those corrections rather than by what sells.
+
+       So: a healthy product opens near where it closes and wanders,
+       which is what a replenished line does. A product that is low
+       or out opens high and drains, which is the story of how it got
+       there. Either way the corrections at the end are small. */
+    const target = p.band === 'out' ? 0
+      : p.band === 'low' ? r.int(1, p.reorderLevel)
+      : p.band === 'retired' ? (r.chance(0.5) ? 0 : r.int(1, 12))
+      : r.int(p.reorderLevel + 6, p.reorderLevel + 190);
+
+    // Both cases open within a consignment or two of where they
+    // close. Opening a low line at three hundred boxes made a better
+    // story and a worse ledger: the drain then had to happen in the
+    // last week, in a run of identical capped dispatches, instead of
+    // across the ninety days it really took.
+    let balance = p.band === 'healthy'
+      ? Math.max(20, target + r.int(-70, 70))
+      : target + r.int(20, 140);
+
     opening.set(p.productCode, balance);
     add(WINDOW + 1, p, 'opening', balance, {
       ref: 'Opening stock',
       party: 'Opening balance',
       by: 'System',
     });
+    rows[rows.length - 1].at = iso(WINDOW + 1, 0, 0);   // start of day
 
     // Which days anything happened on. Drawn, then sorted, so a
     // product's history is lumpy the way a real one is rather than
@@ -123,7 +182,20 @@ function buildLedger() {
     for (let i = 0, n = r.int(lo, hi); i < n; i += 1) days.push(r.int(7, WINDOW));
     days.sort((a, b) => b - a);
 
+    /* THE CLOCK HAS TO AGREE WITH THE ORDER THINGS HAPPENED IN.
+       Each movement is generated against the balance the previous
+       one left -- that is what stops a dispatch exceeding the shelf
+       -- but the ledger is read in time order. Giving each a random
+       hour let two movements on the SAME day swap places, and a
+       dispatch applied before the receipt that covered it took the
+       running balance negative.
+       So the hour is not random: it runs forward with the
+       generation. Days are already oldest-first, and three minutes
+       per step keeps same-day movements in sequence without ever
+       spilling into the next day. */
+    let step = 0;
     for (const daysAgo of days) {
+      step += 1;
       // A retired product is never reordered; that is what retiring
       // one means. It can still go out, and still come back.
       const pool = p.retired
@@ -147,46 +219,59 @@ function buildLedger() {
       }
 
       add(daysAgo, p, reason, qty, {
-        ref: reason === 'purchase' ? 'PO-' + String(2100 + (seq % 24))
-          : reason === 'sale' ? 'SO-' + String(5100 + (seq % 32))
+        ref: reason === 'purchase' ? 'PO-' + String(2100 + (seq % 46))
+          : reason === 'sale' ? 'SO-' + String(5100 + (seq % 64))
           : '—',
-        party: dir === 'in'
-          ? (SUPPLIERS.find((s) => s.id === p.supplier) || SUPPLIERS[0]).name
-          : r.pick(CUSTOMERS).name,
+        party: partyFor(reason, p, r, SUPPLIERS),
       });
+      rows[rows.length - 1].at = iso(daysAgo, 9, (step * 3) % 540);
     }
 
-    /* ONE LAST MOVEMENT, to land the product where its band says it
-       should be today. This is the only steered figure in the file,
-       and it is a plain receipt or dispatch of a sensible size -- not
-       a silent correction of the balance. A reviewer who wants a
-       catalogue with a handful of out-of-stock lines to look at gets
-       one, and the ledger still explains every box of it. */
-    const target = p.band === 'out' ? 0
-      : p.band === 'low' ? r.int(1, p.reorderLevel)
-      : p.band === 'retired' ? (r.chance(0.5) ? 0 : r.int(1, 12))
-      : r.int(p.reorderLevel + 6, p.reorderLevel + 190);
+    /* THE LAST FEW MOVEMENTS, landing the product exactly where its
+       band says it should be today. A reviewer who wants a catalogue
+       with a handful of out-of-stock lines to look at gets one, and
+       the ledger still explains every box of it.
 
-    const delta = target - balance;
-    if (delta !== 0) {
-      /* A RETIRED PRODUCT IS NEVER REORDERED, and the closing
-         movement is not an exception. Stock coming back to a
+       SETTLED IN REAL-SIZED MOVEMENTS, not one lump.
+       A single closing movement of three hundred boxes was both
+       unbelievable on a stock card AND wrong in aggregate: it
+       dominated "most dispatched", which then ranked products by
+       the size of their correction rather than by what the studio
+       actually sells. The difference is now worked off in
+       consignment-sized receipts and dispatches across the last
+       week, each the size that reason would really be. */
+    const CAP = { purchase: 160, return_in: 40, sale: 45 };
+    let guard = 0;
+    while (balance !== target && guard < 40) {
+      guard += 1;
+      const delta = target - balance;
+      /* A RETIRED PRODUCT IS NEVER REORDERED, and these closing
+         movements are not an exception. Stock coming back to a
          discontinued line is a customer returning it, not the studio
          buying more of something it has stopped selling -- and a
          purchase order against a retired product is precisely the
          mistake the Discontinued status exists to prevent. */
       const reason = delta > 0 ? (p.retired ? 'return_in' : 'purchase') : 'sale';
-      const qty = Math.abs(delta);
-      add(r.int(0, 6), p, reason, qty, {
-        ref: reason === 'purchase' ? 'PO-' + String(2100 + (seq % 24))
-          : reason === 'sale' ? 'SO-' + String(5100 + (seq % 32))
+      const qty = Math.min(Math.abs(delta), CAP[reason]);
+      balance += delta > 0 ? qty : -qty;
+      add(0, p, reason, qty, {
+        ref: reason === 'purchase' ? 'PO-' + String(2100 + (seq % 46))
+          : reason === 'sale' ? 'SO-' + String(5100 + (seq % 64))
           : '—',
-        party: delta > 0
-          ? (p.retired ? r.pick(CUSTOMERS).name
-            : (SUPPLIERS.find((s) => s.id === p.supplier) || SUPPLIERS[0]).name)
-          : r.pick(CUSTOMERS).name,
+        party: partyFor(reason, p, r, SUPPLIERS),
       });
-      balance = target;
+
+      /* STRICTLY IN ORDER, and ahead of nothing. These movements are
+         generated in the sequence they must be applied -- each one
+         assumes the balance the previous left -- but the ledger is
+         sorted by time, so a random date among them re-orders them
+         and applies a dispatch before the receipt that covered it.
+         That is what drove two products' running balance negative.
+         Each therefore gets an explicit stamp, 55 minutes after the
+         one before, inside the last two days -- still clear of the
+         main run, which stops at day seven. */
+      rows[rows.length - 1].at =
+        new Date(DEMO_TODAY.getTime() - (2 * 24 * 60 - guard * 55) * 60000).toISOString();
     }
 
     // The stock figure and the status, READ OFF the ledger. These are
