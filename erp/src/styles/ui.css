@@ -1,0 +1,660 @@
+/* ============================================================
+   UI PRIMITIVES
+   ============================================================
+   Panels, buttons, pills, fields, tables and the empty states --
+   the pieces every one of the fifteen screens is assembled from.
+   Nothing here is screen-specific; a screen that needs its own
+   rule is a sign the primitive is wrong.
+   ============================================================ */
+
+/* ── page furniture ───────────────────────────────────────── */
+
+.page-intro {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.page-intro p {
+  margin: 3px 0 0;
+  color: var(--text2);
+  max-width: 62ch;
+  font-size: 13px;
+}
+.page-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.panel {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
+}
+.panel + .panel { margin-top: 16px; }
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line);
+}
+.panel-head h2 { font-size: 15.5px; }
+.panel-head p {
+  margin: 2px 0 0;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.panel-body { padding: 18px; }
+
+/* A row of panels that should share the width evenly, collapsing to
+   one column rather than squeezing. */
+.grid-2, .grid-3, .grid-4 { display: grid; gap: 16px; }
+.grid-2 { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+.grid-3 { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.grid-4 { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+.stack { display: grid; gap: 16px; }
+
+/* A GRID ITEM WILL NOT SHRINK BELOW ITS CONTENT unless told to.
+   `min-width: auto` is the default, so a wide table inside a grid
+   cell widens the whole track and pushes the page sideways --
+   defeating the scroll container the table is already sitting in.
+   It cost the categories page its phone layout, and it would have
+   cost every future screen that nests a table in a grid, so it is
+   fixed here once rather than per screen. */
+.grid-2 > *, .grid-3 > *, .grid-4 > *, .stack > * { min-width: 0; }
+.panel { min-width: 0; }
+
+/* ── buttons ──────────────────────────────────────────────── */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 14px;
+  border-radius: var(--r);
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.14s, border-color 0.14s, color 0.14s;
+}
+.btn:hover { background: var(--sand); border-color: #D8CDB8; }
+
+.btn-primary {
+  background: var(--gold);
+  border-color: var(--gold);
+  color: #fff;
+}
+.btn-primary:hover { background: #7A5C31; border-color: #7A5C31; color: #fff; }
+
+.btn-danger { color: var(--danger); border-color: rgba(168, 85, 42, 0.3); }
+.btn-danger:hover { background: var(--danger-bg); border-color: var(--danger); }
+
+.btn-sm { padding: 4px 9px; font-size: 12px; }
+
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn:disabled:hover { background: var(--card); border-color: var(--line); }
+
+/* ── status pills ─────────────────────────────────────────────
+   Colour is never the only signal: each pill carries its own words,
+   so the five stock states are still distinguishable in greyscale
+   and to a colour-blind reader. */
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2.5px 9px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+.pill::before {
+  content: '';
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: 0 0 6px;
+}
+.pill-ok      { background: var(--ok-bg);     color: var(--ok);     border-color: rgba(79, 107, 69, 0.22); }
+.pill-warn    { background: var(--warn-bg);   color: var(--warn);   border-color: rgba(154, 107, 31, 0.24); }
+.pill-danger  { background: var(--danger-bg); color: var(--danger); border-color: rgba(168, 85, 42, 0.24); }
+.pill-info    { background: var(--info-bg);   color: var(--info);   border-color: rgba(69, 96, 107, 0.22); }
+/* Discontinued: no dot, a dashed edge and struck-through weight. A
+   retired product is not an alarm, and must never be mistaken for
+   Out of Stock, which is one the studio still sells and must
+   reorder. */
+.pill-inert   { background: var(--inert-bg); color: var(--inert); border-style: dashed; border-color: #D8CDB8; }
+.pill-inert::before { display: none; }
+
+/* ── fields ───────────────────────────────────────────────── */
+
+.field { display: grid; gap: 4px; }
+.field > label {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.input, .select, .textarea {
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--card);
+  font-size: 13px;
+  width: 100%;
+}
+.input:focus, .select:focus, .textarea:focus {
+  outline: none;
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px rgba(227, 197, 142, 0.35);
+}
+.select { cursor: pointer; }
+
+.toolbar {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--line);
+  background: var(--card);
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+}
+.toolbar .input, .toolbar .select { width: auto; min-width: 150px; }
+.toolbar-search { flex: 1 1 220px; min-width: 180px !important; }
+.toolbar-spacer { margin-left: auto; }
+
+/* ── tables ───────────────────────────────────────────────────
+   Horizontal scroll is kept INSIDE the table, so a sixteen-column
+   Product Master never makes the whole page scroll sideways. */
+
+.table-scroll { overflow-x: auto; }
+
+.table { width: 100%; border-collapse: collapse; font-size: 13px; }
+
+.table th {
+  position: sticky;
+  top: 0;
+  background: var(--sand);
+  text-align: left;
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 600;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+  z-index: 1;
+}
+.table th.is-sortable { cursor: pointer; user-select: none; }
+.table th.is-sortable:hover { color: var(--ink); }
+.table th .sort-mark { opacity: 0.45; margin-left: 4px; font-size: 9px; }
+.table th.is-sorted { color: var(--gold); }
+.table th.is-sorted .sort-mark { opacity: 1; }
+
+.table td {
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+  /* Sixteen columns in a 1200px window will wrap "Kitchen & Dining"
+     onto two lines and treble the height of every row, which turns a
+     25-row page into a page you have to scroll twice to read. The
+     table scrolls sideways inside its own panel instead -- the
+     reader moves one axis at a time. */
+  white-space: nowrap;
+}
+/* Opt back in where a cell is genuinely prose. */
+.table td.wrap { white-space: normal; }
+.table tbody tr:hover { background: #FCFAF6; }
+.table tbody tr.is-picked { background: rgba(227, 197, 142, 0.16); }
+.table td.right, .table th.right { text-align: right; }
+
+.table-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 11px 18px;
+  font-size: 12px;
+  color: var(--text2);
+}
+.pager { display: flex; align-items: center; gap: 6px; }
+
+/* A picked-rows bar that only exists while rows are picked, so the
+   bulk actions cannot be clicked against an empty selection. */
+.bulkbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 18px;
+  background: var(--sand);
+  border-bottom: 1px solid var(--line);
+  font-size: 12.5px;
+}
+.bulkbar strong { font-weight: 600; }
+
+/* ── empty states ─────────────────────────────────────────── */
+
+.empty {
+  padding: 44px 24px;
+  text-align: center;
+  color: var(--muted);
+}
+.empty h3 { font-size: 15px; color: var(--text2); }
+.empty p { margin: 5px auto 0; max-width: 42ch; font-size: 12.5px; }
+
+/* ── placeholder screen ───────────────────────────────────── */
+
+.placeholder { padding: 30px 28px; max-width: 680px; }
+.placeholder-flag {
+  display: inline-block;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border: 1px dashed #D8CDB8;
+  border-radius: 999px;
+  padding: 3px 10px;
+  margin-bottom: 12px;
+}
+.placeholder h2 { font-size: 21px; }
+.placeholder-purpose { color: var(--text2); margin: 7px 0 0; }
+.placeholder-label {
+  margin: 20px 0 6px;
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.placeholder-list { margin: 0; padding-left: 20px; color: var(--text2); }
+.placeholder-list li { margin-bottom: 4px; }
+.placeholder-note {
+  margin: 20px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* ── small odds and ends ──────────────────────────────────── */
+
+.muted { color: var(--muted); }
+.tiny { font-size: 11.5px; }
+.sku { font-family: var(--font-mono); font-size: 12px; color: var(--text2); }
+.swatch {
+  display: inline-block;
+  width: 13px; height: 13px;
+  border-radius: 3px;
+  border: 1px solid var(--line);
+  vertical-align: -2px;
+  margin-right: 6px;
+}
+
+/* ============================================================
+   KPI CARDS
+   ============================================================ */
+
+.kpi {
+  display: block;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  padding: 15px 17px;
+  box-shadow: var(--shadow-sm);
+  color: inherit;
+  text-decoration: none;
+}
+.kpi.is-link { transition: border-color 0.14s, box-shadow 0.14s, transform 0.14s; }
+.kpi.is-link:hover {
+  border-color: var(--gold-light);
+  box-shadow: var(--shadow);
+  text-decoration: none;
+  transform: translateY(-1px);
+}
+
+.kpi-label {
+  margin: 0;
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.kpi-value {
+  margin: 6px 0 0;
+  font-family: var(--font-display);
+  font-size: 27px;
+  line-height: 1.1;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.kpi-value .num { font-family: inherit; font-size: inherit; }
+.kpi-value small {
+  font-family: var(--font-body);
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 400;
+}
+.kpi-value.is-warn   { color: var(--warn); }
+.kpi-value.is-danger { color: var(--danger); }
+.kpi-value.is-ok     { color: var(--ok); }
+
+.kpi-note {
+  margin: 7px 0 0;
+  font-size: 11.5px;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+/* Up is not automatically good -- a rise in out-of-stock lines is
+   not a win -- so the arrow is coloured by direction only, and the
+   card's own wording carries whether it is welcome. */
+.kpi-delta { font-weight: 600; }
+.kpi-delta.is-up { color: var(--ok); }
+.kpi-delta.is-down { color: var(--danger); }
+
+/* ============================================================
+   CHARTS
+   ============================================================ */
+
+.chart { width: 100%; height: auto; display: block; overflow: visible; }
+
+.donut-wrap {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+.donut { width: 168px; height: 168px; flex: 0 0 auto; }
+
+.donut-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  flex: 1 1 170px;
+  min-width: 160px;
+  font-size: 12.5px;
+}
+.donut-legend li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--line);
+}
+.donut-legend li:last-child { border-bottom: 0; }
+.donut-legend strong { margin-left: auto; font-weight: 600; }
+
+/* ============================================================
+   MODAL
+   ============================================================ */
+
+.modal-wrap {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(26, 21, 18, 0.46);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.modal {
+  background: var(--card);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-lg);
+  width: 100%;
+  max-width: 520px;
+  max-height: calc(100vh - 40px);
+  display: flex;
+  flex-direction: column;
+  outline: none;
+}
+.modal.is-wide { max-width: 860px; }
+
+.modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--line);
+}
+.modal-head h2 { font-size: 17px; }
+.modal-head p { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
+
+.modal-body { padding: 18px; overflow-y: auto; }
+.modal-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 13px 18px;
+  border-top: 1px solid var(--line);
+  background: var(--sand);
+  border-radius: 0 0 var(--r-lg) var(--r-lg);
+}
+
+/* ============================================================
+   NOTICES
+   ============================================================
+   Used where a screen has to state a limit of this build rather
+   than pretend past it -- the frozen demo clock, a retry button
+   that does not retry anything.
+   ============================================================ */
+
+.notice {
+  display: flex;
+  gap: 10px;
+  padding: 11px 14px;
+  border-radius: var(--r);
+  font-size: 12.5px;
+  line-height: 1.5;
+  border: 1px solid;
+  margin-bottom: 16px;
+}
+.notice strong { font-weight: 600; }
+.notice-info   { background: var(--info-bg);   border-color: rgba(69, 96, 107, 0.22);  color: var(--info); }
+.notice-warn   { background: var(--warn-bg);   border-color: rgba(154, 107, 31, 0.24); color: var(--warn); }
+.notice-danger { background: var(--danger-bg); border-color: rgba(168, 85, 42, 0.24);  color: var(--danger); }
+
+/* ============================================================
+   ACTIVITY FEED
+   ============================================================ */
+
+.feed { list-style: none; margin: 0; padding: 0; }
+.feed li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+.feed li:last-child { border-bottom: 0; }
+.feed.is-tight li { padding: 8px 0; }
+
+.feed-text { min-width: 0; flex: 1; }
+.feed-text strong { font-weight: 600; }
+
+/* Direction, not sentiment. Stock arriving is not "good news" and
+   stock leaving is not "bad news" -- both are just the business
+   working -- so these are the two neutral tones, not green and red. */
+.feed-dir {
+  flex: 0 0 22px;
+  width: 22px; height: 22px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  font-size: 12px;
+  margin-top: 1px;
+}
+.feed-dir.is-in  { background: var(--info-bg); color: var(--info); }
+.feed-dir.is-out { background: var(--sand);    color: var(--text2); }
+
+/* ============================================================
+   DETAIL VIEW
+   ============================================================ */
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+  gap: 0 24px;
+}
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+.detail-label {
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+.detail-value { text-align: right; font-weight: 500; }
+
+/* Which system owns a field. Quiet on purpose -- it is an
+   annotation for whoever reviews the integration, not a label the
+   studio has to read past every day. */
+.origin {
+  font-size: 8.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 1px 5px;
+  border-radius: 3px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+.origin.is-erp { border-color: rgba(138, 106, 59, 0.3); color: var(--gold); }
+
+/* ============================================================
+   VIEW TABS
+   ============================================================
+   Saved views across the top of a list. Each carries its own count,
+   so the reader can see there is nothing to do without clicking
+   into an empty table to find out.
+   ============================================================ */
+
+.viewbar {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 16px 0 12px;
+}
+.viewtab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  font-size: 12.5px;
+  cursor: pointer;
+  color: var(--text2);
+}
+.viewtab:hover { background: var(--sand); color: var(--ink); }
+.viewtab .num {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--sand);
+  color: var(--muted);
+}
+.viewtab.is-on {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #fff;
+}
+.viewtab.is-on .num { background: rgba(255, 255, 255, 0.16); color: var(--gold-light); }
+
+/* ============================================================
+   SUMMARY STRIP
+   ============================================================
+   The two or three totals that belong above a list rather than
+   beside it in cards.
+   ============================================================ */
+
+.summary-strip {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  flex-wrap: wrap;
+  padding: 13px 18px;
+  margin-bottom: 14px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
+}
+.summary-strip > div { display: flex; flex-direction: column; gap: 2px; }
+.summary-strip strong { font-size: 18px; font-family: var(--font-display); font-weight: 600; }
+.summary-strip p { margin: 0 0 0 auto; }
+
+/* ============================================================
+   THE RECONCILIATION STRIP
+   ============================================================
+   Opening + in − out = on hand, written as the sum it is. The
+   point is that a reader can check every term of it against the
+   rows underneath.
+   ============================================================ */
+
+.reconcile {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 14px 18px;
+  margin-bottom: 14px;
+  background: var(--sand);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+}
+.reconcile > div { display: flex; flex-direction: column; gap: 1px; }
+.reconcile strong { font-family: var(--font-display); font-size: 20px; font-weight: 600; }
+.reconcile-op { font-size: 17px; color: var(--muted); }
+.reconcile .is-closing strong { color: var(--gold); }
+.reconcile p { margin: 0 0 0 auto; max-width: 30ch; text-align: right; }
+
+/* ============================================================
+   IMPORT / EXPORT ROWS
+   ============================================================ */
+
+.transfer-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+.transfer-row:last-child { border-bottom: 0; padding-bottom: 0; }
+.transfer-row p { margin: 3px 0 0; max-width: 46ch; }
+.transfer-actions { display: flex; gap: 6px; flex: 0 0 auto; flex-wrap: wrap; }
+
+/* ============================================================
+   OPEN DECISIONS
+   ============================================================ */
+
+.decisions { margin: 0; padding-left: 22px; max-width: 76ch; }
+.decisions li { margin-bottom: 9px; color: var(--text2); font-size: 13px; line-height: 1.55; }
