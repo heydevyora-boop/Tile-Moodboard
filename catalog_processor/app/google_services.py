@@ -463,6 +463,35 @@ def escape_drive_query_value(value):
 # GET OR CREATE GOOGLE DRIVE FOLDER
 # ============================================================
 
+# ============================================================
+# HOW OFTEN A DRIVE CALL IS WORTH TRYING AGAIN
+# ============================================================
+#
+# WHAT WENT WRONG WITHOUT THIS.
+#
+# Every call below ended in a bare .execute(), which asks
+# googleapiclient for exactly one attempt. So one dropped connection
+# lost that tile:
+#
+#   [DRIVE UPLOAD] FAILED  Morson Harmoni 600X1200 ...page_11_image_39.webp:
+#   [WinError 10060] A connection attempt failed because the connected
+#   party did not properly respond after a period of time
+#
+# WinError 10060 is WSAETIMEDOUT, and googleapiclient's own
+# _retry_request names that errno in the set it retries -- alongside
+# ECONNRESET, ECONNABORTED and the rest -- with exponential backoff
+# between attempts. The machinery for this exact failure was already
+# there and was simply never asked for: num_retries defaults to 0.
+#
+# Three, not more. Each attempt carries its own connect timeout before
+# it gives up (about twenty seconds on Windows), so a network that is
+# genuinely unreachable costs that much per try -- and a catalog is
+# hundreds of tiles. Three recovers a blip without turning an outage
+# into an hour of waiting, and a tile that still fails is left
+# unprocessed for the next run exactly as before.
+DRIVE_RETRIES = 3
+
+
 def get_or_create_folder(
     drive_service,
     folder_name,
@@ -497,7 +526,7 @@ def get_or_create_folder(
         spaces="drive",
         fields="files(id,name,parents)",
         pageSize=100,
-    ).execute()
+    ).execute(num_retries=DRIVE_RETRIES)
 
     folders = response.get(
         "files",
@@ -523,7 +552,7 @@ def get_or_create_folder(
     folder = drive_service.files().create(
         body=metadata,
         fields="id,name,parents",
-    ).execute()
+    ).execute(num_retries=DRIVE_RETRIES)
 
     return folder["id"]
 
@@ -577,7 +606,7 @@ def upload_file(
             spaces="drive",
             fields="files(id,name)",
             pageSize=1,
-        ).execute().get("files", [])
+        ).execute(num_retries=DRIVE_RETRIES).get("files", [])
         if found:
             existing_id = found[0]["id"]
     except Exception as exc:  # noqa: BLE001 -- never fatal
@@ -591,13 +620,13 @@ def upload_file(
             fileId=existing_id,
             media_body=media,
             fields="id,name,webViewLink,webContentLink",
-        ).execute()
+        ).execute(num_retries=DRIVE_RETRIES)
     else:
         uploaded_file = drive_service.files().create(
             body=metadata,
             media_body=media,
             fields="id,name,webViewLink,webContentLink",
-        ).execute()
+        ).execute(num_retries=DRIVE_RETRIES)
 
     # --------------------------------------------------------
     # PUBLIC VIEW PERMISSION
@@ -621,7 +650,7 @@ def upload_file(
                 "role": "reader"
             },
             fields="id"
-        ).execute()
+        ).execute(num_retries=DRIVE_RETRIES)
 
     except Exception as error:
 
