@@ -1,5 +1,7 @@
 import { Link } from 'react-router-dom';
 import KpiCard from '../components/KpiCard.jsx';
+import { api } from '../api/client.js';
+import { useApi } from '../api/useApi.js';
 import StatusPill from '../components/StatusPill.jsx';
 import { LineChart, BarChart, DonutChart } from '../components/Charts.jsx';
 import {
@@ -13,6 +15,11 @@ import { money, moneyShort, qty, since, day } from '../lib/format.js';
 
 export default function Dashboard() {
   const lastSync = SYNC_EVENTS[0];
+  /* The real stock position. If the API is not running this stays
+     null and the two stock cards read "—" rather than falling back
+     to a demo figure: a dash is obviously missing, a plausible
+     wrong number is not. */
+  const stock = useApi(() => api.inventory.dashboard(), []);
 
   return (
     <>
@@ -40,12 +47,29 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* ── the four figures worth a glance ─────────────────── */}
+      {/* ── the four figures worth a glance ───────────────────
+          The two STOCK figures are read from the ERP database;
+          the rest of this screen is still demo data, which the
+          sidebar marks. Mixing the two on one row is deliberate:
+          the alternative was leaving a mock stock figure here that
+          contradicts the live Inventory screen beside it, and two
+          different answers to "how much stock is there" is worse
+          than one row sourced from two places.
+
+          THERE IS NO "STOCK VALUE" CARD any more. It used to show
+          boxes multiplied by the purchase price, which is a guess:
+          the studio has not chosen a valuation method, and FIFO,
+          weighted average and standard cost give three different
+          answers for the same stock. See docs/INVENTORY_MANAGEMENT.md.
+          ─────────────────────────────────────────────────────── */}
       <div className="grid-4">
         <KpiCard
-          label="Stock value"
-          value={moneyShort(KPIS.stockValue)}
-          note={qty(KPIS.boxes) + ' boxes on hand, valued at cost'}
+          label="Stock on hand"
+          value={stock.data ? qty(stock.data.totals.physicalOnHand) : '—'}
+          note={stock.data
+            ? qty(stock.data.totals.available) + ' of it sellable, across '
+              + qty(stock.data.totals.skusHeld) + ' product(s)'
+            : 'reading from the ERP database…'}
           to="/inventory"
         />
         <KpiCard
@@ -56,9 +80,13 @@ export default function Dashboard() {
         />
         <KpiCard
           label="Needs ordering"
-          value={qty(KPIS.needsOrdering)}
-          tone={KPIS.needsOrdering > 0 ? 'warn' : undefined}
-          note={KPIS.out + ' out of stock, ' + KPIS.low + ' running low'}
+          value={stock.data ? qty(stock.data.totals.lowStock + stock.data.totals.outOfStock) : '—'}
+          tone={stock.data && (stock.data.totals.lowStock + stock.data.totals.outOfStock) > 0
+            ? 'warn' : undefined}
+          note={stock.data
+            ? stock.data.totals.outOfStock + ' with nothing on hand, '
+              + stock.data.totals.lowStock + ' running low'
+            : 'reading from the ERP database…'}
           to="/inventory"
         />
         <KpiCard

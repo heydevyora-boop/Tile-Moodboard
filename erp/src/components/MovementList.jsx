@@ -1,91 +1,180 @@
 import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import DataTable from './DataTable.jsx';
-import Modal from './Modal.jsx';
-import { MOVEMENTS, MOVEMENT_REASONS, PRODUCTS } from '../data/ledger.js';
-import { DEMO_TODAY } from '../data/catalogue.js';
-import { money, qty, stamp, since } from '../lib/format.js';
+import StockMovementForm from './StockMovementForm.jsx';
+import { Failed } from './ApiState.jsx';
+import { api } from '../api/client.js';
+import { useApi } from '../api/useApi.js';
+import { qty, stamp } from '../lib/format.js';
 
 /* ============================================================
-   INWARD AND OUTWARD, FROM ONE STREAM
+   INWARD AND OUTWARD, FROM ONE LEDGER
    ============================================================
-   Stock Inward and Stock Outward are not two sets of records. They
-   are one ledger read in two directions, which is why they share
-   this component: a receipt that appeared on the inward screen but
-   not in the ledger would be a bug waiting to happen, and here it
-   cannot exist.
+   Stock Inward and Stock Outward are not two sets of records.
+   They are one append-only ledger read in two directions, which
+   is why they share this component and why the direction is
+   resolved in the DATABASE rather than here: a receipt that
+   appeared on the Inward screen but not in the ledger would be a
+   bug waiting to happen, and like this it cannot exist.
+
+   Recording a movement goes through the one stock transaction
+   service, with an idempotency key, so pressing Save twice posts
+   it once.
    ============================================================ */
+
+const REASON_LABEL = {
+  OPENING_STOCK: 'Opening stock',
+  PURCHASE_RECEIPT: 'Purchase receipt',
+  PURCHASE_RETURN: 'Returned to supplier',
+  SALES_DISPATCH: 'Sales dispatch',
+  SALES_RETURN: 'Customer return',
+  SAMPLE_ISSUE: 'Sample issued',
+  DAMAGE: 'Damage',
+  DAMAGE_RECOVERY: 'Damage recovered',
+  STOCK_COUNT_CORRECTION: 'Stock count correction',
+  WAREHOUSE_TRANSFER: 'Warehouse transfer',
+  RESERVATION: 'Reserved',
+  RESERVATION_RELEASE: 'Reservation released',
+  OTHER: 'Other',
+};
+
+const REASONS_BY_DIR = {
+  in: ['PURCHASE_RECEIPT', 'SALES_RETURN', 'STOCK_COUNT_CORRECTION', 'WAREHOUSE_TRANSFER', 'OPENING_STOCK', 'OTHER'],
+  out: ['SALES_DISPATCH', 'SAMPLE_ISSUE', 'PURCHASE_RETURN', 'STOCK_COUNT_CORRECTION', 'WAREHOUSE_TRANSFER', 'OTHER'],
+};
 
 export default function MovementList({ dir, title, intro, recordLabel }) {
   const [search, setSearch] = useState('');
   const [reason, setReason] = useState('all');
+  const [warehouseId, setWarehouseId] = useState('all');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const [recording, setRecording] = useState(false);
 
-  const reasons = Object.entries(MOVEMENT_REASONS).filter(([, v]) => v.dir === dir);
+  const query = useMemo(() => ({
+    direction: dir === 'in' ? 'IN' : 'OUT',
+    search: search || undefined,
+    reason,
+    warehouseId,
+    from: from || undefined,
+    to: to || undefined,
+    page,
+    pageSize,
+  }), [dir, search, reason, warehouseId, from, to, page, pageSize]);
 
-  const rows = useMemo(() => MOVEMENTS
-    .filter((m) => m.dir === dir && (reason === 'all' || m.reason === reason))
-    .sort((a, b) => b.at.localeCompare(a.at)), [dir, reason]);
+  const list = useApi(() => api.inventory.ledger(query), [JSON.stringify(query)]);
+  const warehouses = useApi(() => api.reference.warehouses(), []);
 
-  const totalQty = rows.reduce((s, m) => s + m.qty, 0);
-  const totalValue = rows.reduce((s, m) => {
-    const p = PRODUCTS.find((x) => x.productCode === m.productCode);
-    return s + m.qty * m.rate * (p ? p.sqftPerBox : 1);
-  }, 0);
+  const reset = (fn) => (value) => { fn(value); setPage(1); };
 
   const columns = [
+    {
+      key: 'entryNo',
+      label: 'Entry',
+      width: 78,
+      sortable: false,
+      render: (m) => <span className="sku">{m.entryNo}</span>,
+    },
     {
       key: 'at',
       label: 'When',
       width: 150,
+      sortable: false,
       render: (m) => (
         <>
           {stamp(m.at)}
-          <div className="tiny muted">{since(m.at, DEMO_TODAY)}</div>
+          {/* The business date and the moment it was typed in are
+              different facts, and only one of them can be
+              back-dated. Where they differ, both are shown. */}
+          {m.recordedAt && m.recordedAt.slice(0, 10) !== m.at.slice(0, 10) && (
+            <div className="tiny muted">entered {stamp(m.recordedAt)}</div>
+          )}
         </>
       ),
     },
-    { key: 'id', label: 'Ref', width: 100, render: (m) => <span className="sku">{m.id}</span> },
     {
       key: 'productName',
       label: 'Product',
+      sortable: false,
       render: (m) => (
         <>
           <strong>{m.productName}</strong>
-          <div className="sku">{m.productCode} · {m.brand}</div>
+          <div className="sku">{m.sku}</div>
         </>
       ),
+    },
+    {
+      key: 'warehouse',
+      label: 'Warehouse',
+      width: 140,
+      sortable: false,
+      render: (m) => m.warehouse,
     },
     {
       key: 'reason',
       label: 'Reason',
-      width: 150,
-      value: (m) => MOVEMENT_REASONS[m.reason].label,
+      width: 160,
+      sortable: false,
+      render: (m) => REASON_LABEL[m.reason] ?? m.reason,
     },
-    { key: 'party', label: dir === 'in' ? 'From' : 'To', width: 220 },
-    { key: 'ref', label: 'Document', width: 120, render: (m) => <span className="sku">{m.ref}</span> },
-    { key: 'qty', label: 'Boxes', align: 'right', width: 86, render: (m) => <span className="num">{qty(m.qty)}</span> },
     {
-      key: 'value',
-      label: 'Value',
-      align: 'right',
-      width: 110,
-      value: (m) => {
-        const p = PRODUCTS.find((x) => x.productCode === m.productCode);
-        return Math.round(m.qty * m.rate * (p ? p.sqftPerBox : 1));
-      },
-      render: (m) => {
-        const p = PRODUCTS.find((x) => x.productCode === m.productCode);
-        return <span className="num">{money(m.qty * m.rate * (p ? p.sqftPerBox : 1))}</span>;
-      },
+      key: 'referenceNo',
+      label: 'Document',
+      width: 130,
+      sortable: false,
+      render: (m) => (m.referenceNo
+        ? <span className="sku">{m.referenceNo}</span>
+        : <span className="muted">—</span>),
     },
-    { key: 'by', label: 'Recorded by', width: 140 },
+    {
+      key: 'quantity',
+      label: dir === 'in' ? 'Received' : 'Issued',
+      align: 'right',
+      width: 96,
+      sortable: false,
+      render: (m) => <span className="num">{qty(m.quantity)} {m.uom?.toLowerCase()}</span>,
+    },
+    /* THE WHOLE POINT OF A LEDGER: what the balance was, and what
+       it became. Reading these two down the page re-derives the
+       stock figure by hand, which is how a discrepancy is found. */
+    {
+      key: 'balanceBefore',
+      label: 'Was',
+      align: 'right',
+      width: 84,
+      sortable: false,
+      render: (m) => <span className="num muted">{qty(m.balanceBefore)}</span>,
+    },
+    {
+      key: 'balanceAfter',
+      label: 'Became',
+      align: 'right',
+      width: 92,
+      sortable: false,
+      render: (m) => <strong className="num">{qty(m.balanceAfter)}</strong>,
+    },
+    {
+      key: 'performedBy',
+      label: 'Recorded by',
+      width: 130,
+      sortable: false,
+      render: (m) => m.performedBy ?? <span className="muted">—</span>,
+    },
   ];
+
+  if (list.error && !list.data) return <Failed error={list.error} onRetry={list.reload} />;
+
+  const rows = list.data?.rows ?? [];
+  const pageQty = rows.reduce((s, m) => s + m.quantity, 0);
 
   return (
     <>
       <div className="page-intro">
         <div><p>{intro}</p></div>
         <div className="page-actions">
+          <Link className="btn" to="/ledger">Full ledger</Link>
           <button className="btn btn-primary" onClick={() => setRecording(true)}>{recordLabel}</button>
         </div>
       </div>
@@ -93,18 +182,16 @@ export default function MovementList({ dir, title, intro, recordLabel }) {
       <div className="summary-strip">
         <div>
           <span className="kpi-label">Movements</span>
-          <strong className="num">{qty(rows.length)}</strong>
+          <strong className="num">{qty(list.data?.total ?? 0)}</strong>
         </div>
         <div>
-          <span className="kpi-label">Boxes {dir === 'in' ? 'received' : 'issued'}</span>
-          <strong className="num">{qty(totalQty)}</strong>
-        </div>
-        <div>
-          <span className="kpi-label">Value</span>
-          <strong className="num">{money(totalValue)}</strong>
+          <span className="kpi-label">On this page</span>
+          <strong className="num">{qty(pageQty)}</strong>
         </div>
         <p className="tiny muted">
-          {dir === 'in' ? 'Valued at cost.' : 'Valued at the selling rate.'} Last 90 days.
+          Every row is an entry on the append-only ledger. Nothing here can be
+          edited or deleted — a mistake is corrected by posting its reversal,
+          and both stay on the record.
         </p>
       </div>
 
@@ -112,37 +199,72 @@ export default function MovementList({ dir, title, intro, recordLabel }) {
         rows={rows}
         columns={columns}
         rowKey={(m) => m.id}
+        server={{
+          total: list.data?.total ?? 0,
+          page,
+          pageSize,
+          pageCount: list.data?.pageCount ?? 1,
+          loading: list.loading,
+          sort: null,
+          onPage: setPage,
+          onPageSize: (n) => { setPageSize(n); setPage(1); },
+          onSort: () => {},
+        }}
         search={search}
-        onSearch={setSearch}
-        searchPlaceholder="Search product, party, document…"
-        initialSort={{ key: 'at', dir: 'desc' }}
+        onSearch={reset(setSearch)}
+        searchPlaceholder="Search product code, name, document…"
         emptyTitle={'No ' + title.toLowerCase() + ' movements'}
-        emptyNote="Nothing matches this reason or search."
+        emptyNote="Nothing matches this reason, warehouse or date range."
         filters={(
-          <select className="select" value={reason} onChange={(e) => setReason(e.target.value)} aria-label="Reason">
-            <option value="all">All reasons</option>
-            {reasons.map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-          </select>
+          <>
+            <select
+              className="select"
+              value={reason}
+              onChange={(e) => reset(setReason)(e.target.value)}
+              aria-label="Reason"
+            >
+              <option value="all">All reasons</option>
+              {REASONS_BY_DIR[dir].map((r) => (
+                <option key={r} value={r}>{REASON_LABEL[r]}</option>
+              ))}
+            </select>
+            <select
+              className="select"
+              value={warehouseId}
+              onChange={(e) => reset(setWarehouseId)(e.target.value)}
+              aria-label="Warehouse"
+            >
+              <option value="all">All warehouses</option>
+              {(warehouses.data?.rows ?? []).map((w) => (
+                <option key={w.id} value={w.id}>{w.name}</option>
+              ))}
+            </select>
+            <input
+              className="input"
+              type="date"
+              value={from}
+              onChange={(e) => reset(setFrom)(e.target.value)}
+              aria-label="From"
+              style={{ width: 142 }}
+            />
+            <input
+              className="input"
+              type="date"
+              value={to}
+              onChange={(e) => reset(setTo)(e.target.value)}
+              aria-label="To"
+              style={{ width: 142 }}
+            />
+          </>
         )}
       />
 
-      <Modal
+      <StockMovementForm
+        mode={dir}
         open={recording}
         onClose={() => setRecording(false)}
-        title={recordLabel}
-        footer={<button className="btn btn-primary" onClick={() => setRecording(false)}>Understood</button>}
-      >
-        <p>
-          This is a UI prototype: the form is not wired to anything, and
-          recording a movement here would not change a stock figure.
-        </p>
-        <p className="muted tiny">
-          It matters more here than elsewhere. Every quantity on these screens
-          is the closing balance of a stock card — letting you add a movement
-          that the ledger never saw would put the two out of step, which is the
-          one thing this prototype is built not to do.
-        </p>
-      </Modal>
+        onPosted={() => list.reload()}
+      />
     </>
   );
 }

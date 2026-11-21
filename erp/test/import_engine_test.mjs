@@ -76,6 +76,14 @@ async function importFile(rows, filename = 'master.xlsx') {
 
 try {
   /* ── 1. a valid Excel import ──────────────────────────── */
+  /* What the ledger held BEFORE this suite imported anything.
+     Importing a catalogue must not post a single stock movement:
+     a product and the stock of it are different facts, and a
+     spreadsheet of products is not a delivery note. Measured as a
+     delta rather than an absolute, because this database is
+     shared with the other suites and with manual checks. */
+  const ledgerBefore = await prisma.stockLedgerEntry.count();
+
   console.log('\n1. a valid Excel import');
 
   const productsBefore = await prisma.product.count();
@@ -466,15 +474,23 @@ try {
   check('15c. their prices are untouched',
     Number(seeded.find((p) => p.sku === 'DV-1001').purchasePrice) === 62);
 
-  /* Scoped to the SEEDED products. The Product Master suite shares
-     this database and posts movements of its own, so a count of
-     the whole ledger measures that suite rather than this one.
-     What matters here is that importing touched none of it. */
-  const seededLedger = await prisma.stockLedgerEntry.count({
-    where: { product: { sku: { startsWith: 'DV-' } } },
+  /* A DELTA, not an absolute. An earlier version of this check
+     asserted "exactly twelve movements for DV- products", which
+     was true on the day it was written and became false as soon
+     as anything else used this shared database -- it failed for a
+     reason that had nothing to do with importing. What this is
+     really asserting is that the import engine posts no stock
+     movements at all, and a before-and-after comparison says
+     exactly that, whatever else has ever touched the database. */
+  const ledgerAfter = await prisma.stockLedgerEntry.count();
+  check('15d. importing a catalogue posted no stock movements whatsoever',
+    ledgerAfter === ledgerBefore, ledgerBefore + ' -> ' + ledgerAfter);
+
+  const importedWithStock = await prisma.stockLedgerEntry.count({
+    where: { referenceType: 'MANUAL', reason: 'OPENING_STOCK', product: { brand: { name: BRAND } } },
   });
-  check('15d. the twelve seeded stock movements are intact',
-    seededLedger === 12, seededLedger);
+  check('15e. and none of the imported products was given stock out of thin air',
+    importedWithStock === 0, importedWithStock);
 
   /* ── 25. the imported products are real and correct ───── */
   console.log('\n16. what the import actually produced');

@@ -93,8 +93,16 @@ try {
   check('2a. the palette is unchanged',
     tokens.ink === '#1A1512' && tokens.gold === '#8A6A3B' && tokens.paper === '#F7F3EC', tokens);
 
-  check('2b. the sidebar still lists all fifteen modules',
-    (await page.$$('.nav-item')).length === 15);
+  check('2b. the sidebar lists all eighteen modules',
+    (await page.$$('.nav-item')).length === 18);
+  /* A module you have to scroll to find is a module people forget
+     the system has. Step 5 took the sidebar from fifteen entries
+     to eighteen, so this is checked rather than assumed. */
+  check('2b-ii. and they all fit the viewport without the nav scrolling',
+    await page.evaluate(() => {
+      const nav = document.querySelector('.sidebar-nav');
+      return nav.scrollHeight <= nav.clientHeight + 1;
+    }));
   check('2c. the shell, topbar and content column are all present',
     (await page.$$('.sidebar')).length === 1
     && (await page.$$('.topbar')).length === 1
@@ -183,8 +191,18 @@ try {
     live.includes('Product Master') && live.includes('Catalogue Structure'), live);
   check('6b. the screens still on demo data are NOT marked live',
     !live.includes('Purchase Management') && !live.includes('Sales Management'), live);
-  check('6c. Warehouses is still marked planned',
-    flags.some((f) => f.label === 'Warehouses' && f.flag === 'planned'));
+  /* Warehouses was a placeholder through step 4: the brief itself
+     flagged that its workflow was unsettled, and a transfer flow
+     built before the studio agreed how stock moves between
+     locations would have had to be unlearned. Step 5 settled it
+     and built it, so it is live along with the rest of Inventory. */
+  check('6c. every inventory screen is now marked live',
+    ['Inventory / Stock', 'Stock Inward', 'Stock Outward', 'Stock Adjustments',
+      'Stock Ledger', 'Warehouses', 'Warehouse Transfers', 'Stock Reconciliation']
+      .every((label) => live.includes(label)), live);
+  check('6d. and nothing is left marked planned',
+    !flags.some((f) => f.flag === 'planned'),
+    flags.filter((f) => f.flag === 'planned').map((f) => f.label));
 
   console.log('\n7. the catalogue structure screen works');
 

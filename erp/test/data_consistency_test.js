@@ -126,7 +126,17 @@ check('5a. every module belongs to a group the sidebar renders',
   MODULES.every((m) => GROUP_ORDER.includes(m.group)),
   MODULES.filter((m) => !GROUP_ORDER.includes(m.group)).map((m) => m.label));
 check('5b. no two modules share a path', new Set(MODULES.map((m) => m.to)).size === MODULES.length);
-check('5c. the brief asked for fifteen modules', MODULES.length === 15, MODULES.length);
+/* Fifteen through step 4. Step 5 added Stock Adjustments,
+   Warehouse Transfers and Stock Reconciliation, which the
+   inventory brief asks for as screens of their own. The count is
+   asserted rather than left open so that a module cannot be added
+   by accident and go unnoticed in the sidebar. */
+check('5c. the fifteen modules of the brief, plus the three step 5 added',
+  MODULES.length === 18, MODULES.length);
+check('5c-ii. and the three new ones are the inventory screens step 5 specified',
+  ['/adjustments', '/transfers', '/reconciliation']
+    .every((p) => MODULES.some((m) => m.to === p)),
+  MODULES.map((m) => m.to).join(' '));
 check('5d. a product sub-path still resolves to Product Master',
   moduleFor('/products/DV-1001').label === 'Product Master');
 check('5e. an unknown path falls back to the dashboard rather than throwing',

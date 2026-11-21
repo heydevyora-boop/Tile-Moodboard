@@ -7,7 +7,10 @@ import Categories from './pages/Categories.jsx';
 import Inventory from './pages/Inventory.jsx';
 import StockInward from './pages/StockInward.jsx';
 import StockOutward from './pages/StockOutward.jsx';
+import StockAdjustments from './pages/StockAdjustments.jsx';
 import StockLedger from './pages/StockLedger.jsx';
+import Transfers from './pages/Transfers.jsx';
+import Reconciliation from './pages/Reconciliation.jsx';
 import Warehouses from './pages/Warehouses.jsx';
 import Purchase from './pages/Purchase.jsx';
 import Sales from './pages/Sales.jsx';
@@ -37,8 +40,11 @@ export default function App() {
         <Route path="inventory" element={<Inventory />} />
         <Route path="inward" element={<StockInward />} />
         <Route path="outward" element={<StockOutward />} />
+        <Route path="adjustments" element={<StockAdjustments />} />
         <Route path="ledger" element={<StockLedger />} />
         <Route path="warehouses" element={<Warehouses />} />
+        <Route path="transfers" element={<Transfers />} />
+        <Route path="reconciliation" element={<Reconciliation />} />
 
         <Route path="purchase" element={<Purchase />} />
         <Route path="sales" element={<Sales />} />

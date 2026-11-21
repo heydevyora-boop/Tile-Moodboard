@@ -1,5 +1,5 @@
 /* ============================================================
-   THE FIFTEEN MODULES, IN ONE PLACE
+   THE EIGHTEEN MODULES, IN ONE PLACE
    ============================================================
 
    The sidebar, the router and the page titles all read from this
@@ -9,11 +9,16 @@
    `status` is the honest state of each screen:
      'live'    -- reads and writes the real ERP database
      'ready'   -- built, but still running on generated demo data
-     'planned' -- deliberately a placeholder. Warehouses is the one
-                  the brief itself flagged: its workflow has not been
-                  finalised, so the UI says so rather than inventing
-                  a transfer flow the studio would then have to
-                  unlearn.
+     'planned' -- deliberately a placeholder, for a module whose
+                  workflow the studio has not settled.
+
+   Warehouses was 'planned' through step 3, because the brief itself
+   flagged that its workflow was unsettled and a transfer flow built
+   before the studio agreed how stock moves between locations would
+   have had to be unlearned. Step 5 settled it: the four questions
+   that screen used to list are answered in
+   docs/INVENTORY_MANAGEMENT.md and implemented, so it is 'live'
+   along with the rest of Inventory.
 
    The distinction is shown in the sidebar rather than kept in a
    document, because a screen full of convincing demo data is
@@ -27,11 +32,14 @@ export const MODULES = [
   { to: '/products',    label: 'Product Master',         group: 'Catalogue',  status: 'live' },
   { to: '/categories',  label: 'Catalogue Structure',    group: 'Catalogue',  status: 'live' },
 
-  { to: '/inventory',   label: 'Inventory / Stock',      group: 'Inventory',  status: 'ready' },
-  { to: '/inward',      label: 'Stock Inward',           group: 'Inventory',  status: 'ready' },
-  { to: '/outward',     label: 'Stock Outward',          group: 'Inventory',  status: 'ready' },
-  { to: '/ledger',      label: 'Stock Ledger',           group: 'Inventory',  status: 'ready' },
-  { to: '/warehouses',  label: 'Warehouses',             group: 'Inventory',  status: 'planned' },
+  { to: '/inventory',   label: 'Inventory / Stock',      group: 'Inventory',  status: 'live' },
+  { to: '/inward',      label: 'Stock Inward',           group: 'Inventory',  status: 'live' },
+  { to: '/outward',     label: 'Stock Outward',          group: 'Inventory',  status: 'live' },
+  { to: '/adjustments', label: 'Stock Adjustments',      group: 'Inventory',  status: 'live' },
+  { to: '/ledger',      label: 'Stock Ledger',           group: 'Inventory',  status: 'live' },
+  { to: '/warehouses',  label: 'Warehouses',             group: 'Inventory',  status: 'live' },
+  { to: '/transfers',   label: 'Warehouse Transfers',    group: 'Inventory',  status: 'live' },
+  { to: '/reconciliation', label: 'Stock Reconciliation', group: 'Inventory', status: 'live' },
 
   { to: '/purchase',    label: 'Purchase Management',    group: 'Trade',      status: 'ready' },
   { to: '/sales',       label: 'Sales Management',       group: 'Trade',      status: 'ready' },

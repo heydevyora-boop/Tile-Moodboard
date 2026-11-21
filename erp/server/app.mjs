@@ -6,6 +6,8 @@ import productHeads from './routes/productHeads.mjs';
 import products from './routes/products.mjs';
 import reference from './routes/reference.mjs';
 import imports from './routes/imports.mjs';
+import inventory from './routes/inventory.mjs';
+import warehouses from './routes/warehouses.mjs';
 
 /* ============================================================
    THE ERP PRODUCT MASTER API
@@ -17,6 +19,25 @@ import imports from './routes/imports.mjs';
    credentials for one: that is a later phase, and the outbox
    table from step 2 is where it will read its work from.
    ============================================================ */
+
+/* Which stock-layer errors are answers rather than faults, and
+   what each one tells the caller. */
+const STOCK_REFUSALS = {
+  // Already posted. The caller's idempotency key did its job.
+  DuplicateMovementError: (e) => ({
+    idempotencyKey: e.idempotencyKey,
+    resolution: 'This movement is already on the ledger. Nothing further was posted.',
+  }),
+  // Refused because it would take a balance below zero. The
+  // figures are included so the screen can say "8 available, 12
+  // requested" instead of "failed".
+  InsufficientStockError: (e) => ({
+    dimension: e.dimension,
+    available: e.available,
+    requested: e.requested,
+  }),
+  StockValidationError: (e) => ({ fields: e.fields }),
+};
 
 export function createApp() {
   const app = express();
@@ -62,7 +83,7 @@ export function createApp() {
     try {
       const { prisma } = await import('../db/client.mjs');
       const [row] = await prisma.$queryRaw`SELECT current_database() AS db`;
-      res.json({ ok: true, database: row.db, phase: 'step-3 product master' });
+      res.json({ ok: true, database: row.db, phase: 'step-5 inventory management' });
     } catch (err) { next(err); }
   });
 
@@ -71,6 +92,8 @@ export function createApp() {
   app.use('/api/products', products);
   app.use('/api/reference', reference);
   app.use('/api/imports', imports);
+  app.use('/api/inventory', inventory);
+  app.use('/api/warehouses', warehouses);
 
   app.use((req, res) => {
     res.status(404).json({ error: { code: 'NOT_FOUND', message: 'No such endpoint: ' + req.method + ' ' + req.path } });
@@ -86,6 +109,30 @@ export function createApp() {
     if (err instanceof AppError) {
       return res.status(err.status).json({
         error: { code: err.code, message: err.message, ...(err.details ? { details: err.details } : {}) },
+      });
+    }
+
+    /* THE STOCK SERVICE'S OWN REFUSALS.
+       db/stock.mjs is the database layer and knows nothing about
+       HTTP -- deliberately, so it can be called from a script or a
+       test with no Express in sight. Its three refusals are
+       answers, not faults, and each already states the status and
+       the figures behind it. Translated here by name, from a
+       closed list: "any error carrying a status" would eventually
+       let a Prisma error through, and those carry table names,
+       column names and sometimes values.
+
+       Without this, re-submitting a form came back as
+       "Something went wrong" with a 500 -- for a request the
+       system had handled perfectly, by refusing to post the same
+       movement twice. */
+    if (STOCK_REFUSALS[err?.name]) {
+      return res.status(err.status).json({
+        error: {
+          code: err.code,
+          message: err.message,
+          details: STOCK_REFUSALS[err.name](err),
+        },
       });
     }
     console.error('[erp-api] unhandled:', err);

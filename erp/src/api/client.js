@@ -138,6 +138,54 @@ export const api = {
     errorReportUrl: (id) => BASE + '/imports/batches/' + id + '/errors.csv',
   },
 
+  /* INVENTORY.
+     Every write here is a POST that posts a movement. There is no
+     PATCH and no DELETE on a stock figure, because there is no
+     such thing: a balance is the sum of its ledger, and the only
+     way to change it is to add a movement. A correction is an
+     adjustment with a reason on it. */
+  inventory: {
+    list: (params) => request('/inventory', { params }),
+    totals: () => request('/inventory/totals'),
+    dashboard: () => request('/inventory/dashboard'),
+    ledger: (params) => request('/inventory/ledger', { params }),
+    reconciliation: () => request('/inventory/reconciliation'),
+
+    opening: (body) => request('/inventory/opening', { method: 'POST', body }),
+    inward: (body) => request('/inventory/inward', { method: 'POST', body }),
+    outward: (body) => request('/inventory/outward', { method: 'POST', body }),
+    adjust: (body) => request('/inventory/adjustments', { method: 'POST', body }),
+    reserve: (body) => request('/inventory/reservations', { method: 'POST', body }),
+    release: (body) => request('/inventory/reservations/release', { method: 'POST', body }),
+    markDamaged: (body) => request('/inventory/damage', { method: 'POST', body }),
+    recoverDamaged: (body) => request('/inventory/damage/recover', { method: 'POST', body }),
+    /* Not a delete. The opposite movement, linked to the one it
+       corrects, so the stock card shows both. */
+    reverse: (entryId, remarks) =>
+      request('/inventory/ledger/reverse', { method: 'POST', body: { entryId, remarks } }),
+  },
+
+  warehouses: {
+    list: (params) => request('/warehouses', { params }),
+    get: (id) => request('/warehouses/' + id),
+    stock: (id, params) => request('/warehouses/' + id + '/stock', { params }),
+    create: (body) => request('/warehouses', { method: 'POST', body }),
+    update: (id, body) => request('/warehouses/' + id, { method: 'PATCH', body }),
+    /* Activate and deactivate. There is deliberately no remove: a
+       warehouse with stock history cannot be deleted without
+       orphaning the entries that explain where the stock went. */
+    setActive: (id, isActive, reason) =>
+      request('/warehouses/' + id + '/active', { method: 'POST', body: { isActive, reason } }),
+
+    transfers: (params) => request('/warehouses/transfers', { params }),
+    transfer: (id) => request('/warehouses/transfers/' + id),
+    createTransfer: (body) => request('/warehouses/transfers', { method: 'POST', body }),
+    dispatch: (id) => request('/warehouses/transfers/' + id + '/dispatch', { method: 'POST' }),
+    receive: (id) => request('/warehouses/transfers/' + id + '/receive', { method: 'POST' }),
+    cancelTransfer: (id, reason) =>
+      request('/warehouses/transfers/' + id + '/cancel', { method: 'POST', body: { reason } }),
+  },
+
   reference: {
     categories: () => request('/reference/categories'),
     productRules: () => request('/reference/product-rules'),

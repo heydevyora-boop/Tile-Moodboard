@@ -103,12 +103,36 @@ enum PriceBasis {
 /// Which way stock moved. Transfers are two entries, not one, so
 /// each warehouse's own ledger stands on its own.
 enum StockMovementType {
+  // ── movements that change PHYSICAL stock ────────────────
   INWARD
   OUTWARD
   ADJUSTMENT_INCREASE
   ADJUSTMENT_DECREASE
   TRANSFER_IN
   TRANSFER_OUT
+
+  // ── movements that change RESERVED stock ────────────────
+  // Physical stock does not move: the boxes are still on the
+  // shelf, they are just promised to somebody.
+  RESERVATION
+  RESERVATION_RELEASE
+
+  // ── movements that change DAMAGED stock ─────────────────
+  // Physical stock does not move either. A broken box is still
+  // in the warehouse; it has stopped being sellable. Writing it
+  // off is a separate ADJUSTMENT_DECREASE, which is a different
+  // decision made by a different person.
+  DAMAGE
+  DAMAGE_RECOVERY
+
+  // NO "REVERSAL" MEMBER, DELIBERATELY.
+  //
+  // A reversal is the OPPOSITE movement, carrying
+  // reversalOfEntryId. Recording it as its own type would throw
+  // away the direction -- "REVERSAL" alone cannot say whether
+  // stock went up or down -- and every balance calculation would
+  // then need a special case to look up what it reversed. The
+  // step-2 design already had this right.
 }
 
 /// WHY it moved. Separate from the type because "stock went out"
@@ -123,8 +147,14 @@ enum StockMovementReason {
   SALES_RETURN
   SAMPLE_ISSUE
   DAMAGE
+  /// A damaged box turned out to be fine, or was repaired.
+  DAMAGE_RECOVERY
   STOCK_COUNT_CORRECTION
   WAREHOUSE_TRANSFER
+  /// Stock promised to a confirmed order, or released again when
+  /// the order is dispatched or cancelled.
+  RESERVATION
+  RESERVATION_RELEASE
   OTHER
 }
 
@@ -259,6 +289,8 @@ model User {
   purchaseOrders       PurchaseOrder[]
   salesOrders          SalesOrder[]
   transfers            WarehouseTransfer[]
+  transfersDispatched  WarehouseTransfer[]  @relation("TransferDispatchedBy")
+  transfersReceived    WarehouseTransfer[]  @relation("TransferReceivedBy")
   auditLogs            AuditLog[]
 
   @@index([status])
@@ -597,11 +629,35 @@ model InventoryBalance {
   /// it, because "we dispatched more than we had" is a data error,
   /// not a number.
   quantityOnHand Decimal @default(0) @db.Decimal(14, 3)
-  /// Committed to a confirmed order but not yet dispatched. Whether
-  /// confirming an order should reserve at all is still an open
-  /// decision; the column exists so that answering it later is not
-  /// a migration.
+  /// Committed to a confirmed order but not yet dispatched. Part
+  /// of quantityOnHand, not additional to it: the boxes are on the
+  /// shelf and somebody else's.
   quantityReserved Decimal @default(0) @db.Decimal(14, 3)
+
+  /// Physically present and not sellable. ALSO part of
+  /// quantityOnHand: a broken box is still a box in the warehouse,
+  /// and pretending otherwise makes the stock-take disagree with
+  /// the system. Writing it off is an ADJUSTMENT_DECREASE, which
+  /// is a separate decision.
+  quantityDamaged Decimal @default(0) @db.Decimal(14, 3)
+
+  /// ON ITS WAY HERE, AND COUNTED NOWHERE ELSE.
+  ///
+  /// Stock that has left another warehouse on a transfer and has
+  /// not yet been received. It is held against the DESTINATION,
+  /// because that is where it is going and where somebody will
+  /// eventually count it.
+  ///
+  /// It is deliberately NOT part of quantityOnHand: a lorry is not
+  /// a shelf, and nobody can pick from it. Company-wide physical
+  /// stock is therefore
+  ///
+  ///     SUM(quantityOnHand) + SUM(quantityInTransit)
+  ///
+  /// which stays constant across a transfer -- the source's
+  /// on-hand falls and this rises by the same amount, then the
+  /// reverse on receipt. Nothing is counted twice at any point.
+  quantityInTransit Decimal @default(0) @db.Decimal(14, 3)
 
   /// Per-warehouse override of Product.reorderLevel.
   reorderLevel Decimal? @db.Decimal(14, 3)
@@ -664,11 +720,26 @@ model StockLedgerEntry {
   unitCost    Decimal? @db.Decimal(14, 2)
   valueAmount Decimal? @db.Decimal(14, 2)
 
-  /// The running balance AFTER this entry, for this product in this
-  /// warehouse. Written inside the same locked transaction, so it
-  /// is a fact about the moment rather than a guess, and it is what
-  /// lets a stock card be read without re-summing the history.
-  balanceAfter Decimal @db.Decimal(14, 3)
+  /// WHAT THE BALANCE WAS BEFORE, AND WHAT IT BECAME.
+  ///
+  /// Both written inside the same locked transaction, so a stock
+  /// card reads as a statement does -- opening, movement, closing
+  /// -- and a reader can check each line without re-summing the
+  /// history above it. The pair also makes a gap obvious: if one
+  /// row's balanceAfter is not the next row's balanceBefore,
+  /// something wrote stock outside the ledger.
+  ///
+  /// These are always PHYSICAL on-hand. A reservation or a damage
+  /// entry leaves them unchanged -- the boxes have not moved --
+  /// and records its own effect in the two columns below.
+  balanceBefore Decimal @default(0) @db.Decimal(14, 3)
+  balanceAfter  Decimal @db.Decimal(14, 3)
+
+  /// The other two dimensions as they stood after this entry, so
+  /// one row answers "what was on the shelf, what was promised,
+  /// and what was broken" without joining to anything.
+  reservedAfter Decimal @default(0) @db.Decimal(14, 3)
+  damagedAfter  Decimal @default(0) @db.Decimal(14, 3)
 
   referenceType StockReferenceType
   /// The id of the document that caused this. Not a foreign key:
@@ -981,7 +1052,14 @@ model WarehouseTransfer {
 
   dispatchedAt DateTime?
   receivedAt   DateTime?
+  cancelledAt  DateTime?
   notes        String?
+
+  /// Who sent it and who signed for it. Two different people, on
+  /// purpose: a transfer one person can both dispatch and receive
+  /// without anybody noticing is not a control.
+  dispatchedById String? @db.Uuid
+  receivedById   String? @db.Uuid
 
   createdById String   @db.Uuid
   createdAt   DateTime @default(now())
@@ -990,6 +1068,8 @@ model WarehouseTransfer {
   fromWarehouse Warehouse               @relation("TransferFrom", fields: [fromWarehouseId], references: [id], onDelete: Restrict)
   toWarehouse   Warehouse               @relation("TransferTo", fields: [toWarehouseId], references: [id], onDelete: Restrict)
   createdBy     User                    @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  dispatchedBy  User?                   @relation("TransferDispatchedBy", fields: [dispatchedById], references: [id], onDelete: Restrict)
+  receivedBy    User?                   @relation("TransferReceivedBy", fields: [receivedById], references: [id], onDelete: Restrict)
   lines         WarehouseTransferLine[]
 
   @@index([status])
