@@ -6,13 +6,34 @@ writes anywhere.
 
 It exists to be argued with before anything is built.
 
+The ERP's **own PostgreSQL database** now sits beside it — schema,
+migrations, seed and verification. It is independent of the Casa De
+Aurum website's database and nothing connects the two. See
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
+The screens still run on mock data: wiring them to the database is
+the next step, not this one.
+
 ```bash
 cd erp
 npm install
-npm run dev      # http://127.0.0.1:5174
-npm run build    # production bundle into dist/
-node test/data_consistency_test.js   # 35 checks on the demo data
+
+# the prototype
+npm run dev          # http://127.0.0.1:5174
+npm run build
+npm run test:data    # 35 checks on the demo data
+
+# the database  (needs ERP_DATABASE_URL — copy .env.example to .env)
+npm run db:deploy    # apply migrations
+npm run db:seed      # safe, idempotent development data
+npm run db:verify    # 41 checks against the real database
+npm run db:studio    # browse it
 ```
+
+> `ERP_DATABASE_URL`, never `DATABASE_URL`. That second name points
+> at the Casa De Aurum website's database, and the ERP must never
+> open it. The connection refuses to start without its own variable
+> rather than falling back.
 
 ---
 

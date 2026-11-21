@@ -1,2 +1,15 @@
 node_modules/
 dist/
+
+# The real environment file, never committed: it holds a database
+# password.
+.env
+.env.local
+
+# ...but the EXAMPLE is documentation and must be committed. The
+# repository root ignores `.env*`, which sweeps it up too, so it is
+# explicitly un-ignored here. Without this line a new developer
+# clones the project and has nothing telling them the variable is
+# ERP_DATABASE_URL rather than DATABASE_URL — which is the one
+# thing about this setup they must not guess at.
+!.env.example
