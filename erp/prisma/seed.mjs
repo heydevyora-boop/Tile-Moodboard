@@ -251,6 +251,7 @@ async function main() {
     ['SALES_ORDER', 'SO'],
     ['STOCK_ADJUSTMENT', 'ADJ'],
     ['WAREHOUSE_TRANSFER', 'TRF'],
+    ['IMPORT_BATCH', 'IMP'],
   ]) {
     await prisma.documentSequence.upsert({
       where: { documentType },
@@ -258,7 +259,7 @@ async function main() {
       create: { documentType, prefix, periodKey: '2026', lastNumber: 0, padding: 4 },
     });
   }
-  log('4 document sequences');
+  log('5 document sequences');
 
   // ── OPENING STOCK, THROUGH THE LEDGER ──────────────────────
   //

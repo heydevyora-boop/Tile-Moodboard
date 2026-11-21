@@ -5,6 +5,7 @@ import brands from './routes/brands.mjs';
 import productHeads from './routes/productHeads.mjs';
 import products from './routes/products.mjs';
 import reference from './routes/reference.mjs';
+import imports from './routes/imports.mjs';
 
 /* ============================================================
    THE ERP PRODUCT MASTER API
@@ -69,6 +70,7 @@ export function createApp() {
   app.use('/api/product-heads', productHeads);
   app.use('/api/products', products);
   app.use('/api/reference', reference);
+  app.use('/api/imports', imports);
 
   app.use((req, res) => {
     res.status(404).json({ error: { code: 'NOT_FOUND', message: 'No such endpoint: ' + req.method + ' ' + req.path } });

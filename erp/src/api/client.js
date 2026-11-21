@@ -101,6 +101,43 @@ export const api = {
     update: (id, body) => request('/product-heads/' + id, { method: 'PATCH', body }),
   },
 
+  imports: {
+    sources: () => request('/imports/sources'),
+    /* The file goes up as raw bytes with its name in a header.
+       No multipart, so no boundary parsing and no extra library
+       to keep patched. */
+    upload: async (file, sheet) => {
+      const response = await fetch(BASE + '/imports/upload', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/octet-stream',
+          'x-filename': file.name,
+          ...(sheet ? { 'x-sheet': sheet } : {}),
+        },
+        body: file,
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) throw new ApiError(response.status, payload);
+      return payload;
+    },
+    inspect: async (file) => {
+      const response = await fetch(BASE + '/imports/inspect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/octet-stream', 'x-filename': file.name },
+        body: file,
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) throw new ApiError(response.status, payload);
+      return payload;
+    },
+    batches: (params) => request('/imports/batches', { params }),
+    batch: (id) => request('/imports/batches/' + id),
+    preview: (id, params) => request('/imports/batches/' + id + '/preview', { params }),
+    confirm: (id, body) => request('/imports/batches/' + id + '/confirm', { method: 'POST', body: body ?? {} }),
+    retry: (id) => request('/imports/batches/' + id + '/retry', { method: 'POST' }),
+    errorReportUrl: (id) => BASE + '/imports/batches/' + id + '/errors.csv',
+  },
+
   reference: {
     categories: () => request('/reference/categories'),
     productRules: () => request('/reference/product-rules'),

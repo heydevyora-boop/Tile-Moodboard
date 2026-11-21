@@ -39,7 +39,7 @@ export const MODULES = [
   { to: '/reports',     label: 'Reports & Analytics',    group: 'Insight',    status: 'ready' },
 
   { to: '/sync',        label: 'Website Sync Status',    group: 'Integration', status: 'ready' },
-  { to: '/transfer',    label: 'Import / Export',        group: 'Integration', status: 'ready' },
+  { to: '/transfer',    label: 'Import / Export',        group: 'Integration', status: 'live' },
 
   { to: '/users',       label: 'User Management',        group: 'Admin',      status: 'ready' },
   { to: '/settings',    label: 'Settings',               group: 'Admin',      status: 'ready' },

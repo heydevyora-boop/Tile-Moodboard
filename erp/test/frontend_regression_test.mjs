@@ -227,6 +227,30 @@ try {
     named.length > 0 && named.some((f) => ['name', 'size', 'brandId'].includes(f)), named);
   await page.keyboard.press('Escape');
 
+  console.log('\n8b. the import screen is connected');
+
+  await page.goto(APP + '/transfer', { waitUntil: 'networkidle' });
+  await page.waitForSelector('.panel', { timeout: 20000 });
+  const importText = await page.$eval('.content', (n) => n.textContent);
+  check('8b1. the Excel path is offered as available', /Excel or CSV upload/.test(importText));
+  check('8b2. Google Sheets is shown as UNAVAILABLE rather than offered',
+    /Unavailable/.test(importText) && /never tested against the live spreadsheet/.test(importText));
+  check('8b3. ...and names the missing configuration',
+    /ERP_GOOGLE_SHEET_ID/.test(importText));
+  check('8b4. the fields the source does not carry are stated',
+    /purchasePrice/.test(importText) && /sellingPrice/.test(importText));
+
+  // There must be no button that would call the unavailable source.
+  const sheetsButtons = await page.$$eval('button', (bs) => bs
+    .map((b) => b.textContent.trim())
+    .filter((t) => /google sheet/i.test(t) && /import|connect|read/i.test(t)));
+  check('8b5. no button offers the Google Sheets import', sheetsButtons.length === 0, sheetsButtons);
+
+  await page.click('.viewtab:has-text("Import history")');
+  await page.waitForSelector('.table', { timeout: 20000 });
+  check('8b6. the import history loads from the database',
+    (await page.$$('.table thead th')).length >= 10);
+
   console.log('\n9. nothing threw');
 
   /* The empty-save in section 8 is SUPPOSED to be rejected, and

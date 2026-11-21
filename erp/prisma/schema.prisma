@@ -255,6 +255,7 @@ model User {
   uploadedImages       ProductImage[]
   stockEntries         StockLedgerEntry[]
   adjustments          StockAdjustment[]
+  importBatches        ImportBatch[]
   purchaseOrders       PurchaseOrder[]
   salesOrders          SalesOrder[]
   transfers            WarehouseTransfer[]
@@ -512,6 +513,8 @@ model Product {
   transferLines       WarehouseTransferLine[]
   websiteMapping      WebsiteProductMapping?
   images              ProductImage[]
+  importRowsMatched   ImportRow[]            @relation("ImportRowMatched")
+  importRowsCreated   ImportRow[]            @relation("ImportRowCreated")
 
   @@index([brandId])
   @@index([categoryId])
@@ -1276,4 +1279,205 @@ model ProductImage {
   @@index([isApproved])
   @@index([extractionRef])
   @@map("product_images")
+}
+
+// ============================================================
+// 15. IMPORT         (step 4)
+// ============================================================
+
+enum ImportSourceType {
+  /// An .xlsx or .csv uploaded by someone in the studio. The only
+  /// one verified end to end in this build.
+  EXCEL_UPLOAD
+  /// The MASTER tab of the catalogue pipeline's Google Sheet.
+  /// Implemented against the sheet's real, verified column list,
+  /// but NOT tested against a live spreadsheet: no credentials and
+  /// no GOOGLE_SHEET_ID are configured in this environment, and
+  /// the adapter refuses to run rather than pretend.
+  GOOGLE_SHEETS
+}
+
+enum ImportBatchStatus {
+  CREATED
+  READING
+  VALIDATING
+  PREVIEW_READY
+  IMPORTING
+  COMPLETED
+  COMPLETED_WITH_ERRORS
+  FAILED
+  CANCELLED
+}
+
+/// Does the arithmetic add up?
+///
+/// A batch is only COMPLETED when every row read has landed in
+/// exactly one final category and those add up to the number read.
+/// Anything else is FAILED and shows the discrepancy — a batch
+/// that silently loses four rows is worse than one that stops.
+enum ReconciliationStatus {
+  NOT_RUN
+  PASSED
+  FAILED
+  /// The source could not tell us how many rows it had, so "did we
+  /// read all of them?" cannot be answered. Stated rather than
+  /// assumed.
+  UNVERIFIED
+}
+
+/// Where one source row ended up. MUTUALLY EXCLUSIVE at the end of
+/// a batch: a row is in exactly one of these, which is what makes
+/// the reconciliation arithmetic mean anything.
+enum ImportRowStatus {
+  PENDING
+  VALID
+  IMPORTED
+  /// Already in the ERP, identically. Nothing to do.
+  SKIPPED_DUPLICATE
+  /// Matched an existing product and was left alone, because this
+  /// phase does not overwrite without an approved update rule.
+  SKIPPED_EXISTING
+  /// Mandatory information missing. Not imported, not discarded.
+  INCOMPLETE
+  /// Close enough to something that exists that a person must look.
+  REVIEW_REQUIRED
+  /// Invalid beyond repair — a price that is not a number, a
+  /// category that does not exist.
+  REJECTED
+  /// Tried and failed for a technical reason. Retryable.
+  FAILED
+}
+
+enum DuplicateClassification {
+  NEW_RECORD
+  EXISTING_RECORD
+  EXACT_DUPLICATE
+  POSSIBLE_DUPLICATE
+}
+
+/// ONE IMPORT RUN.
+///
+/// Never deleted. The history of what was loaded, from where, by
+/// whom and with what result is part of the catalogue's
+/// provenance: "where did this product come from?" has to stay
+/// answerable years later.
+model ImportBatch {
+  id        String           @id @default(uuid()) @db.Uuid
+  batchNo   String           @unique
+  sourceType ImportSourceType
+
+  /// The uploaded file's name, or the spreadsheet id.
+  sourceRef  String
+  /// The tab, for a spreadsheet. "MASTER" for the catalogue sheet.
+  sourceSheet String?
+  /// A hash of the source content where one can be computed, so a
+  /// re-upload of the identical file is recognisable as such.
+  sourceFingerprint String?
+
+  status         ImportBatchStatus    @default(CREATED)
+  reconciliation ReconciliationStatus @default(NOT_RUN)
+
+  /// How many rows the source SAYS it has, where it can say.
+  /// Null means it could not tell us, which is why
+  /// reconciliation can come back UNVERIFIED rather than PASSED.
+  sourceRowsExpected Int?
+  sourceRowsRead     Int @default(0)
+
+  // The final tally. Mutually exclusive, and checked.
+  rowsValid      Int @default(0)
+  rowsImported   Int @default(0)
+  rowsDuplicate  Int @default(0)
+  rowsExisting   Int @default(0)
+  rowsIncomplete Int @default(0)
+  rowsReview     Int @default(0)
+  rowsRejected   Int @default(0)
+  rowsFailed     Int @default(0)
+  rowsPending    Int @default(0)
+  /// Rows retried at least once. Not a final category — a retried
+  /// row still ends up in exactly one of the above.
+  rowsRetried    Int @default(0)
+
+  errorSummary String?
+  /// The discrepancy, when reconciliation fails. Kept so the
+  /// failure can be investigated after the fact.
+  reconciliationNote String?
+
+  startedById String?   @db.Uuid
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  startedBy User?       @relation(fields: [startedById], references: [id], onDelete: Restrict)
+  rows      ImportRow[]
+
+  @@index([status, startedAt])
+  @@index([sourceType])
+  @@index([sourceFingerprint])
+  @@map("import_batches")
+}
+
+/// ONE SOURCE ROW, and what became of it.
+///
+/// Row-level state is what makes a partially failed batch
+/// recoverable: four bad rows out of nine hundred are retried on
+/// their own, and nobody re-imports the spreadsheet.
+model ImportRow {
+  id      String @id @default(uuid()) @db.Uuid
+  batchId String @db.Uuid
+
+  /// The row's position in the source, 1-based and counting the
+  /// header as row 1 — so it matches what the person sees when
+  /// they open the file.
+  sourceRowNumber Int
+
+  /// A STABLE HASH OF THE ROW'S IDENTIFYING CONTENT.
+  ///
+  /// Not of the whole row: a changed note or a re-run's new
+  /// timestamp would make the same product look new. Built from
+  /// the fields that say WHICH product this is, normalised the
+  /// same way the duplicate check normalises them.
+  ///
+  /// Unique per batch, so one batch cannot process a row twice;
+  /// across batches it is the key that makes a re-import of the
+  /// same sheet a no-op instead of a second copy of the catalogue.
+  fingerprint String
+
+  /// The row exactly as it was read, after sanitising. Kept so an
+  /// error can be explained against what actually arrived, not
+  /// against what the mapper made of it.
+  rawData Json
+
+  /// What the mapper made of it. Null where mapping itself failed.
+  mappedData Json?
+
+  status         ImportRowStatus         @default(PENDING)
+  classification DuplicateClassification?
+
+  /// [{ field, message }] — the same shape every other rejection
+  /// in this API uses, so one renderer handles all of them.
+  errors Json?
+
+  /// What it matched, and what it became.
+  matchedProductId  String? @db.Uuid
+  createdProductId  String? @db.Uuid
+  createdHeadId     String? @db.Uuid
+  createdBrandId    String? @db.Uuid
+
+  attempts    Int       @default(0)
+  lastError   String?
+  processedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  batch          ImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  matchedProduct Product?    @relation("ImportRowMatched", fields: [matchedProductId], references: [id], onDelete: Restrict)
+  createdProduct Product?    @relation("ImportRowCreated", fields: [createdProductId], references: [id], onDelete: Restrict)
+
+  /// One row number once per batch, and one fingerprint once per
+  /// batch. The second is the real guard: a spreadsheet that lists
+  /// the same product on two rows is caught at insert.
+  @@unique([batchId, sourceRowNumber])
+  @@unique([batchId, fingerprint])
+  @@index([batchId, status])
+  @@index([fingerprint])
+  @@map("import_rows")
 }
