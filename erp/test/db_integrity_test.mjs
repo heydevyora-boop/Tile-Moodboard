@@ -303,6 +303,13 @@ async function main() {
   check('8d2. ...while an ACTIVE product holding nothing does read OUT_OF_STOCK',
     (kinds.OUT_OF_STOCK || 0) > 0 && (kinds.DISCONTINUED || 0) > 0, kinds);
 
+  /* The fixture goes away again. It has no stock history, so it
+     CAN be deleted -- and leaving it behind put a test row in the
+     development catalogue, where it turned up in the Product
+     Master as a real product priced at twenty rupees. A suite that
+     litters the database it tests is a suite people stop running. */
+  await prisma.product.delete({ where: { id: retiredEmpty.id } });
+
   const retired = await prisma.$queryRaw`
     SELECT sku, quantity_on_hand::text AS qty, availability
     FROM v_product_availability WHERE "status" = 'DISCONTINUED'

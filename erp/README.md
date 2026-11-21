@@ -11,8 +11,21 @@ migrations, seed and verification. It is independent of the Casa De
 Aurum website's database and nothing connects the two. See
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
-The screens still run on mock data: wiring them to the database is
-the next step, not this one.
+**Product Master and Catalogue Structure are now connected** to
+that database through an Express API — create, edit, status,
+archive, search, filter, sort and paging, with category-aware
+validation and permanent SKUs. See
+[`docs/PRODUCT_MASTER.md`](docs/PRODUCT_MASTER.md).
+
+**Import / Export** loads the catalogue pipeline's spreadsheet into
+the ERP — preview, duplicate detection, row-level errors and
+reconciliation that has to add up. See
+[`docs/EXCEL_IMPORT.md`](docs/EXCEL_IMPORT.md). Google Sheets is
+implemented but **not verified against the live spreadsheet**; the
+Excel export path is tested end to end.
+
+The other twelve screens still run on generated demo data. The
+sidebar marks which is which, and so does the pill in the topbar.
 
 ```bash
 cd erp
@@ -26,8 +39,17 @@ npm run test:data    # 35 checks on the demo data
 # the database  (needs ERP_DATABASE_URL — copy .env.example to .env)
 npm run db:deploy    # apply migrations
 npm run db:seed      # safe, idempotent development data
-npm run db:verify    # 41 checks against the real database
 npm run db:studio    # browse it
+
+# the Product Master API
+npm run api          # http://127.0.0.1:4310
+
+# every suite
+npm run db:verify            #  41  database integrity
+npm run test:product-master  #  92  Product Master (own test database)
+npm run test:frontend        #  42  frontend regression (needs api + dev)
+npm run test:import          #  82  the import engine
+npm run test:data            #  35  the demo data the other screens use
 ```
 
 > `ERP_DATABASE_URL`, never `DATABASE_URL`. That second name points

@@ -250,3 +250,20 @@
   .content { padding: 16px 14px 48px; }
   .who-text { display: none; }
 }
+
+/* A screen that is really connected to the database. Gold rather
+   than the muted outline a "planned" module gets: one is a promise,
+   the other is a fact. */
+.nav-flag.is-live {
+  border-color: rgba(227, 197, 142, 0.55);
+  color: var(--gold-light);
+}
+
+/* The topbar pill on a screen that really is connected. Green
+   rather than amber: amber says "careful, this is not real", and
+   on a live screen that would be the opposite of the truth. */
+.env-pill.is-live {
+  background: var(--ok-bg);
+  color: var(--ok);
+  border-color: rgba(79, 107, 69, 0.26);
+}
