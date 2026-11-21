@@ -3,19 +3,31 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "De'vyora / Casa De Aurum ERP — frontend prototype. Mock data only; no backend, no database.",
+  "description": "De'vyora / Casa De Aurum ERP. Frontend prototype (mock data) plus the ERP's own PostgreSQL schema. Independent of the Casa De Aurum website database.",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:data": "node test/data_consistency_test.js",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:status": "prisma migrate status",
+    "db:studio": "prisma studio",
+    "db:seed": "node prisma/seed.mjs",
+    "db:verify": "node test/db_integrity_test.mjs"
   },
   "dependencies": {
+    "@prisma/adapter-pg": "^7.9.1",
+    "@prisma/client": "^7.9.1",
     "react": "19.3.1",
     "react-dom": "19.3.1",
     "react-router-dom": "7.9.1"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "6.3.0",
+    "dotenv": "^16.4.5",
+    "prisma": "^7.9.1",
     "vite": "8.3.8"
   }
 }
