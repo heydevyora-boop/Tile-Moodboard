@@ -251,6 +251,8 @@ model User {
   // Disable the account instead; that is what UserStatus is for.
   createdProducts      Product[]            @relation("ProductCreatedBy")
   updatedProducts      Product[]            @relation("ProductUpdatedBy")
+  archivedProducts     Product[]            @relation("ProductArchivedBy")
+  uploadedImages       ProductImage[]
   stockEntries         StockLedgerEntry[]
   adjustments          StockAdjustment[]
   purchaseOrders       PurchaseOrder[]
@@ -326,25 +328,46 @@ model Brand {
   @@map("brands")
 }
 
-/// A brand's series — "Somany Verona", "Morson Statuario". Scoped
-/// to a brand because that is what a collection is in this trade:
-/// two brands may both sell something called Verona and they are
-/// not the same range.
+/// THE PRODUCT HEAD — ALSO CALLED THE SERIES.
+///
+/// "Kajaria Neo Sapien". One head, many variants: Grey, Brown and
+/// Blue are three Products under this one row, and changing a
+/// colour never creates a second head.
+///
+/// NAMING. The table is `collections` because it was created in
+/// step 2, before the term "Product Head" was settled on. The two
+/// are the same thing and the API calls it productHead throughout.
+/// It was not renamed because renaming a table that already holds
+/// data and foreign keys buys nothing the comment does not; say the
+/// word and it is one non-destructive ALTER TABLE.
+///
+/// Scoped to a brand, because that is what a series is in this
+/// trade: two brands may both sell something called Verona and they
+/// are not the same range.
 model Collection {
   id       String  @id @default(uuid()) @db.Uuid
   brandId  String  @db.Uuid
   code     String
   name     String
+  /// THE HEAD'S OWN CATEGORY. Added in step 3: a head belongs to a
+  /// category, and its variants inherit that unless one genuinely
+  /// differs. Nullable because the heads created in step 2 predate
+  /// the column, and backfilling a guess would be worse than
+  /// leaving the truth — that nobody has said yet.
+  categoryId String? @db.Uuid
+  description String?
   isActive Boolean @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  brand    Brand     @relation(fields: [brandId], references: [id], onDelete: Restrict)
+  brand    Brand            @relation(fields: [brandId], references: [id], onDelete: Restrict)
+  category ProductCategory? @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   products Product[]
 
   @@unique([brandId, code])
   @@index([brandId])
+  @@index([categoryId])
   @@map("collections")
 }
 
@@ -369,6 +392,7 @@ model ProductCategory {
   parent   ProductCategory?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: Restrict)
   children ProductCategory[] @relation("CategoryTree")
   products Product[]
+  productHeads Collection[]
 
   @@index([parentId])
   @@map("product_categories")
@@ -430,9 +454,43 @@ model Product {
   /// than one place.
   reorderLevel Decimal @default(0) @db.Decimal(14, 3)
 
+  /// The MAIN image. Kept in step with the ProductImage row whose
+  /// role is MAIN, written in the same transaction — the same
+  /// projection pattern as InventoryBalance, and checked the same
+  /// way. ProductImage is the source; this is the convenience
+  /// pointer the list screens read without a join.
   imageUrl String?
 
+  /// WHAT THIS CATEGORY NEEDS THAT TILES DO NOT.
+  ///
+  /// A GRC panel has a projection and a material; a tile has a
+  /// surface type. Neither belongs as a column on every product in
+  /// the catalogue, and adding one per category would mean a
+  /// migration every time the studio starts selling something new.
+  ///
+  /// The keys are not free-form: productRules.mjs declares what
+  /// each category requires and permits, and validation rejects a
+  /// key no rule allows. A JSON column with no rules behind it is
+  /// just a place for typos to accumulate.
+  attributes Json?
+
   status ProductStatus @default(ACTIVE)
+
+  /// ARCHIVED IS NOT A STATUS, AND THAT IS DELIBERATE.
+  ///
+  /// The three statuses say what the studio has decided
+  /// COMMERCIALLY: on sale, withdrawn, retired. Archiving says
+  /// something different — "keep this out of my way" — and the two
+  /// are independent: a discontinued product may or may not be
+  /// archived, and both facts matter.
+  ///
+  /// It is also why archiving is the answer to "delete this
+  /// product". A product with stock history cannot be deleted
+  /// without orphaning the movements that explain where the stock
+  /// went, and the database refuses. Archiving hides it and keeps
+  /// the history.
+  archivedAt   DateTime?
+  archivedById String?   @db.Uuid
 
   createdById String?  @db.Uuid
   updatedById String?  @db.Uuid
@@ -444,6 +502,7 @@ model Product {
   collection Collection?      @relation(fields: [collectionId], references: [id], onDelete: Restrict)
   createdBy  User?            @relation("ProductCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   updatedBy  User?            @relation("ProductUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+  archivedBy User?            @relation("ProductArchivedBy", fields: [archivedById], references: [id], onDelete: Restrict)
 
   inventory           InventoryBalance[]
   stockEntries        StockLedgerEntry[]
@@ -452,12 +511,20 @@ model Product {
   salesOrderLines     SalesOrderLine[]
   transferLines       WarehouseTransferLine[]
   websiteMapping      WebsiteProductMapping?
+  images              ProductImage[]
 
   @@index([brandId])
   @@index([categoryId])
   @@index([collectionId])
   @@index([status])
   @@index([name])
+  /// The list screen's default view: everything not archived.
+  @@index([archivedAt])
+  /// Filtering by the variant attributes, which the Product Master
+  /// screen offers as four separate filters.
+  @@index([colour])
+  @@index([finish])
+  @@index([size])
   @@map("products")
 }
 
@@ -1119,4 +1186,94 @@ model DocumentSequence {
   updatedAt DateTime @updatedAt
 
   @@map("document_sequences")
+}
+
+// ============================================================
+// 14. PRODUCT IMAGES          (added in step 3)
+// ============================================================
+
+/// WHERE AN IMAGE CAME FROM. The distinction matters because the
+/// catalogue extraction pipeline produces thousands of crops and
+/// not one of them is a product image until a person says so.
+enum ImageSource {
+  /// Uploaded by someone in the studio.
+  MANUAL_UPLOAD
+  /// Produced by the existing catalogue extraction pipeline.
+  /// Arrives unapproved, always.
+  CATALOGUE_EXTRACTION
+  /// A reference to a page or plate in a supplier's catalogue,
+  /// rather than a cut-out of the product itself.
+  CATALOGUE_REFERENCE
+  /// Somewhere else entirely — a supplier's website, an email.
+  EXTERNAL
+}
+
+enum ImageRole {
+  /// The one picture that represents the variant. At most one per
+  /// product, enforced by a partial unique index.
+  MAIN
+  /// Further pictures of the same variant.
+  GALLERY
+  /// The catalogue page it was found on, kept for provenance
+  /// rather than for display.
+  CATALOGUE_PAGE
+}
+
+/// A PICTURE OF A VARIANT, AND WHERE IT CAME FROM.
+///
+/// THE RULE THIS TABLE EXISTS TO ENFORCE: an extracted catalogue
+/// image is NOT automatically a product image. The pipeline may
+/// write rows here all day; each arrives with isApproved = false
+/// and stays out of the Product Master's view of the product until
+/// a person approves it. Only an approved image may be MAIN.
+///
+/// It stores REFERENCES, never files. The catalogue pipeline
+/// already uploads to Google Drive and records the URL; this table
+/// points at what is already there rather than copying it, so
+/// nothing is duplicated and that pipeline is not touched.
+model ProductImage {
+  id        String @id @default(uuid()) @db.Uuid
+  productId String @db.Uuid
+
+  /// Where the bytes actually live. A Drive URL, a CDN path, an
+  /// object key — whatever the storage of the day is.
+  url String
+  /// The storage system's own identifier, where it has one. Lets
+  /// the image be found again if the URL form ever changes.
+  storageRef String?
+
+  role      ImageRole   @default(GALLERY)
+  source    ImageSource @default(MANUAL_UPLOAD)
+  sortOrder Int         @default(0)
+  altText   String?
+
+  /// FALSE UNTIL A PERSON SAYS OTHERWISE. The default is the whole
+  /// point: nothing extracted shows up as a product image by
+  /// accident.
+  isApproved   Boolean   @default(false)
+  approvedAt   DateTime?
+  approvedById String?   @db.Uuid
+
+  /// Provenance, for an image that came out of a catalogue. Which
+  /// catalogue, which page — so a questionable picture can be
+  /// checked against the original.
+  catalogueName String?
+  cataloguePage Int?
+  /// The extraction pipeline's own reference for this crop. A
+  /// loose string, NOT a foreign key: the pipeline is a separate
+  /// system with its own storage and this table must not depend on
+  /// it being reachable.
+  extractionRef String?
+
+  uploadedById String?  @db.Uuid
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  product    Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  uploadedBy User?   @relation(fields: [uploadedById], references: [id], onDelete: Restrict)
+
+  @@index([productId, role, sortOrder])
+  @@index([isApproved])
+  @@index([extractionRef])
+  @@map("product_images")
 }

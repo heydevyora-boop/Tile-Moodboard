@@ -56,12 +56,20 @@ export default function Shell() {
           </div>
 
           <div className="topbar-right">
-            {/* Deliberately inert. A search box and a bell that do
-                nothing would be read as broken; a single honest
-                label is not. */}
-            <span className="env-pill" title="No backend is connected in this build.">
-              Demo data
-            </span>
+            {/* What THIS screen is reading. It was a fixed "Demo
+                data" label while nothing was connected; now that
+                two screens are, a fixed label would be wrong on
+                them — and a wrong label about whether data is real
+                is worse than none. */}
+            {current.status === 'live' ? (
+              <span className="env-pill is-live" title="This screen reads and writes the ERP database.">
+                Live data
+              </span>
+            ) : (
+              <span className="env-pill" title="This screen still runs on generated demo data and saves nothing.">
+                Demo data
+              </span>
+            )}
             <div className="who">
               <span className="who-avatar">DV</span>
               <span className="who-text">

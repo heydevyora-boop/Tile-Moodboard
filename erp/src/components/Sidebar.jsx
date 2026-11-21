@@ -37,10 +37,13 @@ export default function Sidebar({ open, onNavigate }) {
                   onClick={onNavigate}
                 >
                   <span className="nav-item-label">{m.label}</span>
-                  {/* A planned module says so in the nav, not only
-                      once you have clicked into it and found an
-                      empty screen. */}
+                  {/* What is real and what is not, said in the nav
+                      rather than discovered by clicking. A screen
+                      full of convincing demo data looks exactly
+                      like a working one until somebody tries to
+                      save. */}
                   {m.status === 'planned' && <span className="nav-flag">planned</span>}
+                  {m.status === 'live' && <span className="nav-flag is-live">live</span>}
                 </NavLink>
               ))}
             </div>
@@ -54,9 +57,9 @@ export default function Sidebar({ open, onNavigate }) {
       <div className="sidebar-foot">
         <span className="sidebar-foot-dot" />
         <div>
-          <strong>UI prototype</strong>
-          Demo data only. Nothing here is saved, and no live system is
-          read or written.
+          <strong>Part connected</strong>
+          Screens marked <em>live</em> read and write the ERP database.
+          The rest still run on demo data and save nothing.
         </div>
       </div>
     </aside>

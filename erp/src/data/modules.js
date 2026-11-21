@@ -7,19 +7,25 @@
    or carry two different names in two places.
 
    `status` is the honest state of each screen:
-     'ready'   -- the screen is built against mock data
+     'live'    -- reads and writes the real ERP database
+     'ready'   -- built, but still running on generated demo data
      'planned' -- deliberately a placeholder. Warehouses is the one
                   the brief itself flagged: its workflow has not been
                   finalised, so the UI says so rather than inventing
                   a transfer flow the studio would then have to
                   unlearn.
+
+   The distinction is shown in the sidebar rather than kept in a
+   document, because a screen full of convincing demo data is
+   indistinguishable from a working one until somebody tries to
+   save. A reviewer must be able to see at a glance which is which.
    ============================================================ */
 
 export const MODULES = [
   { to: '/',            label: 'Dashboard',              group: 'Overview',   status: 'ready' },
 
-  { to: '/products',    label: 'Product Master',         group: 'Catalogue',  status: 'ready' },
-  { to: '/categories',  label: 'Product Categories',     group: 'Catalogue',  status: 'ready' },
+  { to: '/products',    label: 'Product Master',         group: 'Catalogue',  status: 'live' },
+  { to: '/categories',  label: 'Catalogue Structure',    group: 'Catalogue',  status: 'live' },
 
   { to: '/inventory',   label: 'Inventory / Stock',      group: 'Inventory',  status: 'ready' },
   { to: '/inward',      label: 'Stock Inward',           group: 'Inventory',  status: 'ready' },

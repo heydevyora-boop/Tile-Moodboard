@@ -20,10 +20,30 @@ import { useMemo, useState, useEffect } from 'react';
 
 const PAGE_SIZES = [10, 25, 50, 100];
 
+/* ── SERVER MODE ──────────────────────────────────────────────
+   Pass `server` and the table stops searching, sorting and
+   slicing: it renders exactly the rows it is given and reports
+   every control back to the caller, which asks the database.
+
+   The Product Master needs this. Fetching the whole catalogue so
+   the browser can filter it works at ninety products and stops
+   working at nine thousand -- by which point the fix is a rewrite
+   of every screen that reads it. The markup below is identical in
+   both modes, so a screen can start on mock data and move to the
+   API without being redesigned.
+
+   server = {
+     total, page, pageSize, pageCount, loading,
+     sort: { key, dir } | null,
+     onPage(n), onPageSize(n), onSort({ key, dir }),
+   }
+   ────────────────────────────────────────────────────────── */
+
 export default function DataTable({
   rows,
   columns,
   rowKey,
+  server = null,
   search = '',
   searchPlaceholder = 'Search…',
   onSearch,
@@ -39,9 +59,16 @@ export default function DataTable({
   onRowClick = null,
   pageSize: initialPageSize = 25,
 }) {
-  const [sort, setSort] = useState(initialSort);
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(initialPageSize);
+  const [localSort, setLocalSort] = useState(initialSort);
+  const [localPage, setLocalPage] = useState(1);
+  const [localPageSize, setLocalPageSize] = useState(initialPageSize);
+
+  // In server mode the caller owns all three.
+  const sort = server ? server.sort : localSort;
+  const page = server ? server.page : localPage;
+  const pageSize = server ? server.pageSize : localPageSize;
+  const setPage = server ? server.onPage : setLocalPage;
+  const setPageSize = server ? server.onPageSize : setLocalPageSize;
 
   const valueOf = (col, row) => (col.value ? col.value(row) : row[col.key]);
 
@@ -50,6 +77,8 @@ export default function DataTable({
      still searchable by the word in it. Case- and space-insensitive
      because nobody types a product code the way it is stored. */
   const searched = useMemo(() => {
+    // The database already did it.
+    if (server) return rows;
     const q = search.trim().toLowerCase();
     if (!q) return rows;
     return rows.filter((row) => columns.some((col) => {
@@ -63,6 +92,7 @@ export default function DataTable({
      "DV-1010" sorts after "DV-1009" and 1,200 after 900 -- both of
      which a naive string sort gets wrong. */
   const sorted = useMemo(() => {
+    if (server) return searched;
     if (!sort) return searched;
     const col = columns.find((c) => c.key === sort.key);
     if (!col) return searched;
@@ -80,17 +110,24 @@ export default function DataTable({
 
   // A filter or a search that shortens the list must not strand the
   // reader on a page that no longer exists.
-  const pageCount = Math.max(1, Math.ceil(sorted.length / pageSize));
-  useEffect(() => { if (page > pageCount) setPage(1); }, [page, pageCount]);
+  const pageCount = server
+    ? Math.max(1, server.pageCount)
+    : Math.max(1, Math.ceil(sorted.length / pageSize));
+  const total = server ? server.total : sorted.length;
+
+  useEffect(() => {
+    if (!server && page > pageCount) setPage(1);
+  }, [server, page, pageCount, setPage]);
 
   const start = (Math.min(page, pageCount) - 1) * pageSize;
-  const pageRows = sorted.slice(start, start + pageSize);
+  const pageRows = server ? sorted : sorted.slice(start, start + pageSize);
 
   const toggleSort = (col) => {
     if (col.sortable === false) return;
-    setSort((s) => (s && s.key === col.key
-      ? { key: col.key, dir: s.dir === 'asc' ? 'desc' : 'asc' }
-      : { key: col.key, dir: 'asc' }));
+    const next = sort && sort.key === col.key
+      ? { key: col.key, dir: sort.dir === 'asc' ? 'desc' : 'asc' }
+      : { key: col.key, dir: 'asc' };
+    if (server) server.onSort(next); else setLocalSort(next);
   };
 
   /* ── selection ────────────────────────────────────────────────
@@ -141,7 +178,9 @@ export default function DataTable({
         </div>
       )}
 
-      {sorted.length === 0 ? (
+      {server?.loading && pageRows.length === 0 ? (
+        <div className="empty"><h3>Loading…</h3><p>Reading from the ERP database.</p></div>
+      ) : pageRows.length === 0 ? (
         <div className="empty">
           <h3>{emptyTitle}</h3>
           <p>{emptyNote}</p>
@@ -221,11 +260,12 @@ export default function DataTable({
 
       <div className="table-foot">
         <span>
-          {sorted.length === 0
+          {total === 0
             ? 'No rows'
-            : 'Showing ' + (start + 1) + '–' + Math.min(start + pageSize, sorted.length)
-              + ' of ' + sorted.length
-              + (sorted.length !== rows.length ? ' (filtered from ' + rows.length + ')' : '')}
+            : 'Showing ' + (start + 1) + '–' + Math.min(start + pageSize, total)
+              + ' of ' + total
+              + (!server && sorted.length !== rows.length ? ' (filtered from ' + rows.length + ')' : '')}
+          {server?.loading && <span className="muted"> · refreshing</span>}
         </span>
 
         <div className="pager">
