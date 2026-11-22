@@ -186,6 +186,70 @@ export const api = {
       request('/warehouses/transfers/' + id + '/cancel', { method: 'POST', body: { reason } }),
   },
 
+  /* PURCHASE.
+     Note which of these move stock and which do not. Creating or
+     approving a purchase order moves nothing; recording a
+     supplier invoice moves nothing. Only a goods receipt and a
+     purchase return touch inventory, and they do it through the
+     same stock service every other movement goes through. */
+  suppliers: {
+    list: (params) => request('/suppliers', { params }),
+    options: () => request('/suppliers/options'),
+    get: (id) => request('/suppliers/' + id),
+    history: (id, params) => request('/suppliers/' + id + '/history', { params }),
+    create: (body) => request('/suppliers', { method: 'POST', body }),
+    update: (id, body) => request('/suppliers/' + id, { method: 'PATCH', body }),
+    // No remove(). A supplier with history cannot be deleted
+    // without orphaning it, and the API has no endpoint for it.
+    setActive: (id, isActive, reason) =>
+      request('/suppliers/' + id + '/active', { method: 'POST', body: { isActive, reason } }),
+  },
+
+  purchaseOrders: {
+    list: (params) => request('/purchase-orders', { params }),
+    get: (id) => request('/purchase-orders/' + id),
+    create: (body) => request('/purchase-orders', { method: 'POST', body }),
+    update: (id, body) => request('/purchase-orders/' + id, { method: 'PATCH', body }),
+    submit: (id) => request('/purchase-orders/' + id + '/submit', { method: 'POST' }),
+    approve: (id) => request('/purchase-orders/' + id + '/approve', { method: 'POST' }),
+    returnToDraft: (id, reason) =>
+      request('/purchase-orders/' + id + '/return-to-draft', { method: 'POST', body: { reason } }),
+    cancel: (id, reason) =>
+      request('/purchase-orders/' + id + '/cancel', { method: 'POST', body: { reason } }),
+    close: (id, reason) =>
+      request('/purchase-orders/' + id + '/close', { method: 'POST', body: { reason } }),
+    receivable: (id) => request('/purchase-orders/' + id + '/receivable'),
+  },
+
+  goodsReceipts: {
+    list: (params) => request('/goods-receipts', { params }),
+    get: (id) => request('/goods-receipts/' + id),
+    // THE ONE CALL IN THE PURCHASE MODULE THAT INCREASES STOCK.
+    receive: (body) => request('/goods-receipts', { method: 'POST', body }),
+    cancel: (id, reason) =>
+      request('/goods-receipts/' + id + '/cancel', { method: 'POST', body: { reason } }),
+  },
+
+  purchaseReturns: {
+    list: (params) => request('/purchase-returns', { params }),
+    get: (id) => request('/purchase-returns/' + id),
+    eligibility: (params) => request('/purchase-returns/eligibility', { params }),
+    post: (body) => request('/purchase-returns', { method: 'POST', body }),
+  },
+
+  supplierInvoices: {
+    list: (params) => request('/supplier-invoices', { params }),
+    get: (id) => request('/supplier-invoices/' + id),
+    create: (body) => request('/supplier-invoices', { method: 'POST', body }),
+    setStatus: (id, status, note) =>
+      request('/supplier-invoices/' + id + '/status', { method: 'POST', body: { status, note } }),
+  },
+
+  purchase: {
+    dashboard: (params) => request('/dashboard', { params }),
+    history: (params) => request('/history', { params }),
+  },
+
   reference: {
     categories: () => request('/reference/categories'),
     productRules: () => request('/reference/product-rules'),

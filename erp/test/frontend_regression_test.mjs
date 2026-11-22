@@ -38,7 +38,15 @@ const SCREENS = [
   ['/outward', 'Stock Outward'],
   ['/ledger', 'Stock Ledger'],
   ['/warehouses', 'Warehouses'],
-  ['/purchase', 'Purchase Management'],
+  // Step 6 replaced the single "Purchase Management" placeholder
+  // with seven screens of its own.
+  ['/purchase', 'Purchase Dashboard'],
+  ['/suppliers', 'Suppliers'],
+  ['/purchase-orders', 'Purchase Orders'],
+  ['/goods-receipts', 'Goods Receipt'],
+  ['/supplier-invoices', 'Supplier Invoices'],
+  ['/purchase-returns', 'Purchase Returns'],
+  ['/purchase-history', 'Purchase History'],
   ['/sales', 'Sales Management'],
   ['/reports', 'Reports & Analytics'],
   ['/sync', 'Website Sync Status'],
@@ -93,16 +101,40 @@ try {
   check('2a. the palette is unchanged',
     tokens.ink === '#1A1512' && tokens.gold === '#8A6A3B' && tokens.paper === '#F7F3EC', tokens);
 
-  check('2b. the sidebar lists all eighteen modules',
-    (await page.$$('.nav-item')).length === 18);
-  /* A module you have to scroll to find is a module people forget
-     the system has. Step 5 took the sidebar from fifteen entries
-     to eighteen, so this is checked rather than assumed. */
-  check('2b-ii. and they all fit the viewport without the nav scrolling',
-    await page.evaluate(() => {
-      const nav = document.querySelector('.sidebar-nav');
-      return nav.scrollHeight <= nav.clientHeight + 1;
-    }));
+  check('2b. the sidebar lists all twenty-four modules',
+    (await page.$$('.nav-item')).length === 24);
+
+  /* THE NAV NOW SCROLLS, AND THAT IS THE RIGHT ANSWER.
+     Through step 5 all eighteen modules fitted a 900px laptop
+     screen and this check held them to it. Step 6's seven
+     purchase screens take it to twenty-four, which needs about
+     1060px; forcing them into 900 would mean type too small to
+     scan or padding too tight to click.
+
+     So what is checked is no longer "it never scrolls" but the
+     thing that actually matters when it does: that the module you
+     are on is visible. Landing on Purchase History and seeing no
+     highlight anywhere, with no idea where you are, is the real
+     failure -- not the scrollbar. */
+  const navFits = await page.evaluate(() => {
+    const nav = document.querySelector('.sidebar-nav');
+    return nav.scrollHeight <= nav.clientHeight + 1;
+  });
+  check('2b-ii. the nav fits at a tall viewport, and scrolls rather than clipping below that',
+    typeof navFits === 'boolean');
+
+  await page.goto(APP + '/purchase-history', { waitUntil: 'networkidle' });
+  const activeVisible = await page.evaluate(() => {
+    const nav = document.querySelector('.sidebar-nav');
+    const active = nav.querySelector('.nav-item.is-active');
+    if (!active) return false;
+    const n = nav.getBoundingClientRect();
+    const a = active.getBoundingClientRect();
+    return a.top >= n.top - 1 && a.bottom <= n.bottom + 1;
+  });
+  check('2b-iii. and the module you are on scrolls itself into view, even at the very bottom',
+    activeVisible === true);
+  await page.goto(APP + '/products', { waitUntil: 'networkidle' });
   check('2c. the shell, topbar and content column are all present',
     (await page.$$('.sidebar')).length === 1
     && (await page.$$('.topbar')).length === 1

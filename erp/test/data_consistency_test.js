@@ -126,15 +126,20 @@ check('5a. every module belongs to a group the sidebar renders',
   MODULES.every((m) => GROUP_ORDER.includes(m.group)),
   MODULES.filter((m) => !GROUP_ORDER.includes(m.group)).map((m) => m.label));
 check('5b. no two modules share a path', new Set(MODULES.map((m) => m.to)).size === MODULES.length);
-/* Fifteen through step 4. Step 5 added Stock Adjustments,
-   Warehouse Transfers and Stock Reconciliation, which the
-   inventory brief asks for as screens of their own. The count is
-   asserted rather than left open so that a module cannot be added
-   by accident and go unnoticed in the sidebar. */
-check('5c. the fifteen modules of the brief, plus the three step 5 added',
-  MODULES.length === 18, MODULES.length);
-check('5c-ii. and the three new ones are the inventory screens step 5 specified',
+/* Fifteen through step 4; eighteen after step 5 added the three
+   inventory screens; twenty-four after step 6 replaced the single
+   "Purchase Management" placeholder with seven real ones. The
+   count is asserted rather than left open so that a module cannot
+   be added by accident and go unnoticed in the sidebar. */
+check('5c. fifteen from the brief, three from step 5, seven from step 6, less the placeholder',
+  MODULES.length === 24, MODULES.length);
+check('5c-ii. the three inventory screens step 5 specified are there',
   ['/adjustments', '/transfers', '/reconciliation']
+    .every((p) => MODULES.some((m) => m.to === p)),
+  MODULES.map((m) => m.to).join(' '));
+check('5c-iii. and the seven purchase screens step 6 specified',
+  ['/purchase', '/suppliers', '/purchase-orders', '/goods-receipts',
+    '/supplier-invoices', '/purchase-returns', '/purchase-history']
     .every((p) => MODULES.some((m) => m.to === p)),
   MODULES.map((m) => m.to).join(' '));
 check('5d. a product sub-path still resolves to Product Master',

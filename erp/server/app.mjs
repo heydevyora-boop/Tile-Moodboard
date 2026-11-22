@@ -8,6 +8,7 @@ import reference from './routes/reference.mjs';
 import imports from './routes/imports.mjs';
 import inventory from './routes/inventory.mjs';
 import warehouses from './routes/warehouses.mjs';
+import purchase from './routes/purchase.mjs';
 
 /* ============================================================
    THE ERP PRODUCT MASTER API
@@ -83,7 +84,7 @@ export function createApp() {
     try {
       const { prisma } = await import('../db/client.mjs');
       const [row] = await prisma.$queryRaw`SELECT current_database() AS db`;
-      res.json({ ok: true, database: row.db, phase: 'step-5 inventory management' });
+      res.json({ ok: true, database: row.db, phase: 'step-6 purchase management' });
     } catch (err) { next(err); }
   });
 
@@ -94,6 +95,11 @@ export function createApp() {
   app.use('/api/imports', imports);
   app.use('/api/inventory', inventory);
   app.use('/api/warehouses', warehouses);
+  /* Mounted at the root of /api rather than under /api/purchase,
+     because the module's documents are peers: suppliers, purchase
+     orders, goods receipts, returns and supplier invoices are
+     five things, not five views of one. */
+  app.use('/api', purchase);
 
   app.use((req, res) => {
     res.status(404).json({ error: { code: 'NOT_FOUND', message: 'No such endpoint: ' + req.method + ' ' + req.path } });

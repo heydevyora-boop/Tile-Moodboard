@@ -34,10 +34,20 @@ async function main() {
     ['MANAGER', 'Studio Manager',
       'Catalogue, stock, purchase and sales. Not users.',
       ['product:read', 'product:write', 'stock:read', 'stock:post',
-        'purchase:read', 'purchase:write', 'sales:read', 'sales:write', 'report:read']],
+        // purchase:approve is what lets a manager turn a draft
+        // order into one a supplier may act on. Separate from
+        // purchase:write on purpose: raising an order and
+        // committing the studio to it are different acts, and a
+        // role can be given the first without the second.
+        'purchase:read', 'purchase:write', 'purchase:approve',
+        'sales:read', 'sales:write', 'report:read']],
     ['STORE', 'Store Keeper',
-      'Stock movements and the ledger. No prices.',
-      ['stock:read', 'stock:post', 'product:read']],
+      'Stock movements and the ledger. Receives goods; cannot approve an order.',
+      ['stock:read', 'stock:post', 'product:read',
+        // A store keeper books in what arrives at the gate, which
+        // is purchase:receive, and can read the order to check it
+        // against. Approving one is somebody else's job.
+        'purchase:read', 'purchase:receive']],
     ['SALES', 'Sales',
       'Sales orders and the catalogue; stock read-only.',
       ['sales:read', 'sales:write', 'product:read', 'stock:read']],
@@ -94,12 +104,18 @@ async function main() {
   // ── warehouse ──────────────────────────────────────────────
   const warehouse = await prisma.warehouse.upsert({
     where: { code: 'WH-MAIN' },
-    update: {},
+    update: {
+      // The place of supply for everything delivered here, and so
+      // half of every purchase's GST treatment.
+      state: 'Gujarat',
+      stateCode: '24',
+    },
     create: {
       code: 'WH-MAIN',
       name: 'Studio Warehouse',
       city: 'Ahmedabad',
       state: 'Gujarat',
+      stateCode: '24',
       isDefault: true,
     },
   });
@@ -155,16 +171,24 @@ async function main() {
   log(BRANDS.length, 'brands and', collectionCount, 'collections');
 
   // ── suppliers and customers ────────────────────────────────
+  /* The last one is in RAJASTHAN, deliberately. Every other
+     supplier and the studio warehouse are in Gujarat, so without
+     it every purchase in the demo data would be intra-state and
+     the IGST path would never be seen outside the test suite.
+     A tile studio buying marble from Kishangarh is also exactly
+     what happens. */
   const SUPPLIERS = [
-    ['SUP-SOM', 'Somany Ceramics Ltd.', 'Kadi', '24AAACS1234F1Z5', '30 days'],
-    ['SUP-MOR', 'Morson Granito', 'Morbi', '24AABCM5678G1Z2', '45 days'],
-    ['SUP-SIM', 'Simpolo Vitrified Pvt. Ltd.', 'Morbi', '24AADCS9012H1Z9', '30 days'],
-    ['SUP-VAR', 'Varmora Granito Pvt. Ltd.', 'Rajkot', '24AACCV3456J1Z7', 'Advance'],
+    ['SUP-SOM', 'Somany Ceramics Ltd.', 'Kadi', '24AAACS1234F1Z5', '30 days', 30, 'Gujarat', '24'],
+    ['SUP-MOR', 'Morson Granito', 'Morbi', '24AABCM5678G1Z2', '45 days', 45, 'Gujarat', '24'],
+    ['SUP-SIM', 'Simpolo Vitrified Pvt. Ltd.', 'Morbi', '24AADCS9012H1Z9', '30 days', 30, 'Gujarat', '24'],
+    ['SUP-VAR', 'Varmora Granito Pvt. Ltd.', 'Rajkot', '24AACCV3456J1Z7', 'Advance', null, 'Gujarat', '24'],
+    ['SUP-KIS', 'Kishangarh Marble Traders', 'Kishangarh', '08AAFCK7788L1ZQ', '60 days', 60, 'Rajasthan', '08'],
   ];
-  for (const [code, name, city, gstin, paymentTerms] of SUPPLIERS) {
+  for (const [code, name, city, gstin, paymentTerms, creditPeriodDays, state, stateCode] of SUPPLIERS) {
     await prisma.supplier.upsert({
-      where: { code }, update: { name },
-      create: { code, name, city, gstin, paymentTerms, state: 'Gujarat' },
+      where: { code },
+      update: { name, state, stateCode, creditPeriodDays },
+      create: { code, name, city, gstin, paymentTerms, creditPeriodDays, state, stateCode },
     });
   }
 
@@ -179,7 +203,8 @@ async function main() {
       where: { code }, update: { name }, create: { code, name, type, city: 'Ahmedabad' },
     });
   }
-  log(SUPPLIERS.length, 'suppliers and', CUSTOMERS.length, 'customers');
+  log(SUPPLIERS.length, 'suppliers (4 in Gujarat, 1 in Rajasthan) and',
+    CUSTOMERS.length, 'customers');
 
   // ── products ───────────────────────────────────────────────
   //
@@ -248,6 +273,8 @@ async function main() {
   // ── document sequences ─────────────────────────────────────
   for (const [documentType, prefix] of [
     ['PURCHASE_ORDER', 'PO'],
+    ['GOODS_RECEIPT_NOTE', 'GRN'],
+    ['PURCHASE_RETURN', 'PR'],
     ['SALES_ORDER', 'SO'],
     ['STOCK_ADJUSTMENT', 'ADJ'],
     ['WAREHOUSE_TRANSFER', 'TRF'],
@@ -259,7 +286,7 @@ async function main() {
       create: { documentType, prefix, periodKey: '2026', lastNumber: 0, padding: 4 },
     });
   }
-  log('5 document sequences');
+  log('7 document sequences');
 
   // ── OPENING STOCK, THROUGH THE LEDGER ──────────────────────
   //

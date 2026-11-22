@@ -12,7 +12,13 @@ import StockLedger from './pages/StockLedger.jsx';
 import Transfers from './pages/Transfers.jsx';
 import Reconciliation from './pages/Reconciliation.jsx';
 import Warehouses from './pages/Warehouses.jsx';
-import Purchase from './pages/Purchase.jsx';
+import PurchaseDashboard from './pages/PurchaseDashboard.jsx';
+import Suppliers from './pages/Suppliers.jsx';
+import PurchaseOrders from './pages/PurchaseOrders.jsx';
+import GoodsReceipts from './pages/GoodsReceipts.jsx';
+import SupplierInvoices from './pages/SupplierInvoices.jsx';
+import PurchaseReturns from './pages/PurchaseReturns.jsx';
+import PurchaseHistory from './pages/PurchaseHistory.jsx';
 import Sales from './pages/Sales.jsx';
 import Reports from './pages/Reports.jsx';
 import SyncStatus from './pages/SyncStatus.jsx';
@@ -46,7 +52,13 @@ export default function App() {
         <Route path="transfers" element={<Transfers />} />
         <Route path="reconciliation" element={<Reconciliation />} />
 
-        <Route path="purchase" element={<Purchase />} />
+        <Route path="purchase" element={<PurchaseDashboard />} />
+        <Route path="suppliers" element={<Suppliers />} />
+        <Route path="purchase-orders" element={<PurchaseOrders />} />
+        <Route path="goods-receipts" element={<GoodsReceipts />} />
+        <Route path="supplier-invoices" element={<SupplierInvoices />} />
+        <Route path="purchase-returns" element={<PurchaseReturns />} />
+        <Route path="purchase-history" element={<PurchaseHistory />} />
         <Route path="sales" element={<Sales />} />
 
         <Route path="reports" element={<Reports />} />

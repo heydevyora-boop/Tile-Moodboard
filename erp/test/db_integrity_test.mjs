@@ -371,6 +371,9 @@ async function main() {
       supplierId: supplier.id,
       warehouseId: warehouse.id,
       orderDate: new Date(),
+      // Required since step 6, with no default: an order whose
+      // tax treatment nobody decided must not be insertable.
+      gstTreatment: 'INTRA_STATE',
       createdById: admin.id,
       lines: {
         create: [{
@@ -381,7 +384,15 @@ async function main() {
           quantity: 10,
           uom: 'BOX',
           unitPrice: product.purchasePrice,
-          lineTotal: 100,
+          /* These have to add up now. Step 6 added CHECKs tying a
+             line's gross, discount, taxable value, tax and total
+             together, and this fixture used to carry an arbitrary
+             lineTotal of 100 against ten boxes at sixty-two --
+             which the database rightly refuses. Zero tax, so the
+             total is simply the taxable value. */
+          grossAmount: Number(product.purchasePrice) * 10,
+          taxableValue: Number(product.purchasePrice) * 10,
+          lineTotal: Number(product.purchasePrice) * 10,
         }],
       },
     },

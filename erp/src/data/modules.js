@@ -1,5 +1,5 @@
 /* ============================================================
-   THE EIGHTEEN MODULES, IN ONE PLACE
+   THE TWENTY-FOUR MODULES, IN ONE PLACE
    ============================================================
 
    The sidebar, the router and the page titles all read from this
@@ -41,7 +41,14 @@ export const MODULES = [
   { to: '/transfers',   label: 'Warehouse Transfers',    group: 'Inventory',  status: 'live' },
   { to: '/reconciliation', label: 'Stock Reconciliation', group: 'Inventory', status: 'live' },
 
-  { to: '/purchase',    label: 'Purchase Management',    group: 'Trade',      status: 'ready' },
+  { to: '/purchase',          label: 'Purchase Dashboard',  group: 'Purchase', status: 'live' },
+  { to: '/suppliers',         label: 'Suppliers',           group: 'Purchase', status: 'live' },
+  { to: '/purchase-orders',   label: 'Purchase Orders',     group: 'Purchase', status: 'live' },
+  { to: '/goods-receipts',    label: 'Goods Receipt',       group: 'Purchase', status: 'live' },
+  { to: '/supplier-invoices', label: 'Supplier Invoices',   group: 'Purchase', status: 'live' },
+  { to: '/purchase-returns',  label: 'Purchase Returns',    group: 'Purchase', status: 'live' },
+  { to: '/purchase-history',  label: 'Purchase History',    group: 'Purchase', status: 'live' },
+
   { to: '/sales',       label: 'Sales Management',       group: 'Trade',      status: 'ready' },
 
   { to: '/reports',     label: 'Reports & Analytics',    group: 'Insight',    status: 'ready' },
@@ -57,7 +64,7 @@ export const MODULES = [
    MODULES so re-ordering a section does not mean re-sorting the
    route table. */
 export const GROUP_ORDER = [
-  'Overview', 'Catalogue', 'Inventory', 'Trade', 'Insight', 'Integration', 'Admin',
+  'Overview', 'Catalogue', 'Inventory', 'Purchase', 'Trade', 'Insight', 'Integration', 'Admin',
 ];
 
 /** The module a path belongs to, for the topbar heading. */
