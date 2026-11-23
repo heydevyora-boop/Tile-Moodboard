@@ -8,22 +8,54 @@
    The base URL is a build-time variable with a localhost default,
    because the API is not deployed anywhere yet and hard-coding a
    production host it does not have would be a lie.
+
+   STEP 8 moved this onto /api/v1, which answers in the brief's
+   {success,message,data,meta} / {success,message,code,errors}
+   envelope rather than the bare payload every route used to send
+   straight back (see server/utils/response.mjs for why the server
+   side speaks both). `unwrapData()` below undoes exactly that
+   wrapping, so every one of the 24 screens that already calls
+   `api.*` keeps working unchanged: this file is the only place
+   that needed to know the envelope exists.
    ============================================================ */
 
-const BASE = import.meta.env.VITE_ERP_API ?? 'http://127.0.0.1:4310/api';
+const BASE = import.meta.env.VITE_ERP_API ?? 'http://127.0.0.1:4310/api/v1';
 
 /** An error the UI can actually render, field list and all. */
 export class ApiError extends Error {
   constructor(status, payload) {
-    super(payload?.error?.message || ('Request failed with status ' + status));
+    super(payload?.message || ('Request failed with status ' + status));
     this.name = 'ApiError';
     this.status = status;
-    this.code = payload?.error?.code || 'UNKNOWN';
-    /** [{ field, message }] where the server named the fields. */
-    this.fields = payload?.error?.details?.fields ?? null;
+    this.code = payload?.code || 'UNKNOWN';
+    const errors = Array.isArray(payload?.errors) ? payload.errors : [];
+    /* A field-validation failure's `fields` array IS `errors`
+       (server/utils/response.mjs keeps the two in step for exactly
+       this reason); anything else is one block of detail sitting
+       in errors[0] -- a near-duplicate's candidates among them. */
+    this.fields = errors.length && errors[0] && 'field' in errors[0] ? errors : null;
     /** Near-matches, where the server wants a person to decide. */
-    this.candidates = payload?.error?.details?.candidates ?? null;
+    this.candidates = errors[0]?.candidates ?? null;
   }
+}
+
+/**
+ * The v1 envelope, unwrapped back into the plain shape every
+ * screen already expects. A paginated list gets its own
+ * `{rows, page, pageSize, total, pageCount}` object back exactly
+ * as before -- the server only renamed those four fields into
+ * `meta` for the trip, and this renames them back -- and anything
+ * else is just `data`, since a non-list payload was never wrapped
+ * in extra structure to begin with.
+ */
+function unwrapData(payload) {
+  if (!payload || typeof payload !== 'object' || !('success' in payload)) return payload;
+  const { data, meta } = payload;
+  if (meta && typeof meta.currentPage === 'number') {
+    const { currentPage, pageSize, totalRecords, totalPages, ...rest } = meta;
+    return { rows: data, page: currentPage, pageSize, total: totalRecords, pageCount: totalPages, ...rest };
+  }
+  return data;
 }
 
 /** Only the parameters that have a value; blank filters are absent. */
@@ -50,11 +82,10 @@ async function request(path, { method = 'GET', body, params } = {}) {
        and saying so beats "Failed to fetch" -- which sends people
        looking at their network. */
     const err = new ApiError(0, {
-      error: {
-        code: 'API_UNREACHABLE',
-        message: 'The ERP API is not responding at ' + BASE
-          + '. Start it with: npm run api',
-      },
+      code: 'API_UNREACHABLE',
+      message: 'The ERP API is not responding at ' + BASE
+        + '. Start it with: npm run api',
+      errors: [],
     });
     err.cause = cause;
     throw err;
@@ -64,7 +95,7 @@ async function request(path, { method = 'GET', body, params } = {}) {
 
   const payload = await response.json().catch(() => null);
   if (!response.ok) throw new ApiError(response.status, payload);
-  return payload;
+  return unwrapData(payload);
 }
 
 export const api = {
@@ -118,7 +149,7 @@ export const api = {
       });
       const payload = await response.json().catch(() => null);
       if (!response.ok) throw new ApiError(response.status, payload);
-      return payload;
+      return unwrapData(payload);
     },
     inspect: async (file) => {
       const response = await fetch(BASE + '/imports/inspect', {
@@ -128,7 +159,7 @@ export const api = {
       });
       const payload = await response.json().catch(() => null);
       if (!response.ok) throw new ApiError(response.status, payload);
-      return payload;
+      return unwrapData(payload);
     },
     batches: (params) => request('/imports/batches', { params }),
     batch: (id) => request('/imports/batches/' + id),

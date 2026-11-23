@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { parse, handler } from '../validate.mjs';
+import { requirePermission } from '../services/permission.mjs';
 import * as engine from '../import/engine.mjs';
 import { googleSheetsConfig, UPLOAD_LIMITS, describeHeaders, readUpload } from '../import/sources.mjs';
 import { MASTER_COLUMNS, FIELDS_ABSENT_FROM_SOURCE, OTHER_SHEETS } from '../import/mapping.mjs';
@@ -58,6 +59,7 @@ router.get('/sources', handler(async (_req, res) => {
  */
 router.post(
   '/upload',
+  requirePermission('product:write'),
   // 20 MB at the parser so an oversized body is refused before
   // it is buffered; the 15 MB business limit is checked after.
   (req, res, next) => {
@@ -144,12 +146,12 @@ const Confirm = z.object({
   includeReviewed: z.boolean().optional(),
 });
 
-router.post('/batches/:id/confirm', handler(async (req, res) => {
+router.post('/batches/:id/confirm', requirePermission('product:write'), handler(async (req, res) => {
   res.json(await engine.confirm(req.params.id, parse(Confirm, req.body ?? {}), req.actor));
 }));
 
 /** Retry only the rows that failed. */
-router.post('/batches/:id/retry', handler(async (req, res) => {
+router.post('/batches/:id/retry', requirePermission('product:write'), handler(async (req, res) => {
   const failed = await prisma.importRow.findMany({
     where: { batchId: req.params.id, status: 'FAILED' },
     select: { id: true },

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { parse, handler } from '../validate.mjs';
+import { requirePermission } from '../services/permission.mjs';
 import * as heads from '../services/productHead.service.mjs';
 
 const router = Router();
@@ -49,11 +50,11 @@ router.get('/:id', handler(async (req, res) => {
   res.json(await heads.get(req.params.id));
 }));
 
-router.post('/', handler(async (req, res) => {
+router.post('/', requirePermission('product:write'), handler(async (req, res) => {
   res.status(201).json(await heads.create(parse(CreateHead, req.body), req.actor));
 }));
 
-router.patch('/:id', handler(async (req, res) => {
+router.patch('/:id', requirePermission('product:write'), handler(async (req, res) => {
   res.json(await heads.update(req.params.id, parse(UpdateHead, req.body), req.actor));
 }));
 

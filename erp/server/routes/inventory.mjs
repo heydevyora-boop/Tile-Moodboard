@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { parse, handler } from '../validate.mjs';
+import { requirePermission } from '../services/permission.mjs';
 import * as inventory from '../services/inventory.service.mjs';
 import * as warehouses from '../services/warehouse.service.mjs';
 
@@ -137,7 +138,7 @@ const Opening = z.object({
   transactionDate: z.string().nullish(),
 });
 
-router.post('/opening', handler(async (req, res) => {
+router.post('/opening', requirePermission('stock:post'), handler(async (req, res) => {
   res.status(201).json(await inventory.openingStock(parse(Opening, req.body), req.actor));
 }));
 
@@ -147,7 +148,7 @@ const Inward = z.object({
   unitCost: money,
 });
 
-router.post('/inward', handler(async (req, res) => {
+router.post('/inward', requirePermission('stock:post'), handler(async (req, res) => {
   res.status(201).json(await inventory.stockInward(parse(Inward, req.body), req.actor));
 }));
 
@@ -156,7 +157,7 @@ const Outward = z.object({
   reason: z.enum(['SALES_DISPATCH', 'SAMPLE_ISSUE', 'PURCHASE_RETURN', 'OTHER']).optional(),
 });
 
-router.post('/outward', handler(async (req, res) => {
+router.post('/outward', requirePermission('stock:post'), handler(async (req, res) => {
   res.status(201).json(await inventory.stockOutward(parse(Outward, req.body), req.actor));
 }));
 
@@ -174,7 +175,7 @@ const Adjustment = z.object({
   idempotencyKey: z.string().max(200).nullish(),
 });
 
-router.post('/adjustments', handler(async (req, res) => {
+router.post('/adjustments', requirePermission('stock:post'), handler(async (req, res) => {
   res.status(201).json(await inventory.stockAdjustment(parse(Adjustment, req.body), req.actor));
 }));
 
@@ -191,11 +192,11 @@ const Reservation = z.object({
   idempotencyKey: z.string().max(200).nullish(),
 });
 
-router.post('/reservations', handler(async (req, res) => {
+router.post('/reservations', requirePermission('stock:reserve'), handler(async (req, res) => {
   res.status(201).json(await inventory.reserve(parse(Reservation, req.body), req.actor));
 }));
 
-router.post('/reservations/release', handler(async (req, res) => {
+router.post('/reservations/release', requirePermission('stock:reserve'), handler(async (req, res) => {
   res.status(201).json(await inventory.releaseReservation(parse(Reservation, req.body), req.actor));
 }));
 
@@ -211,11 +212,11 @@ const Damage = z.object({
   idempotencyKey: z.string().max(200).nullish(),
 });
 
-router.post('/damage', handler(async (req, res) => {
+router.post('/damage', requirePermission('stock:post'), handler(async (req, res) => {
   res.status(201).json(await inventory.markDamaged(parse(Damage, req.body), req.actor));
 }));
 
-router.post('/damage/recover', handler(async (req, res) => {
+router.post('/damage/recover', requirePermission('stock:post'), handler(async (req, res) => {
   res.status(201).json(await inventory.recoverDamaged(parse(Damage, req.body), req.actor));
 }));
 
@@ -233,7 +234,7 @@ const Reversal = z.object({
   remarks: z.string().max(1000).nullish(),
 });
 
-router.post('/ledger/reverse', handler(async (req, res) => {
+router.post('/ledger/reverse', requirePermission('stock:post'), handler(async (req, res) => {
   const body = parse(Reversal, req.body);
   const result = await inventory.reverseStockMovement({
     entryId: body.entryId,

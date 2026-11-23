@@ -1,6 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import { AppError } from './errors.mjs';
+import { errorEnvelope } from './utils/response.mjs';
 import brands from './routes/brands.mjs';
 import productHeads from './routes/productHeads.mjs';
 import products from './routes/products.mjs';
@@ -10,6 +10,7 @@ import inventory from './routes/inventory.mjs';
 import warehouses from './routes/warehouses.mjs';
 import purchase from './routes/purchase.mjs';
 import sales from './routes/sales.mjs';
+import v1 from './routes/v1.mjs';
 
 /* ============================================================
    THE ERP PRODUCT MASTER API
@@ -22,24 +23,15 @@ import sales from './routes/sales.mjs';
    table from step 2 is where it will read its work from.
    ============================================================ */
 
-/* Which stock-layer errors are answers rather than faults, and
-   what each one tells the caller. */
-const STOCK_REFUSALS = {
-  // Already posted. The caller's idempotency key did its job.
-  DuplicateMovementError: (e) => ({
-    idempotencyKey: e.idempotencyKey,
-    resolution: 'This movement is already on the ledger. Nothing further was posted.',
-  }),
-  // Refused because it would take a balance below zero. The
-  // figures are included so the screen can say "8 available, 12
-  // requested" instead of "failed".
-  InsufficientStockError: (e) => ({
-    dimension: e.dimension,
-    available: e.available,
-    requested: e.requested,
-  }),
-  StockValidationError: (e) => ({ fields: e.fields }),
-};
+/* True once this request has been inside the /api/v1 router (set
+   by markApiVersion), or for one that never matched anything
+   inside it at all -- the 404 and error handlers both run OUTSIDE
+   that router, so req.path (the full, unstripped path here) is
+   the fallback that still gets a request to /api/v1/nonsense the
+   right envelope. */
+function isV1(req) {
+  return req.apiVersion === 'v1' || req.path.startsWith('/api/v1');
+}
 
 export function createApp() {
   const app = express();
@@ -81,11 +73,15 @@ export function createApp() {
     } catch (err) { next(err); }
   });
 
-  app.get('/api/health', async (_req, res, next) => {
+  app.get(['/api/health', '/api/v1/health'], async (req, res, next) => {
     try {
       const { prisma } = await import('../db/client.mjs');
       const [row] = await prisma.$queryRaw`SELECT current_database() AS db`;
-      res.json({ ok: true, database: row.db, phase: 'step-6 purchase management' });
+      const payload = { ok: true, database: row.db, phase: 'step-8 ERP API development' };
+      if (req.path.startsWith('/api/v1')) {
+        return res.json({ success: true, message: 'ERP API is reachable', data: payload, meta: {} });
+      }
+      res.json(payload);
     } catch (err) { next(err); }
   });
 
@@ -106,50 +102,42 @@ export function createApp() {
      payments are peer documents, not sub-resources of one noun. */
   app.use('/api', sales);
 
+  /* THE STANDARDIZED SURFACE. Every module above, again, under
+     the SAME router objects, plus the two modules step 8 adds
+     outright (dashboard, parties). See server/routes/v1.mjs and
+     server/utils/response.mjs for what actually differs. */
+  app.use('/api/v1', v1);
+
   app.use((req, res) => {
-    res.status(404).json({ error: { code: 'NOT_FOUND', message: 'No such endpoint: ' + req.method + ' ' + req.path } });
+    const message = 'No such endpoint: ' + req.method + ' ' + req.path;
+    res.status(404);
+    if (isV1(req)) {
+      const send = res.locals.sendRaw ?? res.json.bind(res);
+      return send({ success: false, message, code: 'NOT_FOUND', errors: [] });
+    }
+    res.json({ error: { code: 'NOT_FOUND', message } });
   });
 
-  /* ONE PLACE WHERE ERRORS BECOME RESPONSES.
-     Known errors keep their status and their field list. Anything
-     else is a 500 with a generic message: a Prisma error carries
-     table names, column names and sometimes values, and none of
-     that belongs in a browser. It is logged in full on the
-     server, where it is useful and private. */
-  app.use((err, _req, res, _next) => {
-    if (err instanceof AppError) {
-      return res.status(err.status).json({
-        error: { code: err.code, message: err.message, ...(err.details ? { details: err.details } : {}) },
-      });
+  /* ONE PLACE WHERE ERRORS BECOME RESPONSES, for both API
+     generations. errorEnvelope() (server/utils/response.mjs)
+     computes the legacy {error:{...}} shape and the v1
+     {success:false,...} shape from the SAME error every time, so
+     there is exactly one place either shape is assembled -- not
+     one here and a second copy for v1. Known errors keep their
+     status and their field list in both. Anything else is a 500
+     with a generic message in both: a Prisma error carries table
+     and column names, and none of that belongs in a browser
+     response, logged in full here instead, where it is useful and
+     private. */
+  app.use((err, req, res, _next) => {
+    const { status, legacy, v1: v1Body } = errorEnvelope(err);
+    if (status === 500) console.error('[erp-api] unhandled:', err);
+    res.status(status);
+    if (isV1(req)) {
+      const send = res.locals.sendRaw ?? res.json.bind(res);
+      return send(v1Body);
     }
-
-    /* THE STOCK SERVICE'S OWN REFUSALS.
-       db/stock.mjs is the database layer and knows nothing about
-       HTTP -- deliberately, so it can be called from a script or a
-       test with no Express in sight. Its three refusals are
-       answers, not faults, and each already states the status and
-       the figures behind it. Translated here by name, from a
-       closed list: "any error carrying a status" would eventually
-       let a Prisma error through, and those carry table names,
-       column names and sometimes values.
-
-       Without this, re-submitting a form came back as
-       "Something went wrong" with a 500 -- for a request the
-       system had handled perfectly, by refusing to post the same
-       movement twice. */
-    if (STOCK_REFUSALS[err?.name]) {
-      return res.status(err.status).json({
-        error: {
-          code: err.code,
-          message: err.message,
-          details: STOCK_REFUSALS[err.name](err),
-        },
-      });
-    }
-    console.error('[erp-api] unhandled:', err);
-    return res.status(500).json({
-      error: { code: 'INTERNAL_ERROR', message: 'Something went wrong. The details are in the server log.' },
-    });
+    res.json(legacy);
   });
 
   return app;

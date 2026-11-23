@@ -51,6 +51,11 @@ async function main() {
         'sales:read', 'sales:write', 'sales:approve',
         'stock:reserve', 'sales:invoice', 'sales:dispatch',
         'sales:return', 'sales:payment',
+        // Warehouse master data (create/update, activate/deactivate)
+        // is a manager decision, separate from stock:post, which is
+        // what a store keeper uses to move stock IN a warehouse that
+        // already exists.
+        'warehouse:write',
         'report:read']],
     ['STORE', 'Store Keeper',
       'Stock movements and the ledger. Receives goods and dispatches sales orders; approves neither.',

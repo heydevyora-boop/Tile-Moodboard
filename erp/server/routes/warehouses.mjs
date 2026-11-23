@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { parse, handler } from '../validate.mjs';
+import { requirePermission } from '../services/permission.mjs';
 import * as warehouses from '../services/warehouse.service.mjs';
 
 /* ============================================================
@@ -69,7 +70,7 @@ const CreateTransfer = z.object({
   })).min(1, 'A transfer needs at least one line.'),
 });
 
-router.post('/transfers', handler(async (req, res) => {
+router.post('/transfers', requirePermission('stock:post'), handler(async (req, res) => {
   res.status(201).json(await warehouses.createTransfer(parse(CreateTransfer, req.body), req.actor));
 }));
 
@@ -81,24 +82,24 @@ router.get('/transfers/:id', handler(async (req, res) => {
    different physical event with a different person's name on it:
    somebody loads the lorry, somebody else signs for it. */
 
-router.post('/transfers/:id/dispatch', handler(async (req, res) => {
+router.post('/transfers/:id/dispatch', requirePermission('stock:post'), handler(async (req, res) => {
   res.json(await warehouses.dispatchTransfer(req.params.id, req.actor));
 }));
 
-router.post('/transfers/:id/receive', handler(async (req, res) => {
+router.post('/transfers/:id/receive', requirePermission('stock:post'), handler(async (req, res) => {
   res.json(await warehouses.receiveTransfer(req.params.id, req.actor));
 }));
 
 const Cancel = z.object({ reason: z.string().max(1000).nullish() });
 
-router.post('/transfers/:id/cancel', handler(async (req, res) => {
+router.post('/transfers/:id/cancel', requirePermission('stock:post'), handler(async (req, res) => {
   const body = parse(Cancel, req.body ?? {});
   res.json(await warehouses.cancelTransfer(req.params.id, req.actor, body.reason ?? undefined));
 }));
 
 /* ── one warehouse ───────────────────────────────────────── */
 
-router.post('/', handler(async (req, res) => {
+router.post('/', requirePermission('warehouse:write'), handler(async (req, res) => {
   res.status(201).json(await warehouses.create(parse(CreateWarehouse, req.body), req.actor));
 }));
 
@@ -106,7 +107,7 @@ router.get('/:id', handler(async (req, res) => {
   res.json(await warehouses.get(req.params.id));
 }));
 
-router.patch('/:id', handler(async (req, res) => {
+router.patch('/:id', requirePermission('warehouse:write'), handler(async (req, res) => {
   res.json(await warehouses.update(req.params.id, parse(UpdateWarehouse, req.body), req.actor));
 }));
 
@@ -123,7 +124,7 @@ const SetActive = z.object({
   reason: z.string().max(500).nullish(),
 });
 
-router.post('/:id/active', handler(async (req, res) => {
+router.post('/:id/active', requirePermission('warehouse:write'), handler(async (req, res) => {
   const body = parse(SetActive, req.body);
   res.json(await warehouses.setActive(req.params.id, body.isActive, req.actor, body.reason ?? undefined));
 }));

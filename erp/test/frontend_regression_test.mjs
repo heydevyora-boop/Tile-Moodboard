@@ -177,7 +177,10 @@ try {
   console.log('\n4. search, filter, sort and paging go to the server');
 
   const requests = [];
-  page.on('request', (r) => { if (r.url().includes('/api/products?')) requests.push(r.url()); });
+  // Step 8 moved the frontend client onto /api/v1/products; this
+  // still excludes an unrelated /api/v1/product-heads request,
+  // which is the one thing the old /api/products? check protected.
+  page.on('request', (r) => { if (/\/api(\/v1)?\/products\?/.test(r.url())) requests.push(r.url()); });
 
   await page.fill('.toolbar-search', 'verona');
   await page.waitForTimeout(1000);
