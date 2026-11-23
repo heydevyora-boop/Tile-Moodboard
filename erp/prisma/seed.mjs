@@ -34,15 +34,55 @@ async function main() {
     ['MANAGER', 'Studio Manager',
       'Catalogue, stock, purchase and sales. Not users.',
       ['product:read', 'product:write', 'stock:read', 'stock:post',
-        'purchase:read', 'purchase:write', 'sales:read', 'sales:write', 'report:read']],
+        // purchase:approve is what lets a manager turn a draft
+        // order into one a supplier may act on. Separate from
+        // purchase:write on purpose: raising an order and
+        // committing the studio to it are different acts, and a
+        // role can be given the first without the second.
+        'purchase:read', 'purchase:write', 'purchase:approve',
+        // THE SALES PERMISSIONS, EACH ITS OWN AUTHORITY. The
+        // brief is explicit: order approval, stock reservation,
+        // dispatch and payment are separate permissions, and
+        // nobody gets unrestricted sales access. The manager
+        // holds every one of them; the SALES and STORE roles
+        // below each hold a deliberately narrower slice.
+        'customer:read', 'customer:write',
+        'quotation:read', 'quotation:write', 'quotation:approve',
+        'sales:read', 'sales:write', 'sales:approve',
+        'stock:reserve', 'sales:invoice', 'sales:dispatch',
+        'sales:return', 'sales:payment',
+        // Warehouse master data (create/update, activate/deactivate)
+        // is a manager decision, separate from stock:post, which is
+        // what a store keeper uses to move stock IN a warehouse that
+        // already exists.
+        'warehouse:write',
+        'report:read']],
     ['STORE', 'Store Keeper',
-      'Stock movements and the ledger. No prices.',
-      ['stock:read', 'stock:post', 'product:read']],
+      'Stock movements and the ledger. Receives goods and dispatches sales orders; approves neither.',
+      ['stock:read', 'stock:post', 'product:read',
+        // A store keeper books in what arrives at the gate, which
+        // is purchase:receive, and can read the order to check it
+        // against. Approving one is somebody else's job.
+        'purchase:read', 'purchase:receive',
+        // The mirror image on the sales side: a store keeper
+        // reserves stock for a confirmed order and loads the
+        // lorry (sales:dispatch), but does not confirm the order,
+        // invoice it or take payment for it.
+        'sales:read', 'customer:read', 'stock:reserve', 'sales:dispatch']],
     ['SALES', 'Sales',
-      'Sales orders and the catalogue; stock read-only.',
-      ['sales:read', 'sales:write', 'product:read', 'stock:read']],
+      'Quotations and draft orders; commits neither stock nor the studio.',
+      ['sales:read', 'sales:write', 'customer:read', 'customer:write',
+        'quotation:read', 'quotation:write',
+        // Explicitly NOT sales:approve, stock:reserve,
+        // sales:dispatch, sales:invoice or sales:payment: a sales
+        // person can raise a quotation and a draft order, but
+        // confirming it, taking the stock, shipping it, billing
+        // it and collecting for it are each somebody else's
+        // decision to make.
+        'product:read', 'stock:read']],
     ['VIEWER', 'Viewer', 'Read-only across every module.',
-      ['product:read', 'stock:read', 'purchase:read', 'sales:read', 'report:read']],
+      ['product:read', 'stock:read', 'purchase:read', 'sales:read',
+        'customer:read', 'quotation:read', 'report:read']],
   ];
 
   for (const [code, name, description, permissions] of ROLES) {
@@ -94,12 +134,18 @@ async function main() {
   // ── warehouse ──────────────────────────────────────────────
   const warehouse = await prisma.warehouse.upsert({
     where: { code: 'WH-MAIN' },
-    update: {},
+    update: {
+      // The place of supply for everything delivered here, and so
+      // half of every purchase's GST treatment.
+      state: 'Gujarat',
+      stateCode: '24',
+    },
     create: {
       code: 'WH-MAIN',
       name: 'Studio Warehouse',
       city: 'Ahmedabad',
       state: 'Gujarat',
+      stateCode: '24',
       isDefault: true,
     },
   });
@@ -155,31 +201,52 @@ async function main() {
   log(BRANDS.length, 'brands and', collectionCount, 'collections');
 
   // ── suppliers and customers ────────────────────────────────
+  /* The last one is in RAJASTHAN, deliberately. Every other
+     supplier and the studio warehouse are in Gujarat, so without
+     it every purchase in the demo data would be intra-state and
+     the IGST path would never be seen outside the test suite.
+     A tile studio buying marble from Kishangarh is also exactly
+     what happens. */
   const SUPPLIERS = [
-    ['SUP-SOM', 'Somany Ceramics Ltd.', 'Kadi', '24AAACS1234F1Z5', '30 days'],
-    ['SUP-MOR', 'Morson Granito', 'Morbi', '24AABCM5678G1Z2', '45 days'],
-    ['SUP-SIM', 'Simpolo Vitrified Pvt. Ltd.', 'Morbi', '24AADCS9012H1Z9', '30 days'],
-    ['SUP-VAR', 'Varmora Granito Pvt. Ltd.', 'Rajkot', '24AACCV3456J1Z7', 'Advance'],
+    ['SUP-SOM', 'Somany Ceramics Ltd.', 'Kadi', '24AAACS1234F1Z5', '30 days', 30, 'Gujarat', '24'],
+    ['SUP-MOR', 'Morson Granito', 'Morbi', '24AABCM5678G1Z2', '45 days', 45, 'Gujarat', '24'],
+    ['SUP-SIM', 'Simpolo Vitrified Pvt. Ltd.', 'Morbi', '24AADCS9012H1Z9', '30 days', 30, 'Gujarat', '24'],
+    ['SUP-VAR', 'Varmora Granito Pvt. Ltd.', 'Rajkot', '24AACCV3456J1Z7', 'Advance', null, 'Gujarat', '24'],
+    ['SUP-KIS', 'Kishangarh Marble Traders', 'Kishangarh', '08AAFCK7788L1ZQ', '60 days', 60, 'Rajasthan', '08'],
   ];
-  for (const [code, name, city, gstin, paymentTerms] of SUPPLIERS) {
+  for (const [code, name, city, gstin, paymentTerms, creditPeriodDays, state, stateCode] of SUPPLIERS) {
     await prisma.supplier.upsert({
-      where: { code }, update: { name },
-      create: { code, name, city, gstin, paymentTerms, state: 'Gujarat' },
+      where: { code },
+      update: { name, state, stateCode, creditPeriodDays },
+      create: { code, name, city, gstin, paymentTerms, creditPeriodDays, state, stateCode },
     });
   }
 
+  /* The trade customer is in MAHARASHTRA, deliberately -- every
+     other customer and the studio warehouse are in Gujarat, so
+     without it every sale in the demo data would be intra-state
+     and the IGST path would never be seen outside the test suite.
+     A retail buyer has no GSTIN at all: an ordinary unregistered
+     (B2C) sale, which still carries GST on the sales side, unlike
+     an unregistered purchase supplier. */
   const CUSTOMERS = [
-    ['CUS-0001', 'Mehta Residence — Bodakdev', 'RETAIL'],
-    ['CUS-0002', 'Shah Interiors LLP', 'TRADE'],
-    ['CUS-0003', 'Patel Builders Pvt. Ltd.', 'PROJECT'],
-    ['CUS-0004', 'Casa De Aurum — Studio Sample', 'INTERNAL'],
+    ['CUS-0001', 'Mehta Residence — Bodakdev', 'RETAIL', null, 'Gujarat', '24', 'Immediate', null],
+    ['CUS-0002', 'Shah Interiors LLP', 'TRADE', '27AABCS6789K1Z4', 'Maharashtra', '27', '30 days', 30],
+    ['CUS-0003', 'Patel Builders Pvt. Ltd.', 'PROJECT', '24AADCP2345L1Z6', 'Gujarat', '24', '45 days', 45],
+    ['CUS-0004', 'Casa De Aurum — Studio Sample', 'INTERNAL', null, 'Gujarat', '24', 'Internal', null],
   ];
-  for (const [code, name, type] of CUSTOMERS) {
+  for (const [code, name, type, gstin, state, stateCode, paymentTerms, creditPeriodDays] of CUSTOMERS) {
     await prisma.customer.upsert({
-      where: { code }, update: { name }, create: { code, name, type, city: 'Ahmedabad' },
+      where: { code },
+      update: { name, state, stateCode, creditPeriodDays },
+      create: {
+        code, name, type, gstin, city: state === 'Maharashtra' ? 'Pune' : 'Ahmedabad',
+        state, stateCode, paymentTerms, creditPeriodDays,
+      },
     });
   }
-  log(SUPPLIERS.length, 'suppliers and', CUSTOMERS.length, 'customers');
+  log(SUPPLIERS.length, 'suppliers (4 in Gujarat, 1 in Rajasthan) and',
+    CUSTOMERS.length, 'customers (3 in Gujarat, 1 in Maharashtra)');
 
   // ── products ───────────────────────────────────────────────
   //
@@ -248,7 +315,13 @@ async function main() {
   // ── document sequences ─────────────────────────────────────
   for (const [documentType, prefix] of [
     ['PURCHASE_ORDER', 'PO'],
+    ['GOODS_RECEIPT_NOTE', 'GRN'],
+    ['PURCHASE_RETURN', 'PR'],
+    ['QUOTATION', 'QT'],
     ['SALES_ORDER', 'SO'],
+    ['SALES_INVOICE', 'INV'],
+    ['DELIVERY_CHALLAN', 'DC'],
+    ['SALES_RETURN', 'SR'],
     ['STOCK_ADJUSTMENT', 'ADJ'],
     ['WAREHOUSE_TRANSFER', 'TRF'],
     ['IMPORT_BATCH', 'IMP'],
@@ -259,7 +332,7 @@ async function main() {
       create: { documentType, prefix, periodKey: '2026', lastNumber: 0, padding: 4 },
     });
   }
-  log('5 document sequences');
+  log('11 document sequences');
 
   // ── OPENING STOCK, THROUGH THE LEDGER ──────────────────────
   //

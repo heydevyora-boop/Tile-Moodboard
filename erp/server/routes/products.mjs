@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { parse, handler } from '../validate.mjs';
+import { requirePermission } from '../services/permission.mjs';
 import * as products from '../services/product.service.mjs';
 
 const router = Router();
@@ -86,11 +87,11 @@ router.get('/:id/stock', handler(async (req, res) => {
   res.json(await products.stockSummary(req.params.id));
 }));
 
-router.post('/', handler(async (req, res) => {
+router.post('/', requirePermission('product:write'), handler(async (req, res) => {
   res.status(201).json(await products.create(parse(CreateVariant, req.body), req.actor));
 }));
 
-router.patch('/:id', handler(async (req, res) => {
+router.patch('/:id', requirePermission('product:write'), handler(async (req, res) => {
   res.json(await products.update(req.params.id, parse(UpdateVariant, req.body), req.actor));
 }));
 
@@ -99,7 +100,7 @@ const StatusBody = z.object({
   reason: z.string().max(500).optional(),
 });
 
-router.post('/:id/status', handler(async (req, res) => {
+router.post('/:id/status', requirePermission('product:write'), handler(async (req, res) => {
   const { status, reason } = parse(StatusBody, req.body);
   res.json(await products.setStatus(req.params.id, status, req.actor, reason));
 }));
@@ -109,11 +110,11 @@ router.post('/:id/status', handler(async (req, res) => {
    orphaning the entries that explain where the stock went, and
    offering a button that fails for half the catalogue is worse
    than not offering one. */
-router.post('/:id/archive', handler(async (req, res) => {
+router.post('/:id/archive', requirePermission('product:write'), handler(async (req, res) => {
   res.json(await products.archive(req.params.id, req.actor, req.body?.reason));
 }));
 
-router.post('/:id/restore', handler(async (req, res) => {
+router.post('/:id/restore', requirePermission('product:write'), handler(async (req, res) => {
   res.json(await products.restore(req.params.id, req.actor));
 }));
 

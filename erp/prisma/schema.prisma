@@ -103,12 +103,36 @@ enum PriceBasis {
 /// Which way stock moved. Transfers are two entries, not one, so
 /// each warehouse's own ledger stands on its own.
 enum StockMovementType {
+  // ── movements that change PHYSICAL stock ────────────────
   INWARD
   OUTWARD
   ADJUSTMENT_INCREASE
   ADJUSTMENT_DECREASE
   TRANSFER_IN
   TRANSFER_OUT
+
+  // ── movements that change RESERVED stock ────────────────
+  // Physical stock does not move: the boxes are still on the
+  // shelf, they are just promised to somebody.
+  RESERVATION
+  RESERVATION_RELEASE
+
+  // ── movements that change DAMAGED stock ─────────────────
+  // Physical stock does not move either. A broken box is still
+  // in the warehouse; it has stopped being sellable. Writing it
+  // off is a separate ADJUSTMENT_DECREASE, which is a different
+  // decision made by a different person.
+  DAMAGE
+  DAMAGE_RECOVERY
+
+  // NO "REVERSAL" MEMBER, DELIBERATELY.
+  //
+  // A reversal is the OPPOSITE movement, carrying
+  // reversalOfEntryId. Recording it as its own type would throw
+  // away the direction -- "REVERSAL" alone cannot say whether
+  // stock went up or down -- and every balance calculation would
+  // then need a special case to look up what it reversed. The
+  // step-2 design already had this right.
 }
 
 /// WHY it moved. Separate from the type because "stock went out"
@@ -123,8 +147,14 @@ enum StockMovementReason {
   SALES_RETURN
   SAMPLE_ISSUE
   DAMAGE
+  /// A damaged box turned out to be fine, or was repaired.
+  DAMAGE_RECOVERY
   STOCK_COUNT_CORRECTION
   WAREHOUSE_TRANSFER
+  /// Stock promised to a confirmed order, or released again when
+  /// the order is dispatched or cancelled.
+  RESERVATION
+  RESERVATION_RELEASE
   OTHER
 }
 
@@ -132,6 +162,16 @@ enum StockMovementReason {
 /// referenceId so a movement can always be traced to what caused it.
 enum StockReferenceType {
   PURCHASE_ORDER
+  /// What a receipt's stock movements point at. Distinct from
+  /// PURCHASE_ORDER on purpose: the order is the agreement, the
+  /// note is the delivery, and only the second one moved stock.
+  GOODS_RECEIPT_NOTE
+  PURCHASE_RETURN
+  /// What a dispatch's stock movements point at -- the delivery
+  /// challan, not the sales order. The order is the agreement,
+  /// the challan is what actually left the building.
+  DELIVERY_CHALLAN
+  SALES_RETURN
   SALES_ORDER
   STOCK_ADJUSTMENT
   WAREHOUSE_TRANSFER
@@ -139,21 +179,191 @@ enum StockReferenceType {
   MANUAL
 }
 
+/// THE PURCHASE ORDER LIFECYCLE.
+///
+///     DRAFT ─▶ PENDING_APPROVAL ─▶ APPROVED ─┬─▶ PARTIALLY_RECEIVED ─▶ FULLY_RECEIVED
+///       │             │                      │            │                   │
+///       └─────────────┴──────────────────────┴▶ CANCELLED └───────────────────┴▶ CLOSED
+///
+/// CANCELLED is reachable only while NOTHING has been received: an
+/// order goods have arrived against did happen, and pretending
+/// otherwise would orphan the stock that came in on it. Such an
+/// order is CLOSED instead, short of its full quantity, with a
+/// reason recorded.
+///
+/// APPROVED was called ORDERED and FULLY_RECEIVED was called
+/// RECEIVED, through step 5. They were renamed rather than
+/// replaced -- a rename rewrites no rows and leaves no dead
+/// members -- and there were no purchase orders in any database at
+/// the time.
 enum PurchaseOrderStatus {
   DRAFT
-  ORDERED
+  PENDING_APPROVAL
+  APPROVED
   PARTIALLY_RECEIVED
-  RECEIVED
+  FULLY_RECEIVED
+  CANCELLED
+  CLOSED
+}
+
+/// A goods receipt is DRAFT until it is posted. Posting is what
+/// moves stock, and it is irreversible: the ledger entries it
+/// wrote cannot be unwritten. A receipt entered by mistake is
+/// corrected by a purchase return or an adjustment, not by
+/// deleting the note.
+enum GoodsReceiptStatus {
+  DRAFT
+  POSTED
   CANCELLED
 }
 
-enum SalesOrderStatus {
-  QUOTATION
-  CONFIRMED
-  DISPATCHED
-  INVOICED
-  DELIVERED
+enum PurchaseReturnStatus {
+  DRAFT
+  POSTED
   CANCELLED
+}
+
+/// A supplier invoice is a CLAIM FOR PAYMENT. It is deliberately
+/// not evidence that anything arrived: only a posted goods receipt
+/// is that. An invoice can be recorded, matched against receipts,
+/// disputed or cancelled, and none of it touches stock.
+enum SupplierInvoiceStatus {
+  RECEIVED
+  MATCHED
+  DISPUTED
+  CANCELLED
+}
+
+/// HOW GST APPLIES TO ONE PURCHASE, decided when the order is
+/// raised and then frozen on it.
+///
+/// For goods, the place of supply is where they are delivered, so
+/// the comparison is the SUPPLIER's state against the RECEIVING
+/// WAREHOUSE's state.
+///
+///   INTRA_STATE  same state      -> CGST + SGST, half each
+///   INTER_STATE  different state -> IGST, the whole rate
+///   UNREGISTERED supplier has no GSTIN -> no GST charged on the
+///                document. Reverse charge, where it applies, is
+///                an accounting matter and out of this phase.
+///
+/// There is deliberately no "assume intra-state" fallback. If the
+/// two state codes cannot be established the order is refused,
+/// because guessing produces a tax figure that is wrong in a way
+/// nobody notices until an audit.
+enum GstTreatment {
+  INTRA_STATE
+  INTER_STATE
+  UNREGISTERED
+}
+
+/// THE SALES ORDER LIFECYCLE.
+///
+///     DRAFT -> PENDING_APPROVAL -> CONFIRMED -> PARTIALLY_RESERVED -> RESERVED
+///       |              |               |                                 |
+///       +--------------+---------------+-> CANCELLED                     v
+///                                                              PARTIALLY_DISPATCHED
+///                                                                         |
+///                                                                         v
+///                                                                FULLY_DISPATCHED
+///                                                                         |
+///                                                                         v
+///                                                                      CLOSED
+///
+/// CANCELLED is reachable only while NOTHING has shipped: stock
+/// that has actually left the building is a fact, and pretending
+/// otherwise would orphan it. An order already dispatched in part
+/// is CLOSED instead, short of its full quantity, with a reason.
+///
+/// Renamed from the step-2 names, which predate the separate
+/// Quotation document this step adds: QUOTATION -> DRAFT,
+/// DISPATCHED -> PARTIALLY_DISPATCHED, INVOICED ->
+/// FULLY_DISPATCHED, DELIVERED -> CLOSED. A rename rewrites no
+/// rows, and there were no sales orders in any database when this
+/// ran.
+enum SalesOrderStatus {
+  DRAFT
+  PENDING_APPROVAL
+  CONFIRMED
+  PARTIALLY_RESERVED
+  RESERVED
+  PARTIALLY_DISPATCHED
+  FULLY_DISPATCHED
+  CLOSED
+  CANCELLED
+}
+
+enum QuotationStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  REJECTED
+  EXPIRED
+  CONVERTED
+  CANCELLED
+}
+
+/// A sales invoice is DRAFT until posted; posting commits the
+/// price and tax snapshot but -- unlike a goods receipt -- moves
+/// NO stock. See the architecture note in SALES_MANAGEMENT.md
+/// section 7 for why dispatch, not invoicing, is the chosen
+/// inventory event.
+enum SalesInvoiceStatus {
+  DRAFT
+  POSTED
+  CANCELLED
+}
+
+enum DeliveryChallanStatus {
+  DRAFT
+  DISPATCHED
+  CANCELLED
+}
+
+enum SalesReturnStatus {
+  DRAFT
+  POSTED
+  CANCELLED
+}
+
+/// What came back, and what it is worth doing with it.
+/// Only ACCEPTED_GOOD may return to sellable stock.
+enum ReturnDisposition {
+  ACCEPTED_GOOD
+  DAMAGED
+  REJECTED
+}
+
+enum PaymentStatus {
+  UNPAID
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+}
+
+enum PaymentMethod {
+  CASH
+  BANK_TRANSFER
+  CHEQUE
+  UPI
+  CARD
+  OTHER
+}
+
+/// HOW GST APPLIES TO ONE SALE, decided when the order is raised
+/// and then frozen on it. For goods the place of supply is where
+/// they are delivered, so the comparison is the SELLING
+/// WAREHOUSE's state against the CUSTOMER's shipping state --
+/// the mirror image of the purchase side, which compares the
+/// supplier against the receiving warehouse.
+///
+/// UNLIKE THE PURCHASE SIDE: a customer with no GSTIN is not
+/// exempt. An unregistered buyer is an ordinary retail (B2C) sale
+/// and still carries GST; only an explicitly exempt or export
+/// sale would not, and neither is implemented in this phase.
+enum SalesGstTreatment {
+  INTRA_STATE
+  INTER_STATE
 }
 
 /// A document's life. POSTED is the line past which a document may
@@ -190,6 +400,11 @@ enum AuditAction {
   UPDATE
   DELETE
   POST
+  APPROVE
+  RECEIVE
+  RESERVE
+  DISPATCH
+  CLOSE
   CANCEL
   LOGIN
   EXPORT
@@ -257,8 +472,33 @@ model User {
   adjustments          StockAdjustment[]
   importBatches        ImportBatch[]
   purchaseOrders       PurchaseOrder[]
-  salesOrders          SalesOrder[]
   transfers            WarehouseTransfer[]
+  transfersDispatched  WarehouseTransfer[]  @relation("TransferDispatchedBy")
+  transfersReceived    WarehouseTransfer[]  @relation("TransferReceivedBy")
+  posApproved          PurchaseOrder[]      @relation("PoApprovedBy")
+  posCancelled         PurchaseOrder[]      @relation("PoCancelledBy")
+  posClosed            PurchaseOrder[]      @relation("PoClosedBy")
+  grnsReceived         GoodsReceiptNote[]   @relation("GrnReceivedBy")
+  grnsPosted           GoodsReceiptNote[]   @relation("GrnPostedBy")
+  grnsCancelled        GoodsReceiptNote[]   @relation("GrnCancelledBy")
+  returnsCreated       PurchaseReturn[]     @relation("ReturnCreatedBy")
+  returnsPosted        PurchaseReturn[]     @relation("ReturnPostedBy")
+  supplierInvoices     SupplierInvoice[]    @relation("InvoiceCreatedBy")
+  quotesCreated        Quotation[]          @relation("QuoteCreatedBy")
+  quotesConverted      Quotation[]          @relation("QuoteConvertedBy")
+  salesOrdersCreated   SalesOrder[]         @relation("SoCreatedBy")
+  salesOrdersApproved  SalesOrder[]         @relation("SoApprovedBy")
+  salesOrdersCancelled SalesOrder[]         @relation("SoCancelledBy")
+  salesOrdersClosed    SalesOrder[]         @relation("SoClosedBy")
+  invoicesCreated      SalesInvoice[]       @relation("InvCreatedBy")
+  invoicesPosted       SalesInvoice[]       @relation("InvPostedBy")
+  invoicesCancelled    SalesInvoice[]       @relation("InvCancelledBy")
+  challansCreated      DeliveryChallan[]    @relation("DcCreatedBy")
+  challansDispatched   DeliveryChallan[]    @relation("DcDispatchedBy")
+  challansCancelled    DeliveryChallan[]    @relation("DcCancelledBy")
+  salesReturnsReceived SalesReturn[]        @relation("SrReceivedBy")
+  salesReturnsPosted   SalesReturn[]        @relation("SrPostedBy")
+  paymentsRecorded     CustomerPayment[]    @relation("PaymentRecordedBy")
   auditLogs            AuditLog[]
 
   @@index([status])
@@ -508,7 +748,13 @@ model Product {
   inventory           InventoryBalance[]
   stockEntries        StockLedgerEntry[]
   adjustmentLines     StockAdjustmentLine[]
-  purchaseOrderLines  PurchaseOrderLine[]
+  purchaseOrderLines PurchaseOrderLine[]
+  goodsReceiptLines   GoodsReceiptNoteLine[]
+  purchaseReturnLines PurchaseReturnLine[]
+  quotationLines      QuotationLine[]
+  salesInvoiceLines   SalesInvoiceLine[]
+  deliveryChallanLines DeliveryChallanLine[]
+  salesReturnLines    SalesReturnLine[]
   salesOrderLines     SalesOrderLine[]
   transferLines       WarehouseTransferLine[]
   websiteMapping      WebsiteProductMapping?
@@ -543,6 +789,16 @@ model Warehouse {
   city        String?
   state       String?
   postalCode  String?
+
+  /// The GST state code of the place goods are delivered to. For
+  /// goods, the place of supply IS the delivery address, so this is
+  /// one half of every purchase's GST treatment; the supplier's
+  /// state code is the other. Without it an order cannot be taxed,
+  /// and the service says so rather than assuming.
+  stateCode String?
+  /// The studio's own registration at this location, where it has
+  /// one. Printed on purchase paperwork.
+  gstin String?
   /// Exactly one warehouse carries this. The ERP holds stock in one
   /// place today; the schema is already multi-warehouse so that
   /// adding a second is data entry rather than a migration of every
@@ -560,6 +816,12 @@ model Warehouse {
   salesOrders     SalesOrder[]
   transfersOut    WarehouseTransfer[] @relation("TransferFrom")
   transfersIn     WarehouseTransfer[] @relation("TransferTo")
+  goodsReceipts   GoodsReceiptNote[]
+  purchaseReturns PurchaseReturn[]
+  quotations      Quotation[]
+  salesInvoices   SalesInvoice[]
+  deliveryChallans DeliveryChallan[]
+  salesReturns    SalesReturn[]
 
   @@index([isActive])
   @@map("warehouses")
@@ -597,11 +859,35 @@ model InventoryBalance {
   /// it, because "we dispatched more than we had" is a data error,
   /// not a number.
   quantityOnHand Decimal @default(0) @db.Decimal(14, 3)
-  /// Committed to a confirmed order but not yet dispatched. Whether
-  /// confirming an order should reserve at all is still an open
-  /// decision; the column exists so that answering it later is not
-  /// a migration.
+  /// Committed to a confirmed order but not yet dispatched. Part
+  /// of quantityOnHand, not additional to it: the boxes are on the
+  /// shelf and somebody else's.
   quantityReserved Decimal @default(0) @db.Decimal(14, 3)
+
+  /// Physically present and not sellable. ALSO part of
+  /// quantityOnHand: a broken box is still a box in the warehouse,
+  /// and pretending otherwise makes the stock-take disagree with
+  /// the system. Writing it off is an ADJUSTMENT_DECREASE, which
+  /// is a separate decision.
+  quantityDamaged Decimal @default(0) @db.Decimal(14, 3)
+
+  /// ON ITS WAY HERE, AND COUNTED NOWHERE ELSE.
+  ///
+  /// Stock that has left another warehouse on a transfer and has
+  /// not yet been received. It is held against the DESTINATION,
+  /// because that is where it is going and where somebody will
+  /// eventually count it.
+  ///
+  /// It is deliberately NOT part of quantityOnHand: a lorry is not
+  /// a shelf, and nobody can pick from it. Company-wide physical
+  /// stock is therefore
+  ///
+  ///     SUM(quantityOnHand) + SUM(quantityInTransit)
+  ///
+  /// which stays constant across a transfer -- the source's
+  /// on-hand falls and this rises by the same amount, then the
+  /// reverse on receipt. Nothing is counted twice at any point.
+  quantityInTransit Decimal @default(0) @db.Decimal(14, 3)
 
   /// Per-warehouse override of Product.reorderLevel.
   reorderLevel Decimal? @db.Decimal(14, 3)
@@ -664,11 +950,26 @@ model StockLedgerEntry {
   unitCost    Decimal? @db.Decimal(14, 2)
   valueAmount Decimal? @db.Decimal(14, 2)
 
-  /// The running balance AFTER this entry, for this product in this
-  /// warehouse. Written inside the same locked transaction, so it
-  /// is a fact about the moment rather than a guess, and it is what
-  /// lets a stock card be read without re-summing the history.
-  balanceAfter Decimal @db.Decimal(14, 3)
+  /// WHAT THE BALANCE WAS BEFORE, AND WHAT IT BECAME.
+  ///
+  /// Both written inside the same locked transaction, so a stock
+  /// card reads as a statement does -- opening, movement, closing
+  /// -- and a reader can check each line without re-summing the
+  /// history above it. The pair also makes a gap obvious: if one
+  /// row's balanceAfter is not the next row's balanceBefore,
+  /// something wrote stock outside the ledger.
+  ///
+  /// These are always PHYSICAL on-hand. A reservation or a damage
+  /// entry leaves them unchanged -- the boxes have not moved --
+  /// and records its own effect in the two columns below.
+  balanceBefore Decimal @default(0) @db.Decimal(14, 3)
+  balanceAfter  Decimal @db.Decimal(14, 3)
+
+  /// The other two dimensions as they stood after this entry, so
+  /// one row answers "what was on the shelf, what was promised,
+  /// and what was broken" without joining to anything.
+  reservedAfter Decimal @default(0) @db.Decimal(14, 3)
+  damagedAfter  Decimal @default(0) @db.Decimal(14, 3)
 
   referenceType StockReferenceType
   /// The id of the document that caused this. Not a foreign key:
@@ -785,17 +1086,46 @@ model Supplier {
   addressLine  String?
   city         String?
   state        String?
+  postalCode   String?
+
+  /// THE GST STATE CODE: the two digits that decide whether a
+  /// purchase attracts CGST+SGST or IGST. It is also the first two
+  /// characters of the GSTIN, so where a GSTIN is recorded this is
+  /// derived from it and the two are checked against each other --
+  /// a supplier whose GSTIN says 24 and whose state code says 27
+  /// is a data-entry error worth catching at the form.
+  stateCode String?
+
+  /// Where goods are collected from, when that is not the billing
+  /// address. Kept separate because a supplier's registered office
+  /// and its despatch warehouse are routinely in different places.
+  shippingAddressLine String?
+  shippingCity        String?
+  shippingState       String?
+  shippingStateCode   String?
+  shippingPostalCode  String?
+
   /// Free text: "30 days", "Advance". Deliberately not an enum —
   /// supplier terms are whatever was negotiated.
   paymentTerms String?
-  isActive     Boolean @default(true)
+  /// The same terms as a number, where they reduce to one. Used to
+  /// work out when an invoice falls due; null where the terms do
+  /// not reduce to a count of days ("Advance").
+  creditPeriodDays Int?
+
+  notes    String?
+  isActive Boolean @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  purchaseOrders PurchaseOrder[]
+  purchaseOrders  PurchaseOrder[]
+  goodsReceipts   GoodsReceiptNote[]
+  purchaseReturns PurchaseReturn[]
+  invoices        SupplierInvoice[]
 
   @@index([isActive])
+  @@index([stateCode])
   @@map("suppliers")
 }
 
@@ -811,7 +1141,35 @@ model Customer {
   addressLine  String?
   city         String?
   state        String?
-  isActive     Boolean @default(true)
+  postalCode   String?
+
+  /// THE GST STATE CODE: the two digits that decide whether a sale
+  /// attracts CGST+SGST or IGST, compared against the selling
+  /// warehouse's own state code. Derived from the GSTIN where one
+  /// is recorded, the same way a supplier's is on the purchase
+  /// side.
+  stateCode String?
+
+  /// Where goods are delivered, when that differs from the billing
+  /// address -- a site address for a project customer, most
+  /// commonly. For GOODS the place of supply is the SHIPPING
+  /// state, so this is the side of the GST decision that actually
+  /// matters; billing address and state are what appears on the
+  /// invoice.
+  shippingAddressLine String?
+  shippingCity        String?
+  shippingState       String?
+  shippingStateCode   String?
+  shippingPostalCode  String?
+
+  /// Free text, as on the supplier side: whatever was agreed.
+  paymentTerms String?
+  /// Reduces to a day count where the terms do; null where they do
+  /// not ("Advance"). Used to work out an invoice's due date.
+  creditPeriodDays Int?
+
+  notes    String?
+  isActive Boolean @default(true)
 
   /// Where this customer came from, if they were created by the
   /// website rather than at the counter. A loose reference, not a
@@ -821,10 +1179,16 @@ model Customer {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  salesOrders SalesOrder[]
+  quotations      Quotation[]
+  salesOrders     SalesOrder[]
+  invoices        SalesInvoice[]
+  deliveryChallans DeliveryChallan[]
+  salesReturns    SalesReturn[]
+  payments        CustomerPayment[]
 
   @@index([isActive])
   @@index([type])
+  @@index([stateCode])
   @@map("customers")
 }
 
@@ -843,26 +1207,76 @@ model PurchaseOrder {
   orderDate    DateTime
   expectedDate DateTime?
 
+  /// WHERE THE PAPERWORK GOES AND WHERE THE GOODS GO. Snapshots,
+  /// written when the order is raised. The supplier may move
+  /// afterwards; what was agreed must still read the way it read on
+  /// the day, and a reprint of last year's order must not quietly
+  /// show this year's address.
+  billingAddress  String?
+  shippingAddress String?
+  paymentTerms    String?
+
+  /// HOW GST APPLIES, decided once from the supplier's state and
+  /// the receiving warehouse's state, then frozen here. Recomputing
+  /// it on read would change an old order's tax the day a supplier
+  /// updates its address.
+  gstTreatment       GstTreatment
+  supplierStateCode  String?
+  placeOfSupplyCode  String?
+
   /// Totals are STORED, not computed on read. A supplier's invoice
   /// is a historical fact; recomputing it from today's prices would
   /// quietly rewrite what was agreed.
-  subTotal   Decimal @default(0) @db.Decimal(14, 2)
-  taxTotal   Decimal @default(0) @db.Decimal(14, 2)
-  grandTotal Decimal @default(0) @db.Decimal(14, 2)
-  currency   String  @default("INR")
+  subTotal      Decimal @default(0) @db.Decimal(14, 2)
+  discountTotal Decimal @default(0) @db.Decimal(14, 2)
+  taxableTotal  Decimal @default(0) @db.Decimal(14, 2)
+  cgstTotal     Decimal @default(0) @db.Decimal(14, 2)
+  sgstTotal     Decimal @default(0) @db.Decimal(14, 2)
+  igstTotal     Decimal @default(0) @db.Decimal(14, 2)
+  taxTotal      Decimal @default(0) @db.Decimal(14, 2)
+  otherCharges  Decimal @default(0) @db.Decimal(14, 2)
+  grandTotal    Decimal @default(0) @db.Decimal(14, 2)
+  currency      String  @default("INR")
 
-  notes       String?
+  notes String?
+
+  /// WHO APPROVED IT, AND WHEN. An order that reached a supplier
+  /// without a name against it is not a control. A CHECK enforces
+  /// that the pair is all-or-nothing.
+  submittedAt  DateTime?
+  approvedById String?   @db.Uuid
+  approvedAt   DateTime?
+
+  cancelledById String?   @db.Uuid
+  cancelledAt   DateTime?
+  cancelReason  String?
+
+  /// Short closure: the order is finished with, although less than
+  /// the full quantity arrived. The reason is required, because
+  /// "we stopped waiting" and "the supplier cannot supply" are
+  /// different facts about the same number.
+  closedById  String?   @db.Uuid
+  closedAt    DateTime?
+  closeReason String?
+
   createdById String   @db.Uuid
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  supplier  Supplier            @relation(fields: [supplierId], references: [id], onDelete: Restrict)
-  warehouse Warehouse           @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
-  createdBy User                @relation(fields: [createdById], references: [id], onDelete: Restrict)
-  lines     PurchaseOrderLine[]
+  supplier    Supplier            @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  warehouse   Warehouse           @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  createdBy   User                @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  approvedBy  User?               @relation("PoApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict)
+  cancelledBy User?               @relation("PoCancelledBy", fields: [cancelledById], references: [id], onDelete: Restrict)
+  closedBy    User?               @relation("PoClosedBy", fields: [closedById], references: [id], onDelete: Restrict)
+  lines       PurchaseOrderLine[]
+  receipts    GoodsReceiptNote[]
+  returns     PurchaseReturn[]
+  invoices    SupplierInvoice[]
 
   @@index([supplierId])
   @@index([status, orderDate])
+  @@index([warehouseId])
   @@map("purchase_orders")
 }
 
@@ -879,22 +1293,315 @@ model PurchaseOrderLine {
   skuAtOrder  String
   nameAtOrder String
 
-  quantity         Decimal       @db.Decimal(14, 3)
-  uom              UnitOfMeasure
-  unitPrice        Decimal       @db.Decimal(14, 2)
-  lineTotal        Decimal       @db.Decimal(14, 2)
-  /// Running total of what has actually arrived against this line.
-  /// Maintained alongside the receipt's ledger entries, which stay
-  /// the authority.
-  receivedQuantity Decimal       @default(0) @db.Decimal(14, 3)
+  /// The HSN code as it stood when the line was written, for the
+  /// same reason as the SKU and the name.
+  hsnAtOrder String?
 
-  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
-  product       Product       @relation(fields: [productId], references: [id], onDelete: Restrict)
+  quantity  Decimal       @db.Decimal(14, 3)
+  uom       UnitOfMeasure
+  unitPrice Decimal       @db.Decimal(14, 2)
+
+  /// THE LINE, STEP BY STEP, each step stored rather than derived:
+  ///
+  ///   grossAmount   = quantity x unitPrice
+  ///   discountAmount
+  ///   taxableValue  = grossAmount - discountAmount
+  ///   taxAmount     = taxableValue x taxRate / 100
+  ///   lineTotal     = taxableValue + taxAmount
+  ///
+  /// Storing each step is what lets somebody check the arithmetic
+  /// of a two-year-old order without knowing which rate applied
+  /// then, and what stops a rate change rewriting history.
+  discountPercent Decimal @default(0) @db.Decimal(6, 3)
+  discountAmount  Decimal @default(0) @db.Decimal(14, 2)
+  grossAmount     Decimal @default(0) @db.Decimal(14, 2)
+  taxableValue    Decimal @default(0) @db.Decimal(14, 2)
+
+  /// The GST rate that applied to THIS line on THIS order. Taken
+  /// from the product's category when the line is written and then
+  /// frozen: the Product Master's HSN or rate may change, and an
+  /// order already placed must not change with it.
+  taxRate    Decimal @default(0) @db.Decimal(5, 2)
+  cgstAmount Decimal @default(0) @db.Decimal(14, 2)
+  sgstAmount Decimal @default(0) @db.Decimal(14, 2)
+  igstAmount Decimal @default(0) @db.Decimal(14, 2)
+  taxAmount  Decimal @default(0) @db.Decimal(14, 2)
+  lineTotal  Decimal @db.Decimal(14, 2)
+
+  /// When this particular line is due, where it differs from the
+  /// order's own date.
+  expectedDate DateTime?
+  description  String?
+
+  /// Running totals of what has actually arrived against this line.
+  /// Maintained alongside the receipt's ledger entries, which stay
+  /// the authority: these are a convenience for the screen, and the
+  /// reconciliation check re-derives them from the receipts.
+  ///
+  /// receivedQuantity counts everything that ENTERED THE BUILDING,
+  /// sound or broken, because both are things the supplier has
+  /// delivered against the order. rejectedQuantity counts what was
+  /// turned away at the gate and never entered stock at all, so the
+  /// supplier still owes it.
+  receivedQuantity Decimal @default(0) @db.Decimal(14, 3)
+  rejectedQuantity Decimal @default(0) @db.Decimal(14, 3)
+
+  purchaseOrder PurchaseOrder          @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  product       Product                @relation(fields: [productId], references: [id], onDelete: Restrict)
+  receiptLines  GoodsReceiptNoteLine[]
 
   @@unique([purchaseOrderId, lineNo])
   @@index([productId])
   @@map("purchase_order_lines")
 }
+
+
+/* ============================================================
+   GOODS RECEIPT — WHERE PURCHASING MEETS INVENTORY
+   ============================================================
+
+   A PURCHASE ORDER DOES NOT CHANGE STOCK. Neither does approving
+   one, and neither does a supplier's invoice. Stock changes when
+   goods physically arrive and somebody posts a receipt for them.
+   That is the whole reason this table exists rather than a
+   "received" flag on the order.
+
+   Posting a receipt writes its stock movements through
+   postStockMovement(), in the same transaction, and nowhere else.
+   Each line's movements carry a stable idempotency key derived
+   from the line's own id, so a resubmitted form or a retried
+   request posts the stock exactly once.
+   ============================================================ */
+
+model GoodsReceiptNote {
+  id       String             @id @default(uuid()) @db.Uuid
+  grnNo    String             @unique
+  status   GoodsReceiptStatus @default(DRAFT)
+
+  purchaseOrderId String @db.Uuid
+  supplierId      String @db.Uuid
+  /// Where the goods actually landed. Defaults to the order's
+  /// warehouse but may differ: a lorry that was redirected is a
+  /// fact about the delivery, not about the order.
+  warehouseId     String @db.Uuid
+
+  receiptDate DateTime
+  /// The supplier's own despatch paperwork, for matching.
+  supplierDocNo   String?
+  supplierDocDate DateTime?
+  /// A reference to wherever the signed delivery note is filed.
+  /// Deliberately a string: the ERP stores no files in this phase.
+  documentRef String?
+  remarks     String?
+
+  receivedById String    @db.Uuid
+  postedById   String?   @db.Uuid
+  postedAt     DateTime?
+
+  cancelledById String?   @db.Uuid
+  cancelledAt   DateTime?
+  cancelReason  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  purchaseOrder PurchaseOrder          @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
+  supplier      Supplier               @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  warehouse     Warehouse              @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  receivedBy    User                   @relation("GrnReceivedBy", fields: [receivedById], references: [id], onDelete: Restrict)
+  postedBy      User?                  @relation("GrnPostedBy", fields: [postedById], references: [id], onDelete: Restrict)
+  cancelledBy   User?                  @relation("GrnCancelledBy", fields: [cancelledById], references: [id], onDelete: Restrict)
+  lines         GoodsReceiptNoteLine[]
+  invoices      SupplierInvoice[]
+
+  @@index([purchaseOrderId])
+  @@index([supplierId])
+  @@index([status, receiptDate])
+  @@map("goods_receipt_notes")
+}
+
+model GoodsReceiptNoteLine {
+  id                  String @id @default(uuid()) @db.Uuid
+  goodsReceiptNoteId  String @db.Uuid
+  lineNo              Int
+  purchaseOrderLineId String @db.Uuid
+  productId           String @db.Uuid
+
+  skuAtReceipt  String
+  nameAtReceipt String
+
+  /// WHAT WAS ORDERED AND WHAT HAD ALREADY COME, as they stood when
+  /// this note was written. Snapshots, so the note reads correctly
+  /// later even though the order's running totals have moved on.
+  orderedQuantity          Decimal @db.Decimal(14, 3)
+  previouslyReceivedQuantity Decimal @default(0) @db.Decimal(14, 3)
+
+  /// THE THREE DISPOSITIONS OF A DELIVERY, and they are not the
+  /// same thing:
+  ///
+  ///   accepted  sound, into stock, sellable
+  ///   damaged   into stock because it IS in the building, but
+  ///             marked damaged so it is not sellable. A broken box
+  ///             a stock-take would find has to be on the system,
+  ///             or the count disagrees with the shelf.
+  ///   rejected  turned away at the gate. Never entered stock at
+  ///             all, so no movement is posted and the supplier
+  ///             still owes the quantity.
+  ///
+  /// receivedQuantity = accepted + damaged: what came through the
+  /// door. Rejected is excluded on purpose.
+  acceptedQuantity Decimal @db.Decimal(14, 3)
+  damagedQuantity  Decimal @default(0) @db.Decimal(14, 3)
+  rejectedQuantity Decimal @default(0) @db.Decimal(14, 3)
+  receivedQuantity Decimal @db.Decimal(14, 3)
+
+  uom UnitOfMeasure
+  /// The cost this stock came in at, copied from the order line and
+  /// written onto the stock movement. Whatever valuation method is
+  /// chosen later needs it, and it cannot be reconstructed.
+  unitCost Decimal? @db.Decimal(14, 2)
+
+  rejectionReason String?
+  remarks         String?
+
+  goodsReceiptNote  GoodsReceiptNote  @relation(fields: [goodsReceiptNoteId], references: [id], onDelete: Cascade)
+  purchaseOrderLine PurchaseOrderLine @relation(fields: [purchaseOrderLineId], references: [id], onDelete: Restrict)
+  product           Product           @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@unique([goodsReceiptNoteId, lineNo])
+  @@index([purchaseOrderLineId])
+  @@index([productId])
+  @@map("goods_receipt_note_lines")
+}
+
+
+/* ============================================================
+   PURCHASE RETURN — STOCK GOING BACK TO THE SUPPLIER
+   ============================================================
+   Reduces stock through postStockMovement() like everything else.
+   It does NOT edit the receipt that brought the stock in: that
+   entry stays on the ledger, and the return sits beside it, which
+   is how a stock card shows what actually happened.
+   ============================================================ */
+
+model PurchaseReturn {
+  id       String               @id @default(uuid()) @db.Uuid
+  returnNo String               @unique
+  status   PurchaseReturnStatus @default(DRAFT)
+
+  supplierId      String  @db.Uuid
+  warehouseId     String  @db.Uuid
+  purchaseOrderId String? @db.Uuid
+
+  returnDate DateTime
+  /// Why the goods went back. Required by the service: a return
+  /// with no reason is a number somebody changed.
+  reason     String
+  remarks    String?
+  documentRef String?
+
+  createdById String    @db.Uuid
+  postedById  String?   @db.Uuid
+  postedAt    DateTime?
+
+  cancelledAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  supplier      Supplier             @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  warehouse     Warehouse            @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  purchaseOrder PurchaseOrder?       @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
+  createdBy     User                 @relation("ReturnCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  postedBy      User?                @relation("ReturnPostedBy", fields: [postedById], references: [id], onDelete: Restrict)
+  lines         PurchaseReturnLine[]
+
+  @@index([supplierId])
+  @@index([status, returnDate])
+  @@map("purchase_returns")
+}
+
+model PurchaseReturnLine {
+  id               String @id @default(uuid()) @db.Uuid
+  purchaseReturnId String @db.Uuid
+  lineNo           Int
+  productId        String @db.Uuid
+
+  skuAtReturn  String
+  nameAtReturn String
+
+  quantity Decimal       @db.Decimal(14, 3)
+  uom      UnitOfMeasure
+  unitCost Decimal?      @db.Decimal(14, 2)
+  /// Whether the boxes going back are sound stock or stock already
+  /// marked damaged. The two come out of different dimensions of
+  /// the balance, so the service has to be told which.
+  fromDamaged Boolean @default(false)
+  remarks     String?
+
+  purchaseReturn PurchaseReturn @relation(fields: [purchaseReturnId], references: [id], onDelete: Cascade)
+  product        Product        @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@unique([purchaseReturnId, lineNo])
+  @@index([productId])
+  @@map("purchase_return_lines")
+}
+
+
+/* ============================================================
+   SUPPLIER INVOICE — A CLAIM FOR PAYMENT, NOT A DELIVERY
+   ============================================================
+   Recording one changes NO stock. The three documents are
+   deliberately separate rows in three separate tables:
+
+     purchase order   what we agreed to buy
+     goods receipt    what actually arrived   <- the only one that
+                                                 moves stock
+     supplier invoice what we are being asked to pay for
+
+   They routinely disagree, and an ERP that conflates any two of
+   them cannot show you how.
+   ============================================================ */
+
+model SupplierInvoice {
+  id         String                @id @default(uuid()) @db.Uuid
+  supplierId String                @db.Uuid
+  status     SupplierInvoiceStatus @default(RECEIVED)
+
+  /// The SUPPLIER's number, not ours. Unique per supplier: the same
+  /// invoice number from two different suppliers is ordinary, the
+  /// same one twice from one supplier is a double entry.
+  invoiceNo   String
+  invoiceDate DateTime
+  dueDate     DateTime?
+
+  purchaseOrderId    String? @db.Uuid
+  goodsReceiptNoteId String? @db.Uuid
+
+  taxableAmount Decimal @default(0) @db.Decimal(14, 2)
+  taxAmount     Decimal @default(0) @db.Decimal(14, 2)
+  invoiceAmount Decimal @db.Decimal(14, 2)
+  currency      String  @default("INR")
+
+  documentRef String?
+  notes       String?
+
+  createdById String   @db.Uuid
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  supplier         Supplier          @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  purchaseOrder    PurchaseOrder?    @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
+  goodsReceiptNote GoodsReceiptNote? @relation(fields: [goodsReceiptNoteId], references: [id], onDelete: Restrict)
+  createdBy        User              @relation("InvoiceCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  /// One invoice number per supplier. The database enforces it, so
+  /// a double entry is refused even if two clerks save at once.
+  @@unique([supplierId, invoiceNo])
+  @@index([status, invoiceDate])
+  @@map("supplier_invoices")
+}
+
 
 // ============================================================
 // 8. SALES
@@ -908,29 +1615,97 @@ model SalesOrder {
   /// now; splitting an order across locations is one of the open
   /// decisions.
   warehouseId String           @db.Uuid
-  status      SalesOrderStatus @default(QUOTATION)
+  status      SalesOrderStatus @default(DRAFT)
 
-  orderDate    DateTime
-  dispatchDate DateTime?
+  /// Where this order came from, when it was raised directly out
+  /// of an accepted quotation. Optional: an order may be written
+  /// from scratch with no quotation behind it.
+  quotationId String? @db.Uuid
 
-  subTotal    Decimal @default(0) @db.Decimal(14, 2)
-  discount    Decimal @default(0) @db.Decimal(14, 2)
-  taxTotal    Decimal @default(0) @db.Decimal(14, 2)
-  grandTotal  Decimal @default(0) @db.Decimal(14, 2)
-  currency    String  @default("INR")
+  orderDate           DateTime
+  /// SUPERSEDED by expectedDispatchDate below. The step-2 column
+  /// was ambiguous between an expected date and an actual one;
+  /// kept, not dropped, and always null (zero rows existed
+  /// before step 7).
+  legacyDispatchDate   DateTime?
+  /// WHEN DISPATCH IS PLANNED FOR. The ACTUAL dispatch date is a
+  /// fact about a delivery challan, not about the order, and
+  /// lives there instead -- an order can have several partial
+  /// dispatches on different real dates.
+  expectedDispatchDate DateTime?
 
-  notes       String?
+  /// WHERE THE PAPERWORK GOES AND WHERE THE GOODS GO. Snapshots,
+  /// written when the order is confirmed, for the same reason as
+  /// on the purchase side: the customer's address may change
+  /// afterwards and a reprint of an old order must not quietly
+  /// show the new one.
+  billingAddress  String?
+  shippingAddress String?
+  paymentTerms    String?
+  deliveryTerms   String?
+
+  /// HOW GST APPLIES, decided once from the selling warehouse's
+  /// state and the customer's shipping state, then frozen here.
+  gstTreatment      SalesGstTreatment
+  sellerStateCode   String?
+  placeOfSupplyCode String?
+
+  subTotal      Decimal @default(0) @db.Decimal(14, 2)
+  /// SUPERSEDED by discountTotal (the sum of line-level discounts).
+  /// The step-2 column was a single undifferentiated figure with
+  /// no breakdown. Kept, renamed, rather than dropped -- dropping
+  /// a column is not an additive migration -- and always zero,
+  /// since no sales order existed before step 7.
+  legacyDiscount Decimal @default(0) @db.Decimal(14, 2)
+  discountTotal Decimal @default(0) @db.Decimal(14, 2)
+  taxableTotal  Decimal @default(0) @db.Decimal(14, 2)
+  cgstTotal     Decimal @default(0) @db.Decimal(14, 2)
+  sgstTotal     Decimal @default(0) @db.Decimal(14, 2)
+  igstTotal     Decimal @default(0) @db.Decimal(14, 2)
+  taxTotal      Decimal @default(0) @db.Decimal(14, 2)
+  otherCharges  Decimal @default(0) @db.Decimal(14, 2)
+  grandTotal    Decimal @default(0) @db.Decimal(14, 2)
+  currency      String  @default("INR")
+
+  notes String?
+
+  /// WHO APPROVED IT, AND WHEN. Mirrors the purchase order: an
+  /// order nobody signed off on reaching the reservation and
+  /// dispatch stage is not a control.
+  submittedAt  DateTime?
+  approvedById String?   @db.Uuid
+  approvedAt   DateTime?
+
+  cancelledById String?   @db.Uuid
+  cancelledAt   DateTime?
+  cancelReason  String?
+
+  /// Finished with, short of the full quantity -- the only honest
+  /// end for an order partly dispatched and never completing.
+  closedById  String?   @db.Uuid
+  closedAt    DateTime?
+  closeReason String?
+
   createdById String   @db.Uuid
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   customer  Customer         @relation(fields: [customerId], references: [id], onDelete: Restrict)
   warehouse Warehouse        @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
-  createdBy User             @relation(fields: [createdById], references: [id], onDelete: Restrict)
-  lines     SalesOrderLine[]
+  quotation Quotation?       @relation(fields: [quotationId], references: [id], onDelete: Restrict)
+  createdBy User             @relation("SoCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  approvedBy  User?          @relation("SoApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict)
+  cancelledBy User?          @relation("SoCancelledBy", fields: [cancelledById], references: [id], onDelete: Restrict)
+  closedBy    User?          @relation("SoClosedBy", fields: [closedById], references: [id], onDelete: Restrict)
+  lines         SalesOrderLine[]
+  invoices      SalesInvoice[]
+  deliveryChallans DeliveryChallan[]
+  salesReturns  SalesReturn[]
 
   @@index([customerId])
   @@index([status, orderDate])
+  @@index([warehouseId])
+  @@index([quotationId])
   @@map("sales_orders")
 }
 
@@ -942,21 +1717,473 @@ model SalesOrderLine {
 
   skuAtOrder  String
   nameAtOrder String
+  hsnAtOrder  String?
+  description String?
 
-  quantity           Decimal       @db.Decimal(14, 3)
-  uom                UnitOfMeasure
-  unitPrice          Decimal       @db.Decimal(14, 2)
-  discount           Decimal       @default(0) @db.Decimal(14, 2)
-  lineTotal          Decimal       @db.Decimal(14, 2)
-  dispatchedQuantity Decimal       @default(0) @db.Decimal(14, 3)
+  quantity  Decimal       @db.Decimal(14, 3)
+  uom       UnitOfMeasure
+  unitPrice Decimal       @db.Decimal(14, 2)
+  /// SUPERSEDED by discountAmount/discountPercent below. Kept for
+  /// the same reason as SalesOrder.legacyDiscount.
+  legacyDiscount Decimal @default(0) @db.Decimal(14, 2)
+
+  /// THE LINE, STEP BY STEP -- the same shape as a purchase order
+  /// line, computed by the same money.mjs:
+  ///
+  ///   grossAmount  = quantity x unitPrice
+  ///   discountAmount
+  ///   taxableValue = grossAmount - discountAmount
+  ///   taxAmount    = taxableValue x taxRate / 100
+  ///   lineTotal    = taxableValue + taxAmount
+  discountPercent Decimal @default(0) @db.Decimal(6, 3)
+  discountAmount  Decimal @default(0) @db.Decimal(14, 2)
+  grossAmount     Decimal @default(0) @db.Decimal(14, 2)
+  taxableValue    Decimal @default(0) @db.Decimal(14, 2)
+
+  /// The GST rate that applied to THIS line on THIS order, frozen
+  /// the same way as on a purchase order line.
+  taxRate    Decimal @default(0) @db.Decimal(5, 2)
+  cgstAmount Decimal @default(0) @db.Decimal(14, 2)
+  sgstAmount Decimal @default(0) @db.Decimal(14, 2)
+  igstAmount Decimal @default(0) @db.Decimal(14, 2)
+  taxAmount  Decimal @default(0) @db.Decimal(14, 2)
+  lineTotal  Decimal @db.Decimal(14, 2)
+
+  /// RUNNING TOTALS, maintained alongside the ledger entries that
+  /// are the real authority.
+  ///
+  /// reservedQuantity: committed to THIS order and not yet
+  /// dispatched. Consumed (reduced) as dispatch releases the
+  /// reservation and ships the stock, so reserved + dispatched
+  /// is not meaningful as a sum -- dispatching MOVES quantity
+  /// from reserved to dispatched, it does not add a third pool.
+  ///
+  /// dispatchedQuantity: what has actually left the building
+  /// against this line.
+  ///
+  /// returnedQuantity: what has come back, of any disposition.
+  /// Counted so eligibility for a further return can be computed
+  /// without re-summing every sales return line.
+  reservedQuantity   Decimal @default(0) @db.Decimal(14, 3)
+  dispatchedQuantity Decimal @default(0) @db.Decimal(14, 3)
+  returnedQuantity   Decimal @default(0) @db.Decimal(14, 3)
 
   salesOrder SalesOrder @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
   product    Product    @relation(fields: [productId], references: [id], onDelete: Restrict)
+  dispatchLines DeliveryChallanLine[]
 
   @@unique([salesOrderId, lineNo])
   @@index([productId])
   @@map("sales_order_lines")
 }
+
+
+/* ============================================================
+   QUOTATION — NEVER TOUCHES STOCK
+   ============================================================
+
+   A quotation is a proposal. Nothing about raising, revising,
+   sending or even accepting one changes inventory: no balance is
+   written, no ledger row inserted, and quotation.service.mjs does
+   not import postStockMovement at all. Only an explicit,
+   authorised CONVERSION creates a sales order, and converting is
+   never automatic -- creating a quotation never creates an order
+   on its own.
+   ============================================================ */
+
+model Quotation {
+  id            String          @id @default(uuid()) @db.Uuid
+  quotationNo   String          @unique
+  status        QuotationStatus @default(DRAFT)
+  /// Revisions share this: the first quotation in a chain is its
+  /// own root, and each later revision points back to the one it
+  /// supersedes.
+  revisionOf    String?         @db.Uuid
+  revisionNo    Int             @default(1)
+
+  customerId  String    @db.Uuid
+  warehouseId String?   @db.Uuid
+
+  quotationDate DateTime
+  expiryDate    DateTime?
+
+  billingAddress  String?
+  shippingAddress String?
+  paymentTerms    String?
+  deliveryTerms   String?
+  notes           String?
+
+  subTotal      Decimal @default(0) @db.Decimal(14, 2)
+  discountTotal Decimal @default(0) @db.Decimal(14, 2)
+  taxableTotal  Decimal @default(0) @db.Decimal(14, 2)
+  cgstTotal     Decimal @default(0) @db.Decimal(14, 2)
+  sgstTotal     Decimal @default(0) @db.Decimal(14, 2)
+  igstTotal     Decimal @default(0) @db.Decimal(14, 2)
+  taxTotal      Decimal @default(0) @db.Decimal(14, 2)
+  grandTotal    Decimal @default(0) @db.Decimal(14, 2)
+  currency      String  @default("INR")
+
+  sentAt       DateTime?
+  respondedAt  DateTime?
+  convertedAt  DateTime?
+  convertedById String?  @db.Uuid
+  cancelledAt  DateTime?
+
+  createdById String   @db.Uuid
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  customer    Customer         @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  warehouse   Warehouse?       @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  createdBy   User             @relation("QuoteCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  convertedBy User?            @relation("QuoteConvertedBy", fields: [convertedById], references: [id], onDelete: Restrict)
+  previousRevision Quotation?  @relation("QuotationRevision", fields: [revisionOf], references: [id], onDelete: Restrict)
+  laterRevisions   Quotation[] @relation("QuotationRevision")
+  lines       QuotationLine[]
+  salesOrders SalesOrder[]
+
+  @@index([customerId])
+  @@index([status, quotationDate])
+  @@map("quotations")
+}
+
+model QuotationLine {
+  id          String @id @default(uuid()) @db.Uuid
+  quotationId String @db.Uuid
+  lineNo      Int
+  productId   String @db.Uuid
+
+  skuAtQuote  String
+  nameAtQuote String
+  hsnAtQuote  String?
+  description String?
+
+  quantity  Decimal       @db.Decimal(14, 3)
+  uom       UnitOfMeasure
+  unitPrice Decimal       @db.Decimal(14, 2)
+
+  discountPercent Decimal @default(0) @db.Decimal(6, 3)
+  discountAmount  Decimal @default(0) @db.Decimal(14, 2)
+  grossAmount     Decimal @default(0) @db.Decimal(14, 2)
+  taxableValue    Decimal @default(0) @db.Decimal(14, 2)
+
+  taxRate    Decimal @default(0) @db.Decimal(5, 2)
+  cgstAmount Decimal @default(0) @db.Decimal(14, 2)
+  sgstAmount Decimal @default(0) @db.Decimal(14, 2)
+  igstAmount Decimal @default(0) @db.Decimal(14, 2)
+  taxAmount  Decimal @default(0) @db.Decimal(14, 2)
+  lineTotal  Decimal @db.Decimal(14, 2)
+
+  quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  product   Product   @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@unique([quotationId, lineNo])
+  @@index([productId])
+  @@map("quotation_lines")
+}
+
+
+/* ============================================================
+   SALES INVOICE — A CLAIM FOR PAYMENT, NOT A DISPATCH
+   ============================================================
+
+   CREATING OR POSTING AN INVOICE MOVES NO STOCK. The chosen
+   inventory event is DISPATCH: a delivery challan posting is what
+   calls postStockMovement(). sales_invoice.service.mjs does not
+   import it. This mirrors the purchase side exactly -- a supplier
+   invoice there is likewise not evidence of a goods receipt.
+
+   Price and tax are snapshotted at creation and never
+   recalculated from the Product Master, so a later price change
+   cannot alter an old invoice.
+   ============================================================ */
+
+model SalesInvoice {
+  id         String             @id @default(uuid()) @db.Uuid
+  invoiceNo  String             @unique
+  status     SalesInvoiceStatus @default(DRAFT)
+
+  customerId   String  @db.Uuid
+  salesOrderId String? @db.Uuid
+  warehouseId  String  @db.Uuid
+
+  invoiceDate DateTime
+  dueDate     DateTime?
+
+  billingAddress  String?
+  shippingAddress String?
+  paymentTerms    String?
+
+  gstTreatment      SalesGstTreatment
+  sellerStateCode   String?
+  placeOfSupplyCode String?
+
+  subTotal      Decimal @default(0) @db.Decimal(14, 2)
+  discountTotal Decimal @default(0) @db.Decimal(14, 2)
+  taxableTotal  Decimal @default(0) @db.Decimal(14, 2)
+  cgstTotal     Decimal @default(0) @db.Decimal(14, 2)
+  sgstTotal     Decimal @default(0) @db.Decimal(14, 2)
+  igstTotal     Decimal @default(0) @db.Decimal(14, 2)
+  taxTotal      Decimal @default(0) @db.Decimal(14, 2)
+  otherCharges  Decimal @default(0) @db.Decimal(14, 2)
+  grandTotal    Decimal @default(0) @db.Decimal(14, 2)
+  currency      String  @default("INR")
+
+  notes String?
+
+  postedById    String?   @db.Uuid
+  postedAt      DateTime?
+  cancelledById String?   @db.Uuid
+  cancelledAt   DateTime?
+  cancelReason  String?
+
+  createdById String   @db.Uuid
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  customer    Customer            @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  salesOrder  SalesOrder?         @relation(fields: [salesOrderId], references: [id], onDelete: Restrict)
+  warehouse   Warehouse           @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  createdBy   User                @relation("InvCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  postedBy    User?               @relation("InvPostedBy", fields: [postedById], references: [id], onDelete: Restrict)
+  cancelledBy User?               @relation("InvCancelledBy", fields: [cancelledById], references: [id], onDelete: Restrict)
+  lines       SalesInvoiceLine[]
+  payments    CustomerPayment[]
+  deliveryChallans DeliveryChallan[]
+
+  @@index([customerId])
+  @@index([salesOrderId])
+  @@index([status, invoiceDate])
+  @@map("sales_invoices")
+}
+
+model SalesInvoiceLine {
+  id             String @id @default(uuid()) @db.Uuid
+  salesInvoiceId String @db.Uuid
+  lineNo         Int
+  productId      String @db.Uuid
+
+  skuAtInvoice  String
+  nameAtInvoice String
+  hsnAtInvoice  String?
+
+  quantity  Decimal       @db.Decimal(14, 3)
+  uom       UnitOfMeasure
+  unitPrice Decimal       @db.Decimal(14, 2)
+
+  discountPercent Decimal @default(0) @db.Decimal(6, 3)
+  discountAmount  Decimal @default(0) @db.Decimal(14, 2)
+  grossAmount     Decimal @default(0) @db.Decimal(14, 2)
+  taxableValue    Decimal @default(0) @db.Decimal(14, 2)
+
+  taxRate    Decimal @default(0) @db.Decimal(5, 2)
+  cgstAmount Decimal @default(0) @db.Decimal(14, 2)
+  sgstAmount Decimal @default(0) @db.Decimal(14, 2)
+  igstAmount Decimal @default(0) @db.Decimal(14, 2)
+  taxAmount  Decimal @default(0) @db.Decimal(14, 2)
+  lineTotal  Decimal @db.Decimal(14, 2)
+
+  salesInvoice SalesInvoice @relation(fields: [salesInvoiceId], references: [id], onDelete: Cascade)
+  product      Product      @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@unique([salesInvoiceId, lineNo])
+  @@index([productId])
+  @@map("sales_invoice_lines")
+}
+
+
+/* ============================================================
+   DELIVERY CHALLAN — THE ONLY SALES DOCUMENT THAT MOVES STOCK
+   ============================================================
+
+   Posting one calls postStockMovement() for RESERVATION_RELEASE
+   and then OUTWARD, in that order, in one transaction. The order
+   matters: releasing first is what keeps
+   available = onHand - reserved - damaged
+   correct throughout -- releasing after the OUTWARD would let the
+   available-stock CHECK see a moment where the same boxes are
+   counted as both reserved and gone, and could refuse a dispatch
+   that is in fact valid.
+   ============================================================ */
+
+model DeliveryChallan {
+  id             String                 @id @default(uuid()) @db.Uuid
+  challanNo      String                 @unique
+  status         DeliveryChallanStatus  @default(DRAFT)
+
+  salesOrderId   String  @db.Uuid
+  salesInvoiceId String? @db.Uuid
+  customerId     String  @db.Uuid
+  warehouseId    String  @db.Uuid
+
+  dispatchDate DateTime
+
+  transporter      String?
+  vehicleNumber    String?
+  trackingRef      String?
+  receiverName     String?
+  receiverPhone    String?
+  remarks          String?
+
+  dispatchedById String?   @db.Uuid
+  dispatchedAt   DateTime?
+  cancelledById  String?   @db.Uuid
+  cancelledAt    DateTime?
+  cancelReason   String?
+
+  createdById String   @db.Uuid
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  salesOrder   SalesOrder            @relation(fields: [salesOrderId], references: [id], onDelete: Restrict)
+  salesInvoice SalesInvoice?         @relation(fields: [salesInvoiceId], references: [id], onDelete: Restrict)
+  customer     Customer              @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  warehouse    Warehouse             @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  createdBy    User                  @relation("DcCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  dispatchedBy User?                 @relation("DcDispatchedBy", fields: [dispatchedById], references: [id], onDelete: Restrict)
+  cancelledBy  User?                 @relation("DcCancelledBy", fields: [cancelledById], references: [id], onDelete: Restrict)
+  lines        DeliveryChallanLine[]
+
+  @@index([salesOrderId])
+  @@index([customerId])
+  @@index([status, dispatchDate])
+  @@map("delivery_challans")
+}
+
+model DeliveryChallanLine {
+  id                String @id @default(uuid()) @db.Uuid
+  deliveryChallanId String @db.Uuid
+  lineNo            Int
+  salesOrderLineId  String @db.Uuid
+  productId         String @db.Uuid
+
+  skuAtDispatch  String
+  nameAtDispatch String
+
+  quantity Decimal       @db.Decimal(14, 3)
+  uom      UnitOfMeasure
+
+  deliveryChallan DeliveryChallan @relation(fields: [deliveryChallanId], references: [id], onDelete: Cascade)
+  salesOrderLine  SalesOrderLine  @relation(fields: [salesOrderLineId], references: [id], onDelete: Restrict)
+  product         Product         @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@unique([deliveryChallanId, lineNo])
+  @@index([salesOrderLineId])
+  @@index([productId])
+  @@map("delivery_challan_lines")
+}
+
+
+/* ============================================================
+   SALES RETURN — STOCK COMING BACK FROM A CUSTOMER
+   ============================================================
+
+   Reduces or increases stock through postStockMovement() only,
+   and NEVER edits the delivery challan that sent the stock out:
+   that entry stays on the ledger and the return sits beside it.
+
+   THREE DISPOSITIONS, and they are not the same movement:
+
+     ACCEPTED_GOOD  INWARD. Back on the shelf, sellable.
+     DAMAGED        INWARD, then DAMAGE. In the building, not
+                    sellable -- the mirror of a purchase receipt's
+                    damaged line.
+     REJECTED       NO MOVEMENT AT ALL. The customer's claim is
+                    refused outright; nothing was actually
+                    returned to the business.
+   ============================================================ */
+
+model SalesReturn {
+  id       String            @id @default(uuid()) @db.Uuid
+  returnNo String            @unique
+  status   SalesReturnStatus @default(DRAFT)
+
+  customerId        String  @db.Uuid
+  warehouseId       String  @db.Uuid
+  salesOrderId      String? @db.Uuid
+  salesInvoiceId    String? @db.Uuid
+  deliveryChallanId String? @db.Uuid
+
+  returnDate DateTime
+  reason     String
+  remarks    String?
+
+  receivedById String    @db.Uuid
+  postedById   String?   @db.Uuid
+  postedAt     DateTime?
+  cancelledAt  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  customer        Customer         @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  warehouse       Warehouse        @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  salesOrder      SalesOrder?      @relation(fields: [salesOrderId], references: [id], onDelete: Restrict)
+  receivedBy      User             @relation("SrReceivedBy", fields: [receivedById], references: [id], onDelete: Restrict)
+  postedBy        User?            @relation("SrPostedBy", fields: [postedById], references: [id], onDelete: Restrict)
+  lines           SalesReturnLine[]
+
+  @@index([customerId])
+  @@index([status, returnDate])
+  @@map("sales_returns")
+}
+
+model SalesReturnLine {
+  id            String             @id @default(uuid()) @db.Uuid
+  salesReturnId String             @db.Uuid
+  lineNo        Int
+  productId     String             @db.Uuid
+
+  skuAtReturn  String
+  nameAtReturn String
+
+  quantity    Decimal            @db.Decimal(14, 3)
+  uom         UnitOfMeasure
+  disposition ReturnDisposition
+  remarks     String?
+
+  salesReturn SalesReturn @relation(fields: [salesReturnId], references: [id], onDelete: Cascade)
+  product     Product     @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@unique([salesReturnId, lineNo])
+  @@index([productId])
+  @@map("sales_return_lines")
+}
+
+
+/* ============================================================
+   CUSTOMER PAYMENT — BASIC TRACKING, NOT ACCOUNTING
+   ============================================================
+   Every payment names a real, posted invoice. There is no
+   "unapplied" payment in this phase: the brief asks for basic
+   tracking, not a ledger of customer credit. Balance and status
+   are DERIVED from the sum of payments against an invoice, never
+   stored redundantly where it could drift from them.
+   ============================================================ */
+
+model CustomerPayment {
+  id             String        @id @default(uuid()) @db.Uuid
+  customerId     String        @db.Uuid
+  salesInvoiceId String        @db.Uuid
+
+  amount        Decimal       @db.Decimal(14, 2)
+  paymentDate   DateTime
+  method        PaymentMethod
+  reference     String?
+  notes         String?
+
+  recordedById String   @db.Uuid
+  createdAt    DateTime @default(now())
+
+  customer     Customer     @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  salesInvoice SalesInvoice @relation(fields: [salesInvoiceId], references: [id], onDelete: Restrict)
+  recordedBy   User         @relation("PaymentRecordedBy", fields: [recordedById], references: [id], onDelete: Restrict)
+
+  @@index([customerId])
+  @@index([salesInvoiceId])
+  @@map("customer_payments")
+}
+
 
 // ============================================================
 // 9. WAREHOUSE TRANSFERS
@@ -981,7 +2208,14 @@ model WarehouseTransfer {
 
   dispatchedAt DateTime?
   receivedAt   DateTime?
+  cancelledAt  DateTime?
   notes        String?
+
+  /// Who sent it and who signed for it. Two different people, on
+  /// purpose: a transfer one person can both dispatch and receive
+  /// without anybody noticing is not a control.
+  dispatchedById String? @db.Uuid
+  receivedById   String? @db.Uuid
 
   createdById String   @db.Uuid
   createdAt   DateTime @default(now())
@@ -990,6 +2224,8 @@ model WarehouseTransfer {
   fromWarehouse Warehouse               @relation("TransferFrom", fields: [fromWarehouseId], references: [id], onDelete: Restrict)
   toWarehouse   Warehouse               @relation("TransferTo", fields: [toWarehouseId], references: [id], onDelete: Restrict)
   createdBy     User                    @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  dispatchedBy  User?                   @relation("TransferDispatchedBy", fields: [dispatchedById], references: [id], onDelete: Restrict)
+  receivedBy    User?                   @relation("TransferReceivedBy", fields: [receivedById], references: [id], onDelete: Restrict)
   lines         WarehouseTransferLine[]
 
   @@index([status])

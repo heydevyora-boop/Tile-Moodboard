@@ -2,189 +2,405 @@ import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import DataTable from '../components/DataTable.jsx';
 import StatusPill from '../components/StatusPill.jsx';
-import { PRODUCTS, MOVEMENTS, MOVEMENT_REASONS, ledgerFor, openingFor } from '../data/ledger.js';
-import { STATUSES, DEMO_TODAY } from '../data/catalogue.js';
-import { money, qty, stamp } from '../lib/format.js';
+import Modal from '../components/Modal.jsx';
+import { Failed, FieldErrors } from '../components/ApiState.jsx';
+import { api } from '../api/client.js';
+import { useApi } from '../api/useApi.js';
+import { qty, stamp } from '../lib/format.js';
 
 /* ============================================================
-   THE STOCK CARD
+   THE STOCK LEDGER — THE RECORD ITSELF
    ============================================================
-   One product, every movement against it, and the balance after
-   each one. This is the screen that makes the rest of the
-   inventory believable: the number the Product Master shows is the
-   last line of this column, and anyone can follow it back.
+   Every other inventory figure in this system is derived from
+   this table. It is append-only, enforced by database triggers:
+   no row here has ever been edited or deleted, and the database
+   refuses both outright rather than trusting the application not
+   to try.
+
+   So there is no Edit button and no Delete button on this screen.
+   A mistake is corrected by REVERSING it, which posts the
+   opposite movement linked to the original, and the stock card
+   then shows the error and the correction side by side. That is
+   what a ledger is for.
    ============================================================ */
 
+const MOVEMENT = {
+  INWARD: { label: 'Inward', tone: 'ok' },
+  OUTWARD: { label: 'Outward', tone: 'info' },
+  ADJUSTMENT_INCREASE: { label: 'Adjustment up', tone: 'warn' },
+  ADJUSTMENT_DECREASE: { label: 'Adjustment down', tone: 'warn' },
+  TRANSFER_IN: { label: 'Transfer in', tone: 'info' },
+  TRANSFER_OUT: { label: 'Transfer out', tone: 'info' },
+  RESERVATION: { label: 'Reserved', tone: 'inert' },
+  RESERVATION_RELEASE: { label: 'Reservation released', tone: 'inert' },
+  DAMAGE: { label: 'Damaged', tone: 'danger' },
+  DAMAGE_RECOVERY: { label: 'Damage recovered', tone: 'ok' },
+};
+
+const REASON_LABEL = {
+  OPENING_STOCK: 'Opening stock',
+  PURCHASE_RECEIPT: 'Purchase receipt',
+  PURCHASE_RETURN: 'Returned to supplier',
+  SALES_DISPATCH: 'Sales dispatch',
+  SALES_RETURN: 'Customer return',
+  SAMPLE_ISSUE: 'Sample issued',
+  DAMAGE: 'Damage',
+  DAMAGE_RECOVERY: 'Damage recovered',
+  STOCK_COUNT_CORRECTION: 'Stock count correction',
+  WAREHOUSE_TRANSFER: 'Warehouse transfer',
+  RESERVATION: 'Reserved',
+  RESERVATION_RELEASE: 'Reservation released',
+  OTHER: 'Other',
+};
+
 export default function StockLedger() {
-  /* This component holds exactly one hook and then chooses between
-     two children. The chooser and the card each own their own state,
-     which is what keeps the hook order stable: an early return taken
-     AFTER a useState or useMemo would change how many hooks this
-     component calls between renders, and React would break. */
   const [params, setParams] = useSearchParams();
-  const code = params.get('product') || '';
-  const product = PRODUCTS.find((p) => p.productCode === code) || null;
+  const sku = params.get('sku') || '';
 
-  if (!product) return <ProductChooser onPick={(c) => setParams({ product: c })} />;
-  return <StockCard product={product} onBack={() => setParams({})} />;
-}
-
-/* ── one product's card ──────────────────────────────────────── */
-
-function StockCard({ product, onBack }) {
-  const code = product.productCode;
   const [search, setSearch] = useState('');
-  const rows = useMemo(() => ledgerFor(code).slice().reverse(), [code]);
-  const opening = openingFor(code);
-  const closing = rows.length ? rows[0].balance : 0;
+  const [movementType, setMovementType] = useState('all');
+  const [warehouseId, setWarehouseId] = useState('all');
+  const [referenceNo, setReferenceNo] = useState('');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
 
-  const totalIn = rows.filter((m) => m.dir === 'in' && m.reason !== 'opening').reduce((s, m) => s + m.qty, 0);
-  const totalOut = rows.filter((m) => m.dir === 'out').reduce((s, m) => s + m.qty, 0);
+  const [reversing, setReversing] = useState(null);
+  const [reversalRemarks, setReversalRemarks] = useState('');
+  const [reversalError, setReversalError] = useState(null);
+  const [busy, setBusy] = useState(false);
 
-  const columns = [
-    { key: 'at', label: 'When', width: 150, render: (m) => stamp(m.at) },
-    { key: 'id', label: 'Ref', width: 100, render: (m) => <span className="sku">{m.id}</span> },
-    { key: 'reason', label: 'Reason', width: 160, value: (m) => MOVEMENT_REASONS[m.reason].label },
-    { key: 'party', label: 'Party', width: 230 },
-    { key: 'ref', label: 'Document', width: 120, render: (m) => <span className="sku">{m.ref}</span> },
-    {
-      key: 'in',
-      label: 'In',
-      align: 'right',
-      width: 80,
-      value: (m) => (m.dir === 'in' ? m.qty : 0),
-      render: (m) => (m.dir === 'in' ? <span className="num">{qty(m.qty)}</span> : <span className="muted">—</span>),
-    },
-    {
-      key: 'out',
-      label: 'Out',
-      align: 'right',
-      width: 80,
-      value: (m) => (m.dir === 'out' ? m.qty : 0),
-      render: (m) => (m.dir === 'out' ? <span className="num">{qty(m.qty)}</span> : <span className="muted">—</span>),
-    },
-    {
-      key: 'balance',
-      label: 'Balance',
-      align: 'right',
-      width: 96,
-      render: (m) => <strong className="num">{qty(m.balance)}</strong>,
-    },
-  ];
+  const query = useMemo(() => ({
+    sku: sku || undefined,
+    search: search || undefined,
+    movementType,
+    warehouseId,
+    referenceNo: referenceNo || undefined,
+    from: from || undefined,
+    to: to || undefined,
+    page,
+    pageSize,
+  }), [sku, search, movementType, warehouseId, referenceNo, from, to, page, pageSize]);
 
-  return (
-    <>
-      <div className="page-intro">
-        <div>
-          <h2>{product.name}</h2>
-          <p>
-            <span className="sku">{product.productCode}</span> · {product.brand} · {product.size} · {product.finish}
-          </p>
-        </div>
-        <div className="page-actions">
-          <StatusPill tone={STATUSES[product.status].tone} title={STATUSES[product.status].note}>
-            {STATUSES[product.status].label}
-          </StatusPill>
-          <button className="btn" onClick={onBack}>Another product</button>
-        </div>
-      </div>
-
-      {/* The arithmetic, stated. Opening plus in, minus out, equals
-          what the Product Master shows -- and the reader can check
-          every term of it against the rows below. */}
-      <div className="reconcile">
-        <div><span className="kpi-label">Opening</span><strong className="num">{qty(opening)}</strong></div>
-        <span className="reconcile-op">+</span>
-        <div><span className="kpi-label">Received</span><strong className="num">{qty(totalIn)}</strong></div>
-        <span className="reconcile-op">−</span>
-        <div><span className="kpi-label">Issued</span><strong className="num">{qty(totalOut)}</strong></div>
-        <span className="reconcile-op">=</span>
-        <div className="is-closing">
-          <span className="kpi-label">On hand today</span>
-          <strong className="num">{qty(closing)}</strong>
-        </div>
-        <p className="tiny muted">
-          {closing === product.stockQty
-            ? 'Agrees with the Product Master.'
-            : 'Does NOT agree with the Product Master (' + qty(product.stockQty) + ').'}
-          {' '}Valued at {money(closing * product.purchaseRate * product.sqftPerBox)} at cost.
-        </p>
-      </div>
-
-      <DataTable
-        rows={rows}
-        columns={columns}
-        rowKey={(m) => m.id}
-        search={search}
-        onSearch={setSearch}
-        searchPlaceholder="Search reason, party, document…"
-        initialSort={{ key: 'at', dir: 'desc' }}
-        pageSize={50}
-        emptyTitle="No movements"
-        emptyNote="This product has no stock history in the last 90 days."
-      />
-    </>
+  const list = useApi(() => api.inventory.ledger(query), [JSON.stringify(query)]);
+  const warehouses = useApi(() => api.reference.warehouses(), []);
+  /* When one product is pinned, the screen is a stock card and the
+     closing balance is worth stating on its own. */
+  const card = useApi(
+    () => api.inventory.list({ search: sku, pageSize: 20 }),
+    [sku],
+    { skip: !sku },
   );
-}
 
-/* ── which product's card ────────────────────────────────────── */
+  const reset = (fn) => (value) => { fn(value); setPage(1); };
 
-function ProductChooser({ onPick }) {
-  const [search, setSearch] = useState('');
+  const clearProduct = () => {
+    const next = new URLSearchParams(params);
+    next.delete('sku');
+    setParams(next, { replace: true });
+    setPage(1);
+  };
 
-  const rows = useMemo(() => PRODUCTS.map((p) => ({
-    ...p,
-    movements: MOVEMENTS.filter((m) => m.productCode === p.productCode).length,
-  })), []);
+  const reverse = async () => {
+    setBusy(true);
+    setReversalError(null);
+    try {
+      await api.inventory.reverse(reversing.id, reversalRemarks.trim() || undefined);
+      setReversing(null);
+      setReversalRemarks('');
+      list.reload();
+      card.reload();
+    } catch (err) {
+      setReversalError(err);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const columns = [
-    { key: 'productCode', label: 'Code', width: 96, render: (p) => <span className="sku">{p.productCode}</span> },
     {
-      key: 'name',
-      label: 'Product',
-      render: (p) => (
+      key: 'entryNo',
+      label: 'Entry',
+      width: 76,
+      sortable: false,
+      render: (m) => <span className="sku">{m.entryNo}</span>,
+    },
+    {
+      key: 'at',
+      label: 'When',
+      width: 148,
+      sortable: false,
+      render: (m) => (
         <>
-          <strong>{p.name}</strong>
-          <div className="tiny muted">{p.brand} · {p.size}</div>
+          {stamp(m.at)}
+          {m.recordedAt && m.recordedAt.slice(0, 10) !== m.at.slice(0, 10) && (
+            <div className="tiny muted">entered {stamp(m.recordedAt)}</div>
+          )}
         </>
       ),
     },
-    { key: 'movements', label: 'Movements', align: 'right', width: 110, render: (p) => <span className="num">{qty(p.movements)}</span> },
-    { key: 'stockQty', label: 'On hand', align: 'right', width: 92, render: (p) => <span className="num">{qty(p.stockQty)}</span> },
     {
-      key: 'status',
-      label: 'Status',
-      width: 140,
-      value: (p) => STATUSES[p.status].label,
-      render: (p) => <StatusPill tone={STATUSES[p.status].tone}>{STATUSES[p.status].label}</StatusPill>,
+      key: 'productName',
+      label: 'Product',
+      sortable: false,
+      render: (m) => (
+        <>
+          <strong>{m.productName}</strong>
+          <div className="sku">{m.sku} · {m.warehouseCode}</div>
+        </>
+      ),
+    },
+    {
+      key: 'movementType',
+      label: 'Movement',
+      width: 160,
+      sortable: false,
+      render: (m) => {
+        const spec = MOVEMENT[m.movementType] ?? { label: m.movementType, tone: 'info' };
+        return (
+          <>
+            <StatusPill tone={spec.tone}>{spec.label}</StatusPill>
+            <div className="tiny muted">{REASON_LABEL[m.reason] ?? m.reason}</div>
+          </>
+        );
+      },
+    },
+    {
+      key: 'referenceNo',
+      label: 'Document',
+      width: 128,
+      sortable: false,
+      render: (m) => (m.referenceNo
+        ? <span className="sku">{m.referenceNo}</span>
+        : <span className="muted">—</span>),
+    },
+    {
+      key: 'quantity',
+      label: 'Quantity',
+      align: 'right',
+      width: 96,
+      sortable: false,
+      render: (m) => (
+        <span className="num">
+          {m.direction === 'OUT' ? '−' : m.direction === 'IN' ? '+' : ''}{qty(m.quantity)}
+        </span>
+      ),
+    },
+    {
+      key: 'balanceBefore',
+      label: 'Was',
+      align: 'right',
+      width: 82,
+      sortable: false,
+      render: (m) => <span className="num muted">{qty(m.balanceBefore)}</span>,
+    },
+    {
+      key: 'balanceAfter',
+      label: 'Became',
+      align: 'right',
+      width: 90,
+      sortable: false,
+      render: (m) => <strong className="num">{qty(m.balanceAfter)}</strong>,
+    },
+    {
+      key: 'held',
+      label: 'Reserved / damaged',
+      align: 'right',
+      width: 150,
+      sortable: false,
+      render: (m) => (
+        <span className="tiny num muted">
+          {qty(m.reservedAfter)} / {qty(m.damagedAfter)}
+        </span>
+      ),
+    },
+    {
+      key: 'remarks',
+      label: 'Remarks',
+      width: 200,
+      sortable: false,
+      render: (m) => (m.remarks
+        ? <span className="tiny">{m.remarks}</span>
+        : <span className="muted">—</span>),
+    },
+    {
+      key: 'performedBy',
+      label: 'By',
+      width: 120,
+      sortable: false,
+      render: (m) => m.performedBy ?? <span className="muted">—</span>,
+    },
+    {
+      key: 'reverse',
+      label: '',
+      width: 92,
+      sortable: false,
+      render: (m) => (m.reversalOfEntryId
+        /* A reversal cannot itself be reversed from here. Doing so
+           is a third movement that re-does the second, and at that
+           point the right record is an adjustment with a reason,
+           not a chain of undos. */
+        ? <span className="tiny muted" title={'Reverses entry ' + m.reversalOfEntryId}>reversal</span>
+        : (
+          <button className="btn btn-sm" onClick={() => { setReversing(m); setReversalError(null); }}>
+            Reverse
+          </button>
+        )),
     },
   ];
+
+  if (list.error && !list.data) return <Failed error={list.error} onRetry={list.reload} />;
+
+  const held = (card.data?.rows ?? []);
 
   return (
     <>
       <div className="page-intro">
         <div>
           <p>
-            Pick a product to open its stock card: every movement against it,
-            oldest to newest, with the balance after each one. Nothing here is
-            a separate record — the card <em>is</em> where the on-hand figure
-            comes from.
+            Every stock movement the ERP has recorded, newest first. The ledger is
+            append-only and the database enforces it: these rows cannot be edited
+            or deleted, by this screen or by anything else. A mistake is corrected
+            by reversing it, and both entries stay visible.
           </p>
         </div>
       </div>
 
+      {sku && (
+        <div className="notice notice-info">
+          <span aria-hidden="true">●</span>
+          <div>
+            <strong>Stock card for {sku}.</strong>
+            {held.length > 0 && (
+              <>
+                {' '}
+                {held.map((r) => r.warehouse?.name + ': ' + qty(r.physical) + ' on hand, '
+                  + qty(r.available) + ' sellable').join(' · ')}
+              </>
+            )}
+            {' '}
+            <button className="btn btn-sm" style={{ marginLeft: 8 }} onClick={clearProduct}>
+              Show every product
+            </button>
+          </div>
+        </div>
+      )}
+
       <DataTable
-        rows={rows}
+        rows={list.data?.rows ?? []}
         columns={columns}
-        rowKey={(p) => p.productCode}
+        rowKey={(m) => m.id}
+        server={{
+          total: list.data?.total ?? 0,
+          page,
+          pageSize,
+          pageCount: list.data?.pageCount ?? 1,
+          loading: list.loading,
+          sort: null,
+          onPage: setPage,
+          onPageSize: (n) => { setPageSize(n); setPage(1); },
+          onSort: () => {},
+        }}
         search={search}
-        onSearch={setSearch}
-        searchPlaceholder="Search for a product…"
-        initialSort={{ key: 'productCode', dir: 'asc' }}
-        onRowClick={(p) => onPick(p.productCode)}
-        emptyTitle="No products match"
-        emptyNote="Try a different search."
+        onSearch={reset(setSearch)}
+        searchPlaceholder="Search product code or name…"
+        emptyTitle="No movements"
+        emptyNote="Nothing matches these filters."
+        filters={(
+          <>
+            <select
+              className="select"
+              value={movementType}
+              onChange={(e) => reset(setMovementType)(e.target.value)}
+              aria-label="Movement type"
+            >
+              <option value="all">Every movement</option>
+              {Object.entries(MOVEMENT).map(([k, v]) => (
+                <option key={k} value={k}>{v.label}</option>
+              ))}
+            </select>
+            <select
+              className="select"
+              value={warehouseId}
+              onChange={(e) => reset(setWarehouseId)(e.target.value)}
+              aria-label="Warehouse"
+            >
+              <option value="all">All warehouses</option>
+              {(warehouses.data?.rows ?? []).map((w) => (
+                <option key={w.id} value={w.id}>{w.name}</option>
+              ))}
+            </select>
+            <input
+              className="input"
+              value={referenceNo}
+              onChange={(e) => reset(setReferenceNo)(e.target.value)}
+              placeholder="Document no."
+              aria-label="Document number"
+              style={{ width: 140 }}
+            />
+            <input
+              className="input"
+              type="date"
+              value={from}
+              onChange={(e) => reset(setFrom)(e.target.value)}
+              aria-label="From"
+              style={{ width: 142 }}
+            />
+            <input
+              className="input"
+              type="date"
+              value={to}
+              onChange={(e) => reset(setTo)(e.target.value)}
+              aria-label="To"
+              style={{ width: 142 }}
+            />
+          </>
+        )}
       />
+
+      <Modal
+        open={Boolean(reversing)}
+        onClose={() => { setReversing(null); setReversalError(null); }}
+        title={reversing ? 'Reverse entry ' + reversing.entryNo : 'Reverse'}
+        subtitle="This does not delete anything. It posts the opposite movement, linked to the original."
+        footer={(
+          <>
+            <button className="btn" onClick={() => setReversing(null)} disabled={busy}>Cancel</button>
+            <button className="btn btn-primary" onClick={reverse} disabled={busy}>
+              {busy ? 'Posting…' : 'Post the reversal'}
+            </button>
+          </>
+        )}
+      >
+        <FieldErrors error={reversalError} />
+        {reversing && (
+          <>
+            <p>
+              Entry <strong>{reversing.entryNo}</strong> moved{' '}
+              <strong>{qty(reversing.quantity)} {reversing.uom?.toLowerCase()}</strong> of{' '}
+              <strong>{reversing.sku}</strong> at {reversing.warehouse}, taking the balance from{' '}
+              {qty(reversing.balanceBefore)} to {qty(reversing.balanceAfter)}.
+            </p>
+            <p className="tiny muted">
+              A reversal of the same size and the opposite direction will be posted.
+              Both entries stay on the stock card, so the record shows what was
+              recorded and what corrected it.
+            </p>
+            <div className="field">
+              <label htmlFor="rev-remarks">Why (recommended)</label>
+              <textarea
+                id="rev-remarks"
+                className="input"
+                rows={2}
+                value={reversalRemarks}
+                onChange={(e) => setReversalRemarks(e.target.value)}
+                placeholder="Entered against the wrong product."
+              />
+            </div>
+          </>
+        )}
+      </Modal>
     </>
   );
 }

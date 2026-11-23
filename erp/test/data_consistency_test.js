@@ -126,7 +126,29 @@ check('5a. every module belongs to a group the sidebar renders',
   MODULES.every((m) => GROUP_ORDER.includes(m.group)),
   MODULES.filter((m) => !GROUP_ORDER.includes(m.group)).map((m) => m.label));
 check('5b. no two modules share a path', new Set(MODULES.map((m) => m.to)).size === MODULES.length);
-check('5c. the brief asked for fifteen modules', MODULES.length === 15, MODULES.length);
+/* Fifteen through step 4; eighteen after step 5 added the three
+   inventory screens; twenty-four after step 6 replaced the single
+   "Purchase Management" placeholder with seven real ones;
+   thirty-two after step 7 replaced the single "Sales Management"
+   placeholder with nine real ones. The count is asserted rather
+   than left open so that a module cannot be added by accident and
+   go unnoticed in the sidebar. */
+check('5c. fifteen from the brief, three from step 5, seven from step 6, nine from step 7, less the two placeholders',
+  MODULES.length === 32, MODULES.length);
+check('5c-ii. the three inventory screens step 5 specified are there',
+  ['/adjustments', '/transfers', '/reconciliation']
+    .every((p) => MODULES.some((m) => m.to === p)),
+  MODULES.map((m) => m.to).join(' '));
+check('5c-iii. and the seven purchase screens step 6 specified',
+  ['/purchase', '/suppliers', '/purchase-orders', '/goods-receipts',
+    '/supplier-invoices', '/purchase-returns', '/purchase-history']
+    .every((p) => MODULES.some((m) => m.to === p)),
+  MODULES.map((m) => m.to).join(' '));
+check('5c-iv. and the nine sales screens step 7 specified',
+  ['/sales', '/customers', '/quotations', '/sales-orders', '/sales-invoices',
+    '/delivery-challans', '/sales-returns', '/customer-payments', '/sales-history']
+    .every((p) => MODULES.some((m) => m.to === p)),
+  MODULES.map((m) => m.to).join(' '));
 check('5d. a product sub-path still resolves to Product Master',
   moduleFor('/products/DV-1001').label === 'Product Master');
 check('5e. an unknown path falls back to the dashboard rather than throwing',

@@ -1,8 +1,4 @@
-import { prisma, disconnect } from '../db/client.mjs';
-import {
-  postStockMovement, reverseStockMovement, nextDocumentNumber,
-  DuplicateMovementError, InsufficientStockError,
-} from '../db/stock.mjs';
+import { useTestDatabase, migrate, seed } from './helpers/testdb.mjs';
 
 /**
  * EVERY GUARANTEE THE ARCHITECTURE CLAIMS, TESTED AGAINST THE REAL
@@ -13,8 +9,38 @@ import {
  * These checks make the claims falsifiable: each one tries the
  * thing that must not work and fails if it succeeds.
  *
- * Run:  node test/db_integrity_test.mjs
+ * ON ITS OWN DATABASE -- which it was NOT until step 5.
+ *
+ * This suite posts movements: a sample, a reversal, ten concurrent
+ * ones. Every other suite redirects to a test database before
+ * doing that; this one did not, so it ran against whatever .env
+ * pointed at, which is the DEVELOPMENT database. Each run wrote
+ * thirteen movements with keys like test:race:... into the demo
+ * catalogue, and had been doing so since step 2. Found in step 5
+ * by counting the development ledger before and after each suite.
+ *
+ * The rows already written cannot be taken out: the ledger is
+ * append-only and the database refuses a DELETE -- which is the
+ * guarantee this very suite exists to prove. They stay, they
+ * reconcile, and nothing here will write there again.
+ *
+ * The imports below are DYNAMIC on purpose. db/client.mjs reads
+ * ERP_DATABASE_URL once, at import time, so a static import at the
+ * top of the file would bind to the development database before
+ * the redirect had a chance to run.
+ *
+ * Run:  npm run db:verify
  */
+
+useTestDatabase('devyora_erp_integrity_test');
+migrate();
+seed();
+
+const { prisma, disconnect } = await import('../db/client.mjs');
+const {
+  postStockMovement, reverseStockMovement, nextDocumentNumber,
+  DuplicateMovementError, InsufficientStockError,
+} = await import('../db/stock.mjs');
 
 let passed = 0;
 const failures = [];
@@ -101,7 +127,10 @@ async function main() {
   console.log('\n3. a correction adds a row, it never changes one');
 
   const before = await prisma.stockLedgerEntry.count({ where: { productId: product.id } });
-  const sample = await postStockMovement({
+  // The service now returns { entry, before, after } -- the
+  // previous and resulting balances a stock service has to give
+  // back, not just the row it wrote.
+  const { entry: sample } = await postStockMovement({
     productId: product.id,
     warehouseId: warehouse.id,
     movementType: 'OUTWARD',
@@ -113,7 +142,7 @@ async function main() {
     createdById: admin.id,
   });
 
-  const reversal = await reverseStockMovement({ entryId: sample.id, createdById: admin.id });
+  const { entry: reversal } = await reverseStockMovement({ entryId: sample.id, createdById: admin.id });
   const after = await prisma.stockLedgerEntry.count({ where: { productId: product.id } });
 
   check('3a. reversing a movement ADDS an entry rather than removing one',
@@ -147,7 +176,7 @@ async function main() {
     createdById: admin.id,
   };
 
-  const first = await postStockMovement(move);
+  const { entry: first } = await postStockMovement(move);
   const second = await refused(() => postStockMovement(move));
   check('4a. a repeated post is rejected, not applied twice',
     second.threw && second.err instanceof DuplicateMovementError);
@@ -227,7 +256,7 @@ async function main() {
 
   const balancesAfter = results
     .filter((r) => r.status === 'fulfilled')
-    .map((r) => Number(r.value.balanceAfter))
+    .map((r) => Number(r.value.entry.balanceAfter))
     .sort((a, b) => b - a);
   check('6c. every entry recorded a distinct running balance',
     new Set(balancesAfter).size === 10, balancesAfter);
@@ -342,6 +371,9 @@ async function main() {
       supplierId: supplier.id,
       warehouseId: warehouse.id,
       orderDate: new Date(),
+      // Required since step 6, with no default: an order whose
+      // tax treatment nobody decided must not be insertable.
+      gstTreatment: 'INTRA_STATE',
       createdById: admin.id,
       lines: {
         create: [{
@@ -352,7 +384,15 @@ async function main() {
           quantity: 10,
           uom: 'BOX',
           unitPrice: product.purchasePrice,
-          lineTotal: 100,
+          /* These have to add up now. Step 6 added CHECKs tying a
+             line's gross, discount, taxable value, tax and total
+             together, and this fixture used to carry an arbitrary
+             lineTotal of 100 against ten boxes at sixty-two --
+             which the database rightly refuses. Zero tax, so the
+             total is simply the taxable value. */
+          grossAmount: Number(product.purchasePrice) * 10,
+          taxableValue: Number(product.purchasePrice) * 10,
+          lineTotal: Number(product.purchasePrice) * 10,
         }],
       },
     },

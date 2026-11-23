@@ -473,6 +473,10 @@
 .notice-info   { background: var(--info-bg);   border-color: rgba(69, 96, 107, 0.22);  color: var(--info); }
 .notice-warn   { background: var(--warn-bg);   border-color: rgba(154, 107, 31, 0.24); color: var(--warn); }
 .notice-danger { background: var(--danger-bg); border-color: rgba(168, 85, 42, 0.24);  color: var(--danger); }
+/* Used where a check has actually been run and passed -- the
+   reconciliation banner. There is no green notice for "probably
+   fine": the only thing that earns this colour is a report. */
+.notice-ok     { background: var(--ok-bg);     border-color: rgba(79, 107, 69, 0.22);  color: var(--ok); }
 
 /* ============================================================
    ACTIVITY FEED

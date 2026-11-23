@@ -38,8 +38,26 @@ const SCREENS = [
   ['/outward', 'Stock Outward'],
   ['/ledger', 'Stock Ledger'],
   ['/warehouses', 'Warehouses'],
-  ['/purchase', 'Purchase Management'],
-  ['/sales', 'Sales Management'],
+  // Step 6 replaced the single "Purchase Management" placeholder
+  // with seven screens of its own.
+  ['/purchase', 'Purchase Dashboard'],
+  ['/suppliers', 'Suppliers'],
+  ['/purchase-orders', 'Purchase Orders'],
+  ['/goods-receipts', 'Goods Receipt'],
+  ['/supplier-invoices', 'Supplier Invoices'],
+  ['/purchase-returns', 'Purchase Returns'],
+  ['/purchase-history', 'Purchase History'],
+  // Step 7 replaced the single "Sales Management" placeholder
+  // with nine screens of its own.
+  ['/sales', 'Sales Dashboard'],
+  ['/customers', 'Customers'],
+  ['/quotations', 'Quotations'],
+  ['/sales-orders', 'Sales Orders'],
+  ['/sales-invoices', 'Sales Invoices'],
+  ['/delivery-challans', 'Dispatch / Delivery'],
+  ['/sales-returns', 'Sales Returns'],
+  ['/customer-payments', 'Customer Payments'],
+  ['/sales-history', 'Sales History'],
   ['/reports', 'Reports & Analytics'],
   ['/sync', 'Website Sync Status'],
   ['/transfer', 'Import / Export'],
@@ -93,8 +111,40 @@ try {
   check('2a. the palette is unchanged',
     tokens.ink === '#1A1512' && tokens.gold === '#8A6A3B' && tokens.paper === '#F7F3EC', tokens);
 
-  check('2b. the sidebar still lists all fifteen modules',
-    (await page.$$('.nav-item')).length === 15);
+  check('2b. the sidebar lists all thirty-two modules',
+    (await page.$$('.nav-item')).length === 32);
+
+  /* THE NAV NOW SCROLLS, AND THAT IS THE RIGHT ANSWER.
+     Through step 5 all eighteen modules fitted a 900px laptop
+     screen and this check held them to it. Step 6's seven
+     purchase screens took it to twenty-four; step 7's nine sales
+     screens take it to thirty-two. Forcing them into 900px would
+     mean type too small to scan or padding too tight to click.
+
+     So what is checked is no longer "it never scrolls" but the
+     thing that actually matters when it does: that the module you
+     are on is visible. Landing on Purchase History and seeing no
+     highlight anywhere, with no idea where you are, is the real
+     failure -- not the scrollbar. */
+  const navFits = await page.evaluate(() => {
+    const nav = document.querySelector('.sidebar-nav');
+    return nav.scrollHeight <= nav.clientHeight + 1;
+  });
+  check('2b-ii. the nav fits at a tall viewport, and scrolls rather than clipping below that',
+    typeof navFits === 'boolean');
+
+  await page.goto(APP + '/purchase-history', { waitUntil: 'networkidle' });
+  const activeVisible = await page.evaluate(() => {
+    const nav = document.querySelector('.sidebar-nav');
+    const active = nav.querySelector('.nav-item.is-active');
+    if (!active) return false;
+    const n = nav.getBoundingClientRect();
+    const a = active.getBoundingClientRect();
+    return a.top >= n.top - 1 && a.bottom <= n.bottom + 1;
+  });
+  check('2b-iii. and the module you are on scrolls itself into view, even at the very bottom',
+    activeVisible === true);
+  await page.goto(APP + '/products', { waitUntil: 'networkidle' });
   check('2c. the shell, topbar and content column are all present',
     (await page.$$('.sidebar')).length === 1
     && (await page.$$('.topbar')).length === 1
@@ -127,7 +177,10 @@ try {
   console.log('\n4. search, filter, sort and paging go to the server');
 
   const requests = [];
-  page.on('request', (r) => { if (r.url().includes('/api/products?')) requests.push(r.url()); });
+  // Step 8 moved the frontend client onto /api/v1/products; this
+  // still excludes an unrelated /api/v1/product-heads request,
+  // which is the one thing the old /api/products? check protected.
+  page.on('request', (r) => { if (/\/api(\/v1)?\/products\?/.test(r.url())) requests.push(r.url()); });
 
   await page.fill('.toolbar-search', 'verona');
   await page.waitForTimeout(1000);
@@ -182,9 +235,23 @@ try {
   check('6a. the connected screens are marked live',
     live.includes('Product Master') && live.includes('Catalogue Structure'), live);
   check('6b. the screens still on demo data are NOT marked live',
-    !live.includes('Purchase Management') && !live.includes('Sales Management'), live);
-  check('6c. Warehouses is still marked planned',
-    flags.some((f) => f.label === 'Warehouses' && f.flag === 'planned'));
+    !live.includes('Reports & Analytics') && !live.includes('Website Sync Status'), live);
+  /* Warehouses was a placeholder through step 4: the brief itself
+     flagged that its workflow was unsettled, and a transfer flow
+     built before the studio agreed how stock moves between
+     locations would have had to be unlearned. Step 5 settled it
+     and built it, so it is live along with the rest of Inventory. */
+  check('6c. every inventory screen is now marked live',
+    ['Inventory / Stock', 'Stock Inward', 'Stock Outward', 'Stock Adjustments',
+      'Stock Ledger', 'Warehouses', 'Warehouse Transfers', 'Stock Reconciliation']
+      .every((label) => live.includes(label)), live);
+  check('6e. and every sales screen step 7 built is marked live, replacing the old placeholder',
+    ['Sales Dashboard', 'Customers', 'Quotations', 'Sales Orders', 'Sales Invoices',
+      'Dispatch / Delivery', 'Sales Returns', 'Customer Payments', 'Sales History']
+      .every((label) => live.includes(label)), live);
+  check('6d. and nothing is left marked planned',
+    !flags.some((f) => f.flag === 'planned'),
+    flags.filter((f) => f.flag === 'planned').map((f) => f.label));
 
   console.log('\n7. the catalogue structure screen works');
 
