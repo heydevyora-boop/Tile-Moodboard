@@ -177,6 +177,78 @@ export function gstTreatmentFor({ supplier, warehouse }) {
 }
 
 /**
+ * Decide the GST treatment of a SALE.
+ *
+ * THIS IS NOT gstTreatmentFor() READ BACKWARDS. Two things differ
+ * from the purchase side, and both were found during step 7's
+ * inspection before any sales code was written:
+ *
+ * (1) THE COMPARISON IS MIRRORED. For goods the place of supply is
+ *     where they are delivered, so on a purchase that is the
+ *     RECEIVING WAREHOUSE's state (compared against the
+ *     supplier's). On a sale the goods are delivered TO the
+ *     customer, so the place of supply is the CUSTOMER's shipping
+ *     state, compared against the SELLING WAREHOUSE's state -- the
+ *     seller's registration, not the buyer's, is the other side of
+ *     the comparison now.
+ *
+ * (2) AN UNREGISTERED PARTY IS NOT EXEMPT. A supplier with no
+ *     GSTIN charges no GST (UNREGISTERED, step 6). A CUSTOMER with
+ *     no GSTIN is an ordinary retail buyer -- a plain B2C sale --
+ *     and the sale still carries GST. There is no UNREGISTERED
+ *     member in SalesGstTreatment at all; a sale is always
+ *     INTRA_STATE or INTER_STATE once a place of supply is known.
+ *     Exempt and export sales are not implemented in this phase.
+ *
+ * As on the purchase side, THERE IS NO FALLBACK. If either state
+ * code is missing this returns a reason instead of a treatment,
+ * and the caller refuses the order. The arithmetic that follows
+ * (computeLine, computeTotals) is the SAME function used for
+ * purchases -- nothing here is a second GST engine, only a second
+ * decision about which treatment to feed it.
+ *
+ * @returns {{treatment: string} | {error: {field: string, message: string}}}
+ */
+export function salesGstTreatmentFor({ warehouse, customer }) {
+  const sellerCode = /^\d{2}$/.test(warehouse?.stateCode ?? '') ? warehouse.stateCode : null;
+
+  // Ship-to, not bill-to -- goods move to the shipping address,
+  // and that is where the place of supply is. Falls back to the
+  // customer's own state only when no separate shipping state was
+  // recorded, i.e. billing and shipping are the same place.
+  const placeOfSupply = /^\d{2}$/.test(customer?.shippingStateCode ?? '')
+    ? customer.shippingStateCode
+    : (/^\d{2}$/.test(customer?.stateCode ?? '') ? customer.stateCode : null);
+
+  if (!sellerCode) {
+    return {
+      error: {
+        field: 'warehouseId',
+        message: 'The dispatching warehouse has no GST state code, so the tax on this '
+          + 'sale cannot be worked out. Set it on the warehouse first.',
+      },
+    };
+  }
+  if (!placeOfSupply) {
+    return {
+      error: {
+        field: 'customerId',
+        message: 'This customer has no GST state code, billing or shipping, so the '
+          + 'place of supply cannot be determined. Even an unregistered retail sale '
+          + 'still carries GST, and it needs a state to be taxed in — set one on the '
+          + 'customer first.',
+      },
+    };
+  }
+
+  return {
+    treatment: sellerCode === placeOfSupply ? 'INTRA_STATE' : 'INTER_STATE',
+    sellerStateCode: sellerCode,
+    placeOfSupplyCode: placeOfSupply,
+  };
+}
+
+/**
  * A supplier's state code, preferring the GSTIN.
  *
  * The first two characters of a GSTIN ARE the state code, so when

@@ -47,7 +47,17 @@ const SCREENS = [
   ['/supplier-invoices', 'Supplier Invoices'],
   ['/purchase-returns', 'Purchase Returns'],
   ['/purchase-history', 'Purchase History'],
-  ['/sales', 'Sales Management'],
+  // Step 7 replaced the single "Sales Management" placeholder
+  // with nine screens of its own.
+  ['/sales', 'Sales Dashboard'],
+  ['/customers', 'Customers'],
+  ['/quotations', 'Quotations'],
+  ['/sales-orders', 'Sales Orders'],
+  ['/sales-invoices', 'Sales Invoices'],
+  ['/delivery-challans', 'Dispatch / Delivery'],
+  ['/sales-returns', 'Sales Returns'],
+  ['/customer-payments', 'Customer Payments'],
+  ['/sales-history', 'Sales History'],
   ['/reports', 'Reports & Analytics'],
   ['/sync', 'Website Sync Status'],
   ['/transfer', 'Import / Export'],
@@ -101,15 +111,15 @@ try {
   check('2a. the palette is unchanged',
     tokens.ink === '#1A1512' && tokens.gold === '#8A6A3B' && tokens.paper === '#F7F3EC', tokens);
 
-  check('2b. the sidebar lists all twenty-four modules',
-    (await page.$$('.nav-item')).length === 24);
+  check('2b. the sidebar lists all thirty-two modules',
+    (await page.$$('.nav-item')).length === 32);
 
   /* THE NAV NOW SCROLLS, AND THAT IS THE RIGHT ANSWER.
      Through step 5 all eighteen modules fitted a 900px laptop
      screen and this check held them to it. Step 6's seven
-     purchase screens take it to twenty-four, which needs about
-     1060px; forcing them into 900 would mean type too small to
-     scan or padding too tight to click.
+     purchase screens took it to twenty-four; step 7's nine sales
+     screens take it to thirty-two. Forcing them into 900px would
+     mean type too small to scan or padding too tight to click.
 
      So what is checked is no longer "it never scrolls" but the
      thing that actually matters when it does: that the module you
@@ -222,7 +232,7 @@ try {
   check('6a. the connected screens are marked live',
     live.includes('Product Master') && live.includes('Catalogue Structure'), live);
   check('6b. the screens still on demo data are NOT marked live',
-    !live.includes('Purchase Management') && !live.includes('Sales Management'), live);
+    !live.includes('Reports & Analytics') && !live.includes('Website Sync Status'), live);
   /* Warehouses was a placeholder through step 4: the brief itself
      flagged that its workflow was unsettled, and a transfer flow
      built before the studio agreed how stock moves between
@@ -231,6 +241,10 @@ try {
   check('6c. every inventory screen is now marked live',
     ['Inventory / Stock', 'Stock Inward', 'Stock Outward', 'Stock Adjustments',
       'Stock Ledger', 'Warehouses', 'Warehouse Transfers', 'Stock Reconciliation']
+      .every((label) => live.includes(label)), live);
+  check('6e. and every sales screen step 7 built is marked live, replacing the old placeholder',
+    ['Sales Dashboard', 'Customers', 'Quotations', 'Sales Orders', 'Sales Invoices',
+      'Dispatch / Delivery', 'Sales Returns', 'Customer Payments', 'Sales History']
       .every((label) => live.includes(label)), live);
   check('6d. and nothing is left marked planned',
     !flags.some((f) => f.flag === 'planned'),

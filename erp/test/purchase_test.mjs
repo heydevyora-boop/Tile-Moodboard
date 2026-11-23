@@ -793,12 +793,20 @@ async function main() {
     'grep -lE "^import \\{[^}]*postStockMovement" server/services/*.mjs || true',
     { cwd: process.cwd(), encoding: 'utf8' },
   ).split('\n').filter(Boolean);
-  check('33b. and only the receipt and return services import the stock service at all',
+  check('33b. and only the services that legitimately move stock import the stock service at all',
     purchaseImports.every((f) => [
       'server/services/inventory.service.mjs',
       'server/services/warehouse.service.mjs',
       'server/services/grn.service.mjs',
       'server/services/purchaseReturn.service.mjs',
+      // Step 7's own three: reservation (RESERVED dimension),
+      // dispatch (OUTWARD) and sales returns (INWARD/DAMAGE).
+      // Checked again, in full, by test/sales_test.mjs's own
+      // "architecture" section -- this allowlist only has to
+      // agree that these three belong on it, not re-prove why.
+      'server/services/reservation.service.mjs',
+      'server/services/dispatch.service.mjs',
+      'server/services/salesReturn.service.mjs',
     ].includes(f)), purchaseImports.join(', '));
 
   /* ────────────────────────────────────────────────────────

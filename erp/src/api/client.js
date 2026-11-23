@@ -255,4 +255,94 @@ export const api = {
     productRules: () => request('/reference/product-rules'),
     warehouses: () => request('/reference/warehouses'),
   },
+
+  /* SALES.
+     Note which of these move stock and which do not, the same
+     discipline as purchase: a quotation, a sales order, an
+     approval and a sales invoice move nothing. Only a reservation
+     (the RESERVED dimension, not physical stock), a delivery
+     challan (OUTWARD) and a sales return (INWARD/DAMAGE) touch
+     inventory, and all three go through the same stock service
+     everything else in this ERP does. */
+  customers: {
+    list: (params) => request('/customers', { params }),
+    options: () => request('/customers/options'),
+    get: (id) => request('/customers/' + id),
+    history: (id, params) => request('/customers/' + id + '/history', { params }),
+    create: (body) => request('/customers', { method: 'POST', body }),
+    update: (id, body) => request('/customers/' + id, { method: 'PATCH', body }),
+    // No remove(). A customer with history cannot be deleted.
+    setActive: (id, isActive, reason) =>
+      request('/customers/' + id + '/active', { method: 'POST', body: { isActive, reason } }),
+  },
+
+  quotations: {
+    list: (params) => request('/quotations', { params }),
+    get: (id) => request('/quotations/' + id),
+    create: (body) => request('/quotations', { method: 'POST', body }),
+    update: (id, body) => request('/quotations/' + id, { method: 'PATCH', body }),
+    send: (id) => request('/quotations/' + id + '/send', { method: 'POST' }),
+    respond: (id, status) => request('/quotations/' + id + '/respond', { method: 'POST', body: { status } }),
+    cancel: (id, reason) => request('/quotations/' + id + '/cancel', { method: 'POST', body: { reason } }),
+    revise: (id, body) => request('/quotations/' + id + '/revise', { method: 'POST', body }),
+    // THE ONE PATH FROM A QUOTE TO AN ORDER. Never automatic.
+    convert: (id, warehouseId) =>
+      request('/quotations/' + id + '/convert', { method: 'POST', body: { warehouseId: warehouseId || undefined } }),
+  },
+
+  salesOrders: {
+    list: (params) => request('/sales-orders', { params }),
+    get: (id) => request('/sales-orders/' + id),
+    create: (body) => request('/sales-orders', { method: 'POST', body }),
+    update: (id, body) => request('/sales-orders/' + id, { method: 'PATCH', body }),
+    submit: (id) => request('/sales-orders/' + id + '/submit', { method: 'POST' }),
+    approve: (id) => request('/sales-orders/' + id + '/approve', { method: 'POST' }),
+    returnToDraft: (id, reason) =>
+      request('/sales-orders/' + id + '/return-to-draft', { method: 'POST', body: { reason } }),
+    cancel: (id, reason) => request('/sales-orders/' + id + '/cancel', { method: 'POST', body: { reason } }),
+    close: (id, reason) => request('/sales-orders/' + id + '/close', { method: 'POST', body: { reason } }),
+
+    // STOCK AVAILABILITY & RESERVATION. Reserving moves the
+    // RESERVED dimension only -- physical stock is unchanged.
+    availability: (id) => request('/sales-orders/' + id + '/availability'),
+    reserve: (id, lines, clientKey) =>
+      request('/sales-orders/' + id + '/reserve', { method: 'POST', body: { lines, clientKey } }),
+    release: (id, lines, clientKey) =>
+      request('/sales-orders/' + id + '/release', { method: 'POST', body: { lines, clientKey } }),
+
+    dispatchable: (id) => request('/sales-orders/' + id + '/dispatchable'),
+    invoiceable: (id) => request('/sales-orders/' + id + '/invoiceable'),
+    returnable: (id) => request('/sales-orders/' + id + '/returnable'),
+  },
+
+  deliveryChallans: {
+    list: (params) => request('/delivery-challans', { params }),
+    get: (id) => request('/delivery-challans/' + id),
+    // THE ONE CALL IN THE SALES MODULE THAT DECREASES STOCK.
+    dispatch: (body) => request('/delivery-challans', { method: 'POST', body }),
+  },
+
+  salesInvoices: {
+    list: (params) => request('/sales-invoices', { params }),
+    get: (id) => request('/sales-invoices/' + id),
+    create: (body) => request('/sales-invoices', { method: 'POST', body }),
+    cancel: (id, reason) => request('/sales-invoices/' + id + '/cancel', { method: 'POST', body: { reason } }),
+    balance: (id) => request('/sales-invoices/' + id + '/balance'),
+  },
+
+  salesReturns: {
+    list: (params) => request('/sales-returns', { params }),
+    get: (id) => request('/sales-returns/' + id),
+    post: (body) => request('/sales-returns', { method: 'POST', body }),
+  },
+
+  customerPayments: {
+    list: (params) => request('/customer-payments', { params }),
+    record: (body) => request('/customer-payments', { method: 'POST', body }),
+  },
+
+  sales: {
+    dashboard: (params) => request('/sales-dashboard', { params }),
+    history: (params) => request('/sales-history', { params }),
+  },
 };

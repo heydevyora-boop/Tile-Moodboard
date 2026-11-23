@@ -9,6 +9,7 @@ import imports from './routes/imports.mjs';
 import inventory from './routes/inventory.mjs';
 import warehouses from './routes/warehouses.mjs';
 import purchase from './routes/purchase.mjs';
+import sales from './routes/sales.mjs';
 
 /* ============================================================
    THE ERP PRODUCT MASTER API
@@ -100,6 +101,10 @@ export function createApp() {
      orders, goods receipts, returns and supplier invoices are
      five things, not five views of one. */
   app.use('/api', purchase);
+  /* Same reasoning as purchase: customers, quotations, sales
+     orders, reservations, dispatches, invoices, returns and
+     payments are peer documents, not sub-resources of one noun. */
+  app.use('/api', sales);
 
   app.use((req, res) => {
     res.status(404).json({ error: { code: 'NOT_FOUND', message: 'No such endpoint: ' + req.method + ' ' + req.path } });

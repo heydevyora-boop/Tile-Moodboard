@@ -21,7 +21,8 @@
     "test:frontend": "node test/frontend_regression_test.mjs",
     "test:import": "node test/import_engine_test.mjs",
     "test:inventory": "node test/inventory_test.mjs",
-    "test:purchase": "node test/purchase_test.mjs"
+    "test:purchase": "node test/purchase_test.mjs",
+    "test:sales": "node test/sales_test.mjs"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.9.1",

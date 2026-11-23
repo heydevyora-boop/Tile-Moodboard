@@ -49,7 +49,15 @@ export const MODULES = [
   { to: '/purchase-returns',  label: 'Purchase Returns',    group: 'Purchase', status: 'live' },
   { to: '/purchase-history',  label: 'Purchase History',    group: 'Purchase', status: 'live' },
 
-  { to: '/sales',       label: 'Sales Management',       group: 'Trade',      status: 'ready' },
+  { to: '/sales',               label: 'Sales Dashboard',     group: 'Sales', status: 'live' },
+  { to: '/customers',           label: 'Customers',          group: 'Sales', status: 'live' },
+  { to: '/quotations',          label: 'Quotations',         group: 'Sales', status: 'live' },
+  { to: '/sales-orders',        label: 'Sales Orders',       group: 'Sales', status: 'live' },
+  { to: '/sales-invoices',      label: 'Sales Invoices',     group: 'Sales', status: 'live' },
+  { to: '/delivery-challans',   label: 'Dispatch / Delivery', group: 'Sales', status: 'live' },
+  { to: '/sales-returns',       label: 'Sales Returns',      group: 'Sales', status: 'live' },
+  { to: '/customer-payments',   label: 'Customer Payments',  group: 'Sales', status: 'live' },
+  { to: '/sales-history',       label: 'Sales History',      group: 'Sales', status: 'live' },
 
   { to: '/reports',     label: 'Reports & Analytics',    group: 'Insight',    status: 'ready' },
 
@@ -64,7 +72,7 @@ export const MODULES = [
    MODULES so re-ordering a section does not mean re-sorting the
    route table. */
 export const GROUP_ORDER = [
-  'Overview', 'Catalogue', 'Inventory', 'Purchase', 'Trade', 'Insight', 'Integration', 'Admin',
+  'Overview', 'Catalogue', 'Inventory', 'Purchase', 'Sales', 'Insight', 'Integration', 'Admin',
 ];
 
 /** The module a path belongs to, for the topbar heading. */

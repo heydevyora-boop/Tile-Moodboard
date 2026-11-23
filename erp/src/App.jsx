@@ -19,7 +19,15 @@ import GoodsReceipts from './pages/GoodsReceipts.jsx';
 import SupplierInvoices from './pages/SupplierInvoices.jsx';
 import PurchaseReturns from './pages/PurchaseReturns.jsx';
 import PurchaseHistory from './pages/PurchaseHistory.jsx';
-import Sales from './pages/Sales.jsx';
+import SalesDashboard from './pages/SalesDashboard.jsx';
+import Customers from './pages/Customers.jsx';
+import Quotations from './pages/Quotations.jsx';
+import SalesOrders from './pages/SalesOrders.jsx';
+import SalesInvoices from './pages/SalesInvoices.jsx';
+import DeliveryChallans from './pages/DeliveryChallans.jsx';
+import SalesReturns from './pages/SalesReturns.jsx';
+import CustomerPayments from './pages/CustomerPayments.jsx';
+import SalesHistory from './pages/SalesHistory.jsx';
 import Reports from './pages/Reports.jsx';
 import SyncStatus from './pages/SyncStatus.jsx';
 import Transfer from './pages/Transfer.jsx';
@@ -59,7 +67,16 @@ export default function App() {
         <Route path="supplier-invoices" element={<SupplierInvoices />} />
         <Route path="purchase-returns" element={<PurchaseReturns />} />
         <Route path="purchase-history" element={<PurchaseHistory />} />
-        <Route path="sales" element={<Sales />} />
+
+        <Route path="sales" element={<SalesDashboard />} />
+        <Route path="customers" element={<Customers />} />
+        <Route path="quotations" element={<Quotations />} />
+        <Route path="sales-orders" element={<SalesOrders />} />
+        <Route path="sales-invoices" element={<SalesInvoices />} />
+        <Route path="delivery-challans" element={<DeliveryChallans />} />
+        <Route path="sales-returns" element={<SalesReturns />} />
+        <Route path="customer-payments" element={<CustomerPayments />} />
+        <Route path="sales-history" element={<SalesHistory />} />
 
         <Route path="reports" element={<Reports />} />
 
