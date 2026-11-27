@@ -72,7 +72,7 @@ export async function findSimilar(name, excludeId) {
     .slice(0, 5);
 }
 
-export async function create({ name, code, isActive = true, confirmDistinct = false }, actor) {
+export async function create({ name, code, logoUrl, description, isActive = true, confirmDistinct = false }, actor) {
   const fields = [];
   if (!String(name ?? '').trim()) fields.push({ field: 'name', message: 'Brand name is required.' });
   if (fields.length) throw new ValidationError(fields);
@@ -105,7 +105,10 @@ export async function create({ name, code, isActive = true, confirmDistinct = fa
     let brand;
     try {
       brand = await tx.brand.create({
-        data: { name: cleanName, code: await freeCode(tx, cleanCode), isActive },
+        data: {
+          name: cleanName, code: await freeCode(tx, cleanCode), isActive,
+          logoUrl: logoUrl ?? null, description: description ?? null,
+        },
       });
     } catch (err) {
       // The expression index caught something the check above did
@@ -146,6 +149,8 @@ export async function update(id, patch, actor) {
     data.name = cleanName;
   }
   if (patch.isActive !== undefined) data.isActive = patch.isActive;
+  if (patch.logoUrl !== undefined) data.logoUrl = patch.logoUrl;
+  if (patch.description !== undefined) data.description = patch.description;
   // `code` is deliberately NOT editable. It is woven into every
   // SKU generated under this brand, and changing it would make the
   // existing codes describe a prefix that no longer exists.
@@ -182,6 +187,8 @@ function shape(brand) {
     id: brand.id,
     code: brand.code,
     name: brand.name,
+    logoUrl: brand.logoUrl ?? null,
+    description: brand.description ?? null,
     isActive: brand.isActive,
     productCount: brand._count?.products ?? 0,
     productHeadCount: brand._count?.collections ?? 0,

@@ -3,6 +3,7 @@ import { markApiVersion, translateLegacyQueryParams, wrapJsonEnvelope } from '..
 
 import brands from './brands.mjs';
 import productHeads from './productHeads.mjs';
+import productLines from './productLines.mjs';
 import products from './products.mjs';
 import reference from './reference.mjs';
 import imports from './imports.mjs';
@@ -49,6 +50,7 @@ router.use(wrapJsonEnvelope);
 
 router.use('/brands', brands);
 router.use('/product-heads', productHeads);
+router.use('/product-lines', productLines);
 router.use('/products', products);
 router.use('/reference', reference);
 router.use('/imports', imports);

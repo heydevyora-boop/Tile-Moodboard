@@ -125,7 +125,7 @@ export async function findSimilar({ name, brandId, categoryId, excludeId }) {
     .slice(0, 5);
 }
 
-export async function create({ name, brandId, categoryId, code, description, isActive = true, confirmDistinct = false }, actor) {
+export async function create({ name, brandId, categoryId, code, description, coverImageUrl, catalogueDocumentUrl, isActive = true, confirmDistinct = false }, actor) {
   const fields = [];
   if (!String(name ?? '').trim()) fields.push({ field: 'name', message: 'Product head name is required.' });
   if (!brandId) fields.push({ field: 'brandId', message: 'Brand is required.' });
@@ -174,6 +174,8 @@ export async function create({ name, brandId, categoryId, code, description, isA
         name: cleanName,
         code: await freeCode(tx, brandId, normaliseCode(code) || normaliseCode(cleanName).slice(0, 8) || 'HEAD'),
         description: description ?? null,
+        coverImageUrl: coverImageUrl ?? null,
+        catalogueDocumentUrl: catalogueDocumentUrl ?? null,
         isActive,
       },
       include: {
@@ -213,6 +215,8 @@ export async function update(id, patch, actor) {
     data.name = cleanName;
   }
   if (patch.description !== undefined) data.description = patch.description;
+  if (patch.coverImageUrl !== undefined) data.coverImageUrl = patch.coverImageUrl;
+  if (patch.catalogueDocumentUrl !== undefined) data.catalogueDocumentUrl = patch.catalogueDocumentUrl;
   if (patch.isActive !== undefined) data.isActive = patch.isActive;
 
   if (patch.categoryId !== undefined) {
@@ -269,6 +273,8 @@ function shape(head) {
     code: head.code,
     name: head.name,
     description: head.description ?? null,
+    coverImageUrl: head.coverImageUrl ?? null,
+    catalogueDocumentUrl: head.catalogueDocumentUrl ?? null,
     isActive: head.isActive,
     brand: head.brand ?? null,
     category: head.category ?? null,

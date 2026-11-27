@@ -20,6 +20,14 @@ import { QUOTATION_STATUS } from '../data/salesStatus.js';
 
 const EMPTY_LINE = { productId: '', sku: '', name: '', uom: '', quantity: '', unitPrice: '', discountPercent: '' };
 
+/** Company › Collection › Product — Finish, Size, so a line is
+ *  picked by what it actually is, not by a SKU alone. */
+function hierarchyLabel(p) {
+  return [p.brand?.name, p.productHead?.name, p.productLine?.name ?? p.name]
+    .filter(Boolean).join(' › ')
+    + ' — ' + [p.finish, p.size].filter(Boolean).join(', ');
+}
+
 export default function Quotations() {
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
@@ -290,8 +298,8 @@ export default function Quotations() {
               <div className="field">
                 <label htmlFor="q-sku">Product code</label>
                 <input id="q-sku" className="input" list="q-product-list" value={sku} onChange={(e) => setSku(e.target.value)} autoComplete="off" placeholder="DV-1001" />
-                <datalist id="q-product-list">{(matches.data?.rows ?? []).map((p) => <option key={p.id} value={p.sku}>{p.name}</option>)}</datalist>
-                <span className="tiny muted">{chosen ? chosen.name : 'Type two characters to search.'}</span>
+                <datalist id="q-product-list">{(matches.data?.rows ?? []).map((p) => <option key={p.id} value={p.sku}>{hierarchyLabel(p)}</option>)}</datalist>
+                <span className="tiny muted">{chosen ? hierarchyLabel(chosen) : 'Type two characters to search.'}</span>
               </div>
               <div className="field">
                 <label htmlFor="q-qty">Quantity</label>

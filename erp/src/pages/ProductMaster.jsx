@@ -85,23 +85,32 @@ export default function ProductMaster() {
   const options = useApi(() => api.products.filterOptions(), []);
 
   const columns = [
-    { key: 'sku', label: 'Code', width: 150, render: (p) => <span className="sku">{p.sku}</span> },
+    { key: 'sku', label: 'SKU', width: 150, render: (p) => <span className="sku">{p.sku}</span> },
+    { key: 'brand', label: 'Company', width: 100, sortable: false, value: (p) => p.brand?.name },
+    {
+      key: 'productHead',
+      label: 'Collection',
+      width: 120,
+      sortable: false,
+      render: (p) => (p.productHead ? p.productHead.name : <span className="muted tiny">—</span>),
+    },
     {
       key: 'name',
       label: 'Product',
       render: (p) => (
         <>
-          <strong>{p.name}</strong>
+          <strong>{p.productLine ? p.productLine.name : p.name}</strong>
           <div className="tiny muted">
-            {p.productHead ? p.productHead.name : <span className="muted">no series</span>}
+            {p.productLine
+              ? (p.name !== p.productLine.name && p.name)
+              : 'not grouped into a product yet'}
             {p.isArchived && <> · <em>archived</em></>}
           </div>
         </>
       ),
     },
-    { key: 'brand', label: 'Brand', width: 100, sortable: false, value: (p) => p.brand?.name },
-    { key: 'size', label: 'Size', width: 110, render: (p) => <span className="sku">{p.size}</span> },
     { key: 'finish', label: 'Finish', width: 88 },
+    { key: 'size', label: 'Size', width: 110, render: (p) => <span className="sku">{p.size}</span> },
     { key: 'colour', label: 'Colour', width: 96 },
     { key: 'category', label: 'Category', width: 130, sortable: false, value: (p) => p.category?.name },
     {
@@ -336,7 +345,8 @@ function ProductDetail({ id, onClose, onEdit, onChanged }) {
             {[
               ['SKU', p.sku],
               ['Brand', p.brand?.name],
-              ['Product head', p.productHead?.name ?? '—'],
+              ['Collection', p.productHead?.name ?? '—'],
+              ['Product', p.productLine?.name ?? '— (ungrouped)'],
               ['Category', p.category?.name],
               ['Size', p.size],
               ['Thickness', p.thicknessMm === null ? '—' : p.thicknessMm + ' mm'],

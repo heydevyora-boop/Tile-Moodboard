@@ -39,6 +39,7 @@ const VIEWS = {
 };
 
 export default function Inventory() {
+  const [mode, setMode] = useState('list');
   const [view, setView] = useState('all');
   const [search, setSearch] = useState('');
   const [warehouseId, setWarehouseId] = useState('all');
@@ -75,7 +76,7 @@ export default function Inventory() {
         <>
           <strong>{r.name}</strong>
           <div className="tiny muted">
-            {[r.brand?.name, r.productHead?.name, r.category?.name].filter(Boolean).join(' · ')}
+            {[r.brand?.name, r.productHead?.name, r.productLine?.name, r.category?.name].filter(Boolean).join(' · ')}
           </div>
         </>
       ),
@@ -208,6 +209,19 @@ export default function Inventory() {
         </div>
       </div>
 
+      <div className="viewbar">
+        <button className={'viewtab' + (mode === 'list' ? ' is-on' : '')} onClick={() => setMode('list')}>
+          List
+        </button>
+        <button className={'viewtab' + (mode === 'hierarchy' ? ' is-on' : '')} onClick={() => setMode('hierarchy')}>
+          By company / collection / product
+        </button>
+      </div>
+
+      {mode === 'hierarchy' && <StockHierarchy />}
+
+      {mode === 'list' && (
+      <>
       <div className="grid-4">
         <KpiCard
           label="On the shelves"
@@ -331,6 +345,188 @@ export default function Inventory() {
           number of matching rows on this page, not across the whole catalogue.
         </p>
       )}
+      </>
+      )}
     </>
+  );
+}
+
+/* ============================================================
+   THE HIERARCHY DRILL-DOWN
+   ============================================================
+   Company -> collection -> product -> variant. Every total on
+   this screen is a SUM over the SKU-level balances the ledger
+   already maintains -- read via server/services/inventory.
+   service.mjs's companyStock() / collectionStock() /
+   productLineStock(), never a second figure kept anywhere.
+   ============================================================ */
+
+function Totals({ t }) {
+  return (
+    <span className="tiny muted">
+      {qty(t.physical)} on hand
+      {t.reserved > 0 && <> · {qty(t.reserved)} reserved</>}
+      {t.damaged > 0 && <> · {qty(t.damaged)} damaged</>}
+      {t.inTransit > 0 && <> · {qty(t.inTransit)} in transit</>}
+      {' · '}{qty(t.available)} can be sold
+    </span>
+  );
+}
+
+function StockHierarchy() {
+  // null = the top level (every company); otherwise one id per
+  // level, so "back" is just clearing the deepest one set.
+  const [brandId, setBrandId] = useState(null);
+  const [collectionId, setCollectionId] = useState(null);
+  const [productLineId, setProductLineId] = useState(null);
+
+  const top = useApi(() => api.inventory.hierarchy(), [], { skip: !!brandId });
+  const company = useApi(() => api.inventory.companyStock(brandId), [brandId], { skip: !brandId });
+  const collection = useApi(() => api.inventory.collectionStock(collectionId), [collectionId], { skip: !collectionId });
+  const productLine = useApi(() => api.inventory.productStock(productLineId), [productLineId], { skip: !productLineId });
+
+  const reset = () => { setBrandId(null); setCollectionId(null); setProductLineId(null); };
+
+  if (productLineId) {
+    const p = productLine.data;
+    return (
+      <section className="panel">
+        <div className="panel-head">
+          <div>
+            <button className="btn btn-sm" onClick={() => setProductLineId(null)}>← Back</button>
+            <h2 style={{ marginTop: 8 }}>{p ? p.productLine.brand.name + ' › ' + (p.productLine.collection?.name ?? '—') + ' › ' + p.productLine.name : 'Loading…'}</h2>
+            {p && <Totals t={p.totals} />}
+          </div>
+        </div>
+        {p && (
+          <div className="table-scroll">
+            <table className="table">
+              <thead><tr><th>SKU</th><th>Finish</th><th>Size</th><th>Colour</th><th>Status</th><th colSpan={2}>Stock</th></tr></thead>
+              <tbody>
+                {p.variants.map((v) => (
+                  <tr key={v.id}>
+                    <td><span className="sku">{v.sku}</span></td>
+                    <td>{v.finish ?? '—'}</td>
+                    <td><span className="sku">{v.size}</span></td>
+                    <td>{v.colour ?? '—'}</td>
+                    <td><StatusPill tone={v.status === 'ACTIVE' ? 'ok' : v.status === 'DISCONTINUED' ? 'inert' : 'info'}>{v.status}</StatusPill></td>
+                    <td colSpan={2}><Totals t={v.totals} /></td>
+                  </tr>
+                ))}
+                {p.variants.length === 0 && <tr><td colSpan={7} className="muted">No variants.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <p className="tiny muted" style={{ marginTop: 10 }}>
+          Warehouse-by-warehouse stock and the full movement history for one
+          SKU are on the <strong>List</strong> view and the{' '}
+          <Link to="/ledger">Stock Ledger</Link>.
+        </p>
+      </section>
+    );
+  }
+
+  if (collectionId) {
+    const c = collection.data;
+    return (
+      <section className="panel">
+        <div className="panel-head">
+          <div>
+            <button className="btn btn-sm" onClick={() => setCollectionId(null)}>← Back</button>
+            <h2 style={{ marginTop: 8 }}>{c ? c.collection.brand.name + ' › ' + c.collection.name : 'Loading…'}</h2>
+            {c && <Totals t={c.totals} />}
+          </div>
+        </div>
+        {c && (
+          <div className="table-scroll">
+            <table className="table">
+              <thead><tr><th>Product</th><th className="right">Variants</th><th colSpan={2}>Stock</th></tr></thead>
+              <tbody>
+                {c.products.map((p) => (
+                  <tr key={p.id} style={{ cursor: 'pointer' }} onClick={() => setProductLineId(p.id)}>
+                    <td><strong>{p.name}</strong><div className="sku">{p.code}</div></td>
+                    <td className="right num">{qty(p.variantCount)}</td>
+                    <td colSpan={2}><Totals t={p.totals} /></td>
+                  </tr>
+                ))}
+                {c.unassigned.variantCount > 0 && (
+                  <tr>
+                    <td><span className="muted tiny">Not grouped into a product</span></td>
+                    <td className="right num">{qty(c.unassigned.variantCount)}</td>
+                    <td colSpan={2}><Totals t={c.unassigned.totals} /></td>
+                  </tr>
+                )}
+                {c.products.length === 0 && c.unassigned.variantCount === 0 && (
+                  <tr><td colSpan={4} className="muted">No products.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+    );
+  }
+
+  if (brandId) {
+    const b = company.data;
+    return (
+      <section className="panel">
+        <div className="panel-head">
+          <div>
+            <button className="btn btn-sm" onClick={reset}>← Back</button>
+            <h2 style={{ marginTop: 8 }}>{b ? b.brand.name : 'Loading…'}</h2>
+            {b && <Totals t={b.totals} />}
+          </div>
+        </div>
+        {b && (
+          <div className="table-scroll">
+            <table className="table">
+              <thead><tr><th>Collection</th><th className="right">Products</th><th colSpan={2}>Stock</th></tr></thead>
+              <tbody>
+                {b.collections.map((c) => (
+                  <tr key={c.id} style={{ cursor: 'pointer' }} onClick={() => setCollectionId(c.id)}>
+                    <td><strong>{c.name}</strong><div className="sku">{c.code}</div></td>
+                    <td className="right num">{qty(c.productCount)}</td>
+                    <td colSpan={2}><Totals t={c.totals} /></td>
+                  </tr>
+                ))}
+                {b.unassigned.productCount > 0 && (
+                  <tr>
+                    <td><span className="muted tiny">Not under a collection</span></td>
+                    <td className="right num">{qty(b.unassigned.productCount)}</td>
+                    <td colSpan={2}><Totals t={b.unassigned.totals} /></td>
+                  </tr>
+                )}
+                {b.collections.length === 0 && b.unassigned.productCount === 0 && (
+                  <tr><td colSpan={4} className="muted">No collections.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+    );
+  }
+
+  return (
+    <section className="panel">
+      <div className="table-scroll">
+        <table className="table">
+          <thead><tr><th>Company</th><th colSpan={2}>Stock</th></tr></thead>
+          <tbody>
+            {(top.data?.rows ?? []).map((b) => (
+              <tr key={b.id} style={{ cursor: 'pointer' }} onClick={() => setBrandId(b.id)}>
+                <td><strong>{b.name}</strong><div className="sku">{b.code}</div></td>
+                <td colSpan={2}><Totals t={b.totals} /></td>
+              </tr>
+            ))}
+            {(top.data?.rows ?? []).length === 0 && !top.loading && (
+              <tr><td colSpan={3} className="muted">No companies yet.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }

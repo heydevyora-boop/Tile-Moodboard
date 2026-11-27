@@ -18,7 +18,7 @@ import { useApi } from '../api/useApi.js';
    ============================================================ */
 
 const EMPTY = {
-  name: '', brandId: '', categoryId: '', headId: '',
+  name: '', brandId: '', categoryId: '', headId: '', productLineId: '',
   size: '', lengthMm: '', widthMm: '', thicknessMm: '',
   finish: '', colour: '', uom: 'BOX',
   piecesPerUnit: '', areaSqftPerUnit: '',
@@ -38,6 +38,7 @@ export default function ProductForm({ product, brands, categories, onClose, onSa
         brandId: product.brand?.id ?? '',
         categoryId: product.category?.id ?? '',
         headId: product.productHead?.id ?? '',
+        productLineId: product.productLine?.id ?? '',
         size: product.size,
         lengthMm: product.lengthMm ?? '',
         widthMm: product.widthMm ?? '',
@@ -66,6 +67,11 @@ export default function ProductForm({ product, brands, categories, onClose, onSa
   const heads = useApi(
     () => api.productHeads.list({ brandId: form.brandId, pageSize: 200 }),
     [form.brandId],
+    { skip: !form.brandId },
+  );
+  const lines = useApi(
+    () => api.productLines.list({ brandId: form.brandId, collectionId: form.headId || undefined, pageSize: 200 }),
+    [form.brandId, form.headId],
     { skip: !form.brandId },
   );
 
@@ -167,6 +173,21 @@ export default function ProductForm({ product, brands, categories, onClose, onSa
               <option value="">No series</option>
               {(heads.data?.rows ?? []).map((h) => (
                 <option key={h.id} value={h.id}>{h.name} ({h.variantCount})</option>
+              ))}
+            </select>
+          </Field>
+
+          <Field
+            name="productLineId"
+            label="Product"
+            hint={form.brandId
+              ? 'A Matte and a Glossy of the same slab are two variants of one Product.'
+              : 'Choose a brand first.'}
+          >
+            <select id="f-productLineId" className="select" value={form.productLineId} onChange={set('productLineId')} disabled={!form.brandId}>
+              <option value="">No product (ungrouped)</option>
+              {(lines.data?.rows ?? []).map((p) => (
+                <option key={p.id} value={p.id}>{p.name} ({p.variantCount})</option>
               ))}
             </select>
           </Field>

@@ -40,6 +40,7 @@ const LIST_SELECT = {
   brand: { select: { id: true, name: true, code: true } },
   category: { select: { id: true, name: true, code: true } },
   collection: { select: { id: true, name: true, code: true } },
+  productLine: { select: { id: true, name: true, code: true } },
   inventory: { select: { warehouseId: true, quantityOnHand: true, quantityReserved: true, reorderLevel: true } },
 };
 
@@ -58,7 +59,7 @@ const SORTABLE = new Set([
  */
 export async function list(query = {}) {
   const {
-    search, brandId, categoryId, headId, status, colour, finish, size,
+    search, brandId, categoryId, headId, productLineId, status, colour, finish, size,
     thicknessMm, includeArchived = false,
     sortBy = 'sku', sortDir = 'asc', page = 1, pageSize = 25,
   } = query;
@@ -71,6 +72,7 @@ export async function list(query = {}) {
     ...(brandId ? { brandId } : {}),
     ...(categoryId ? { categoryId } : {}),
     ...(headId ? { collectionId: headId } : {}),
+    ...(productLineId ? { productLineId } : {}),
     ...(status ? { status: Array.isArray(status) ? { in: status } : status } : {}),
     ...(colour ? { colour: { equals: colour, mode: 'insensitive' } } : {}),
     ...(finish ? { finish: { equals: finish, mode: 'insensitive' } } : {}),
@@ -87,6 +89,7 @@ export async function list(query = {}) {
           { colour: { contains: search, mode: 'insensitive' } },
           { brand: { name: { contains: search, mode: 'insensitive' } } },
           { collection: { name: { contains: search, mode: 'insensitive' } } },
+          { productLine: { name: { contains: search, mode: 'insensitive' } } },
         ],
       }
       : {}),
@@ -221,10 +224,18 @@ export async function stockSummary(id) {
 }
 
 /** Variants under a head that already match these attributes. */
-export async function findDuplicateVariants({ headId, colour, finish, size, excludeId }) {
-  if (!headId) return [];
+export async function findDuplicateVariants({ headId, productLineId, colour, finish, size, excludeId }) {
+  if (!headId && !productLineId) return [];
+  // A Product (ProductLine) is the more precise scope -- "the same
+  // finish and size of THIS product" -- so it wins when both are
+  // given. Falling back to the head/collection keeps the check
+  // working for a variant nobody has grouped into a product yet.
   const siblings = await prisma.product.findMany({
-    where: { collectionId: headId, archivedAt: null, ...(excludeId ? { id: { not: excludeId } } : {}) },
+    where: {
+      archivedAt: null,
+      ...(excludeId ? { id: { not: excludeId } } : {}),
+      ...(productLineId ? { productLineId } : { collectionId: headId }),
+    },
     select: { id: true, sku: true, name: true, colour: true, finish: true, size: true },
   });
   return siblings.filter((v) =>
@@ -234,7 +245,7 @@ export async function findDuplicateVariants({ headId, colour, finish, size, excl
 }
 
 export async function create(input, actor) {
-  const { headId, sku: manualSku, confirmDistinct = false, ...data } = input;
+  const { headId, productLineId, sku: manualSku, confirmDistinct = false, ...data } = input;
 
   // The category decides which fields are required, so it has to
   // be resolved before anything is validated.
@@ -253,6 +264,31 @@ export async function create(input, actor) {
     }
   }
 
+  // A ProductLine ("Onery Elite Decore") is the optional grouping
+  // above this variant. Same inheritance rule as headId: whatever
+  // this variant does not state itself, it takes from the line it
+  // joins -- and whatever it DOES state must agree with the line,
+  // not quietly override it.
+  let line = null;
+  if (productLineId) {
+    line = await prisma.productLine.findUnique({ where: { id: productLineId }, include: { brand: true } });
+    if (!line) throw new ValidationError([{ field: 'productLineId', message: 'No such product.' }]);
+    if (!categoryId) categoryId = line.categoryId ?? undefined;
+    if (!data.brandId) data.brandId = line.brandId;
+    if (line.brandId !== data.brandId) {
+      throw new ValidationError([{
+        field: 'brandId',
+        message: 'This product belongs to ' + line.brand.name + '. A variant cannot sit under a product of another brand.',
+      }]);
+    }
+    if (headId && line.collectionId && line.collectionId !== headId) {
+      throw new ValidationError([{
+        field: 'headId',
+        message: 'This product belongs to a different product head than the one given.',
+      }]);
+    }
+  }
+
   if (!categoryId) {
     throw new ValidationError([{ field: 'categoryId', message: 'Category is required (the head has none set).' }]);
   }
@@ -264,14 +300,15 @@ export async function create(input, actor) {
   const brand = await prisma.brand.findUnique({ where: { id: data.brandId } });
   if (!brand) throw new ValidationError([{ field: 'brandId', message: 'No such brand.' }]);
 
-  /* The same colour, finish and size under the same head is
-     almost certainly the variant being entered twice. Almost --
-     so it is raised, not refused outright. */
-  if (headId && !confirmDistinct) {
-    const dupes = await findDuplicateVariants({ headId, colour: data.colour, finish: data.finish, size: data.size });
+  /* The same colour, finish and size under the same product (or,
+     failing that, the same head) is almost certainly the variant
+     being entered twice. Almost -- so it is raised, not refused
+     outright. */
+  if ((headId || productLineId) && !confirmDistinct) {
+    const dupes = await findDuplicateVariants({ headId, productLineId, colour: data.colour, finish: data.finish, size: data.size });
     if (dupes.length > 0) {
       throw new NeedsReviewError(
-        'A variant of this head already has that colour, finish and size.',
+        'A variant of this product already has that colour, finish and size.',
         dupes,
       );
     }
@@ -288,7 +325,8 @@ export async function create(input, actor) {
           name: String(data.name).trim(),
           brandId: data.brandId,
           categoryId,
-          collectionId: headId ?? null,
+          collectionId: headId ?? line?.collectionId ?? null,
+          productLineId: productLineId ?? null,
           size: data.size,
           lengthMm: data.lengthMm ?? null,
           widthMm: data.widthMm ?? null,
@@ -381,6 +419,20 @@ export async function update(id, patch, actor) {
   }
   if (patch.categoryId !== undefined) data.categoryId = patch.categoryId;
   if (patch.headId !== undefined) data.collectionId = patch.headId || null;
+  if (patch.productLineId !== undefined) {
+    if (patch.productLineId) {
+      const line = await prisma.productLine.findUnique({ where: { id: patch.productLineId } });
+      if (!line) throw new ValidationError([{ field: 'productLineId', message: 'No such product.' }]);
+      const brandId = patch.brandId ?? before.brandId;
+      if (line.brandId !== brandId) {
+        throw new ValidationError([{
+          field: 'productLineId',
+          message: 'This product belongs to a different brand than this variant.',
+        }]);
+      }
+    }
+    data.productLineId = patch.productLineId || null;
+  }
   data.updatedById = actor?.id ?? null;
 
   return prisma.$transaction(async (tx) => {
@@ -496,6 +548,7 @@ function shape(p) {
     brand: p.brand,
     category: p.category,
     productHead: p.collection,
+    productLine: p.productLine,
     size: p.size,
     lengthMm: p.lengthMm,
     widthMm: p.widthMm,

@@ -23,7 +23,8 @@
     "test:inventory": "node test/inventory_test.mjs",
     "test:purchase": "node test/purchase_test.mjs",
     "test:sales": "node test/sales_test.mjs",
-    "test:api": "node test/api_v1_test.mjs"
+    "test:api": "node test/api_v1_test.mjs",
+    "test:hierarchy": "node test/product_hierarchy_test.mjs"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.9.1",

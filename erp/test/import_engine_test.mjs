@@ -249,11 +249,14 @@ try {
 
   const sizes = await prisma.product.findMany({
     where: { brand: { name: BRAND }, name: 'Adobe Grey' },
-    select: { sku: true, size: true },
+    select: { sku: true, size: true, productLineId: true },
   });
   check('7c. the two sizes of one name are two rows with two SKUs',
     sizes.length === 2 && new Set(sizes.map((s) => s.size)).size === 2
     && new Set(sizes.map((s) => s.sku)).size === 2, sizes);
+  check('7c2. ...but ONE product (the hierarchy level above a SKU), not two',
+    sizes.every((s) => s.productLineId !== null) && new Set(sizes.map((s) => s.productLineId)).size === 1,
+    sizes.map((s) => s.productLineId));
 
   const finishFp = rowFingerprint({ brandName: BRAND, name: 'X', size: '600x600mm', colour: 'Grey', finish: 'Matte' });
   const glossFp = rowFingerprint({ brandName: BRAND, name: 'X', size: '600x600mm', colour: 'Grey', finish: 'Glossy' });
@@ -497,7 +500,7 @@ try {
 
   const adobe = await prisma.product.findFirst({
     where: { brand: { name: BRAND }, name: 'Adobe Grey', size: '600x1200mm' },
-    include: { brand: true, category: true, collection: true, images: true },
+    include: { brand: true, category: true, collection: true, productLine: true, images: true },
   });
   check('16a. the product carries what the source said',
     adobe?.size === '600x1200mm' && Number(adobe.thicknessMm) === 9
@@ -508,6 +511,8 @@ try {
     Number(adobe.purchasePrice) === 0 && Number(adobe.sellingPrice) === 0);
   check('16c. no product head was assigned, because the source has no series',
     adobe.collectionId === null);
+  check('16c2. but the product (the hierarchy level above a SKU) WAS resolved -- the source does say this',
+    adobe.productLineId !== null && adobe.productLine?.name === 'Adobe Grey', adobe.productLine);
   check('16d. the catalogue image was attached UNAPPROVED',
     adobe.images.length === 1 && adobe.images[0].isApproved === false
     && adobe.images[0].source === 'CATALOGUE_EXTRACTION', adobe.images[0]);

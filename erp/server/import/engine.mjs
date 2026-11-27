@@ -5,6 +5,7 @@ import { readUpload, describeHeaders, readGoogleSheet, googleSheetsConfig } from
 import { validateProduct } from '../services/productRules.mjs';
 import * as productService from '../services/product.service.mjs';
 import * as brandService from '../services/brand.service.mjs';
+import * as productLineService from '../services/productLine.service.mjs';
 import { record } from '../services/audit.mjs';
 import { nextDocumentNumber } from '../../db/stock.mjs';
 import { AppError, NotFoundError } from '../errors.mjs';
@@ -456,10 +457,33 @@ async function importOneRow(row, actor) {
      Assigning one from it would scatter variants across heads
      that do not exist, which is exactly the mistake the hierarchy
      is built to prevent. A person assigns it afterwards. */
+
+  /* THE PRODUCT (the hierarchy level above a variant) IS
+     RESOLVED, not left unset -- unlike the head, this one the
+     source DOES say: "Product Name" is the same string across a
+     tile's Matte row and its Glossy row, exactly the signal a
+     product groups on. Found by an EXACT match within this brand
+     so a second import of the same sheet joins the same product
+     rather than making a sibling; a near-miss is NOT guessed at
+     here -- confirmDistinct, same reasoning as the brand above,
+     because the import preview is where that judgement belongs,
+     and a person can merge two products afterwards in the Product
+     Master if the sheet really did spell one name two ways. */
+  let productLine = await prisma.productLine.findFirst({
+    where: { brandId: brand.id, name: { equals: mapped.name, mode: 'insensitive' } },
+    select: { id: true },
+  });
+  if (!productLine) {
+    productLine = await productLineService.create({
+      name: mapped.name, brandId: brand.id, categoryId: category.id, confirmDistinct: true,
+    }, actor);
+  }
+
   const product = await productService.create({
     name: mapped.name,
     brandId: brand.id,
     categoryId: category.id,
+    productLineId: productLine.id,
     size: mapped.size,
     lengthMm: mapped.lengthMm ?? undefined,
     widthMm: mapped.widthMm ?? undefined,

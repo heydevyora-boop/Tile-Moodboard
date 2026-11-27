@@ -12,6 +12,8 @@ const CreateHead = z.object({
   categoryId: z.string().uuid().nullish(),
   code: z.string().max(16).optional(),
   description: z.string().max(2000).nullish(),
+  coverImageUrl: z.string().max(2000).nullish(),
+  catalogueDocumentUrl: z.string().max(2000).nullish(),
   isActive: z.boolean().optional(),
   confirmDistinct: z.boolean().optional(),
 });
@@ -21,6 +23,8 @@ const UpdateHead = z.object({
   brandId: z.string().uuid().optional(),
   categoryId: z.string().uuid().nullish(),
   description: z.string().max(2000).nullish(),
+  coverImageUrl: z.string().max(2000).nullish(),
+  catalogueDocumentUrl: z.string().max(2000).nullish(),
   isActive: z.boolean().optional(),
 });
 
