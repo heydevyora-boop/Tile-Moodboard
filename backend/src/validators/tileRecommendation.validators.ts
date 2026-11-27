@@ -20,6 +20,10 @@ export const listTilesQuerySchema = z.object({
   search: z.string().trim().max(100).optional(),
   collection: z.string().trim().max(100).optional(),
   brandId: z.string().optional(),
+  collectionId: z.string().optional(),
+  productId: z.string().optional(),
+  finish: z.string().trim().max(60).optional(),
+  size: z.string().trim().max(60).optional(),
 });
 
 export type ListTilesQuery = z.infer<typeof listTilesQuerySchema>;

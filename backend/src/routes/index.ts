@@ -21,6 +21,7 @@ import aiVisualizationRoutes from './ai_visualization.routes';
 import libraryRoutes from './library.routes';
 import clientWishlistRoutes from './clientWishlist.routes';
 import sampleRoutes from './sample.routes';
+import { companiesRouter, collectionsRouter, productsRouter } from './catalogHierarchy.routes';
 
 const router = Router();
 
@@ -39,6 +40,9 @@ router.use('/integrations', integrationsRoutes);
 router.use('/mood-boards', moodBoardRoutes);
 router.use('/print-boards', printBoardRoutes);
 router.use('/tiles', tileRecommendationRoutes);
+router.use('/companies', companiesRouter);
+router.use('/collections', collectionsRouter);
+router.use('/products', productsRouter);
 router.use('/customers', customerRoutes);
 router.use('/admin/api-keys', apiKeyRoutes);
 router.use('/admin', adminRoutes);
