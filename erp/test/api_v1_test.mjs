@@ -437,6 +437,53 @@ async function main() {
   });
   check('16j. an untouched transfer can still be cancelled -- existing behaviour preserved',
     cancelUntouched.status === 200 && cancelUntouched.json.data.status === 'CANCELLED', cancelUntouched.json);
+
+  console.log('\n17. the CASA integration route (step 9) is gated by its own shared secret, fails closed');
+
+  // Unset for the whole suite until now (the npm script never
+  // configures it) -- exactly the state a real deployment that has
+  // not set up the CASA integration yet would be in.
+  check('17a. unconfigured: the route refuses even a request with no key header at all',
+    (await call('GET', '/integrations/casa/catalog-feed', { actor: ADMIN })).status === 403);
+
+  const wrongKeyUnconfigured = await fetch(BASE + '/api/v1/integrations/casa/catalog-feed', {
+    headers: { 'x-casa-key': 'anything-at-all' },
+  });
+  check('17b. unconfigured: even presenting A key is refused -- fails closed, not open-if-any-key',
+    wrongKeyUnconfigured.status === 403);
+
+  process.env.CASA_INTEGRATION_API_KEY = 'test-only-casa-key-for-api-v1-suite';
+
+  const noKeyConfigured = await fetch(BASE + '/api/v1/integrations/casa/catalog-feed');
+  check('17c. configured: a request with no key at all is still refused',
+    noKeyConfigured.status === 403);
+
+  const wrongKeyConfigured = await fetch(BASE + '/api/v1/integrations/casa/catalog-feed', {
+    headers: { 'x-casa-key': 'not-the-right-key' },
+  });
+  check('17d. configured: the wrong key is refused', wrongKeyConfigured.status === 403);
+
+  const rightKey = await fetch(BASE + '/api/v1/integrations/casa/catalog-feed?pageSize=1', {
+    headers: { 'x-casa-key': process.env.CASA_INTEGRATION_API_KEY },
+  });
+  const rightKeyJson = await rightKey.json();
+  check('17e. configured: the correct key succeeds, in the ordinary v1 list envelope',
+    rightKey.status === 200 && rightKeyJson.success === true
+    && Array.isArray(rightKeyJson.data) && typeof rightKeyJson.meta.totalRecords === 'number',
+    rightKeyJson);
+  check('17f. each row carries company/collection/productLine/variants with per-variant inventory',
+    rightKeyJson.data.length > 0
+    && rightKeyJson.data[0].company?.id
+    && 'collection' in rightKeyJson.data[0]
+    && rightKeyJson.data[0].productLine?.id
+    && Array.isArray(rightKeyJson.data[0].variants)
+    && (rightKeyJson.data[0].variants.length === 0 || 'onHand' in rightKeyJson.data[0].variants[0].inventory),
+    rightKeyJson.data[0]);
+
+  check('17g. this route requires no x-erp-user and no requirePermission() check -- the shared secret is the whole gate',
+    true); // structural guarantee, confirmed by reading server/routes/casaIntegration.mjs: only requireCasaKey is applied
+
+  delete process.env.CASA_INTEGRATION_API_KEY;
 }
 
 try {

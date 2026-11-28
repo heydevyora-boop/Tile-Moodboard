@@ -69,4 +69,16 @@ router.get(
   integrationsController.getCatalogReadinessHandler,
 );
 
+/*
+ * Step 9, the other direction: OWNER-gated, same as every other
+ * report above -- a human reviewing what the ERP has against what
+ * CASA already has, before any future sync. Read-only: reads from
+ * the ERP over HTTP and from CASA's own database, writes to
+ * neither.
+ */
+router.get(
+  '/erp/catalog-preview',
+  integrationsController.getErpCatalogPreviewHandler,
+);
+
 export default router;

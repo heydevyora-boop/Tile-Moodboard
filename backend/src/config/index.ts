@@ -220,6 +220,19 @@ export const config = {
   },
 
   // ============================================================
+  // ERP INTEGRATION (step 9) — CASA reading FROM the ERP
+  // ============================================================
+
+  erpIntegration: {
+    baseUrl:
+      env.ERP_API_BASE_URL,
+    apiKey:
+      env.ERP_INTEGRATION_API_KEY,
+    timeoutMs:
+      env.ERP_INTEGRATION_TIMEOUT_MS,
+  },
+
+  // ============================================================
   // PYTHON
   // ============================================================
 

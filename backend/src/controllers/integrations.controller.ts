@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { catchAsync } from '@utils/catchAsync';
 import { getErpCatalogFeed } from '@services/erpExport.service';
 import { getReconciliationReport, listCatalogReadinessIssues } from '@services/catalogValidation.service';
+import { getErpCatalogPreview } from '@services/erpCatalogMapping.service';
 import { ErpCatalogFeedQuery, CatalogReadinessApiQuery } from '@validators/catalogHierarchy.validators';
 import { config } from '@config/index';
 import { describeLibraryFolder } from '@services/library.service';
@@ -477,4 +478,26 @@ export const getCatalogReadinessHandler = catchAsync(async (req: Request, res: R
     listCatalogReadinessIssues(query),
   ]);
   res.status(200).json({ success: true, summary, data: issues.data, meta: issues.meta });
+});
+
+/**
+ * Step 9: reads company/collection/product-line/product/inventory
+ * data FROM the ERP and reports how it lines up against CASA's own
+ * catalog by SKU. OWNER-gated, read-only, writes nothing to either
+ * database — a foundation for a future, separately-approved sync,
+ * not a sync itself (see erpCatalogMapping.service.ts).
+ *
+ * ALWAYS 200. A down, slow, or unconfigured ERP is a normal, known
+ * outcome this reports through `data.erpReachable: false` and
+ * `data.erpUnavailableReason`, the same "always 200, read ok from
+ * data" convention testPythonAiConnection/testGeminiConnection
+ * already use above for exactly this situation — not an HTTP error
+ * that generic frontend error handling would swallow the real
+ * reason for.
+ */
+export const getErpCatalogPreviewHandler = catchAsync(async (req: Request, res: Response) => {
+  const brandId = typeof req.query.brandId === 'string' ? req.query.brandId.trim() || undefined : undefined;
+  const collectionId = typeof req.query.collectionId === 'string' ? req.query.collectionId.trim() || undefined : undefined;
+  const data = await getErpCatalogPreview({ brandId, collectionId });
+  res.status(200).json({ success: true, data });
 });

@@ -64,6 +64,12 @@ place in §6, not here:
   :id/receive`'s body and the transfer line response shape (§6.7) —
   the route and its permission (`stock:post`) are unchanged; only
   what the body accepts and what the response reports grew.
+- **Step 9 (CASA backend integration)** added one new route,
+  `GET /integrations/casa/catalog-feed` (§6.14) — unlike every other
+  route in this file, it is not for an ERP user at all: it exists
+  for the CASA De Aurum backend to call as a separate service, so it
+  is gated by its own shared secret instead of `x-erp-user` +
+  `requirePermission()`.
 
 Closing this gap — these additions existed in the code and were
 smoke-tested in `test/api_v1_test.mjs` §1, but were never added to
@@ -662,6 +668,75 @@ are on"; it is the wrong shape for "page 7 of every party in the
 system," which nothing in this ERP asks for, and `type=CUSTOMER` or
 `type=SUPPLIER` should be used whenever the caller already knows
 which side it wants.
+
+### 6.14 CASA Integration — new in step 9
+
+The only route in this file that does not speak `x-erp-user` at all.
+It exists so the **CASA De Aurum backend** (a separate Node service,
+separate database) can read this ERP's product/brand/collection/
+inventory data over HTTP, for a read-only reconciliation preview on
+the CASA side — see `docs/ERP_INTEGRATION.md` at the monorepo root
+for the other half of this integration. Nothing in CASA writes
+to this ERP, and nothing here writes to CASA.
+
+**Auth is a shared secret, not a user.** `requireCasaKey`
+(`server/middleware/casaAuth.mjs`) mirrors CASA's own `erpAuth.ts` /
+`x-erp-key` pattern, in the opposite direction:
+
+```
+x-casa-key: <CASA_INTEGRATION_API_KEY>
+```
+
+It checks `process.env.CASA_INTEGRATION_API_KEY` fresh on every
+request (not read once at boot), and **fails closed**: if that
+variable is unset, every request is refused with `403 FORBIDDEN` —
+including one that presents some key. A wrong key gets the same
+`403`. There is no `x-erp-user` fallback and no permission string;
+the secret is the entire gate. Leave `CASA_INTEGRATION_API_KEY`
+unset in any environment the CASA backend has no business reaching.
+
+| Method | Path | Perm. | Params | Response `data` |
+|---|---|---|---|---|
+| GET | `/integrations/casa/catalog-feed` | *(shared secret only)* | query: `page?`, `pageSize?` (≤100), `brandId?`, `collectionId?` | page of `{company:{id,name}, collection:{id,name}\|null, productLine:{id,code,name,description,imageUrl}, variants:[{id,sku,finish,size,colour,status,inventory:{onHand,reserved,damaged,inTransit,available}}]}` |
+
+Built on the existing `productLine.service.mjs#list()` and
+`inventory.service.mjs#productLineStock()` — no new service logic,
+no new table, no change to any existing route's behavior. Shaped as
+the ordinary native list page (`{rows, page, pageSize, total,
+pageCount}`) so the `/api/v1` envelope middleware recognizes and
+paginates it exactly like every other list route; the response is
+the standard `{success, message, data: [...], meta: {...}}` seen
+everywhere else in this document, plus a top-level `meta.version`
+the CASA side can log.
+
+```json
+// GET /integrations/casa/catalog-feed?pageSize=1
+// x-casa-key: <the configured secret>
+{
+  "success": true, "message": "Request completed successfully",
+  "data": [
+    {
+      "company": { "id": "…", "name": "Devyora" },
+      "collection": { "id": "…", "name": "Marble Classics" },
+      "productLine": { "id": "…", "code": "PL-0001", "name": "Carrara White",
+        "description": "…", "imageUrl": null },
+      "variants": [
+        { "id": "…", "sku": "DV-1003", "finish": "Polished", "size": "600x600",
+          "colour": "White", "status": "ACTIVE",
+          "inventory": { "onHand": 39, "reserved": 0, "damaged": 0, "inTransit": 0, "available": 39 } }
+      ]
+    }
+  ],
+  "meta": { "currentPage": 1, "pageSize": 1, "totalRecords": 12, "totalPages": 12, "version": "1" }
+}
+```
+
+A missing or wrong key:
+
+```json
+// 403 Forbidden
+{ "success": false, "message": "Invalid or missing x-casa-key.", "code": "FORBIDDEN" }
+```
 
 ---
 
