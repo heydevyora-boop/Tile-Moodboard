@@ -82,7 +82,9 @@
     "test:theme-text": "ts-node -r tsconfig-paths/register test-scripts/theme_text_matches_test.ts",
     "test:home-page": "node test-scripts/home_page_test.js",
     "test:library-multitheme": "node test-scripts/library_multitheme_test.js",
-    "test:public-pages": "node test-scripts/public_pages_test.js"
+    "test:public-pages": "node test-scripts/public_pages_test.js",
+    "test:catalog-hierarchy": "node test-scripts/catalog_hierarchy_test.js",
+    "backfill:catalog-hierarchy": "node scripts/backfill-catalog-hierarchy.js"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
