@@ -315,6 +315,11 @@
 
     const rows = products.map((product) => {
       const name = product.name || product.code || 'Unnamed tile';
+      // Standardized sequence: Brand, Collection, Product Name (above),
+      // SKU, Specifications, Finish. Brand/Collection appear only when
+      // this product has reached that far into the catalog hierarchy --
+      // never recorded in older generations, never guessed here.
+      const brandCollection = [product.brandName, product.collectionName].filter(Boolean).join(' · ');
       const meta = [product.role, product.code, product.size, product.finish]
         .filter(Boolean).join(' · ');
       // THROUGH THE RESOLVER, like every other tile picture on the site.
@@ -333,6 +338,7 @@
         : '<span class="gen-product-blank"></span>';
       return '<div class="gen-product">' + thumb +
         '<span class="gen-product-text">' +
+        (brandCollection ? '<span class="gen-product-meta mono">' + escapeHtml(brandCollection.toUpperCase()) + '</span>' : '') +
         '<span class="gen-product-name">' + escapeHtml(name) + '</span>' +
         (meta ? '<span class="gen-product-meta mono">' + escapeHtml(meta.toUpperCase()) + '</span>' : '') +
         '</span></div>';

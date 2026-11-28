@@ -783,6 +783,11 @@ export type KnownTile = {
   name?: string | null;
   size?: string | null;
   finish?: string | null;
+  /** Company and Collection, when the tile has reached that far into
+   * the catalog hierarchy -- absent for an older or unlinked tile,
+   * never guessed. */
+  brandName?: string | null;
+  collectionName?: string | null;
 };
 
 /**
@@ -903,6 +908,12 @@ export function generationRow(
           imageUrl: String(
             normalizeDriveImageUrl(storedUrl || String(tile?.imageUrl ?? '')) ?? '',
           ),
+          // Never stored in the log at generation time -- always read
+          // back from the live Tile, so this appears only once a
+          // product has actually reached the Company/Collection
+          // hierarchy, never fabricated for an older or unlinked one.
+          brandName: String(tile?.brandName ?? ''),
+          collectionName: String(tile?.collectionName ?? ''),
         };
       }),
   };
@@ -1056,6 +1067,11 @@ router.get(
     // history nobody can recognise a product in is not much of a
     // history. One query turns every such code on this page into its
     // tile, and products that recorded their own picture need nothing.
+    // Every code on this page, not only the ones missing a picture:
+    // Brand/Collection were never stored in the log at generation time
+    // (the hierarchy did not exist yet), so they can only ever be read
+    // back live, for every product shown, not just the ones also
+    // missing an image.
     const codes = [...new Set(
       page.flatMap((row) => {
         const meta = (row.metadata ?? {}) as Record<string, unknown>;
@@ -1066,7 +1082,6 @@ router.get(
         }
         return products
           .filter((e): e is Record<string, unknown> => Boolean(e) && typeof e === 'object')
-          .filter((e) => !String(e.imageUrl ?? '').trim())
           .map((e) => String(e.code ?? '').trim())
           .filter(Boolean);
       }),
@@ -1076,7 +1091,11 @@ router.get(
     if (codes.length) {
       const tiles = await prisma.tile.findMany({
         where: { productCode: { in: codes } },
-        select: { productCode: true, imageUrl: true, name: true, size: true, finish: true },
+        select: {
+          productCode: true, imageUrl: true, name: true, size: true, finish: true,
+          brand: { select: { name: true } },
+          product: { select: { collection: { select: { name: true } } } },
+        },
       });
       tiles.forEach((tile) => {
         if (tile.productCode) {
@@ -1085,6 +1104,8 @@ router.get(
             name: tile.name,
             size: tile.size,
             finish: tile.finish,
+            brandName: tile.brand?.name ?? null,
+            collectionName: tile.product?.collection?.name ?? null,
           });
         }
       });

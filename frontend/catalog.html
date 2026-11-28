@@ -617,25 +617,32 @@
 
     const img = (resolvedTile && resolvedTile.imageUrl) || p.coverImageUrl;
 
+    // Standardized product information sequence: Image, Brand, Collection,
+    // Product Name, SKU, Specifications, Finish/Variant, Selling Price.
+    // SKU and price are shown only once a finish+size resolves one real
+    // variant -- a Product spans several SKUs/prices, so showing one
+    // before resolution would be a guess, not a fact.
+    const specLines = [];
+    if (resolvedTile && resolvedTile.size) specLines.push('Size: ' + escapeHtml(resolvedTile.size));
+    if (resolvedTile && resolvedTile.material) specLines.push('Material: ' + escapeHtml(resolvedTile.material));
+    if (resolvedTile && resolvedTile.thickness) specLines.push('Thickness: ' + escapeHtml(resolvedTile.thickness));
+    if (p.specifications) specLines.push(escapeHtml(p.specifications));
+    if (p.category) specLines.push('Category: ' + escapeHtml(p.category));
+
     host.innerHTML =
       '<div class="detail-panel">' +
-      '<span class="detail-eyebrow mono">' + escapeHtml(brandName) + '</span>' +
+      '<div class="detail-img" style="height:260px">' + (img ? '<img src="' + img + '" alt="' + escapeHtml(p.name) + '">' : '') + '</div>' +
+      '<span class="detail-eyebrow mono" style="margin-top:16px; display:block">' + escapeHtml(brandName) + '</span>' +
       '<div class="detail-collection">' + escapeHtml(collectionName) + '</div>' +
       '<h2 class="detail-name serif">' + escapeHtml(p.name) + '</h2>' +
-      (p.description ? '<p class="page-sub" style="margin-top:10px">' + escapeHtml(p.description) + '</p>' : '') +
-      '<div class="detail-grid">' +
-      '<div class="detail-img">' + (img ? '<img src="' + img + '" alt="' + escapeHtml(p.name) + '">' : '') + '</div>' +
-      '<div>' +
-      (p.finishes.length ? '<div class="option-group"><div class="option-label mono">FINISH</div><div class="option-chip-row" id="finishChips"></div></div>' : '') +
-      (p.finishes.length ? '<div class="option-group" style="margin-top:14px"><div class="option-label mono">SIZE</div><div class="option-chip-row" id="sizeChips"></div></div>' : '') +
       '<div id="variantResolvedSlot"></div>' +
-      (p.specifications ? '<div class="spec-block"><strong>Specifications</strong><br>' + escapeHtml(p.specifications) + '</div>' : '') +
-      (p.category ? '<div class="spec-block">Category: ' + escapeHtml(p.category) + '</div>' : '') +
+      (p.description ? '<p class="page-sub" style="margin-top:10px">' + escapeHtml(p.description) + '</p>' : '') +
+      (specLines.length ? '<div class="spec-block"><strong>Specifications</strong><br>' + specLines.join('<br>') + '</div>' : '') +
+      (p.finishes.length ? '<div class="option-group" style="margin-top:16px"><div class="option-label mono">FINISH</div><div class="option-chip-row" id="finishChips"></div></div>' : '') +
+      (p.finishes.length ? '<div class="option-group" style="margin-top:14px"><div class="option-label mono">SIZE</div><div class="option-chip-row" id="sizeChips"></div></div>' : '') +
       ((p.collection && p.collection.catalogueDocumentUrl)
         ? '<div class="spec-block"><a href="' + p.collection.catalogueDocumentUrl + '" target="_blank" rel="noopener">View catalogue PDF →</a></div>'
         : '') +
-      '</div>' +
-      '</div>' +
       '</div>';
 
     if (p.finishes.length) {
@@ -663,9 +670,19 @@
 
     const slot = document.getElementById('variantResolvedSlot');
     if (slot) {
-      slot.innerHTML = resolvedTile
-        ? '<div class="variant-resolved mono">SKU ' + escapeHtml(resolvedTile.productCode || resolvedTile.id) + ' — ' + (resolvedTile.inStock ? 'IN STOCK' : 'OUT OF STOCK') + '</div>'
-        : (browse.selectedFinish ? '<div class="variant-resolved mono">Select a size to resolve the exact variant.</div>' : '');
+      if (resolvedTile) {
+        // SKU, then price (where set -- never a fabricated placeholder
+        // when it is not), then stock status.
+        const priceLine = resolvedTile.sellingPrice
+          ? '₹' + resolvedTile.sellingPrice + (resolvedTile.unitOfMeasure ? '/' + resolvedTile.unitOfMeasure.toLowerCase() : '')
+          : null;
+        slot.innerHTML =
+          '<div class="variant-resolved mono">SKU ' + escapeHtml(resolvedTile.productCode || resolvedTile.id) + '</div>' +
+          (priceLine ? '<div class="variant-resolved mono">' + escapeHtml(priceLine) + '</div>' : '') +
+          '<div class="variant-resolved mono">' + (resolvedTile.inStock ? 'IN STOCK' : 'OUT OF STOCK') + '</div>';
+      } else {
+        slot.innerHTML = browse.selectedFinish ? '<div class="variant-resolved mono">Select a size to resolve the exact variant.</div>' : '';
+      }
     }
   }
 
@@ -738,18 +755,25 @@
       const card = document.createElement('article');
       card.className = 'surface-card';
       const img = s.imageUrl ? '<img src="' + s.imageUrl + '" alt="' + escapeHtml(s.name) + '">' : '<span style="width:44px;height:44px;flex:0 0 auto;border-radius:11px;background:var(--sand)"></span>';
-      // Company / collection / product, when this tile has been linked
-      // to the hierarchy -- falls back to the plain brand/size/finish
-      // line for tiles not yet assigned to a product.
-      const spec = s.productId && s.product
-        ? [s.brand ? s.brand.name : null, s.product.collection ? s.product.collection.name : null, s.product.name].filter(Boolean).join(' · ')
-        : [s.brand ? s.brand.name : null, s.size, s.finish].filter(Boolean).join(' · ');
+      // Standardized sequence (image already first, being the card's
+      // thumbnail): Brand, Collection, Product Name, SKU, Specifications,
+      // Finish, Selling Price. Falls back to the free-text collection
+      // label and the tile's own name for tiles not yet linked to the
+      // Company/Collection/Product hierarchy -- never invented.
+      const brandName = s.brand ? s.brand.name : null;
+      const collectionName = (s.productId && s.product && s.product.collection) ? s.product.collection.name : (s.collection || null);
+      const productName = (s.productId && s.product) ? s.product.name : s.name;
+      const metaLine = [brandName, collectionName].filter(Boolean).join(' · ');
+      const specParts = [s.size, s.material, s.thickness].filter(Boolean).join(' · ');
+      const skuSpecLine = [s.productCode, specParts, s.finish].filter(Boolean).join(' · ');
+      const priceLine = s.sellingPrice ? ('₹' + s.sellingPrice + (s.unitOfMeasure ? '/' + s.unitOfMeasure.toLowerCase() : '')) : null;
       card.innerHTML =
         img +
         '<span style="min-width:0">' +
-        '<span class="sn">' + escapeHtml(s.name) + '</span>' +
-        '<span class="ss mono">' + (spec ? escapeHtml(spec) : '—') + '</span>' +
-        '<span class="ss mono"><span class="stock-dot ' + (s.inStock ? 'yes' : 'no') + '"></span>' + (s.inStock ? 'IN STOCK' : 'OUT OF STOCK') + '</span>' +
+        (metaLine ? '<span class="ss mono">' + escapeHtml(metaLine) + '</span>' : '') +
+        '<span class="sn">' + escapeHtml(productName) + '</span>' +
+        (skuSpecLine ? '<span class="ss mono">' + escapeHtml(skuSpecLine) + '</span>' : '') +
+        '<span class="ss mono">' + (priceLine ? escapeHtml(priceLine) + ' · ' : '') + '<span class="stock-dot ' + (s.inStock ? 'yes' : 'no') + '"></span>' + (s.inStock ? 'IN STOCK' : 'OUT OF STOCK') + '</span>' +
         '</span>';
       grid.appendChild(card);
     });

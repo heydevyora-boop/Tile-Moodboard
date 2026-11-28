@@ -215,6 +215,8 @@ export const config = {
   internal: {
     syncApiKey:
       env.INTERNAL_SYNC_API_KEY,
+    erpExportApiKey:
+      env.ERP_EXPORT_API_KEY,
   },
 
   // ============================================================

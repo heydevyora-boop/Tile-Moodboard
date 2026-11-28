@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { catchAsync } from '@utils/catchAsync';
+import { getErpCatalogFeed } from '@services/erpExport.service';
 import { config } from '@config/index';
 import { describeLibraryFolder } from '@services/library.service';
 import { geminiClient } from '@services/gemini.service';
@@ -448,4 +449,14 @@ export const testPythonAiConnection = catchAsync(async (_req: Request, res: Resp
       },
     });
   }
+});
+
+/**
+ * The one standardized catalog payload an external reader (the ERP, or
+ * anything else) pulls from CASA. Gated by erpAuth (x-erp-key), not the
+ * normal user session -- see erpAuth.ts.
+ */
+export const getErpCatalogFeedHandler = catchAsync(async (_req: Request, res: Response) => {
+  const feed = await getErpCatalogFeed();
+  res.status(200).json({ success: true, data: feed });
 });

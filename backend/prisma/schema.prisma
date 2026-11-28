@@ -283,6 +283,11 @@ model Tile {
   collection     String?
   material       String?
   thickness      String?
+  /// Not set anywhere in CASA today -- the separate ERP is the only
+  /// place price currently lives. Nullable and populated later, by
+  /// staff or a future ERP sync, never guessed or defaulted.
+  sellingPrice   Decimal?           @db.Decimal(14, 2)
+  unitOfMeasure  UnitOfMeasure?
   imageUrl       String?
   productCode    String?
   inStock        Boolean            @default(true)
@@ -775,6 +780,16 @@ enum TileType {
   BORDER
   ACCENT
   LARGE_FORMAT_BASE
+}
+
+/// What a price is per. Matches the ERP's own UnitOfMeasure enum
+/// exactly, so a future sync never has to translate between the two.
+enum UnitOfMeasure {
+  BOX
+  PIECE
+  SQFT
+  SQM
+  SET
 }
 
 enum RuleSection {

@@ -1,8 +1,17 @@
 import { Router } from 'express';
 import * as integrationsController from '@controllers/integrations.controller';
 import { authenticate, authorize } from '@middlewares/auth';
+import { erpAuth } from '@middlewares/erpAuth';
 
 const router = Router();
+
+/*
+ * PUBLIC (no CASA user session), same reasoning as the Google callback
+ * below: an external reader has no JWT to present. Gated instead by the
+ * x-erp-key shared secret -- see erpAuth.ts. Read-only; writes nothing,
+ * connects nowhere.
+ */
+router.get('/erp/catalog-feed', erpAuth, integrationsController.getErpCatalogFeedHandler);
 
 /*
  * PUBLIC, and before the guards below on purpose.
