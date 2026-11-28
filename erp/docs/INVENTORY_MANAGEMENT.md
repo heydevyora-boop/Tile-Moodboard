@@ -138,9 +138,10 @@ counted in two places. Tests 11c–11e, 11j–11l, 11q.
 | Transition | What happens |
 |---|---|
 | dispatch | `TRANSFER_OUT` at source; destination's in-transit up; attributed |
-| receive | `TRANSFER_IN` at destination; in-transit down; attributed |
+| receive (full or partial) | `TRANSFER_IN` at destination for accepted+damaged; `DAMAGE` for the damaged part; `TRANSFER_LOSS` for any quantity written off as missing; in-transit down by exactly what was just resolved; attributed. **Phase 4.1 — see §14.** |
 | cancel from DRAFT | nothing had moved; the draft closes |
-| cancel from IN_TRANSIT | `TRANSFER_IN` **at the source** — the lorry turned round |
+| cancel from IN_TRANSIT, nothing yet received | `TRANSFER_IN` **at the source** — the lorry turned round |
+| cancel from IN_TRANSIT, something already received | **refused.** Phase 4.1 — see §14 |
 | cancel from COMPLETED | **refused.** Send it back as a new transfer; that is what would actually happen |
 
 A receipt uses `allowInactiveWarehouse`, so stock already on a lorry
@@ -328,6 +329,7 @@ Mounted at `/api/inventory` and `/api/warehouses`.
 | `GET/POST/PATCH /api/warehouses…` | list, open, create, edit, per-warehouse stock |
 | `POST /api/warehouses/:id/active` | activate / deactivate. **No DELETE exists.** |
 | `GET/POST /api/warehouses/transfers…` | list, raise, open, dispatch, receive, cancel |
+| `POST /api/warehouses/transfers/:id/receive` | **Phase 4.1**: body is `{ lines: [{ transferLineId, acceptedQuantity?, damagedQuantity?, missingQuantity?, missingReason?, remarks? }] }` — see §14 |
 
 Refusals are answers, not faults, and each carries its figures:
 
@@ -366,6 +368,19 @@ currently enforces that.
 
 No secrets, keys or credentials appear in any file added by step 5.
 
+**Phase 4.1 re-examined this and reached the same conclusion,
+deliberately.** `stock:read` is a real permission — the seed assigns
+it to roles — but no `GET` route in `inventory.mjs` or
+`warehouses.mjs` checks it, confirmed directly by grep and by test
+18b/18c. This was **not** closed in Phase 4.1. `req.actor` is still
+resolved from the `x-erp-user` header, which anyone who can reach the
+port can set to anything; adding a permission check on top of that
+identity would check a permission against nobody-knows-who and look
+like security while providing none. The only thing actually standing
+between this API and the internet is `ERP_API_HOST=127.0.0.1`. Fixing
+this properly means real authentication, which Phase 4.1 was
+explicitly told not to build (and did not).
+
 ---
 
 ## 11. Migrations added
@@ -378,6 +393,8 @@ reset.
 | `20261121134143_inventory_damage_reservation_transit` | `balanceBefore`, `reservedAfter`, `damagedAfter`, `quantityDamaged`, `quantityInTransit`, transfer attribution columns; backfill; CHECKs; the one-opening unique index |
 | `20261121134500_inventory_reconciliation_views` | `v_inventory_reconciliation` across three dimensions, `v_company_stock`, `v_transfer_reconciliation` |
 | `20261121150000_transfer_reconciliation_cancelled` | the cancelled-transfer fix described in §4 |
+| `20261128090000_transfer_partial_receipt` | **Phase 4.1.** `acceptedQuantity`/`damagedQuantity`/`missingQuantity` on `warehouse_transfer_lines`; `inTransitAfter` (nullable) on `stock_ledger_entries`; `TRANSFER_LOSS`/`TRANSFER_LOSS_REVERSAL` added to `StockMovementType`; `TRANSFER_LOSS` added to `StockMovementReason`; backfill + CHECKs — see §14 |
+| `20261128090500_transfer_reconciliation_partial_receipt` | **Phase 4.1.** `v_transfer_reconciliation` rebuilt to tolerate a legitimate partial receipt and to account for a transfer loss — see §14. Split from the migration above for the same reason `20261121134500` was split from `20261121134143`: Postgres refuses to use a new enum value in the transaction that adds it |
 
 ### The one place the append-only trigger was disabled
 
@@ -394,11 +411,11 @@ reconciliation drift, development data intact.
 
 ## 12. Tests
 
-`npm run test:inventory` — **86 checks, all passing**, on
-`devyora_erp_inventory_test`, which the suite drops and rebuilds
-from the same migrations and the same seed on every run, so nothing
-accumulates between runs and no assertion can quietly start
-measuring the last run's leftovers.
+`npm run test:inventory` — **124 checks, all passing** (86 from step
+5, 38 added by Phase 4.1), on `devyora_erp_inventory_test`, which the
+suite drops and rebuilds from the same migrations and the same seed
+on every run, so nothing accumulates between runs and no assertion
+can quietly start measuring the last run's leftovers.
 
 | | |
 |---|---|
@@ -418,6 +435,8 @@ measuring the last run's leftovers.
 | 14 | nothing but the stock service writes a balance |
 | 15 | the screens show what is really there |
 | 16 | no valuation method was invented |
+| 17 | **Phase 4.1** — partial receipt, accumulating accepted/damaged, missing with a mandatory reason, outstanding calculation, invalid combinations and over-receipt refused outright, duplicate line refused, cancellation refused once anything is resolved (and still allowed when nothing is), reconciliation tolerates a legitimate partial receipt, two concurrent receipts that together would over-receive leave exactly one standing |
+| 18 | **Phase 4.1** — `stock:read` is a real, seeded permission that no route checks; confirmed by direct inspection, not by one person's memory of the code |
 
 Every earlier suite re-run and passing:
 
@@ -437,6 +456,27 @@ marked planned" (it is now live), and an import check that asserted
 an absolute ledger count on a shared database — rewritten as a
 before-and-after delta, which is what it was actually trying to
 prove.
+
+**Phase 4.1 re-ran `test:inventory` (124/124), `test:purchase`
+(126/126) and `test:sales` (95/95)** — the two latter suites exist
+only because of work between step 5 and Phase 4.1, and both exercise
+`postStockMovement()` through Goods Receipt and sales dispatch, so
+they are the most direct check that extending `db/stock.mjs` with the
+`inTransit` dimension and `TRANSFER_LOSS` left every existing
+movement type's behaviour untouched. Also re-run clean:
+`test:product-master` (92/92), `test:hierarchy` (29/29), `test:api`
+(61/61), `test:data` (38/38), `test:import` (85/85).
+
+**The concurrency fix's own closure pass went further and actually
+stood up a live dev server, API and browser** (`npm run api` +
+`npm run dev`, against a disposable database, never the development
+one) to run `test:frontend` (66/66) and a dedicated Transfers-page
+Playwright script that drives the partial-receipt form itself —
+accepted, damaged and missing dispositions, the mandatory missing
+reason, over-receipt refused client-side, the duplicate-submit guard
+— all through actual clicks and typed input, 19/19. Plus the new
+`test/transfer_concurrency_test.mjs` (21/21) — see "Concurrency: the
+transfer row is locked first" above.
 
 ### A defect this found: `db:verify` was writing to the development database
 
@@ -483,3 +523,200 @@ Not started: Purchase Management, Sales Management, the ERP→CASA
 integration, website stock synchronisation. The reservation
 movements exist so that Sales Management has something to call; no
 sales code was written.
+
+*(Purchase Management and Sales Management were in fact built in the
+two phases between step 5 and Phase 4.1; this paragraph is left as
+written at the time, rather than silently edited, since fixing it is
+outside Phase 4.1's own scope. See `docs/` for whatever those phases
+documented.)*
+
+---
+
+## 14. Phase 4.1 — partial transfer receipt, damage and loss
+
+A full audit against a separate 16-section brief found the inventory
+system already built here covering every one of its sections, with
+exactly two gaps: a transfer could only be received all at once, and
+`stock:read` was a defined permission nothing checked. This phase
+closes the first and re-examines the second. **No new inventory
+system, no duplicate model, no new authentication.** Everything below
+extends the same `postStockMovement()` choke point, the same ledger,
+the same projection.
+
+### The problem with all-or-nothing receipt
+
+The original `receiveTransfer()` always recorded the full dispatched
+quantity as received, in one call, with nothing to record if a lorry
+arrived with some boxes short or some broken. Real receiving does not
+work that way.
+
+### The model: three running totals, not one
+
+`warehouse_transfer_lines` gains `acceptedQuantity`, `damagedQuantity`
+and `missingQuantity`, following the Goods Receipt Note's own
+convention exactly rather than inventing a second one:
+
+```
+receivedQuantity = acceptedQuantity + damagedQuantity      (CHECK)
+acceptedQuantity + damagedQuantity + missingQuantity <= quantity   (CHECK)
+```
+
+**Accepted and damaged both arrive physically** — a broken box is
+still a box in the building, and a stock-take would still count it —
+so both post one `TRANSFER_IN` for their combined quantity, exactly
+like a goods receipt. Damaged is then condemned separately with its
+own `DAMAGE` entry and its own reason, so physical stock matches the
+shelf while available stock excludes what nobody can sell.
+
+**Missing never arrives, and never posts a `TRANSFER_IN`.** It posts
+exactly one new movement type, `TRANSFER_LOSS` — decrementing the
+destination's in-transit balance (where the dispatch put it) through
+the ordinary `postStockMovement()` path, with a reason **mandatory**
+on the call, never inferred or defaulted. `db/stock.mjs` gained one
+new dimension (`inTransit`, alongside physical/reserved/damaged) and
+one new "after" column on the ledger (`inTransitAfter`, nullable —
+every entry **before** this phase never recorded it, because nothing
+wrote it through the ledger before now, and backfilling a figure
+nobody measured would be a claim, not a fact). `TRANSFER_LOSS` has a
+real opposite, `TRANSFER_LOSS_REVERSAL`, so a write-off can be
+corrected the same way every other movement is: by posting the
+opposite, never by editing the original.
+
+**There is no automatic loss or damage adjustment anywhere in this
+phase.** Every accepted, damaged and missing quantity is a number a
+person typed into a specific receipt call, with damage additionally
+requiring a per-line `remarks` convention (matched on the `DAMAGE`
+entry) and missing requiring `missingReason` enforced before anything
+is posted.
+
+### Repeatable, never resetting
+
+`receiveTransfer(id, { lines }, actor)` can be called as many times as
+a transfer needs. Each call's quantities are **what this pass is
+resolving**, not a running total the caller has to track — the
+service recomputes outstanding from the line's own stored totals
+(`quantity - accepted - damaged - missing`) and refuses outright, with
+no override, if a call would resolve more than is still outstanding.
+A transfer only becomes `COMPLETED` once every line has nothing left
+outstanding; until then it correctly stays `IN_TRANSIT`, because some
+of it genuinely still is.
+
+### Cancellation after partial resolution
+
+Phase 4.1 adds one guard: a transfer cannot be cancelled once **any**
+quantity on any line has been accepted, damaged or written off.
+Reversing a cancellation that undoes stock already counted somewhere
+is a real workflow this phase was explicitly told not to invent
+(§2 of the brief: no new automatic adjustments, and no override). A
+transfer nothing has yet been received against is exactly as
+cancellable as before.
+
+### Reconciliation
+
+The old `v_transfer_reconciliation` required an `IN_TRANSIT` transfer
+to have `received = 0` — true before partial receipt existed, and a
+guaranteed false alarm the moment it did. The view is rebuilt (own
+migration, same reason the enum-adding migration before it was split
+from its own view) to treat an `IN_TRANSIT` transfer with some, but
+not all, of its dispatched quantity resolved as balanced, and to fold
+a `TRANSFER_LOSS` quantity into the completed/cancelled invariant:
+`dispatched = received + missing`.
+
+### Concurrency: the transfer row is locked first, in both directions
+
+A verification pass tested the concurrent cancel-and-receive case
+directly rather than reasoning about it, and found that the
+in-transit CHECK did **not** always backstop it: of five real
+concurrent trials, two produced a genuinely corrupted business state
+(10 units counted as both returned to the source and received at the
+destination — the same dispatched quantity, physically duplicated),
+caught after the fact by the reconciliation report but not prevented.
+Which of the two outcomes happened depended on which transaction
+reached the destination warehouse's `inventory_balances` row first —
+a race, not a guarantee.
+
+**Fixed.** `receiveTransfer()` and `cancelTransfer()` both now take a
+`SELECT ... FOR UPDATE` lock on the `warehouse_transfers` row itself
+— as the very first statement inside their transaction, before
+reading anything that decides whether the call is valid. Each then
+re-reads the transfer's current status and every line's resolved
+quantities from *inside* that lock, and re-runs the same validation
+that always existed (status must be `IN_TRANSIT`, nothing already
+resolved for a cancel, outstanding not exceeded for a receive) against
+that fresh read — never against the plain, unlocked read taken before
+the transaction opened. This is the same row-lock idiom
+`postStockMovement()` already uses on `inventory_balances`, applied
+to the one row every lifecycle operation on a transfer now serializes
+through.
+
+`test/transfer_concurrency_test.mjs` exercises this directly rather
+than trusting the reasoning: 30 iterations of cancel-vs-receive in
+each array order (60 total), 30 of two simultaneous partial receipts,
+30 of two simultaneous full receipts, plus repeated deterministic
+checks of over-receipt refusal and cancellation-after-partial/damaged/
+missing. Across all of it: both sides never both succeed, the loser
+always gets the existing named `ConflictError` (409) rather than a
+raw database exception, and a closing pass of
+`reconciliationReport()` plus direct queries for duplicate
+idempotency keys, negative balances and over-resolved transfer lines
+all come back clean. The two-receives-over-receiving case (test 17ae
+in `inventory_test.mjs`) is additionally still backstopped by the
+`transfer_line_resolved_not_over_dispatched` CHECK as defense in
+depth, but is no longer the *only* thing standing between a race and
+a corrupted balance.
+
+**Closed, as a follow-up.** `dispatchTransfer()` now takes the same
+lock, re-reading and re-validating status (must still be `DRAFT`)
+from inside it before posting anything, exactly like the other two.
+
+This pairing is not "exactly one must win" the way cancel-vs-receive
+is: `cancelTransfer()` has no failure mode reachable from either
+`DRAFT` or an untouched `IN_TRANSIT`, so it always succeeds in this
+race — either closing a still-genuinely-`DRAFT` transfer outright, or
+(when dispatch won the lock first) legitimately reversing the
+dispatch that just happened, the same path a user clicking Dispatch
+and then Cancel in quick succession would hit. Both are correct,
+pre-existing behaviour. What the lock actually guarantees is the one
+thing that would be wrong: dispatch never moves stock on a transfer
+`cancelTransfer()` has already closed from `DRAFT` — confirmed
+directly, not assumed, by 60 trials across both array orders in
+`test/transfer_concurrency_test.mjs` (29 dispatch-then-cancelled, 31
+cancelled-from-draft, 0 of the unsafe case), with company-wide AND
+per-warehouse stock checked back to exactly its starting point after
+every trial.
+
+### `stock:read` — re-examined, not closed
+
+See §10. The permission is real and seeded; no route checks it; this
+is unchanged by design, because the only identity available
+(`x-erp-user`) is not something a permission check can meaningfully
+be enforced against. Tests 18a–18d assert this directly rather than
+describe it from memory.
+
+### What this phase did not touch
+
+No CASA catalogue code. No Google Drive/Sheets workflow. No new
+authentication. No production data. No merge to `main` — everything
+here is on `claude/seed-feminine-404-fix-aq50lk`, same as every phase
+before it.
+
+### The Transfers screen's Receive dialog (closure pass)
+
+The first cut of this phase kept Receive a one-click full accept,
+deliberately, because nothing in the original brief asked for a
+discrepancy-entry screen. The closure pass built it anyway, once
+asked for: Receive is now a per-line form showing dispatched,
+previously accepted/damaged/missing and outstanding (every figure
+read straight off the API, never recomputed here), with three inputs
+— accepted now, damaged now, missing now — that default to a full
+accept of the outstanding quantity, so confirming without touching
+anything is still exactly the old one-click behaviour. The three
+figures together are checked against outstanding client-side before
+Confirm is even enabled; a missing quantity requires its own reason,
+per line, before Confirm enables; Confirm disables itself the instant
+it is clicked. The transfer detail view sums the same per-line
+figures into dispatched/accepted/damaged/missing/outstanding totals
+and shows them beside the existing balanced/unbalanced notice and
+status pill — again, summed from backend values, never an
+independently computed stock balance. No new screen, no new route:
+the existing confirm-dialog and detail-dialog components, widened.

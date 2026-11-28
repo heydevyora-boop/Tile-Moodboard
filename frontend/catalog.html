@@ -86,6 +86,53 @@
   .use-palette-btn { display:flex; align-items:center; gap:9px; min-height:44px; background:transparent; border:none; padding:0; cursor:pointer; font-size:10.5px; letter-spacing:.14em; color:#6E5228; }
   .use-palette-btn:hover { color:var(--ink); }
 
+  /* ---- Company -> Collection -> Product browsing (Stage 2) ---- */
+  .breadcrumb { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:18px; font-size:11px; letter-spacing:.06em; color:var(--muted); }
+  .breadcrumb button { background:transparent; border:none; cursor:pointer; padding:4px 2px; font-size:11px; letter-spacing:.06em; color:var(--gold); font-family:inherit; }
+  .breadcrumb button:hover { color:var(--ink); text-decoration:underline; }
+  .breadcrumb .sep { color:#C9BCA3; }
+  .breadcrumb .current { color:var(--ink); font-weight:500; }
+
+  .filter-row { display:flex; gap:10px; flex-wrap:wrap; margin-top:16px; }
+  .filter-select { height:38px; padding:0 12px; background:#fff; border:1px solid var(--line); border-radius:10px; font-size:11.5px; color:var(--ink); font-family:inherit; }
+
+  .company-card { background:var(--card); border:1px solid var(--line); border-radius:18px; padding:20px; display:flex; align-items:center; gap:14px; cursor:pointer; animation:rise .4s ease both; text-align:left; width:100%; font-family:inherit; }
+  .company-card:hover { border-color:#C7B393; }
+  .company-logo { width:46px; height:46px; flex:0 0 auto; border-radius:12px; object-fit:cover; background:var(--sand); }
+  .company-logo.placeholder { display:grid; place-items:center; font-size:15px; }
+  .company-name { font-weight:600; font-size:17px; }
+  .company-meta { font-size:10px; letter-spacing:.1em; color:var(--muted); margin-top:4px; }
+
+  /* Card hierarchy: company (small metadata) / collection (secondary
+     heading) / product (primary heading) -- never mixed on one line,
+     per the brief's explicit visual order. */
+  .prod-card { background:var(--card); border:1px solid var(--line); border-radius:20px; overflow:hidden; display:flex; flex-direction:column; cursor:pointer; animation:rise .4s ease both; text-align:left; font-family:inherit; }
+  .prod-card:hover { border-color:#C7B393; }
+  .prod-img { height:clamp(150px,16vw,200px); overflow:hidden; background:var(--sand); }
+  .prod-img img { width:100%; height:100%; object-fit:cover; display:block; }
+  .prod-body { padding:clamp(16px,1.6vw,20px); display:flex; flex-direction:column; gap:4px; }
+  .prod-company { font-size:9.5px; letter-spacing:.16em; color:var(--muted); text-transform:uppercase; }
+  .prod-collection { font-size:12.5px; letter-spacing:.04em; color:#6E5228; font-weight:500; }
+  .prod-name { font-weight:600; font-size:clamp(18px,1.8vw,22px); margin:2px 0 0; line-height:1.18; }
+  .prod-variants { font-size:10px; letter-spacing:.08em; color:var(--muted); margin-top:8px; }
+
+  .detail-panel { background:var(--card); border:1px solid var(--line); border-radius:20px; padding:clamp(20px,2.4vw,32px); margin-top:20px; animation:rise .35s ease both; }
+  .detail-eyebrow { font-size:9.5px; letter-spacing:.16em; color:var(--muted); text-transform:uppercase; }
+  .detail-collection { font-size:13px; color:#6E5228; font-weight:500; margin-top:4px; }
+  .detail-name { font-weight:600; font-size:clamp(24px,2.6vw,32px); margin:6px 0 0; }
+  .detail-grid { display:grid; grid-template-columns:minmax(0,1fr); gap:20px; margin-top:18px; }
+  @media (min-width: 720px) { .detail-grid { grid-template-columns:260px 1fr; } }
+  .detail-img { height:220px; border-radius:16px; overflow:hidden; background:var(--sand); }
+  .detail-img img { width:100%; height:100%; object-fit:cover; display:block; }
+  .option-group { margin-top:4px; }
+  .option-label { font-size:10px; letter-spacing:.14em; color:var(--muted); text-transform:uppercase; margin-bottom:8px; }
+  .option-chip-row { display:flex; gap:8px; flex-wrap:wrap; }
+  .option-chip { height:36px; padding:0 14px; border-radius:100px; border:1px solid var(--line); background:#fff; font-size:11.5px; letter-spacing:.03em; cursor:pointer; font-family:inherit; color:var(--ink); }
+  .option-chip.active { background:var(--ink); color:#FBF6EC; border-color:var(--ink); }
+  .option-chip:disabled { opacity:.4; cursor:not-allowed; text-decoration:line-through; }
+  .variant-resolved { margin-top:14px; padding:12px 14px; background:var(--sand); border-radius:12px; font-size:12px; color:var(--text2); }
+  .spec-block { margin-top:16px; font-size:13px; line-height:1.6; color:var(--text2); }
+
   .section-title { font-weight:600; font-size:clamp(22px,2.3vw,30px); margin:clamp(30px,3.4vw,44px) 0 0; }
   .section-sub { margin:8px 0 0; font-size:14px; color:var(--text2); }
 
@@ -97,6 +144,8 @@
   .stock-dot { display:inline-block; width:6px; height:6px; border-radius:50%; margin-right:5px; }
   .stock-dot.yes { background:#6E5228; }
   .stock-dot.no { background:#A8552A; }
+  .stock-dot.unknown, .stock-dot.checking { background:var(--muted); }
+  .erp-stock-line { display:block; margin-top:3px; }
 
   .load-more-row { display:flex; justify-content:center; margin-top:22px; }
   .btn-secondary { min-height:48px; padding:0 22px; background:#fff; color:var(--ink); border:1px solid var(--line); border-radius:13px; cursor:pointer; font-size:10.5px; letter-spacing:.14em; }
@@ -142,13 +191,23 @@
 
       <div class="search-box">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#A0968A" stroke-width="1.7" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.6-3.6"></path></svg>
-        <input id="searchInput" type="text" placeholder="Search collections and surfaces">
+        <input id="searchInput" type="text" placeholder="Search companies, collections, products or SKU">
       </div>
 
+      <nav class="breadcrumb mono" id="browseBreadcrumb"></nav>
+      <div id="browseSection"></div>
+
+      <h2 class="section-title serif">Curated Collections</h2>
+      <p class="section-sub">A quick preview — browse the full hierarchy above.</p>
       <div id="collectionsSection"></div>
 
       <h2 class="section-title serif">Surface Archive</h2>
       <p class="section-sub" id="archiveSub">All surfaces currently in the catalog.</p>
+      <div class="filter-row" id="archiveFilterRow">
+        <select class="filter-select mono" id="archiveBrandFilter"><option value="">All companies</option></select>
+        <select class="filter-select mono" id="archiveFinishFilter"><option value="">All finishes</option></select>
+        <select class="filter-select mono" id="archiveSizeFilter"><option value="">All sizes</option></select>
+      </div>
       <div id="surfaceSection"></div>
       <div class="load-more-row" id="loadMoreRow" style="display:none">
         <button class="btn-secondary mono" id="loadMoreBtn">LOAD MORE</button>
@@ -209,6 +268,60 @@
   }
 
   // ============================================================
+  // ERP LIVE STOCK (Step 10)
+  // ============================================================
+  // Batch-fetched after the catalog grid/detail panel already
+  // rendered from CASA's own data -- never blocks that render, and
+  // degrades to a clear, distinct badge (never a guess) when the
+  // ERP integration is down, unconfigured, or simply has no
+  // counterpart for a given SKU. Deliberately separate from, and
+  // never a replacement for, the existing CASA `inStock` flag shown
+  // alongside it.
+
+  let surfaceStockGen = 0;
+  let productStockGen = 0;
+
+  function erpStockBadgeHtml(info) {
+    if (!info) {
+      return '<span class="stock-dot checking"></span>CHECKING LIVE STOCK…';
+    }
+    if (info.state === 'available') {
+      return '<span class="stock-dot yes"></span>' + info.quantity + ' AVAILABLE (ERP)';
+    }
+    if (info.state === 'zero') {
+      return '<span class="stock-dot no"></span>OUT OF STOCK (ERP)';
+    }
+    if (info.state === 'unknown') {
+      return '<span class="stock-dot unknown"></span>NOT LINKED TO ERP';
+    }
+    return '<span class="stock-dot unknown"></span>LIVE STOCK UNAVAILABLE';
+  }
+
+  /**
+   * Batch-fetches ERP stock for `targets` ({sku, el} pairs already
+   * in the DOM) and patches each one's badge in place once
+   * resolved. `gen`/`getCurrentGen` guard against a stale fetch (a
+   * reload, filter change, or page nav that happened while this was
+   * in flight) overwriting a newer render -- never throws, a failed
+   * request just leaves every target "unavailable".
+   */
+  async function applyErpStock(targets, gen, getCurrentGen) {
+    if (targets.length === 0) return;
+    const skus = [...new Set(targets.map((t) => t.sku))];
+    let stockMap;
+    try {
+      stockMap = await CasaApi.tiles.stock(skus);
+    } catch (err) {
+      stockMap = {};
+    }
+    if (gen !== getCurrentGen()) return;
+    targets.forEach(({ sku, el }) => {
+      if (!el.isConnected) return;
+      el.innerHTML = erpStockBadgeHtml(stockMap[sku] || { state: 'unavailable' });
+    });
+  }
+
+  // ============================================================
   // STATE
   // ============================================================
 
@@ -222,6 +335,26 @@
     surfacesError: null,
     page: 1,
     meta: null,
+    archiveBrandId: '',
+    archiveFinish: '',
+    archiveSize: '',
+  };
+
+  // Company -> Collection -> Product browsing (Stage 2 hierarchy).
+  const browse = {
+    level: 'companies', // companies | collections | products | product
+    companyId: null,
+    companyName: '',
+    collectionId: null,
+    collectionName: '',
+    items: [],
+    loading: true,
+    error: null,
+    productDetail: null,
+    productDetailLoading: false,
+    productDetailError: null,
+    selectedFinish: null,
+    selectedSize: null,
   };
 
   let searchDebounce = null;
@@ -310,6 +443,317 @@
   }
 
   // ============================================================
+  // COMPANY -> COLLECTION -> PRODUCT BROWSING
+  // ============================================================
+
+  function renderBreadcrumb() {
+    const nav = document.getElementById('browseBreadcrumb');
+    const parts = [];
+    parts.push(browse.level === 'companies'
+      ? '<span class="current">Companies</span>'
+      : '<button data-crumb="companies">Companies</button>');
+    if (browse.companyId) {
+      parts.push('<span class="sep">/</span>');
+      parts.push(browse.level === 'collections'
+        ? '<span class="current">' + escapeHtml(browse.companyName) + '</span>'
+        : '<button data-crumb="collections">' + escapeHtml(browse.companyName) + '</button>');
+    }
+    if (browse.collectionId) {
+      parts.push('<span class="sep">/</span>');
+      parts.push(browse.level === 'products'
+        ? '<span class="current">' + escapeHtml(browse.collectionName) + '</span>'
+        : '<button data-crumb="products">' + escapeHtml(browse.collectionName) + '</button>');
+    }
+    if (browse.level === 'product' && browse.productDetail) {
+      parts.push('<span class="sep">/</span>');
+      parts.push('<span class="current">' + escapeHtml(browse.productDetail.name) + '</span>');
+    }
+    nav.innerHTML = parts.join('');
+    nav.querySelectorAll('[data-crumb]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const target = btn.getAttribute('data-crumb');
+        if (target === 'companies') goToCompanies();
+        else if (target === 'collections') goToCollections(browse.companyId, browse.companyName);
+        else if (target === 'products') goToProducts(browse.collectionId, browse.collectionName);
+      });
+    });
+  }
+
+  function goToCompanies() {
+    browse.level = 'companies';
+    browse.companyId = null; browse.companyName = '';
+    browse.collectionId = null; browse.collectionName = '';
+    loadBrowseLevel();
+  }
+
+  function goToCollections(companyId, companyName) {
+    browse.level = 'collections';
+    browse.companyId = companyId; browse.companyName = companyName;
+    browse.collectionId = null; browse.collectionName = '';
+    loadBrowseLevel();
+  }
+
+  function goToProducts(collectionId, collectionName) {
+    browse.level = 'products';
+    browse.collectionId = collectionId; browse.collectionName = collectionName;
+    loadBrowseLevel();
+  }
+
+  function goToProduct(productId) {
+    browse.level = 'product';
+    browse.selectedFinish = null;
+    browse.selectedSize = null;
+    loadProductDetail(productId);
+  }
+
+  async function loadBrowseLevel() {
+    browse.loading = true;
+    browse.error = null;
+    renderBreadcrumb();
+    renderBrowseSection();
+    try {
+      if (browse.level === 'companies') {
+        browse.items = await CasaApi.companies.list({});
+      } else if (browse.level === 'collections') {
+        const result = await CasaApi.collections.list({ brandId: browse.companyId, limit: 100 });
+        browse.items = result.collections;
+      } else if (browse.level === 'products') {
+        const result = await CasaApi.products.list({ collectionId: browse.collectionId, limit: 100 });
+        browse.items = result.products;
+      }
+    } catch (err) {
+      browse.error = (err && err.message) || 'Could not load the catalog.';
+    } finally {
+      browse.loading = false;
+      renderBreadcrumb();
+      renderBrowseSection();
+    }
+  }
+
+  async function loadProductDetail(productId) {
+    browse.productDetailLoading = true;
+    browse.productDetailError = null;
+    browse.productDetail = null;
+    renderBreadcrumb();
+    renderBrowseSection();
+    try {
+      browse.productDetail = await CasaApi.products.get(productId);
+      // Default to the first finish so the panel never opens empty.
+      if (browse.productDetail.finishes.length) browse.selectedFinish = browse.productDetail.finishes[0];
+    } catch (err) {
+      browse.productDetailError = (err && err.message) || 'Could not load this product.';
+    } finally {
+      browse.productDetailLoading = false;
+      renderBreadcrumb();
+      renderBrowseSection();
+    }
+  }
+
+  function browseSearchFiltered(items, nameOf) {
+    const q = state.query.trim().toLowerCase();
+    if (!q) return items;
+    return items.filter((item) => nameOf(item).toLowerCase().includes(q));
+  }
+
+  function renderBrowseSection() {
+    const host = document.getElementById('browseSection');
+
+    if (browse.level === 'product') {
+      renderProductDetail(host);
+      return;
+    }
+
+    if (browse.loading) {
+      host.innerHTML = '<div class="skeleton-grid"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div></div>';
+      return;
+    }
+    if (browse.error) {
+      host.innerHTML = '<div class="empty-state" style="margin-top:20px"><p class="empty-desc" style="color:#A8552A">' + escapeHtml(browse.error) + '</p></div>';
+      return;
+    }
+
+    if (browse.level === 'companies') {
+      const list = browseSearchFiltered(browse.items, (c) => c.name);
+      if (list.length === 0) {
+        host.innerHTML = '<div class="empty-state" style="margin-top:20px"><h3 class="empty-title serif">No companies yet</h3><p class="empty-desc">Companies appear here once added to the catalog.</p></div>';
+        return;
+      }
+      host.innerHTML = '<div class="collections-grid" id="companyGrid"></div>';
+      const grid = document.getElementById('companyGrid');
+      list.forEach((c) => {
+        const card = document.createElement('button');
+        card.className = 'company-card';
+        const logo = c.logoUrl
+          ? '<img class="company-logo" src="' + c.logoUrl + '" alt="">'
+          : '<span class="company-logo placeholder serif">' + escapeHtml((c.name || '?').charAt(0)) + '</span>';
+        card.innerHTML = logo +
+          '<span><span class="company-name serif">' + escapeHtml(c.name) + '</span>' +
+          '<span class="company-meta mono">' + (c.code ? escapeHtml(c.code) : 'COMPANY') + '</span></span>';
+        card.addEventListener('click', () => goToCollections(c.id, c.name));
+        grid.appendChild(card);
+      });
+      return;
+    }
+
+    if (browse.level === 'collections') {
+      const list = browseSearchFiltered(browse.items, (c) => c.name);
+      if (list.length === 0) {
+        host.innerHTML = '<div class="empty-state" style="margin-top:20px"><h3 class="empty-title serif">No collections yet</h3><p class="empty-desc">' + escapeHtml(browse.companyName) + ' has no collections in the catalog yet.</p></div>';
+        return;
+      }
+      host.innerHTML = '<div class="collections-grid" id="collectionGrid"></div>';
+      const grid = document.getElementById('collectionGrid');
+      list.forEach((c) => {
+        const card = document.createElement('article');
+        card.className = 'coll-card';
+        card.style.cursor = 'pointer';
+        const img = c.coverImageUrl ? '<img src="' + c.coverImageUrl + '" alt="' + escapeHtml(c.name) + '">' : '';
+        const productCount = (c._count && c._count.products) || 0;
+        card.innerHTML =
+          '<div class="coll-img">' + img + '<span class="coll-tag mono">' + escapeHtml(browse.companyName) + '</span></div>' +
+          '<div class="coll-body"><h3 class="serif">' + escapeHtml(c.name) + '</h3>' +
+          '<div class="coll-foot"><span class="coll-count mono">' + productCount + ' PRODUCT' + (productCount === 1 ? '' : 'S') + '</span></div></div>';
+        card.addEventListener('click', () => goToProducts(c.id, c.name));
+        grid.appendChild(card);
+      });
+      return;
+    }
+
+    if (browse.level === 'products') {
+      const list = browseSearchFiltered(browse.items, (p) => p.name);
+      if (list.length === 0) {
+        host.innerHTML = '<div class="empty-state" style="margin-top:20px"><h3 class="empty-title serif">No products yet</h3><p class="empty-desc">' + escapeHtml(browse.collectionName) + ' has no products in the catalog yet.</p></div>';
+        return;
+      }
+      host.innerHTML = '<div class="collections-grid" id="productGrid"></div>';
+      const grid = document.getElementById('productGrid');
+      list.forEach((p) => {
+        const card = document.createElement('button');
+        card.className = 'prod-card';
+        const img = p.coverImageUrl ? '<div class="prod-img"><img src="' + p.coverImageUrl + '" alt="' + escapeHtml(p.name) + '"></div>' : '';
+        const variantCount = (p._count && p._count.tiles) || 0;
+        card.innerHTML = img +
+          '<div class="prod-body">' +
+          '<span class="prod-company mono">' + escapeHtml(browse.companyName) + '</span>' +
+          '<span class="prod-collection">' + escapeHtml(browse.collectionName) + '</span>' +
+          '<span class="prod-name serif">' + escapeHtml(p.name) + '</span>' +
+          '<span class="prod-variants mono">' + variantCount + ' VARIANT' + (variantCount === 1 ? '' : 'S') + '</span>' +
+          '</div>';
+        card.addEventListener('click', () => goToProduct(p.id));
+        grid.appendChild(card);
+      });
+      return;
+    }
+  }
+
+  function renderProductDetail(host) {
+    if (browse.productDetailLoading) {
+      host.innerHTML = '<div class="skeleton-grid"><div class="skeleton" style="height:280px"></div></div>';
+      return;
+    }
+    if (browse.productDetailError) {
+      host.innerHTML = '<div class="empty-state" style="margin-top:20px"><p class="empty-desc" style="color:#A8552A">' + escapeHtml(browse.productDetailError) + '</p></div>';
+      return;
+    }
+    const p = browse.productDetail;
+    if (!p) return;
+
+    const brandName = (p.collection && p.collection.brand && p.collection.brand.name) || browse.companyName;
+    const collectionName = (p.collection && p.collection.name) || browse.collectionName;
+
+    // Finish selection filters the valid sizes for THAT finish; size
+    // selection then resolves exactly one variant. Never both free at once
+    // in a way that could point at a combination that doesn't exist.
+    const validSizesForFinish = p.finishSizePairs.filter((pair) => pair.finish === browse.selectedFinish).map((pair) => pair.size);
+    if (browse.selectedSize && !validSizesForFinish.includes(browse.selectedSize)) browse.selectedSize = null;
+    const resolved = browse.selectedFinish && browse.selectedSize
+      ? p.finishSizePairs.find((pair) => pair.finish === browse.selectedFinish && pair.size === browse.selectedSize)
+      : null;
+    const resolvedTile = resolved ? p.tiles.find((t) => t.id === resolved.tileId) : null;
+
+    const img = (resolvedTile && resolvedTile.imageUrl) || p.coverImageUrl;
+
+    // Standardized product information sequence: Image, Brand, Collection,
+    // Product Name, SKU, Specifications, Finish/Variant, Selling Price.
+    // SKU and price are shown only once a finish+size resolves one real
+    // variant -- a Product spans several SKUs/prices, so showing one
+    // before resolution would be a guess, not a fact.
+    const specLines = [];
+    if (resolvedTile && resolvedTile.size) specLines.push('Size: ' + escapeHtml(resolvedTile.size));
+    if (resolvedTile && resolvedTile.material) specLines.push('Material: ' + escapeHtml(resolvedTile.material));
+    if (resolvedTile && resolvedTile.thickness) specLines.push('Thickness: ' + escapeHtml(resolvedTile.thickness));
+    if (p.specifications) specLines.push(escapeHtml(p.specifications));
+    if (p.category) specLines.push('Category: ' + escapeHtml(p.category));
+
+    host.innerHTML =
+      '<div class="detail-panel">' +
+      '<div class="detail-img" style="height:260px">' + (img ? '<img src="' + img + '" alt="' + escapeHtml(p.name) + '">' : '') + '</div>' +
+      '<span class="detail-eyebrow mono" style="margin-top:16px; display:block">' + escapeHtml(brandName) + '</span>' +
+      '<div class="detail-collection">' + escapeHtml(collectionName) + '</div>' +
+      '<h2 class="detail-name serif">' + escapeHtml(p.name) + '</h2>' +
+      '<div id="variantResolvedSlot"></div>' +
+      (p.description ? '<p class="page-sub" style="margin-top:10px">' + escapeHtml(p.description) + '</p>' : '') +
+      (specLines.length ? '<div class="spec-block"><strong>Specifications</strong><br>' + specLines.join('<br>') + '</div>' : '') +
+      (p.finishes.length ? '<div class="option-group" style="margin-top:16px"><div class="option-label mono">FINISH</div><div class="option-chip-row" id="finishChips"></div></div>' : '') +
+      (p.finishes.length ? '<div class="option-group" style="margin-top:14px"><div class="option-label mono">SIZE</div><div class="option-chip-row" id="sizeChips"></div></div>' : '') +
+      ((p.collection && p.collection.catalogueDocumentUrl)
+        ? '<div class="spec-block"><a href="' + p.collection.catalogueDocumentUrl + '" target="_blank" rel="noopener">View catalogue PDF →</a></div>'
+        : '') +
+      '</div>';
+
+    if (p.finishes.length) {
+      const finishHost = document.getElementById('finishChips');
+      p.finishes.forEach((f) => {
+        const chip = document.createElement('button');
+        chip.className = 'option-chip mono' + (browse.selectedFinish === f ? ' active' : '');
+        chip.textContent = f;
+        chip.addEventListener('click', () => { browse.selectedFinish = f; browse.selectedSize = null; renderBrowseSection(); });
+        finishHost.appendChild(chip);
+      });
+
+      const sizeHost = document.getElementById('sizeChips');
+      const allSizes = [...new Set(p.finishSizePairs.map((pair) => pair.size))];
+      allSizes.forEach((s) => {
+        const valid = validSizesForFinish.includes(s);
+        const chip = document.createElement('button');
+        chip.className = 'option-chip mono' + (browse.selectedSize === s ? ' active' : '');
+        chip.textContent = s;
+        chip.disabled = !valid;
+        if (valid) chip.addEventListener('click', () => { browse.selectedSize = s; renderBrowseSection(); });
+        sizeHost.appendChild(chip);
+      });
+    }
+
+    const slot = document.getElementById('variantResolvedSlot');
+    if (slot) {
+      if (resolvedTile) {
+        // SKU, then price (where set -- never a fabricated placeholder
+        // when it is not), then stock status.
+        const priceLine = resolvedTile.sellingPrice
+          ? '₹' + resolvedTile.sellingPrice + (resolvedTile.unitOfMeasure ? '/' + resolvedTile.unitOfMeasure.toLowerCase() : '')
+          : null;
+        slot.innerHTML =
+          '<div class="variant-resolved mono">SKU ' + escapeHtml(resolvedTile.productCode || resolvedTile.id) + '</div>' +
+          (priceLine ? '<div class="variant-resolved mono">' + escapeHtml(priceLine) + '</div>' : '') +
+          '<div class="variant-resolved mono">' + (resolvedTile.inStock ? 'IN STOCK' : 'OUT OF STOCK') + '</div>' +
+          // ERP-backed line, additional to the CASA inStock line
+          // above it -- not a replacement. No fetch at all for a
+          // tile with no productCode; it goes straight to "not
+          // linked".
+          '<div class="variant-resolved mono erp-stock-line">' + erpStockBadgeHtml(resolvedTile.productCode ? null : { state: 'unknown' }) + '</div>';
+
+        const gen = ++productStockGen;
+        if (resolvedTile.productCode) {
+          const el = slot.querySelector('.erp-stock-line');
+          if (el) applyErpStock([{ sku: resolvedTile.productCode, el }], gen, () => productStockGen);
+        }
+      } else {
+        slot.innerHTML = browse.selectedFinish ? '<div class="variant-resolved mono">Select a size to resolve the exact variant.</div>' : '';
+      }
+    }
+  }
+
+  // ============================================================
   // SURFACE ARCHIVE
   // ============================================================
 
@@ -323,9 +767,17 @@
     renderSurfaces();
 
     try {
-      const result = await CasaApi.tiles.list({ page: state.page, limit: 24, search: state.query || undefined });
+      const result = await CasaApi.tiles.list({
+        page: state.page,
+        limit: 24,
+        search: state.query || undefined,
+        brandId: state.archiveBrandId || undefined,
+        finish: state.archiveFinish || undefined,
+        size: state.archiveSize || undefined,
+      });
       state.surfaces = reset ? result.tiles : state.surfaces.concat(result.tiles);
       state.meta = result.meta;
+      recordFinishOptions(result.tiles);
       document.getElementById('archiveSub').textContent =
         state.meta && typeof state.meta.total === 'number'
           ? state.meta.total + ' surface' + (state.meta.total === 1 ? '' : 's') + ' currently in the catalog.'
@@ -366,31 +818,72 @@
 
     host.innerHTML = '<div class="surface-grid" id="surfaceGrid"></div>';
     const grid = document.getElementById('surfaceGrid');
+    const erpStockTargets = [];
     state.surfaces.forEach((s) => {
       const card = document.createElement('article');
       card.className = 'surface-card';
       const img = s.imageUrl ? '<img src="' + s.imageUrl + '" alt="' + escapeHtml(s.name) + '">' : '<span style="width:44px;height:44px;flex:0 0 auto;border-radius:11px;background:var(--sand)"></span>';
-      const spec = [s.brand ? s.brand.name : null, s.size, s.finish].filter(Boolean).join(' · ');
+      // Standardized sequence (image already first, being the card's
+      // thumbnail): Brand, Collection, Product Name, SKU, Specifications,
+      // Finish, Selling Price. Falls back to the free-text collection
+      // label and the tile's own name for tiles not yet linked to the
+      // Company/Collection/Product hierarchy -- never invented.
+      const brandName = s.brand ? s.brand.name : null;
+      const collectionName = (s.productId && s.product && s.product.collection) ? s.product.collection.name : (s.collection || null);
+      const productName = (s.productId && s.product) ? s.product.name : s.name;
+      const metaLine = [brandName, collectionName].filter(Boolean).join(' · ');
+      const specParts = [s.size, s.material, s.thickness].filter(Boolean).join(' · ');
+      const skuSpecLine = [s.productCode, specParts, s.finish].filter(Boolean).join(' · ');
+      const priceLine = s.sellingPrice ? ('₹' + s.sellingPrice + (s.unitOfMeasure ? '/' + s.unitOfMeasure.toLowerCase() : '')) : null;
+      // The ERP-backed line is ADDITIONAL to, never a replacement
+      // for, the existing CASA inStock badge right above it -- a
+      // tile with no productCode has nothing to ask the ERP about,
+      // so it goes straight to "not linked" with no fetch at all.
       card.innerHTML =
         img +
         '<span style="min-width:0">' +
-        '<span class="sn">' + escapeHtml(s.name) + '</span>' +
-        '<span class="ss mono">' + (spec ? escapeHtml(spec) : '—') + '</span>' +
-        '<span class="ss mono"><span class="stock-dot ' + (s.inStock ? 'yes' : 'no') + '"></span>' + (s.inStock ? 'IN STOCK' : 'OUT OF STOCK') + '</span>' +
+        (metaLine ? '<span class="ss mono">' + escapeHtml(metaLine) + '</span>' : '') +
+        '<span class="sn">' + escapeHtml(productName) + '</span>' +
+        (skuSpecLine ? '<span class="ss mono">' + escapeHtml(skuSpecLine) + '</span>' : '') +
+        '<span class="ss mono">' + (priceLine ? escapeHtml(priceLine) + ' · ' : '') + '<span class="stock-dot ' + (s.inStock ? 'yes' : 'no') + '"></span>' + (s.inStock ? 'IN STOCK' : 'OUT OF STOCK') + '</span>' +
+        '<span class="ss mono erp-stock-line">' + erpStockBadgeHtml(s.productCode ? null : { state: 'unknown' }) + '</span>' +
         '</span>';
       grid.appendChild(card);
+      if (s.productCode) {
+        const el = card.querySelector('.erp-stock-line');
+        if (el) erpStockTargets.push({ sku: s.productCode, el });
+      }
     });
 
     const hasMore = !!(state.meta && state.meta.hasNextPage);
     loadMoreRow.style.display = hasMore ? 'flex' : 'none';
     document.getElementById('loadMoreBtn').disabled = state.surfacesLoading;
+
+    const gen = ++surfaceStockGen;
+    applyErpStock(erpStockTargets, gen, () => surfaceStockGen);
   }
 
   function clearSearch() {
     state.query = '';
     document.getElementById('searchInput').value = '';
     renderCollections();
+    renderBrowseSection();
     loadSurfaces(true);
+  }
+
+  // Finish has no dedicated list endpoint today; its filter options are
+  // built progressively from whatever has actually been loaded, rather
+  // than inventing a fixed list.
+  const knownFinishes = new Set();
+  function recordFinishOptions(tiles) {
+    let added = false;
+    (tiles || []).forEach((t) => { if (t.finish && !knownFinishes.has(t.finish)) { knownFinishes.add(t.finish); added = true; } });
+    if (!added) return;
+    const select = document.getElementById('archiveFinishFilter');
+    const current = select.value;
+    select.innerHTML = '<option value="">All finishes</option>' +
+      [...knownFinishes].sort().map((f) => '<option value="' + escapeHtml(f) + '">' + escapeHtml(f) + '</option>').join('');
+    select.value = current;
   }
 
   // ============================================================
@@ -413,6 +906,7 @@
     document.getElementById('searchInput').addEventListener('input', (e) => {
       state.query = e.target.value;
       renderCollections();
+      renderBrowseSection();
       clearTimeout(searchDebounce);
       searchDebounce = setTimeout(() => loadSurfaces(true), 300);
     });
@@ -422,7 +916,34 @@
       loadSurfaces(false);
     });
 
-    await Promise.all([loadCollections(), loadSurfaces(true)]);
+    document.getElementById('archiveBrandFilter').addEventListener('change', (e) => {
+      state.archiveBrandId = e.target.value;
+      loadSurfaces(true);
+    });
+    document.getElementById('archiveFinishFilter').addEventListener('change', (e) => {
+      state.archiveFinish = e.target.value;
+      loadSurfaces(true);
+    });
+    document.getElementById('archiveSizeFilter').addEventListener('change', (e) => {
+      state.archiveSize = e.target.value;
+      loadSurfaces(true);
+    });
+
+    try {
+      const companiesForFilter = await CasaApi.companies.list({});
+      const brandSelect = document.getElementById('archiveBrandFilter');
+      brandSelect.innerHTML = '<option value="">All companies</option>' +
+        companiesForFilter.map((c) => '<option value="' + c.id + '">' + escapeHtml(c.name) + '</option>').join('');
+    } catch { /* filter stays "All companies" if this fails */ }
+
+    try {
+      const sizes = await CasaApi.tiles.sizes();
+      const sizeSelect = document.getElementById('archiveSizeFilter');
+      sizeSelect.innerHTML = '<option value="">All sizes</option>' +
+        (sizes || []).map((s) => '<option value="' + escapeHtml(s.size || s) + '">' + escapeHtml(s.size || s) + '</option>').join('');
+    } catch { /* filter stays "All sizes" if this fails */ }
+
+    await Promise.all([loadCollections(), loadSurfaces(true), loadBrowseLevel()]);
   }
 
   init();

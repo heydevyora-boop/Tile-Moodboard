@@ -734,9 +734,23 @@ export async function listCatalogTileSizes() {
 export async function listAllTiles(query: ListTilesQuery) {
   const { page, limit, skip, take } = getPagination(query);
   const where = {
-    ...(query.search ? { name: { contains: query.search, mode: 'insensitive' as const } } : {}),
+    ...(query.search
+      ? {
+          OR: [
+            { name: { contains: query.search, mode: 'insensitive' as const } },
+            { productCode: { contains: query.search, mode: 'insensitive' as const } },
+            { collection: { contains: query.search, mode: 'insensitive' as const } },
+            { brand: { name: { contains: query.search, mode: 'insensitive' as const } } },
+            { product: { name: { contains: query.search, mode: 'insensitive' as const } } },
+          ],
+        }
+      : {}),
     ...(query.collection ? { collection: query.collection } : {}),
     ...(query.brandId ? { brandId: query.brandId } : {}),
+    ...(query.collectionId ? { product: { collectionId: query.collectionId } } : {}),
+    ...(query.productId ? { productId: query.productId } : {}),
+    ...(query.finish ? { finish: query.finish } : {}),
+    ...(query.size ? { size: query.size } : {}),
   };
 
   const [tiles, total] = await Promise.all([
@@ -755,7 +769,13 @@ export async function listAllTiles(query: ListTilesQuery) {
         collection: true,
         inStock: true,
         productCode: true,
+        productId: true,
+        material: true,
+        thickness: true,
+        sellingPrice: true,
+        unitOfMeasure: true,
         brand: { select: { id: true, name: true } },
+        product: { select: { id: true, name: true, collection: { select: { id: true, name: true } } } },
       },
     }),
     prisma.tile.count({ where }),

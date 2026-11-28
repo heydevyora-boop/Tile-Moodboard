@@ -75,6 +75,16 @@ const MOVEMENT_EFFECT = {
 
   DAMAGE:              { dimension: 'damaged', sign: +1 },
   DAMAGE_RECOVERY:     { dimension: 'damaged', sign: -1 },
+
+  // In transit is held against the DESTINATION warehouse, moved
+  // directly by dispatch/receive/cancel's own raw SQL (there is no
+  // "transit in"/"transit out" pair of movements -- those events
+  // are documented on the TRANSFER_OUT/TRANSFER_IN entries
+  // themselves). TRANSFER_LOSS is the one case where this
+  // function is the one moving it: an explicit write-off of
+  // dispatched stock that never arrived and never will.
+  TRANSFER_LOSS:          { dimension: 'inTransit', sign: -1 },
+  TRANSFER_LOSS_REVERSAL: { dimension: 'inTransit', sign: +1 },
 };
 
 export const MOVEMENT_TYPES = Object.keys(MOVEMENT_EFFECT);
@@ -226,6 +236,7 @@ export async function postStockMovement(m, tx) {
     if (effect.dimension === 'physical') after.onHand += delta;
     if (effect.dimension === 'reserved') after.reserved += delta;
     if (effect.dimension === 'damaged') after.damaged += delta;
+    if (effect.dimension === 'inTransit') after.inTransit += delta;
 
     const availableBefore = before.onHand - before.reserved - before.damaged;
     const availableAfter = after.onHand - after.reserved - after.damaged;
@@ -243,6 +254,11 @@ export async function postStockMovement(m, tx) {
     if (after.damaged < 0) {
       throw new InsufficientStockError({
         sku: product.sku, dimension: 'damaged', available: before.damaged, requested: qty,
+      });
+    }
+    if (after.inTransit < 0) {
+      throw new InsufficientStockError({
+        sku: product.sku, dimension: 'inTransit', available: before.inTransit, requested: qty,
       });
     }
     if (availableAfter < 0) {
@@ -275,6 +291,7 @@ export async function postStockMovement(m, tx) {
           balanceAfter: after.onHand,
           reservedAfter: after.reserved,
           damagedAfter: after.damaged,
+          inTransitAfter: after.inTransit,
           referenceType: m.referenceType,
           referenceId: m.referenceId ?? null,
           referenceNo: m.referenceNo ?? null,
@@ -296,12 +313,13 @@ export async function postStockMovement(m, tx) {
     // ── 10. the projection, same transaction, same lock ─────
     await db.$executeRaw`
       UPDATE "inventory_balances"
-      SET "quantityOnHand"   = ${after.onHand},
-          "quantityReserved" = ${after.reserved},
-          "quantityDamaged"  = ${after.damaged},
-          "lastMovementAt"   = now(),
-          "version"          = "version" + 1,
-          "updatedAt"        = now()
+      SET "quantityOnHand"    = ${after.onHand},
+          "quantityReserved"  = ${after.reserved},
+          "quantityDamaged"   = ${after.damaged},
+          "quantityInTransit" = ${after.inTransit},
+          "lastMovementAt"    = now(),
+          "version"           = "version" + 1,
+          "updatedAt"         = now()
       WHERE "productId" = ${m.productId}::uuid AND "warehouseId" = ${m.warehouseId}::uuid
     `;
 
@@ -313,13 +331,14 @@ export async function postStockMovement(m, tx) {
     // writing something other than what was computed.
     const [check] = await db.$queryRaw`
       SELECT "quantityOnHand"::text AS on_hand, "quantityReserved"::text AS reserved,
-             "quantityDamaged"::text AS damaged
+             "quantityDamaged"::text AS damaged, "quantityInTransit"::text AS in_transit
       FROM "inventory_balances"
       WHERE "productId" = ${m.productId}::uuid AND "warehouseId" = ${m.warehouseId}::uuid
     `;
     if (Number(check.on_hand) !== after.onHand
       || Number(check.reserved) !== after.reserved
-      || Number(check.damaged) !== after.damaged) {
+      || Number(check.damaged) !== after.damaged
+      || Number(check.in_transit) !== after.inTransit) {
       throw new Error(
         'Stock verification failed for ' + product.sku + ': expected on-hand '
         + after.onHand + ', found ' + check.on_hand + '. The transaction has been rolled back.',
@@ -361,6 +380,8 @@ export async function reverseStockMovement({ entryId, createdById, remarks }, tx
       RESERVATION_RELEASE: 'RESERVATION',
       DAMAGE: 'DAMAGE_RECOVERY',
       DAMAGE_RECOVERY: 'DAMAGE',
+      TRANSFER_LOSS: 'TRANSFER_LOSS_REVERSAL',
+      TRANSFER_LOSS_REVERSAL: 'TRANSFER_LOSS',
     };
 
     return postStockMovement({

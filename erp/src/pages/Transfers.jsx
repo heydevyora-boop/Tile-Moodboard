@@ -57,6 +57,15 @@ export default function Transfers() {
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
 
+  /* One row per outstanding transfer line, built from the
+     AUTHORITATIVE backend figures the moment the Receive dialog
+     opens -- never computed from anything this screen already had
+     lying around. acceptedNow defaults to the line's own
+     outstanding quantity, so confirming without touching anything
+     is exactly the old one-click full receipt. */
+  const [receiptLines, setReceiptLines] = useState([]);
+  const [receiptLoading, setReceiptLoading] = useState(false);
+
   const query = useMemo(() => ({ status, warehouseId, page, pageSize }),
     [status, warehouseId, page, pageSize]);
 
@@ -107,16 +116,97 @@ export default function Transfers() {
     }
   };
 
+  /* Opening the Receive dialog reads the transfer's CURRENT,
+     backend-computed per-line totals and seeds one editable row
+     per line that still has something outstanding. Nothing here
+     is a guess: dispatched/previously-accepted/damaged/missing and
+     outstanding all come straight off the API response. */
+  const openReceive = async (t) => {
+    setConfirming({ action: 'receive', transfer: t });
+    setError(null);
+    setReceiptLines([]);
+    setReceiptLoading(true);
+    try {
+      const full = await api.warehouses.transfer(t.id);
+      setReceiptLines(full.lines
+        .filter((l) => l.outstandingQuantity > 0)
+        .map((l) => ({
+          transferLineId: l.id,
+          sku: l.sku,
+          name: l.name,
+          dispatched: l.quantity,
+          prevAccepted: l.acceptedQuantity,
+          prevDamaged: l.damagedQuantity,
+          prevMissing: l.missingQuantity,
+          outstanding: l.outstandingQuantity,
+          acceptedNow: String(l.outstandingQuantity),
+          damagedNow: '0',
+          missingNow: '0',
+          missingReason: '',
+          remarks: '',
+        })));
+    } catch (err) {
+      setError(err);
+    } finally {
+      setReceiptLoading(false);
+    }
+  };
+
+  const updateReceiptLine = (transferLineId, patch) => {
+    setReceiptLines((prev) => prev.map((l) => (l.transferLineId === transferLineId ? { ...l, ...patch } : l)));
+  };
+
+  /* Parsed once, read everywhere: validation, the disabled state
+     on Confirm, and the request body itself all come from this
+     same pass, so none of them can disagree with each other. */
+  const parsedReceiptLines = receiptLines.map((l) => {
+    const acceptedNum = Number(l.acceptedNow);
+    const damagedNum = Number(l.damagedNow);
+    const missingNum = Number(l.missingNow);
+    const numeric = l.acceptedNow !== '' && l.damagedNow !== '' && l.missingNow !== ''
+      && Number.isFinite(acceptedNum) && Number.isFinite(damagedNum) && Number.isFinite(missingNum);
+    const sum = numeric ? acceptedNum + damagedNum + missingNum : 0;
+    let lineError = null;
+    if (!numeric) lineError = 'Enter a number for every quantity.';
+    else if (acceptedNum < 0 || damagedNum < 0 || missingNum < 0) lineError = 'Quantities cannot be negative.';
+    // A small epsilon: these are 3-decimal quantities compared as
+    // floats, and the outstanding figure itself came off the API
+    // already rounded to the same precision.
+    else if (sum - l.outstanding > 0.0005) lineError = 'Cannot exceed the outstanding quantity (' + qty(l.outstanding) + ').';
+    else if (missingNum > 0 && !l.missingReason.trim()) lineError = 'A missing quantity needs a reason.';
+    return { ...l, acceptedNum, damagedNum, missingNum, sum, lineError };
+  });
+  const receiptHasSomething = parsedReceiptLines.some((l) => l.sum > 0);
+  const receiptValid = receiptLines.length > 0 && receiptHasSomething
+    && parsedReceiptLines.every((l) => l.lineError === null);
+
   const act = async () => {
     setBusy(true);
     setError(null);
     try {
       const { action, transfer } = confirming;
       if (action === 'dispatch') await api.warehouses.dispatch(transfer.id);
-      if (action === 'receive') await api.warehouses.receive(transfer.id);
+      if (action === 'receive') {
+        // Lines where nothing is being recorded this pass are left
+        // off the request entirely, same convention the backend
+        // itself uses: a line that records nothing is not a
+        // receipt line.
+        const lines = parsedReceiptLines
+          .filter((l) => l.sum > 0)
+          .map((l) => ({
+            transferLineId: l.transferLineId,
+            acceptedQuantity: l.acceptedNum,
+            damagedQuantity: l.damagedNum,
+            missingQuantity: l.missingNum,
+            missingReason: l.missingNum > 0 ? l.missingReason.trim() : undefined,
+            remarks: l.damagedNum > 0 && l.remarks.trim() ? l.remarks.trim() : undefined,
+          }));
+        await api.warehouses.receive(transfer.id, { lines });
+      }
       if (action === 'cancel') await api.warehouses.cancelTransfer(transfer.id, reason.trim() || undefined);
       setConfirming(null);
       setReason('');
+      setReceiptLines([]);
       list.reload();
       if (openId) detail.reload();
     } catch (err) {
@@ -199,7 +289,7 @@ export default function Transfers() {
             </button>
           )}
           {t.status === 'IN_TRANSIT' && (
-            <button className="btn btn-sm" onClick={() => { setConfirming({ action: 'receive', transfer: t }); setError(null); }}>
+            <button className="btn btn-sm" onClick={() => openReceive(t)}>
               Receive
             </button>
           )}
@@ -440,15 +530,20 @@ export default function Transfers() {
       {/* ── dispatch / receive / cancel ── */}
       <Modal
         open={Boolean(confirming)}
-        onClose={() => { setConfirming(null); setError(null); }}
+        wide={confirming?.action === 'receive'}
+        onClose={() => { setConfirming(null); setError(null); setReceiptLines([]); }}
         title={confirming
           ? ({ dispatch: 'Dispatch', receive: 'Receive', cancel: 'Cancel' }[confirming.action]
             + ' ' + confirming.transfer.transferNo)
           : ''}
         footer={(
           <>
-            <button className="btn" onClick={() => setConfirming(null)} disabled={busy}>Close</button>
-            <button className="btn btn-primary" onClick={act} disabled={busy}>
+            <button className="btn" onClick={() => { setConfirming(null); setReceiptLines([]); }} disabled={busy}>Close</button>
+            <button
+              className="btn btn-primary"
+              onClick={act}
+              disabled={busy || receiptLoading || (confirming?.action === 'receive' && !receiptValid)}
+            >
               {busy ? 'Working…' : 'Confirm'}
             </button>
           </>
@@ -471,14 +566,127 @@ export default function Transfers() {
         {confirming?.action === 'receive' && (
           <>
             <p>
-              The stock arrives at <strong>{confirming.transfer.to?.name}</strong> and becomes
-              sellable there.
+              What arrived at <strong>{confirming.transfer.to?.name}</strong>, line by line.
+              Signed for by you, under your name.
             </p>
             <p className="tiny muted">
-              Signed for by you, under your name. A transfer one person can both
-              dispatch and receive unnoticed is not a control, so both names are
-              recorded.
+              Accepted now defaults to the whole outstanding quantity -- confirm as
+              it stands for an ordinary full receipt, or change any of the three
+              figures to record a partial, damaged or missing quantity instead. The
+              three together can never exceed what is still outstanding on that
+              line.
             </p>
+
+            {receiptLoading && <p className="muted">Reading the transfer&rsquo;s current figures…</p>}
+
+            {!receiptLoading && receiptLines.length === 0 && (
+              <p className="tiny muted">Nothing is outstanding on this transfer any more.</p>
+            )}
+
+            {!receiptLoading && receiptLines.length > 0 && (
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Product</th>
+                    <th style={{ textAlign: 'right' }}>Dispatched</th>
+                    <th style={{ textAlign: 'right' }}>Prev. accepted</th>
+                    <th style={{ textAlign: 'right' }}>Prev. damaged</th>
+                    <th style={{ textAlign: 'right' }}>Prev. missing</th>
+                    <th style={{ textAlign: 'right' }}>Outstanding</th>
+                    <th style={{ textAlign: 'right' }}>Accepted now</th>
+                    <th style={{ textAlign: 'right' }}>Damaged now</th>
+                    <th style={{ textAlign: 'right' }}>Missing now</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {parsedReceiptLines.map((l) => (
+                    <tr key={l.transferLineId}>
+                      <td><span className="sku">{l.sku}</span><div className="tiny muted">{l.name}</div></td>
+                      <td className="num" style={{ textAlign: 'right' }}>{qty(l.dispatched)}</td>
+                      <td className="num" style={{ textAlign: 'right' }}>
+                        {l.prevAccepted > 0 ? qty(l.prevAccepted) : <span className="muted">—</span>}
+                      </td>
+                      <td className="num" style={{ textAlign: 'right' }}>
+                        {l.prevDamaged > 0 ? qty(l.prevDamaged) : <span className="muted">—</span>}
+                      </td>
+                      <td className="num" style={{ textAlign: 'right' }}>
+                        {l.prevMissing > 0 ? qty(l.prevMissing) : <span className="muted">—</span>}
+                      </td>
+                      <td className="num" style={{ textAlign: 'right' }}><strong>{qty(l.outstanding)}</strong></td>
+                      <td style={{ textAlign: 'right' }}>
+                        <input
+                          className="input" type="number" min="0" step="0.001" style={{ width: 90, textAlign: 'right' }}
+                          value={l.acceptedNow}
+                          onChange={(e) => updateReceiptLine(l.transferLineId, { acceptedNow: e.target.value })}
+                        />
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        <input
+                          className="input" type="number" min="0" step="0.001" style={{ width: 90, textAlign: 'right' }}
+                          value={l.damagedNow}
+                          onChange={(e) => updateReceiptLine(l.transferLineId, { damagedNow: e.target.value })}
+                        />
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        <input
+                          className="input" type="number" min="0" step="0.001" style={{ width: 90, textAlign: 'right' }}
+                          value={l.missingNow}
+                          onChange={(e) => updateReceiptLine(l.transferLineId, { missingNow: e.target.value })}
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+
+            {/* One reason/remarks field PER LINE that needs one --
+                never a single field shared across lines, which on
+                a multi-line transfer would force two different
+                lines to carry the same text or silently apply one
+                line's reason to another. */}
+            {parsedReceiptLines.filter((l) => l.damagedNum > 0 || l.missingNum > 0).map((l) => (
+              <div key={l.transferLineId} className="stack" style={{ marginTop: 8 }}>
+                {l.damagedNum > 0 && (
+                  <div className="field">
+                    <label htmlFor={'t-damage-note-' + l.transferLineId}>
+                      {l.sku} — damage note (optional)
+                    </label>
+                    <input
+                      id={'t-damage-note-' + l.transferLineId}
+                      className="input"
+                      value={l.remarks}
+                      onChange={(e) => updateReceiptLine(l.transferLineId, { remarks: e.target.value })}
+                      placeholder="Corner crushed in transit."
+                    />
+                  </div>
+                )}
+                {l.missingNum > 0 && (
+                  <div className="field">
+                    <label htmlFor={'t-missing-reason-' + l.transferLineId}>
+                      {l.sku} — reason for the missing quantity (required)
+                    </label>
+                    <input
+                      id={'t-missing-reason-' + l.transferLineId}
+                      className="input"
+                      value={l.missingReason}
+                      onChange={(e) => updateReceiptLine(l.transferLineId, { missingReason: e.target.value })}
+                      placeholder="Never arrived; destination logged short on delivery."
+                    />
+                  </div>
+                )}
+              </div>
+            ))}
+
+            {parsedReceiptLines.some((l) => l.lineError) && (
+              <div className="notice notice-danger">
+                <span aria-hidden="true">●</span>
+                <div>
+                  {parsedReceiptLines.find((l) => l.lineError)?.sku}:{' '}
+                  {parsedReceiptLines.find((l) => l.lineError)?.lineError}
+                </div>
+              </div>
+            )}
           </>
         )}
         {confirming?.action === 'cancel' && (
@@ -533,6 +741,9 @@ export default function Transfers() {
                     {detail.data.movement.returnedToSource > 0 && (
                       <> · {qty(detail.data.movement.returnedToSource)} returned to the source</>
                     )}
+                    {detail.data.movement.missing > 0 && (
+                      <> · {qty(detail.data.movement.missing)} written off as missing</>
+                    )}
                     {detail.data.movement.stillInTransit > 0 && (
                       <> · {qty(detail.data.movement.stillInTransit)} still in transit</>
                     )}
@@ -546,12 +757,33 @@ export default function Transfers() {
               {detail.data.notes && <> · {detail.data.notes}</>}
             </p>
 
+            {/* Every figure here is summed straight off the per-line
+                values the API already returned -- never recomputed
+                or guessed by this screen. */}
+            <div className="grid-4" style={{ marginBottom: 10 }}>
+              {[
+                ['Dispatched', detail.data.lines.reduce((s, l) => s + l.quantity, 0)],
+                ['Accepted', detail.data.lines.reduce((s, l) => s + l.acceptedQuantity, 0)],
+                ['Damaged', detail.data.lines.reduce((s, l) => s + l.damagedQuantity, 0)],
+                ['Missing', detail.data.lines.reduce((s, l) => s + l.missingQuantity, 0)],
+                ['Outstanding', detail.data.lines.reduce((s, l) => s + l.outstandingQuantity, 0)],
+              ].map(([label, value]) => (
+                <div key={label} className="field">
+                  <label>{label}</label>
+                  <div className="num" style={{ fontSize: 18 }}>{qty(value)}</div>
+                </div>
+              ))}
+            </div>
+
             <table className="table">
               <thead>
                 <tr>
                   <th>#</th><th>Code</th><th>Product</th>
-                  <th style={{ textAlign: 'right' }}>Sent</th>
-                  <th style={{ textAlign: 'right' }}>Received</th>
+                  <th style={{ textAlign: 'right' }}>Dispatched</th>
+                  <th style={{ textAlign: 'right' }}>Accepted</th>
+                  <th style={{ textAlign: 'right' }}>Damaged</th>
+                  <th style={{ textAlign: 'right' }}>Missing</th>
+                  <th style={{ textAlign: 'right' }}>Outstanding</th>
                 </tr>
               </thead>
               <tbody>
@@ -562,7 +794,16 @@ export default function Transfers() {
                     <td>{l.name}</td>
                     <td className="num" style={{ textAlign: 'right' }}>{qty(l.quantity)}</td>
                     <td className="num" style={{ textAlign: 'right' }}>
-                      {l.receivedQuantity > 0 ? qty(l.receivedQuantity) : <span className="muted">—</span>}
+                      {l.acceptedQuantity > 0 ? qty(l.acceptedQuantity) : <span className="muted">—</span>}
+                    </td>
+                    <td className="num" style={{ textAlign: 'right' }}>
+                      {l.damagedQuantity > 0 ? qty(l.damagedQuantity) : <span className="muted">—</span>}
+                    </td>
+                    <td className="num" style={{ textAlign: 'right' }}>
+                      {l.missingQuantity > 0 ? qty(l.missingQuantity) : <span className="muted">—</span>}
+                    </td>
+                    <td className="num" style={{ textAlign: 'right' }}>
+                      {l.outstandingQuantity > 0 ? <strong>{qty(l.outstandingQuantity)}</strong> : <span className="muted">—</span>}
                     </td>
                   </tr>
                 ))}

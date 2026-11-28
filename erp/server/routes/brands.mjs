@@ -9,6 +9,8 @@ const router = Router();
 const CreateBrand = z.object({
   name: z.string().min(1, 'Brand name is required.').max(120),
   code: z.string().max(12).optional(),
+  logoUrl: z.string().max(2000).nullish(),
+  description: z.string().max(2000).nullish(),
   isActive: z.boolean().optional(),
   confirmDistinct: z.boolean().optional(),
 });
@@ -16,6 +18,8 @@ const CreateBrand = z.object({
 const UpdateBrand = z.object({
   name: z.string().min(1).max(120).optional(),
   code: z.string().max(12).optional(),
+  logoUrl: z.string().max(2000).nullish(),
+  description: z.string().max(2000).nullish(),
   isActive: z.boolean().optional(),
 });
 

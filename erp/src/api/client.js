@@ -132,6 +132,17 @@ export const api = {
     update: (id, body) => request('/product-heads/' + id, { method: 'PATCH', body }),
   },
 
+  /* THE PRODUCT HIERARCHY STEP'S OWN LEVEL, between a Product Head
+     and a variant/SKU: "Onery Elite Decore", with Matte and Glossy
+     as two of its variants. */
+  productLines: {
+    list: (params) => request('/product-lines', { params }),
+    get: (id) => request('/product-lines/' + id),
+    similar: (params) => request('/product-lines/similar', { params }),
+    create: (body) => request('/product-lines', { method: 'POST', body }),
+    update: (id, body) => request('/product-lines/' + id, { method: 'PATCH', body }),
+  },
+
   imports: {
     sources: () => request('/imports/sources'),
     /* The file goes up as raw bytes with its name in a header.
@@ -179,6 +190,10 @@ export const api = {
     list: (params) => request('/inventory', { params }),
     totals: () => request('/inventory/totals'),
     dashboard: () => request('/inventory/dashboard'),
+    hierarchy: () => request('/inventory/hierarchy'),
+    companyStock: (brandId) => request('/inventory/companies/' + brandId),
+    collectionStock: (collectionId) => request('/inventory/collections/' + collectionId),
+    productStock: (productLineId) => request('/inventory/products/' + productLineId),
     ledger: (params) => request('/inventory/ledger', { params }),
     reconciliation: () => request('/inventory/reconciliation'),
 
@@ -212,7 +227,7 @@ export const api = {
     transfer: (id) => request('/warehouses/transfers/' + id),
     createTransfer: (body) => request('/warehouses/transfers', { method: 'POST', body }),
     dispatch: (id) => request('/warehouses/transfers/' + id + '/dispatch', { method: 'POST' }),
-    receive: (id) => request('/warehouses/transfers/' + id + '/receive', { method: 'POST' }),
+    receive: (id, body) => request('/warehouses/transfers/' + id + '/receive', { method: 'POST', body }),
     cancelTransfer: (id, reason) =>
       request('/warehouses/transfers/' + id + '/cancel', { method: 'POST', body: { reason } }),
   },

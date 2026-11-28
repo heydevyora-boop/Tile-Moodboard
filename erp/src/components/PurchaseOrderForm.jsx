@@ -22,6 +22,14 @@ import { GST_TREATMENT } from '../data/purchaseStatus.js';
    authority.
    ============================================================ */
 
+/** Company › Collection › Product — Finish, Size, so a line is
+ *  picked by what it actually is, not by a SKU alone. */
+function hierarchyLabel(p) {
+  return [p.brand?.name, p.productHead?.name, p.productLine?.name ?? p.name]
+    .filter(Boolean).join(' › ')
+    + ' — ' + [p.finish, p.size].filter(Boolean).join(', ');
+}
+
 export default function PurchaseOrderForm({ onClose, onSaved }) {
   const [supplierId, setSupplierId] = useState('');
   const [warehouseId, setWarehouseId] = useState('');
@@ -270,10 +278,10 @@ export default function PurchaseOrderForm({ onClose, onSaved }) {
             <input id="po-sku" className="input" list="po-product-list" value={sku}
               onChange={(e) => setSku(e.target.value)} autoComplete="off" placeholder="DV-1001" />
             <datalist id="po-product-list">
-              {(matches.data?.rows ?? []).map((p) => <option key={p.id} value={p.sku}>{p.name}</option>)}
+              {(matches.data?.rows ?? []).map((p) => <option key={p.id} value={p.sku}>{hierarchyLabel(p)}</option>)}
             </datalist>
             <span className="tiny muted">
-              {chosen ? chosen.name : 'Type two characters to search.'}
+              {chosen ? hierarchyLabel(chosen) : 'Type two characters to search.'}
             </span>
           </div>
           <div className="field">

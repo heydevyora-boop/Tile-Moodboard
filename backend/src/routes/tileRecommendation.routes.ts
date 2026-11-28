@@ -2,7 +2,7 @@ import { Router } from 'express';
 import * as tileRecommendationController from '@controllers/tileRecommendation.controller';
 import { authenticate, requirePermission } from '@middlewares/auth';
 import { validate } from '@middlewares/validate';
-import { tileRecommendationsQuerySchema, listTilesQuerySchema } from '@validators/tileRecommendation.validators';
+import { tileRecommendationsQuerySchema, listTilesQuerySchema, tileStockQuerySchema } from '@validators/tileRecommendation.validators';
 
 const router = Router();
 
@@ -17,6 +17,12 @@ router.get('/recommendations', requirePermission('tiles:read'), validate(tileRec
 // size dropdown. Static path, so it is kept above '/' with the other
 // named routes.
 router.get('/sizes', requirePermission('tiles:read'), tileRecommendationController.listTileSizes);
+
+// Step 10: live ERP stock for a batch of SKUs the Catalog page is
+// about to render. Same permission as the rest of this router --
+// anyone who can browse tiles can already see every SKU this would
+// ask the ERP about. Static path, kept with the other named routes.
+router.get('/stock', requirePermission('tiles:read'), validate(tileStockQuerySchema, 'query'), tileRecommendationController.getTileStock);
 
 // Plain paginated/searchable tile browse for the Catalog page's Surface Archive.
 router.get('/', requirePermission('tiles:read'), validate(listTilesQuerySchema, 'query'), tileRecommendationController.listTiles);

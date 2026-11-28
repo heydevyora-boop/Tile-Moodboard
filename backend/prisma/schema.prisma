@@ -160,17 +160,81 @@ model PasswordResetToken {
 }
 
 model Brand {
-  id        String    @id @default(cuid())
-  name      String    @unique
-  slug      String    @unique
-  logoUrl   String?
-  isActive  Boolean   @default(true)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  catalogs  Catalog[]
-  tiles     Tile[]
+  id          String       @id @default(cuid())
+  name        String       @unique
+  slug        String       @unique
+  /// Optional short code, where the company has one. Distinct from slug
+  /// (which is derived from the name for URL/lookup use); code is whatever
+  /// external identifier the company itself goes by, if any.
+  code        String?
+  description String?
+  logoUrl     String?
+  isActive    Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  catalogs    Catalog[]
+  tiles       Tile[]
+  collections Collection[]
 
   @@map("brands")
+}
+
+/// THE COMMERCIAL GROUPING ABOVE A PRODUCT -- NOT THE SAME THING AS
+/// `Tile.collection`.
+///
+/// `Tile.collection` is free text written by the extraction and
+/// master-sheet sync pipelines (unchanged by this model); it is a
+/// *label* a tile happens to carry. This table is the actual entity:
+/// one row per real collection, scoped to the company it belongs to,
+/// so two companies can each have a collection called the same thing
+/// without becoming one collection. A tile's free-text label is
+/// resolved against this table (by company + normalized name) rather
+/// than this table being inferred from the label at read time.
+model Collection {
+  id                   String    @id @default(cuid())
+  name                 String
+  brandId              String
+  description          String?
+  coverImageUrl        String?
+  catalogueDocumentUrl String?
+  isActive             Boolean   @default(true)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  brand                Brand     @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  products              Product[]
+
+  @@index([brandId])
+  @@index([brandId, name])
+  @@map("collections")
+}
+
+/// THE PRODUCT LEVEL ABOVE A TILE.
+///
+/// A Tile is already one sellable finish x size variant (and, below
+/// that, its own colours and physical samples -- untouched by this
+/// model). This table is the thing several Tile rows are variants OF:
+/// "Onery Elite Decore" the product, of which "Matte / 600x1200" and
+/// "Glossy / 600x1200" are two Tile rows. category is a plain label,
+/// not a foreign key, because CASA has no existing category taxonomy
+/// for this and one is not being invented here.
+model Product {
+  id            String   @id @default(cuid())
+  name          String
+  code          String?
+  collectionId  String
+  description   String?
+  specifications String?
+  coverImageUrl String?
+  category      String?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  collection    Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  tiles         Tile[]
+
+  @@index([collectionId])
+  @@index([code])
+  @@map("products")
 }
 
 model Catalog {
@@ -207,12 +271,23 @@ model Tile {
   name           String
   brandId        String
   catalogId      String?
+  /// Nullable on purpose: every existing Tile row keeps working with no
+  /// product assigned, and assignment happens only through the backfill
+  /// tool or explicit product creation, never silently.
+  productId      String?
   size           String?
   finish         String?
   type           TileType           @default(BASE)
   colorTone      String?
   bestRoom       String?
   collection     String?
+  material       String?
+  thickness      String?
+  /// Not set anywhere in CASA today -- the separate ERP is the only
+  /// place price currently lives. Nullable and populated later, by
+  /// staff or a future ERP sync, never guessed or defaulted.
+  sellingPrice   Decimal?           @db.Decimal(14, 2)
+  unitOfMeasure  UnitOfMeasure?
   imageUrl       String?
   productCode    String?
   inStock        Boolean            @default(true)
@@ -229,9 +304,11 @@ model Tile {
   moodBoardTiles MoodBoardTile[]
   brand          Brand              @relation(fields: [brandId], references: [id], onDelete: Cascade)
   catalog        Catalog?           @relation(fields: [catalogId], references: [id])
+  product        Product?           @relation(fields: [productId], references: [id])
 
   @@index([brandId])
   @@index([catalogId])
+  @@index([productId])
   @@index([type])
   @@index([bestRoom])
   @@map("tiles")
@@ -703,6 +780,16 @@ enum TileType {
   BORDER
   ACCENT
   LARGE_FORMAT_BASE
+}
+
+/// What a price is per. Matches the ERP's own UnitOfMeasure enum
+/// exactly, so a future sync never has to translate between the two.
+enum UnitOfMeasure {
+  BOX
+  PIECE
+  SQFT
+  SQM
+  SET
 }
 
 enum RuleSection {

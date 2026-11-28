@@ -1,8 +1,24 @@
 import { Router } from 'express';
 import * as integrationsController from '@controllers/integrations.controller';
 import { authenticate, authorize } from '@middlewares/auth';
+import { validate } from '@middlewares/validate';
+import { erpAuth } from '@middlewares/erpAuth';
+import { erpCatalogFeedQuerySchema, catalogReadinessQuerySchema } from '@validators/catalogHierarchy.validators';
 
 const router = Router();
+
+/*
+ * PUBLIC (no CASA user session), same reasoning as the Google callback
+ * below: an external reader has no JWT to present. Gated instead by the
+ * x-erp-key shared secret -- see erpAuth.ts. Read-only; writes nothing,
+ * connects nowhere.
+ */
+router.get(
+  '/erp/catalog-feed',
+  erpAuth,
+  validate(erpCatalogFeedQuerySchema, 'query'),
+  integrationsController.getErpCatalogFeedHandler,
+);
 
 /*
  * PUBLIC, and before the guards below on purpose.
@@ -41,5 +57,28 @@ router.post('/google/disconnect', integrationsController.disconnectGoogleOAuth);
 router.post('/google/picker-token', integrationsController.getGooglePickerToken);
 router.get('/python-ai/status', integrationsController.getPythonAiStatus);
 router.post('/python-ai/test', integrationsController.testPythonAiConnection);
+
+/*
+ * OWNER-gated, same as every other status report above -- a human
+ * reviewing data quality before a future ERP sync, not the ERP itself.
+ * Read-only: validates and reconciles, never repairs or reassigns.
+ */
+router.get(
+  '/erp/catalog-readiness',
+  validate(catalogReadinessQuerySchema, 'query'),
+  integrationsController.getCatalogReadinessHandler,
+);
+
+/*
+ * Step 9, the other direction: OWNER-gated, same as every other
+ * report above -- a human reviewing what the ERP has against what
+ * CASA already has, before any future sync. Read-only: reads from
+ * the ERP over HTTP and from CASA's own database, writes to
+ * neither.
+ */
+router.get(
+  '/erp/catalog-preview',
+  integrationsController.getErpCatalogPreviewHandler,
+);
 
 export default router;

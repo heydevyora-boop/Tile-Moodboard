@@ -437,6 +437,53 @@ const envSchema = z.object({
   INTERNAL_SYNC_API_KEY:
     z.string().optional(),
 
+  // Shared secret an external reader (the ERP, or anything else) presents
+  // as the x-erp-key header on the read-only catalog export route.
+  // Deliberately separate from INTERNAL_SYNC_API_KEY above: that one lets
+  // the Python pipeline WRITE tiles in, this one only lets a reader pull
+  // the catalog OUT, and a leak of one should never also expose the
+  // other. Optional for the same reason -- unset, the route refuses
+  // every request rather than running unauthenticated (see erpAuth.ts).
+
+  ERP_EXPORT_API_KEY:
+    z.string().optional(),
+
+  // Step 9, the other direction: CASA reading company/collection/
+  // product-line/product/inventory data FROM the ERP's own
+  // /api/v1, through ERP's new /integrations/casa/catalog-feed
+  // route. The ERP binds to 127.0.0.1 by its own design (see
+  // erp/docs/API_REFERENCE.md §4/§9) and is reachable here only
+  // because both services run on the same host in this
+  // environment -- a real multi-host deployment would need that
+  // reconsidered, which this step does not do.
+  ERP_API_BASE_URL: z
+    .string()
+    .url()
+    .default(
+      'http://127.0.0.1:4310/api/v1',
+    ),
+
+  // Shared secret THIS backend presents as the x-casa-key header
+  // when calling the ERP -- the mirror of ERP_EXPORT_API_KEY
+  // above, for the opposite direction. Deliberately a separate
+  // secret: a leak of the key CASA hands out must never also
+  // expose the key CASA itself presents elsewhere. If left blank,
+  // the ERP integration is treated as not configured and every
+  // call reports unavailable rather than going out unauthenticated.
+  ERP_INTEGRATION_API_KEY:
+    z.string().optional(),
+
+  // How long CASA will wait for one ERP response before treating
+  // it as unavailable. The ERP is a live Postgres-backed read on
+  // every row of this call, not a cache, so a generous but bounded
+  // timeout matters more here than for a simple health check.
+  ERP_INTEGRATION_TIMEOUT_MS: z
+    .coerce
+    .number()
+    .int()
+    .positive()
+    .default(8000),
+
   // ==========================================================
   // PYTHON BRIDGE
   // ==========================================================

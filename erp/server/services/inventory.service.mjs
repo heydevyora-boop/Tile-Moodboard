@@ -33,6 +33,7 @@ const BALANCE_SELECT = {
       id: true, sku: true, name: true, uom: true, status: true, reorderLevel: true,
       brand: { select: { id: true, name: true } },
       collection: { select: { id: true, name: true } },
+      productLine: { select: { id: true, name: true, code: true } },
       category: { select: { id: true, name: true, code: true } },
     },
   },
@@ -58,6 +59,7 @@ function shapeBalance(b) {
     productStatus: b.product.status,
     brand: b.product.brand,
     productHead: b.product.collection,
+    productLine: b.product.productLine,
     category: b.product.category,
     warehouse: b.warehouse,
     physical: onHand,
@@ -77,7 +79,7 @@ function shapeBalance(b) {
 
 export async function listStock(query = {}) {
   const {
-    search, warehouseId, brandId, categoryId, headId,
+    search, warehouseId, brandId, categoryId, headId, productLineId,
     lowOnly, outOnly, damagedOnly,
     sortBy = 'sku', sortDir = 'asc', page = 1, pageSize = 50,
   } = query;
@@ -93,6 +95,7 @@ export async function listStock(query = {}) {
       ...(brandId ? { brandId } : {}),
       ...(categoryId ? { categoryId } : {}),
       ...(headId ? { collectionId: headId } : {}),
+      ...(productLineId ? { productLineId } : {}),
       ...(search
         ? {
           OR: [
@@ -100,6 +103,7 @@ export async function listStock(query = {}) {
             { name: { contains: search, mode: 'insensitive' } },
             { brand: { name: { contains: search, mode: 'insensitive' } } },
             { collection: { name: { contains: search, mode: 'insensitive' } } },
+            { productLine: { name: { contains: search, mode: 'insensitive' } } },
           ],
         }
         : {}),
@@ -149,6 +153,163 @@ export async function companyTotals() {
     damaged: Number(row.damaged),
     available: Number(row.available),
   };
+}
+
+/* ── the hierarchy drill-down ─────────────────────────────── */
+/*
+   Company and collection stock totals are a SUM over the child
+   variants' own InventoryBalance rows, computed on every read --
+   never a stored, independently-editable figure. A brand or a
+   collection does not have a stock balance of its own; it only
+   ever has what its variants have, added up.
+*/
+
+async function aggregateStock(where) {
+  const agg = await prisma.inventoryBalance.aggregate({
+    where,
+    _sum: { quantityOnHand: true, quantityReserved: true, quantityDamaged: true, quantityInTransit: true },
+  });
+  const onHand = Number(agg._sum.quantityOnHand ?? 0);
+  const reserved = Number(agg._sum.quantityReserved ?? 0);
+  const damaged = Number(agg._sum.quantityDamaged ?? 0);
+  const inTransit = Number(agg._sum.quantityInTransit ?? 0);
+  return { physical: onHand, reserved, damaged, inTransit, available: onHand - reserved - damaged };
+}
+
+/** The top of the drill-down: every brand, with its own stock total. */
+export async function stockHierarchy() {
+  const brands = await prisma.brand.findMany({
+    where: { isActive: true },
+    select: { id: true, name: true, code: true },
+    orderBy: { name: 'asc' },
+  });
+  return {
+    rows: await Promise.all(brands.map(async (b) => ({
+      ...b,
+      totals: await aggregateStock({ product: { brandId: b.id } }),
+    }))),
+  };
+}
+
+/** Step 1: a company, its total stock, and its collections' own totals. */
+export async function companyStock(brandId) {
+  const brand = await prisma.brand.findUnique({ where: { id: brandId }, select: { id: true, name: true, code: true } });
+  if (!brand) throw new NotFoundError('Brand');
+
+  const [totals, collectionRows, unassignedTotals, unassignedCount] = await Promise.all([
+    aggregateStock({ product: { brandId } }),
+    prisma.collection.findMany({ where: { brandId }, select: { id: true, name: true, code: true }, orderBy: { name: 'asc' } }),
+    aggregateStock({ product: { brandId, collectionId: null } }),
+    prisma.productLine.count({ where: { brandId, collectionId: null } }),
+  ]);
+
+  const collections = await Promise.all(collectionRows.map(async (c) => ({
+    ...c,
+    totals: await aggregateStock({ product: { brandId, collectionId: c.id } }),
+    productCount: await prisma.productLine.count({ where: { collectionId: c.id } }),
+  })));
+
+  return {
+    brand,
+    totals,
+    collections,
+    // Products with no collection assigned still belong to this
+    // brand's stock total above; listed separately so nothing is
+    // silently missing from the drill-down.
+    unassigned: { totals: unassignedTotals, productCount: unassignedCount },
+  };
+}
+
+/** Step 2: a collection, its total stock, and its products' own totals. */
+export async function collectionStock(collectionId) {
+  const collection = await prisma.collection.findUnique({
+    where: { id: collectionId },
+    select: { id: true, name: true, code: true, brand: { select: { id: true, name: true } } },
+  });
+  if (!collection) throw new NotFoundError('Collection');
+
+  const [totals, lineRows, unassignedTotals, unassignedCount] = await Promise.all([
+    aggregateStock({ product: { collectionId } }),
+    prisma.productLine.findMany({ where: { collectionId }, select: { id: true, name: true, code: true }, orderBy: { name: 'asc' } }),
+    aggregateStock({ product: { collectionId, productLineId: null } }),
+    prisma.product.count({ where: { collectionId, productLineId: null, archivedAt: null } }),
+  ]);
+
+  const products = await Promise.all(lineRows.map(async (p) => ({
+    ...p,
+    totals: await aggregateStock({ product: { productLineId: p.id } }),
+    variantCount: await prisma.product.count({ where: { productLineId: p.id, archivedAt: null } }),
+  })));
+
+  return {
+    collection,
+    totals,
+    products,
+    // Variants under this collection that have not been grouped
+    // into a product yet -- still counted in the total above.
+    unassigned: { totals: unassignedTotals, variantCount: unassignedCount },
+  };
+}
+
+/** Step 3: a product, its total stock, and each variant's own totals. */
+export async function productLineStock(productLineId) {
+  const line = await prisma.productLine.findUnique({
+    where: { id: productLineId },
+    select: { id: true, name: true, code: true, brand: { select: { id: true, name: true } }, collection: { select: { id: true, name: true } } },
+  });
+  if (!line) throw new NotFoundError('Product');
+
+  const [totals, variantRows] = await Promise.all([
+    aggregateStock({ product: { productLineId } }),
+    prisma.product.findMany({
+      where: { productLineId, archivedAt: null },
+      select: { id: true, sku: true, finish: true, size: true, colour: true, status: true },
+      orderBy: [{ finish: 'asc' }, { size: 'asc' }],
+    }),
+  ]);
+
+  const variants = await Promise.all(variantRows.map(async (v) => ({
+    ...v,
+    totals: await aggregateStock({ productId: v.id }),
+  })));
+
+  return { productLine: line, totals, variants };
+}
+
+/**
+ * Step 10: batch stock lookup BY SKU ALONE -- the one thing CASA's
+ * website stock display is allowed to ask for, never a product name
+ * or an ERP internal id. Matches case-insensitively (the Product.sku
+ * unique constraint is case-sensitive; callers may not know the
+ * stored casing), but every returned row's `sku` field echoes back
+ * exactly what was requested, not the normalized form, so a caller
+ * can map results back to its own request without re-normalizing.
+ *
+ * One row per distinct requested SKU, always, so a caller never has
+ * to guess whether a missing row meant "not found" or "dropped":
+ * `found: false` when this ERP has no Product with that SKU at all;
+ * `found: true` with `totals` (same five dimensions as every other
+ * stock read in this file) when it does. Capped at 200 per call --
+ * far more than one catalog page or one product's variant list ever
+ * needs, and a hard stop against an unbounded request.
+ */
+export async function stockBySkus(skus) {
+  const requested = [...new Set((skus || []).map((s) => String(s ?? '').trim()).filter(Boolean))].slice(0, 200);
+  if (requested.length === 0) return [];
+
+  const normalized = requested.map((s) => s.toUpperCase());
+  const products = await prisma.product.findMany({
+    where: { sku: { in: normalized }, archivedAt: null },
+    select: { id: true, sku: true, status: true },
+  });
+  const byNormalizedSku = new Map(products.map((p) => [p.sku.toUpperCase(), p]));
+
+  return Promise.all(requested.map(async (sku) => {
+    const product = byNormalizedSku.get(sku.toUpperCase());
+    if (!product) return { sku, found: false };
+    const totals = await aggregateStock({ productId: product.id });
+    return { sku, found: true, productId: product.id, status: product.status, totals };
+  }));
 }
 
 /** Everything the inventory dashboard shows, from the database. */

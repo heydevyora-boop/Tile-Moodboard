@@ -31,6 +31,10 @@ export const updateExtractedTileSchema = z
     bestRoom: z.string().trim().optional().nullable(),
     collection: z.string().trim().optional().nullable(),
     productCode: z.string().trim().optional().nullable(),
+    material: z.string().trim().max(120).optional().nullable(),
+    thickness: z.string().trim().max(60).optional().nullable(),
+    sellingPrice: z.coerce.number().positive().optional().nullable(),
+    unitOfMeasure: z.enum(['BOX', 'PIECE', 'SQFT', 'SQM', 'SET']).optional().nullable(),
     inStock: z.boolean().optional(),
   })
   .refine((data) => Object.keys(data).length > 0, { message: 'Provide at least one field to update' });

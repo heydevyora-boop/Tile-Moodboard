@@ -3,6 +3,7 @@ import { markApiVersion, translateLegacyQueryParams, wrapJsonEnvelope } from '..
 
 import brands from './brands.mjs';
 import productHeads from './productHeads.mjs';
+import productLines from './productLines.mjs';
 import products from './products.mjs';
 import reference from './reference.mjs';
 import imports from './imports.mjs';
@@ -12,6 +13,7 @@ import purchase from './purchase.mjs';
 import sales from './sales.mjs';
 import dashboard from './dashboard.mjs';
 import parties from './parties.mjs';
+import casaIntegration from './casaIntegration.mjs';
 
 /* ============================================================
    /api/v1 — THE STANDARDIZED SURFACE
@@ -39,6 +41,12 @@ import parties from './parties.mjs';
    outright; they have no legacy counterpart and so exist only
    here, built with the full routes/controllers/validators split
    the brief asks for on anything genuinely new.
+
+   casaIntegration.mjs (step 9) is a third such v1-only module, for
+   a different reason: it is not a screen for a person, it is the
+   one surface a SEPARATE service (CASA's own backend) calls, gated
+   by its own shared secret rather than requirePermission() or the
+   x-erp-user placeholder. See server/middleware/casaAuth.mjs.
    ============================================================ */
 
 const router = Router();
@@ -49,6 +57,7 @@ router.use(wrapJsonEnvelope);
 
 router.use('/brands', brands);
 router.use('/product-heads', productHeads);
+router.use('/product-lines', productLines);
 router.use('/products', products);
 router.use('/reference', reference);
 router.use('/imports', imports);
@@ -58,5 +67,6 @@ router.use('/', purchase);
 router.use('/', sales);
 router.use('/', dashboard);
 router.use('/', parties);
+router.use('/integrations/casa', casaIntegration);
 
 export default router;

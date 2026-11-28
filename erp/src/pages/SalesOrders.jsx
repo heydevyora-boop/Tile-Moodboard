@@ -408,6 +408,14 @@ function ReservationPanel({ order, onClose, onDone }) {
    RAISING A SALES ORDER
    ============================================================ */
 
+/** Company › Collection › Product — Finish, Size, so a line is
+ *  picked by what it actually is, not by a SKU alone. */
+function hierarchyLabel(p) {
+  return [p.brand?.name, p.productHead?.name, p.productLine?.name ?? p.name]
+    .filter(Boolean).join(' › ')
+    + ' — ' + [p.finish, p.size].filter(Boolean).join(', ');
+}
+
 function SalesOrderForm({ onClose, onSaved }) {
   const [customerId, setCustomerId] = useState('');
   const [warehouseId, setWarehouseId] = useState('');
@@ -570,8 +578,8 @@ function SalesOrderForm({ onClose, onSaved }) {
           <div className="field">
             <label htmlFor="so-sku">Product code</label>
             <input id="so-sku" className="input" list="so-product-list" value={sku} onChange={(e) => setSku(e.target.value)} autoComplete="off" placeholder="DV-1001" />
-            <datalist id="so-product-list">{(matches.data?.rows ?? []).map((p) => <option key={p.id} value={p.sku}>{p.name}</option>)}</datalist>
-            <span className="tiny muted">{chosen ? chosen.name : 'Type two characters to search.'}</span>
+            <datalist id="so-product-list">{(matches.data?.rows ?? []).map((p) => <option key={p.id} value={p.sku}>{hierarchyLabel(p)}</option>)}</datalist>
+            <span className="tiny muted">{chosen ? hierarchyLabel(chosen) : 'Type two characters to search.'}</span>
           </div>
           <div className="field"><label htmlFor="so-qty">Quantity</label>
             <input id="so-qty" className="input" type="number" min="0.001" step="0.001" value={quantity} onChange={(e) => setQuantity(e.target.value)} /></div>

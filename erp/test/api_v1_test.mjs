@@ -97,6 +97,10 @@ async function main() {
     ['/sales-returns', 'sales returns'], ['/customer-payments', 'customer payments'],
     ['/sales-dashboard', 'sales dashboard'], ['/dashboard/summary', 'combined dashboard'],
     ['/parties', 'parties'],
+    // Added by the product hierarchy step, after step 8 itself --
+    // mounted the same way (same router, same v1 wrapping) but
+    // never smoke-tested here until now.
+    ['/product-lines', 'product lines'], ['/inventory/hierarchy', 'inventory hierarchy'],
   ];
   for (const [path, label] of smoke) {
     const r = await call('GET', path, { actor: ADMIN });
@@ -104,6 +108,44 @@ async function main() {
       r.status === 200 && r.json?.success === true && 'data' in r.json && 'meta' in r.json,
       { status: r.status, body: r.json });
   }
+
+  console.log('\n1b. the hierarchy drill-down and product-line detail routes');
+
+  // A fresh test database has no product lines of its own --
+  // Stage 1's backfill is a one-time script against the
+  // development database's existing data, not part of the seed
+  // every disposable test database gets. So this section creates
+  // one through the write path first, exercising it too.
+  const createdProductLine = await call('POST', '/product-lines', {
+    actor: MANAGER,
+    body: { name: 'API Test Hierarchy Product', brandId: product.brand.id },
+  });
+  check('1b. creating a product line answers 201 in the envelope',
+    createdProductLine.status === 201 && createdProductLine.json.data.brand?.id === product.brand.id,
+    createdProductLine.json);
+  const productLine = createdProductLine.json.data;
+
+  const plDetail = await call('GET', '/product-lines/' + productLine.id, { actor: ADMIN });
+  check('1b. GET /product-lines/:id answers 200 in the envelope',
+    plDetail.status === 200 && plDetail.json.data.id === productLine.id, plDetail.json);
+
+  const companyStock = await call('GET', '/inventory/companies/' + productLine.brand.id, { actor: ADMIN });
+  check('1b. GET /inventory/companies/:id answers 200 in the envelope',
+    companyStock.status === 200 && companyStock.json.data?.brand?.id === productLine.brand.id, companyStock.json);
+
+  if (productLine.collection?.id) {
+    const collectionStock = await call('GET', '/inventory/collections/' + productLine.collection.id, { actor: ADMIN });
+    check('1b. GET /inventory/collections/:id answers 200 in the envelope',
+      collectionStock.status === 200 && collectionStock.json.data?.collection?.id === productLine.collection.id, collectionStock.json);
+  }
+
+  const productLineStock = await call('GET', '/inventory/products/' + productLine.id, { actor: ADMIN });
+  check('1b. GET /inventory/products/:id answers 200 in the envelope',
+    productLineStock.status === 200 && productLineStock.json.data?.productLine?.id === productLine.id, productLineStock.json);
+
+  const noSuchCompanyStock = await call('GET', '/inventory/companies/00000000-0000-0000-0000-000000000000', { actor: ADMIN });
+  check('1b. a company id that does not exist answers 404, not a raw exception',
+    noSuchCompanyStock.status === 404, noSuchCompanyStock.json);
 
   console.log('\n2. request validation');
 
@@ -180,6 +222,7 @@ async function main() {
     actor: MANAGER, body: { name: 'API Test Overflow Warehouse' },
   });
   check('5e. a manager CAN create a warehouse', managerCanCreateWarehouse.status === 201, managerCanCreateWarehouse.json);
+  const secondWarehouse = managerCanCreateWarehouse.json.data;
 
   console.log('\n6. invalid identity');
 
@@ -301,6 +344,216 @@ async function main() {
     process.env.ERP_DATABASE_URL.includes(DB));
   check('15b. no code path in this suite imports anything about the CASA website database',
     true); // structural guarantee: this file imports only server/app.mjs and db/client.mjs
+
+  console.log('\n16. the full warehouse-transfer lifecycle over real HTTP, including partial receipt');
+
+  // Enough stock at the source for everything this section moves,
+  // regardless of what earlier sections already drew down.
+  await call('POST', '/inventory/inward', {
+    actor: STORE,
+    body: { product: product.sku, warehouseId: warehouse.id, quantity: 100, idempotencyKey: 'transfer-section-stock' },
+  });
+
+  const createdTransfer = await call('POST', '/warehouses/transfers', {
+    actor: MANAGER,
+    body: {
+      fromWarehouseId: warehouse.id, toWarehouseId: secondWarehouse.id,
+      lines: [{ productId: product.id, quantity: 10, uom: 'BOX' }],
+    },
+  });
+  check('16a. creating a transfer answers 201 in the envelope',
+    createdTransfer.status === 201 && createdTransfer.json.data.status === 'DRAFT', createdTransfer.json);
+  const transferId = createdTransfer.json.data.id;
+  const transferLineId = createdTransfer.json.data.lines[0].id;
+
+  const dispatched = await call('POST', '/warehouses/transfers/' + transferId + '/dispatch', { actor: STORE });
+  check('16b. dispatch moves it to IN_TRANSIT', dispatched.status === 200 && dispatched.json.data.status === 'IN_TRANSIT',
+    dispatched.json);
+
+  // A PARTIAL receipt: 6 accepted, 2 damaged, leaving 2 outstanding
+  // -- the body shape added after step 8, never exercised over
+  // real HTTP by this suite until now.
+  const partialReceive = await call('POST', '/warehouses/transfers/' + transferId + '/receive', {
+    actor: STORE,
+    body: { lines: [{ transferLineId, acceptedQuantity: 6, damagedQuantity: 2, remarks: 'corner crushed' }] },
+  });
+  check('16c. a partial receipt with a damaged quantity answers 200 in the v1 envelope',
+    partialReceive.status === 200
+    && partialReceive.json.success === true && 'data' in partialReceive.json && 'meta' in partialReceive.json,
+    partialReceive.json);
+  check('16d. the transfer stays IN_TRANSIT -- 2 is still outstanding',
+    partialReceive.json.data.status === 'IN_TRANSIT', partialReceive.json.data);
+  const lineAfterPartial = partialReceive.json.data.lines[0];
+  check('16e. the response carries acceptedQuantity/damagedQuantity/missingQuantity/outstandingQuantity',
+    lineAfterPartial.acceptedQuantity === 6 && lineAfterPartial.damagedQuantity === 2
+    && lineAfterPartial.missingQuantity === 0 && lineAfterPartial.outstandingQuantity === 2,
+    lineAfterPartial);
+
+  // Cancellation must now be refused -- something has already been
+  // accepted and damaged on this transfer.
+  const cancelAfterPartial = await call('POST', '/warehouses/transfers/' + transferId + '/cancel', {
+    actor: STORE, body: { reason: 'trying anyway' },
+  });
+  check('16f. cancelling a partially-received transfer is refused with a controlled 409, not a 500',
+    cancelAfterPartial.status === 409 && cancelAfterPartial.json.success === false, cancelAfterPartial.json);
+
+  // Resolve the remainder as missing, with its mandatory reason --
+  // completes the transfer and shows up in movement.missing.
+  const missingReceive = await call('POST', '/warehouses/transfers/' + transferId + '/receive', {
+    actor: STORE,
+    body: { lines: [{ transferLineId, missingQuantity: 2, missingReason: 'short on arrival, logged with the lorry driver' }] },
+  });
+  check('16g. resolving the rest as missing completes the transfer',
+    missingReceive.status === 200 && missingReceive.json.data.status === 'COMPLETED', missingReceive.json.data);
+  const missingReasonCheckTransfer = await call('POST', '/warehouses/transfers', {
+    actor: MANAGER,
+    body: { fromWarehouseId: warehouse.id, toWarehouseId: secondWarehouse.id, lines: [{ productId: product.id, quantity: 1 }] },
+  });
+  const missingReasonCheckDispatch = await call(
+    'POST', '/warehouses/transfers/' + missingReasonCheckTransfer.json.data.id + '/dispatch', { actor: STORE },
+  );
+  const missingNoReason = await call(
+    'POST', '/warehouses/transfers/' + missingReasonCheckTransfer.json.data.id + '/receive',
+    {
+      actor: STORE,
+      body: { lines: [{ transferLineId: missingReasonCheckDispatch.json.data.lines[0].id, missingQuantity: 1 }] },
+    },
+  );
+  check('16h. a missing quantity with no reason is rejected with 422, not posted',
+    missingNoReason.status === 422, missingNoReason.json);
+
+  const getTransferDetail = await call('GET', '/warehouses/transfers/' + transferId, { actor: ADMIN });
+  check('16i. the completed transfer\'s movement summary reports the missing quantity',
+    getTransferDetail.json.data.movement?.missing === 2, getTransferDetail.json.data.movement);
+
+  // An untouched transfer -- nothing dispatched, nothing received
+  // -- must still be freely cancellable, exactly as before.
+  const untouchedTransfer = await call('POST', '/warehouses/transfers', {
+    actor: MANAGER,
+    body: { fromWarehouseId: warehouse.id, toWarehouseId: secondWarehouse.id, lines: [{ productId: product.id, quantity: 1 }] },
+  });
+  const cancelUntouched = await call('POST', '/warehouses/transfers/' + untouchedTransfer.json.data.id + '/cancel', {
+    actor: STORE, body: {},
+  });
+  check('16j. an untouched transfer can still be cancelled -- existing behaviour preserved',
+    cancelUntouched.status === 200 && cancelUntouched.json.data.status === 'CANCELLED', cancelUntouched.json);
+
+  console.log('\n17. the CASA integration route (step 9) is gated by its own shared secret, fails closed');
+
+  // Unset for the whole suite until now (the npm script never
+  // configures it) -- exactly the state a real deployment that has
+  // not set up the CASA integration yet would be in.
+  check('17a. unconfigured: the route refuses even a request with no key header at all',
+    (await call('GET', '/integrations/casa/catalog-feed', { actor: ADMIN })).status === 403);
+
+  const wrongKeyUnconfigured = await fetch(BASE + '/api/v1/integrations/casa/catalog-feed', {
+    headers: { 'x-casa-key': 'anything-at-all' },
+  });
+  check('17b. unconfigured: even presenting A key is refused -- fails closed, not open-if-any-key',
+    wrongKeyUnconfigured.status === 403);
+
+  process.env.CASA_INTEGRATION_API_KEY = 'test-only-casa-key-for-api-v1-suite';
+
+  const noKeyConfigured = await fetch(BASE + '/api/v1/integrations/casa/catalog-feed');
+  check('17c. configured: a request with no key at all is still refused',
+    noKeyConfigured.status === 403);
+
+  const wrongKeyConfigured = await fetch(BASE + '/api/v1/integrations/casa/catalog-feed', {
+    headers: { 'x-casa-key': 'not-the-right-key' },
+  });
+  check('17d. configured: the wrong key is refused', wrongKeyConfigured.status === 403);
+
+  const rightKey = await fetch(BASE + '/api/v1/integrations/casa/catalog-feed?pageSize=1', {
+    headers: { 'x-casa-key': process.env.CASA_INTEGRATION_API_KEY },
+  });
+  const rightKeyJson = await rightKey.json();
+  check('17e. configured: the correct key succeeds, in the ordinary v1 list envelope',
+    rightKey.status === 200 && rightKeyJson.success === true
+    && Array.isArray(rightKeyJson.data) && typeof rightKeyJson.meta.totalRecords === 'number',
+    rightKeyJson);
+  check('17f. each row carries company/collection/productLine/variants with per-variant inventory',
+    rightKeyJson.data.length > 0
+    && rightKeyJson.data[0].company?.id
+    && 'collection' in rightKeyJson.data[0]
+    && rightKeyJson.data[0].productLine?.id
+    && Array.isArray(rightKeyJson.data[0].variants)
+    && (rightKeyJson.data[0].variants.length === 0 || 'onHand' in rightKeyJson.data[0].variants[0].inventory),
+    rightKeyJson.data[0]);
+
+  check('17g. this route requires no x-erp-user and no requirePermission() check -- the shared secret is the whole gate',
+    true); // structural guarantee, confirmed by reading server/routes/casaIntegration.mjs: only requireCasaKey is applied
+
+  delete process.env.CASA_INTEGRATION_API_KEY;
+
+  console.log('\n18. the CASA stock-by-SKU route (step 10 website stock display)');
+
+  // Ground truth: whatever this suite's cumulative mutations have left
+  // `product`'s balance at, read through the ERP's own authenticated
+  // view. The new route aggregates across EVERY warehouse (the same
+  // aggregateStock() every other drill-down in this file uses) -- and
+  // by this point in the suite there are two (section 16 created its
+  // own transfer-destination warehouse), so the ground truth here
+  // must sum every matching row too, not just take the first.
+  const groundTruthRows = (await call('GET', '/inventory?search=' + encodeURIComponent(product.sku), { actor: ADMIN }))
+    .json.data.filter((r) => r.sku === product.sku);
+  const groundTruth = groundTruthRows.reduce((acc, r) => ({
+    physical: acc.physical + r.physical,
+    reserved: acc.reserved + r.reserved,
+    damaged: acc.damaged + r.damaged,
+    inTransit: acc.inTransit + r.inTransit,
+    available: acc.available + r.available,
+  }), { physical: 0, reserved: 0, damaged: 0, inTransit: 0, available: 0 });
+  check('18a. precondition: the ground-truth balance for this SKU is readable', groundTruthRows.length > 0, groundTruthRows);
+
+  check('18b. unconfigured: /stock is gated exactly like /catalog-feed, refused with no key at all',
+    (await fetch(BASE + '/api/v1/integrations/casa/stock?skus=' + product.sku)).status === 403);
+
+  process.env.CASA_INTEGRATION_API_KEY = 'test-only-casa-key-for-api-v1-suite';
+  const casaKeyHeader = { 'x-casa-key': process.env.CASA_INTEGRATION_API_KEY };
+
+  check('18c. configured: still refused with no key', (await fetch(BASE + '/api/v1/integrations/casa/stock?skus=' + product.sku)).status === 403);
+
+  const lowerCaseSku = product.sku.toLowerCase();
+  const garbageSku = 'NO-SUCH-SKU-EVER-SEEDED-404';
+  const batchRes = await fetch(
+    BASE + '/api/v1/integrations/casa/stock?skus='
+    // The real SKU requested in two different cases, a SKU that was
+    // never seeded, and an EXACT duplicate of the lower-cased one --
+    // three distinct strings plus one repeat.
+    + encodeURIComponent([lowerCaseSku, garbageSku, product.sku, lowerCaseSku].join(',')),
+    { headers: casaKeyHeader },
+  );
+  const batchJson = await batchRes.json();
+  check('18d. a mixed batch answers 200 in the ordinary v1 envelope', batchRes.status === 200 && batchJson.success === true, batchJson);
+  check('18e. three rows for three distinct requested strings -- the exact repeat collapses, two different casings of the same SKU do not',
+    Array.isArray(batchJson.data) && batchJson.data.length === 3, batchJson.data);
+
+  const lowerRow = batchJson.data.find((r) => r.sku === lowerCaseSku);
+  const upperRow = batchJson.data.find((r) => r.sku === product.sku);
+  check('18f. each row echoes back the EXACT casing requested, not a normalized form',
+    Boolean(lowerRow) && Boolean(upperRow), batchJson.data);
+  check('18g. matching is case-insensitive: the lower-cased request still resolves to the real product',
+    lowerRow?.found === true && Boolean(lowerRow?.productId) && lowerRow.productId === upperRow?.productId,
+    { lowerRow, upperRow });
+  check('18h. the matched totals agree with the ERP\'s own authenticated inventory view -- same five dimensions',
+    lowerRow
+    && lowerRow.totals.physical === groundTruth.physical
+    && lowerRow.totals.reserved === groundTruth.reserved
+    && lowerRow.totals.damaged === groundTruth.damaged
+    && lowerRow.totals.inTransit === groundTruth.inTransit
+    && lowerRow.totals.available === groundTruth.available,
+    { lowerRow, groundTruth });
+
+  const unmatchedRow = batchJson.data.find((r) => r.sku === garbageSku);
+  check('18i. a SKU this ERP has never seeded answers found:false, never a fabricated zero',
+    unmatchedRow?.found === false && !('totals' in unmatchedRow), unmatchedRow);
+
+  const emptyRes = await fetch(BASE + '/api/v1/integrations/casa/stock?skus=', { headers: casaKeyHeader });
+  const emptyJson = await emptyRes.json();
+  check('18j. an empty skus param answers 200 with an empty list, not an error',
+    emptyRes.status === 200 && Array.isArray(emptyJson.data) && emptyJson.data.length === 0, emptyJson);
+
+  delete process.env.CASA_INTEGRATION_API_KEY;
 }
 
 try {

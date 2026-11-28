@@ -75,6 +75,7 @@ router.get('/', handler(async (req, res) => {
     brandId: q.brandId || undefined,
     categoryId: q.categoryId || undefined,
     headId: q.headId || undefined,
+    productLineId: q.productLineId || undefined,
     lowOnly: q.lowOnly === 'true',
     outOnly: q.outOnly === 'true',
     damagedOnly: q.damagedOnly === 'true',
@@ -91,6 +92,26 @@ router.get('/dashboard', handler(async (_req, res) => {
 
 router.get('/totals', handler(async (_req, res) => {
   res.json(await inventory.companyTotals());
+}));
+
+/* THE HIERARCHY DRILL-DOWN. Every figure here is a SUM over the
+   SKU-level InventoryBalance rows the ledger already maintains --
+   there is no second stock total stored anywhere, company or
+   collection included. */
+router.get('/hierarchy', handler(async (_req, res) => {
+  res.json(await inventory.stockHierarchy());
+}));
+
+router.get('/companies/:id', handler(async (req, res) => {
+  res.json(await inventory.companyStock(req.params.id));
+}));
+
+router.get('/collections/:id', handler(async (req, res) => {
+  res.json(await inventory.collectionStock(req.params.id));
+}));
+
+router.get('/products/:id', handler(async (req, res) => {
+  res.json(await inventory.productLineStock(req.params.id));
 }));
 
 /** The stock card: every movement, with the balance it produced. */

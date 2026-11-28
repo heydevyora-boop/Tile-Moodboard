@@ -2165,6 +2165,60 @@
         meta:
           r.meta
       }));
+    },
+
+    /**
+     * Step 10: live ERP stock for a batch of SKUs (Tile.productCode).
+     * Resolves to a map `{ [sku]: { state, quantity? } }` -- never
+     * rejects for an ERP problem (that is a per-SKU `state`, see the
+     * backend's erpStock.service.ts), only for a real request
+     * failure (session expired, network down to our OWN backend),
+     * which the caller should treat the same as any other ApiError.
+     */
+    stock(skus) {
+      if (!skus || skus.length === 0) {
+        return Promise.resolve({});
+      }
+      return apiFetch(
+        `/tiles/stock${qs({ skus: skus.join(',') })}`
+      ).then((r) => r.data.stock);
+    }
+  };
+
+  // ============================================================
+  // CATALOG HIERARCHY — Company (Brand) / Collection / Product,
+  // the levels above a Tile. Companies/collections browsing uses the
+  // same read access as the rest of the catalog; this namespace does
+  // not touch the ERP in any way.
+  // ============================================================
+
+  const companies = {
+    list(params) {
+      return apiFetch(`/companies${qs(params)}`).then((r) => r.data.companies);
+    },
+    get(id) {
+      return apiFetch(`/companies/${id}`).then((r) => r.data.company);
+    }
+  };
+
+  const collections = {
+    list(params) {
+      return apiFetch(`/collections${qs(params)}`).then((r) => ({ collections: r.data.collections, meta: r.meta }));
+    },
+    get(id) {
+      return apiFetch(`/collections/${id}`).then((r) => r.data.collection);
+    }
+  };
+
+  const products = {
+    list(params) {
+      return apiFetch(`/products${qs(params)}`).then((r) => ({ products: r.data.products, meta: r.meta }));
+    },
+    get(id) {
+      return apiFetch(`/products/${id}`).then((r) => r.data.product);
+    },
+    resolveVariant(id, finish, size) {
+      return apiFetch(`/products/${id}/resolve-variant${qs({ finish, size })}`).then((r) => r.data.tile);
     }
   };
 
@@ -4150,6 +4204,12 @@ const ai = {
     samples,
 
     tiles,
+
+    companies,
+
+    collections,
+
+    products,
 
     printBoards,
 

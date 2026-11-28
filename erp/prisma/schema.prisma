@@ -125,6 +125,15 @@ enum StockMovementType {
   DAMAGE
   DAMAGE_RECOVERY
 
+  // ── movements that change IN-TRANSIT stock ──────────────
+  // Held against the DESTINATION warehouse while stock is on its
+  // way. TRANSFER_LOSS writes off a quantity that was dispatched
+  // but never arrives and is never going to -- posted only
+  // through an explicit, reasoned resolution of a transfer
+  // receipt, never automatically.
+  TRANSFER_LOSS
+  TRANSFER_LOSS_REVERSAL
+
   // NO "REVERSAL" MEMBER, DELIBERATELY.
   //
   // A reversal is the OPPOSITE movement, carrying
@@ -155,6 +164,10 @@ enum StockMovementReason {
   /// the order is dispatched or cancelled.
   RESERVATION
   RESERVATION_RELEASE
+  /// Dispatched on a transfer but never arrived, written off
+  /// through an explicit, reasoned resolution -- never guessed or
+  /// posted automatically.
+  TRANSFER_LOSS
   OTHER
 }
 
@@ -467,6 +480,8 @@ model User {
   createdProducts      Product[]            @relation("ProductCreatedBy")
   updatedProducts      Product[]            @relation("ProductUpdatedBy")
   archivedProducts     Product[]            @relation("ProductArchivedBy")
+  createdProductLines  ProductLine[]        @relation("ProductLineCreatedBy")
+  updatedProductLines  ProductLine[]        @relation("ProductLineUpdatedBy")
   uploadedImages       ProductImage[]
   stockEntries         StockLedgerEntry[]
   adjustments          StockAdjustment[]
@@ -559,11 +574,18 @@ model Brand {
   name     String  @unique
   isActive Boolean @default(true)
 
+  /// Additive, step "product hierarchy": the brief's Company fields
+  /// beyond name/code/status. Nullable because every brand created
+  /// before this step has neither.
+  logoUrl     String?
+  description String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  products    Product[]
-  collections Collection[]
+  products     Product[]
+  collections  Collection[]
+  productLines ProductLine[]
 
   @@index([isActive])
   @@map("brands")
@@ -599,17 +621,93 @@ model Collection {
   description String?
   isActive Boolean @default(true)
 
+  /// Additive, step "product hierarchy": the brief's Collection
+  /// fields beyond name/code/description/status. Nullable because
+  /// every collection created before this step has neither.
+  coverImageUrl        String?
+  catalogueDocumentUrl String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  brand    Brand            @relation(fields: [brandId], references: [id], onDelete: Restrict)
-  category ProductCategory? @relation(fields: [categoryId], references: [id], onDelete: Restrict)
-  products Product[]
+  brand        Brand            @relation(fields: [brandId], references: [id], onDelete: Restrict)
+  category     ProductCategory? @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  products     Product[]
+  productLines ProductLine[]
 
   @@unique([brandId, code])
   @@index([brandId])
   @@index([categoryId])
   @@map("collections")
+}
+
+/// THE PRODUCT, AS ITS OWN ROW — ADDED BY THE "PRODUCT HIERARCHY"
+/// STEP. Before this, "Onery Elite Decore" existed only as a name
+/// string repeated across three sibling `Product` rows (Matte
+/// 600x1200, Glossy 600x1200, Matte 800x1600) -- nothing had an id
+/// of its own to hold a shared description, specification sheet or
+/// cover image, and nothing stopped three unrelated rows that
+/// happen to share a name from being mistaken for one product.
+///
+/// NAMING. This table is `product_lines` precisely so it does NOT
+/// collide with the existing `Product` model/table, which keeps
+/// meaning exactly what it has always meant since step 3: one
+/// sellable SKU, with its own finish, size and colour. The brief's
+/// own vocabulary calls both of these "Product" (the line AND the
+/// variant) -- the API and the Product Master screen expose this
+/// one as "Product" and the existing one as the SKU/variant it sits
+/// above, the same display-name-vs-table-name split `collections`
+/// already uses for "Product Head".
+///
+/// A ProductLine is OPTIONAL on Product (`productLineId` is
+/// nullable): every product created before this step, and any
+/// product a person chooses not to group, keeps working exactly as
+/// before. Nothing here is required.
+model ProductLine {
+  id           String  @id @default(uuid()) @db.Uuid
+  brandId      String  @db.Uuid
+  collectionId String? @db.Uuid
+  /// Inherited by its variants unless one genuinely differs --
+  /// the same rule `Collection.categoryId` already states.
+  categoryId   String? @db.Uuid
+
+  code        String
+  name        String
+  description String?
+  /// Category-specific facts that do not vary by finish or size --
+  /// a GRC panel's projection, say. Deliberately a sibling of
+  /// `Product.attributes`, not a replacement for it: an attribute
+  /// that DOES vary by variant (a tile's own colour reading) still
+  /// lives on the variant.
+  specifications Json?
+  /// The catalogue-card picture, shown before a finish is chosen.
+  /// Not a replacement for ProductImage, which stays scoped to the
+  /// variant that was actually photographed.
+  imageUrl String?
+
+  isActive Boolean @default(true)
+
+  createdById String?  @db.Uuid
+  updatedById String?  @db.Uuid
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  brand      Brand            @relation(fields: [brandId], references: [id], onDelete: Restrict)
+  collection Collection?      @relation(fields: [collectionId], references: [id], onDelete: Restrict)
+  category   ProductCategory? @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  createdBy  User?            @relation("ProductLineCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedBy  User?            @relation("ProductLineUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+
+  /// The finish/size variants under this product. A variant without
+  /// a ProductLine (productLineId null) is not an error -- it is a
+  /// product nobody has grouped yet.
+  variants Product[]
+
+  @@unique([brandId, collectionId, code])
+  @@index([brandId])
+  @@index([collectionId])
+  @@index([categoryId])
+  @@map("product_lines")
 }
 
 /// Commercial grouping, for buying, reporting and tax. Not the
@@ -634,6 +732,7 @@ model ProductCategory {
   children ProductCategory[] @relation("CategoryTree")
   products Product[]
   productHeads Collection[]
+  productLines ProductLine[]
 
   @@index([parentId])
   @@map("product_categories")
@@ -661,6 +760,10 @@ model Product {
   brandId      String  @db.Uuid
   categoryId   String  @db.Uuid
   collectionId String? @db.Uuid
+  /// The product this variant belongs to, e.g. "Onery Elite Decore"
+  /// for a Matte-600x1200 and a Glossy-600x1200 row alike. Nullable:
+  /// a variant with no ProductLine is not an error, only ungrouped.
+  productLineId String? @db.Uuid
 
   // ── physical description ──────────────────────────────────
   /// As printed on the box, e.g. "600x1200mm".
@@ -738,9 +841,10 @@ model Product {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  brand      Brand            @relation(fields: [brandId], references: [id], onDelete: Restrict)
-  category   ProductCategory  @relation(fields: [categoryId], references: [id], onDelete: Restrict)
-  collection Collection?      @relation(fields: [collectionId], references: [id], onDelete: Restrict)
+  brand       Brand            @relation(fields: [brandId], references: [id], onDelete: Restrict)
+  category    ProductCategory  @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  collection  Collection?      @relation(fields: [collectionId], references: [id], onDelete: Restrict)
+  productLine ProductLine?     @relation(fields: [productLineId], references: [id], onDelete: Restrict)
   createdBy  User?            @relation("ProductCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   updatedBy  User?            @relation("ProductUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
   archivedBy User?            @relation("ProductArchivedBy", fields: [archivedById], references: [id], onDelete: Restrict)
@@ -765,6 +869,7 @@ model Product {
   @@index([brandId])
   @@index([categoryId])
   @@index([collectionId])
+  @@index([productLineId])
   @@index([status])
   @@index([name])
   /// The list screen's default view: everything not archived.
@@ -970,6 +1075,16 @@ model StockLedgerEntry {
   /// and what was broken" without joining to anything.
   reservedAfter Decimal @default(0) @db.Decimal(14, 3)
   damagedAfter  Decimal @default(0) @db.Decimal(14, 3)
+
+  /// In-transit at this product+warehouse after this entry.
+  /// NULL on every entry written before this column existed --
+  /// those rows never recorded what in-transit was at the time,
+  /// and backfilling them to 0 would claim a figure nobody
+  /// measured. Every entry from here on always carries a real
+  /// value, whether or not this entry's own movement touched the
+  /// in-transit dimension, for the same reason reservedAfter and
+  /// damagedAfter always do.
+  inTransitAfter Decimal? @db.Decimal(14, 3)
 
   referenceType StockReferenceType
   /// The id of the document that caused this. Not a foreign key:
@@ -2238,9 +2353,22 @@ model WarehouseTransferLine {
   lineNo     Int
   productId  String @db.Uuid
 
-  quantity         Decimal       @db.Decimal(14, 3)
-  uom              UnitOfMeasure
-  receivedQuantity Decimal       @default(0) @db.Decimal(14, 3)
+  quantity Decimal       @db.Decimal(14, 3)
+  uom      UnitOfMeasure
+
+  /// Running totals across however many receipt events this line
+  /// has had. receivedQuantity is what physically arrived --
+  /// accepted plus damaged, same convention as a goods receipt
+  /// line -- and is NOT the whole story on its own: missing is
+  /// dispatched stock that never arrives and never will.
+  /// Outstanding (what is still genuinely in transit) is
+  /// `quantity - acceptedQuantity - damagedQuantity - missingQuantity`,
+  /// enforced by a CHECK constraint, never stored as its own
+  /// column that could drift from the three it is derived from.
+  acceptedQuantity Decimal @default(0) @db.Decimal(14, 3)
+  damagedQuantity  Decimal @default(0) @db.Decimal(14, 3)
+  missingQuantity  Decimal @default(0) @db.Decimal(14, 3)
+  receivedQuantity Decimal @default(0) @db.Decimal(14, 3)
 
   transfer WarehouseTransfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
   product  Product           @relation(fields: [productId], references: [id], onDelete: Restrict)

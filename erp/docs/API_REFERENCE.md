@@ -46,6 +46,42 @@ for step 8; `server/services/permission.mjs`'s `requirePermission()`
 previously-open route files now call it the same way purchase and
 sales already did.
 
+### 0.1 Kept current after step 8 (maintenance note)
+
+The table above is the step-8 point-in-time record and is left as
+written. Two later pieces of work extended the same `/api/v1`
+surface by the same mechanism (reusing the existing router objects,
+no new envelope or versioning work needed) and are documented in
+place in §6, not here:
+
+- **The product hierarchy** added `product-lines` (full CRUD,
+  `product:write`-gated writes, §6.3a) and four inventory drill-down
+  routes (§6.6: `/inventory/hierarchy`, `/inventory/companies/:id`,
+  `/inventory/collections/:id`, `/inventory/products/:id`). Both were
+  mounted in `server/routes/v1.mjs` the same way everything in the
+  table above is.
+- **Partial transfer receipt** changed `POST /warehouses/transfers/
+  :id/receive`'s body and the transfer line response shape (§6.7) —
+  the route and its permission (`stock:post`) are unchanged; only
+  what the body accepts and what the response reports grew.
+- **Step 9 (CASA backend integration)** added one new route,
+  `GET /integrations/casa/catalog-feed` (§6.14) — unlike every other
+  route in this file, it is not for an ERP user at all: it exists
+  for the CASA De Aurum backend to call as a separate service, so it
+  is gated by its own shared secret instead of `x-erp-user` +
+  `requirePermission()`.
+- **Step 10 (CASA website stock display)** added a second route on
+  the same router, `GET /integrations/casa/stock` (§6.14) — the
+  batch, SKU-only lookup CASA's catalog pages call per page of tiles
+  rendered, gated by the same shared secret as the route above.
+
+Closing this gap — these additions existed in the code and were
+smoke-tested in `test/api_v1_test.mjs` §1, but were never added to
+§1's module list, never given their own request/response
+documentation here, and the transfer lifecycle had never been
+exercised end-to-end over real HTTP — is itself a later piece of work
+on top of step 8, not a correction to what step 8 shipped.
+
 ---
 
 ## 1. Base URL, versioning and transport
@@ -295,6 +331,29 @@ NEEDS_HUMAN_REVIEW` unless `confirmDistinct: true` is sent.
 cannot be removed without orphaning the ledger entries that explain
 where the stock went; archiving is the supported "remove from use."
 
+### 6.3a Product Master — Product Lines
+
+Added after step 8, by the product hierarchy work (§0.1). Sits
+between Collection and the variant-level `Product` (§6.3): "Onery
+Elite Decore" as its own row, rather than a name repeated across
+every one of its finish/size variants. A sibling inside the existing
+Product Master module, not a module of its own — no separate
+`routes/controllers/validators` split, the same shape `brands.mjs`
+and `product-heads.mjs` already have.
+
+| Method | Path | Perm. | Params / body | Response `data` |
+|---|---|---|---|---|
+| GET | `/product-lines` | | query: `search?`, `brandId?`, `collectionId?`, `categoryId?`, `isActive?`, `page?`, `pageSize?` (≤200) | page of `{id, code, name, description, specifications, imageUrl, isActive, brand: {id,name,code}, collection: {id,name,code}\|null, category: {id,name,code}\|null, variantCount, createdAt, updatedAt}` |
+| GET | `/product-lines/similar` | | query: `name`, `brandId?`, `collectionId?` | `{candidates: [...]}` — near-matches before saving |
+| GET | `/product-lines/:id` | | | one product line, in the same shape as a list row |
+| POST | `/product-lines` | `product:write` | `{name, brandId, collectionId?, categoryId?, code?, description?, specifications?, imageUrl?, isActive?, confirmDistinct?}` | created product line, `201` |
+| PATCH | `/product-lines/:id` | `product:write` | `{name?, brandId?, collectionId?, categoryId?, description?, specifications?, imageUrl?, isActive?}` | updated product line |
+
+**"View every variant under a product" is `GET /products?
+productLineId=:id`** — the existing variant-level list endpoint
+(§6.3) with one more filter, not a second, duplicate nested route.
+There is no `DELETE`, for the same reason `/products/:id` has none.
+
 ### 6.4 Reference data
 
 | Method | Path | Perm. | Response `data` |
@@ -335,6 +394,10 @@ service (`db/stock.mjs`); there is no second way to change a balance.
 | GET | `/inventory/totals` | | | company-wide totals, from the database view, never re-summed in JavaScript |
 | GET | `/inventory/ledger` | | query: `productId?`, `sku?`, `search?`, `warehouseId?`, `brandId?`, `headId?`, `movementType?`, `referenceNo?`, `performedById?`, `from?`, `to?`, `page?`, `pageSize?` | the stock card: every movement, with the balance it produced |
 | GET | `/inventory/reconciliation` | | | the reconciliation report — **reporting-only, never repairs** |
+| GET | `/inventory/hierarchy` | | | **added after step 8** (§0.1) — every active company (brand), each with its own stock totals, live-summed from the same SKU-level balances as everything else here; nothing is stored at this level |
+| GET | `/inventory/companies/:id` | | | one company's totals plus each of its collections' own totals, and an `unassigned` bucket for product lines with no collection; `404` if the brand does not exist |
+| GET | `/inventory/collections/:id` | | | one collection's totals plus each of its product lines' own totals, and an `unassigned` bucket for variants with no product line; `404` if the collection does not exist |
+| GET | `/inventory/products/:id` | | | one product line's totals plus each of its own finish/size variants; `404` if the product line does not exist |
 | POST | `/inventory/opening` | `stock:post` | `{product, warehouseId, quantity≥0, unitCost?, remarks?, transactionDate?}` | the movement, `201` |
 | POST | `/inventory/inward` | `stock:post` | `{product, warehouseId, quantity>0, uom?, reason?, unitCost?, referenceType?, referenceId?, referenceNo?, remarks?, transactionDate?, idempotencyKey?}` | the movement, `201` |
 | POST | `/inventory/outward` | `stock:post` | same shape, `reason` is one of `SALES_DISPATCH\|SAMPLE_ISSUE\|PURCHASE_RETURN\|OTHER` | the movement, `201` |
@@ -362,15 +425,61 @@ double-counting stock.
 | POST | `/warehouses/:id/active` | `warehouse:write` | `{isActive, reason?}` | updated warehouse; refused while the warehouse still holds stock |
 | GET | `/warehouses/transfers` | | query: `status?`, `warehouseId?`, `page?`, `pageSize?` | page of transfers |
 | POST | `/warehouses/transfers` | `stock:post` | `{fromWarehouseId, toWarehouseId, notes?, lines: [{productId, quantity>0, uom?}] (≥1)}` | created transfer, `201` |
-| GET | `/warehouses/transfers/:id` | | | one transfer |
-| POST | `/warehouses/transfers/:id/dispatch` | `stock:post` | — | the transfer, now in transit |
-| POST | `/warehouses/transfers/:id/receive` | `stock:post` | — | the transfer, now received |
-| POST | `/warehouses/transfers/:id/cancel` | `stock:post` | `{reason?}` | the transfer, cancelled |
+| GET | `/warehouses/transfers/:id` | | | one transfer, with its lines and reconciliation summary — see below |
+| POST | `/warehouses/transfers/:id/dispatch` | `stock:post` | — | the transfer, now `IN_TRANSIT` |
+| POST | `/warehouses/transfers/:id/receive` | `stock:post` | **changed after step 8** (§0.1), see below | the transfer; `IN_TRANSIT` if anything is still outstanding, `COMPLETED` once every line is fully resolved |
+| POST | `/warehouses/transfers/:id/cancel` | `stock:post` | `{reason?}` | the transfer, `CANCELLED`; **`409 CONFLICT`** if any line has already had a quantity accepted, damaged or written off (see below) — an untouched transfer (nothing dispatched, or dispatched and nothing yet received) is cancellable exactly as before |
 
 **There is no `DELETE /warehouses/:id`.** A warehouse with stock
 movements against it cannot be removed; deactivating is the
 supported path, and the database and the service both refuse it
 while the warehouse still holds anything.
+
+#### Partial transfer receipt (changed after step 8)
+
+A transfer can be received in more than one pass — some boxes
+accepted, some arriving damaged, some never arriving at all — rather
+than only all at once. `POST /warehouses/transfers/:id/receive`'s
+body is:
+
+```json
+{
+  "lines": [
+    {
+      "transferLineId": "uuid, required",
+      "acceptedQuantity": "number ≥ 0, optional, default 0",
+      "damagedQuantity": "number ≥ 0, optional, default 0",
+      "missingQuantity": "number ≥ 0, optional, default 0",
+      "missingReason": "string, required if missingQuantity > 0",
+      "remarks": "string, optional — recorded against a damaged quantity"
+    }
+  ]
+}
+```
+
+Rules, enforced with `422 VALIDATION_FAILED` naming the field:
+
+- At least one of `acceptedQuantity`/`damagedQuantity`/`missingQuantity`
+  must be greater than zero per line — a line recording nothing should
+  be left off the request, not sent as all-zero.
+- The three, summed with whatever was already accepted/damaged/missing
+  on that line in earlier passes, can never exceed the line's
+  dispatched `quantity` — over-receipt is refused outright, with
+  **no override**.
+- `missingQuantity > 0` requires a non-blank `missingReason`.
+- Accepted and damaged both arrive physically (one combined stock
+  movement); damaged is then separately condemned (unsellable, but
+  still physically on the shelf). Missing never arrives at all and is
+  written off against the destination's in-transit balance — never
+  automatic, always this explicit, reasoned call.
+
+Each `GET /warehouses/transfers/:id` line in the response now carries
+`quantity` (dispatched), `acceptedQuantity`, `damagedQuantity`,
+`missingQuantity` (each a running total across every receive call so
+far) and `outstandingQuantity` (`quantity` minus the other three —
+compute nothing independently; this field is already the
+authoritative figure). The transfer's own `movement` summary gains a
+`missing` field alongside `dispatched`/`received`/`stillInTransit`.
 
 ### 6.8 Purchase — Suppliers
 
@@ -563,6 +672,111 @@ are on"; it is the wrong shape for "page 7 of every party in the
 system," which nothing in this ERP asks for, and `type=CUSTOMER` or
 `type=SUPPLIER` should be used whenever the caller already knows
 which side it wants.
+
+### 6.14 CASA Integration — new in step 9, extended in step 10
+
+The only route in this file that does not speak `x-erp-user` at all.
+It exists so the **CASA De Aurum backend** (a separate Node service,
+separate database) can read this ERP's product/brand/collection/
+inventory data over HTTP, for a read-only reconciliation preview on
+the CASA side — see `docs/ERP_INTEGRATION.md` at the monorepo root
+for the other half of this integration. Nothing in CASA writes
+to this ERP, and nothing here writes to CASA.
+
+**Auth is a shared secret, not a user.** `requireCasaKey`
+(`server/middleware/casaAuth.mjs`) mirrors CASA's own `erpAuth.ts` /
+`x-erp-key` pattern, in the opposite direction:
+
+```
+x-casa-key: <CASA_INTEGRATION_API_KEY>
+```
+
+It checks `process.env.CASA_INTEGRATION_API_KEY` fresh on every
+request (not read once at boot), and **fails closed**: if that
+variable is unset, every request is refused with `403 FORBIDDEN` —
+including one that presents some key. A wrong key gets the same
+`403`. There is no `x-erp-user` fallback and no permission string;
+the secret is the entire gate. Leave `CASA_INTEGRATION_API_KEY`
+unset in any environment the CASA backend has no business reaching.
+
+| Method | Path | Perm. | Params | Response `data` |
+|---|---|---|---|---|
+| GET | `/integrations/casa/catalog-feed` | *(shared secret only)* | query: `page?`, `pageSize?` (≤100), `brandId?`, `collectionId?` | page of `{company:{id,name}, collection:{id,name}\|null, productLine:{id,code,name,description,imageUrl}, variants:[{id,sku,finish,size,colour,status,inventory:{onHand,reserved,damaged,inTransit,available}}]}` |
+| GET | `/integrations/casa/stock` | *(shared secret only)* | query: `skus` (comma-separated, ≤200, deduplicated by exact string) | array of `{sku, found: boolean, productId?, status?, totals?: {physical,reserved,damaged,inTransit,available}}` — one row per distinct requested string, always, in the same case it was requested in |
+
+Built on the existing `productLine.service.mjs#list()` and
+`inventory.service.mjs#productLineStock()` — no new service logic,
+no new table, no change to any existing route's behavior. Shaped as
+the ordinary native list page (`{rows, page, pageSize, total,
+pageCount}`) so the `/api/v1` envelope middleware recognizes and
+paginates it exactly like every other list route; the response is
+the standard `{success, message, data: [...], meta: {...}}` seen
+everywhere else in this document, plus a top-level `meta.version`
+the CASA side can log.
+
+```json
+// GET /integrations/casa/catalog-feed?pageSize=1
+// x-casa-key: <the configured secret>
+{
+  "success": true, "message": "Request completed successfully",
+  "data": [
+    {
+      "company": { "id": "…", "name": "Devyora" },
+      "collection": { "id": "…", "name": "Marble Classics" },
+      "productLine": { "id": "…", "code": "PL-0001", "name": "Carrara White",
+        "description": "…", "imageUrl": null },
+      "variants": [
+        { "id": "…", "sku": "DV-1003", "finish": "Polished", "size": "600x600",
+          "colour": "White", "status": "ACTIVE",
+          "inventory": { "onHand": 39, "reserved": 0, "damaged": 0, "inTransit": 0, "available": 39 } }
+      ]
+    }
+  ],
+  "meta": { "currentPage": 1, "pageSize": 1, "totalRecords": 12, "totalPages": 12, "version": "1" }
+}
+```
+
+A missing or wrong key:
+
+```json
+// 403 Forbidden
+{ "success": false, "message": "Invalid or missing x-casa-key.", "code": "FORBIDDEN" }
+```
+
+**`GET /integrations/casa/stock` (step 10)** — CASA's website stock
+display calls this one, per batch of SKUs it is about to render, to
+show live availability. Built on `inventory.service.mjs#stockBySkus()`,
+which reuses the same (private) `aggregateStock()` every other
+drill-down in §6.6 already sums with — the totals it returns agree
+with this ERP's own authenticated inventory view for the same SKU,
+summed across every warehouse, never one warehouse's balance alone.
+Matches **by SKU only, case-insensitively** — never by name, never by
+a CASA id, because this ERP knows nothing about CASA's own ids.
+
+```json
+// GET /integrations/casa/stock?skus=dv-1001,no-such-sku
+// x-casa-key: <the configured secret>
+{
+  "success": true, "message": "Request completed successfully",
+  "data": [
+    { "sku": "dv-1001", "found": true, "productId": "…", "status": "ACTIVE",
+      "totals": { "physical": 283, "reserved": 0, "damaged": 0, "inTransit": 0, "available": 283 } },
+    { "sku": "no-such-sku", "found": false }
+  ],
+  "meta": {}
+}
+```
+
+A row's `sku` is always exactly the string that was requested (never
+the normalized/uppercased form), so a caller can map a result back to
+its own request without re-normalizing. `found: false` carries no
+`totals` at all — never a fabricated zero — so a caller can tell
+"this ERP has never heard of this SKU" apart from "this ERP has heard
+of it and it has none." Two requests for the same exact string
+collapse to one row; two different **casings** of the same SKU do
+not (there is no single casing to prefer when a caller sends more
+than one), so a caller who cares should normalize its own request
+list before asking, not rely on this route to do it silently.
 
 ---
 

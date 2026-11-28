@@ -157,6 +157,8 @@ export async function getOverview(activityLimit = 10): Promise<DashboardOverview
 
 export interface TopCollection {
   name: string;
+  brandId: string;
+  brandName: string;
   tileCount: number;
   imageUrl: string | null;
 }
@@ -171,30 +173,45 @@ export interface TopCollectionsResult {
  * extractor / AI classification, not new here) to surface a curated
  * preview on the Dashboard's "Design Ideas & Collections" card — the top
  * N collections by tile count, each with one representative image.
+ *
+ * Grouped by (brandId, collection), not collection alone: two different
+ * companies with a collection of the same name must stay two rows, never
+ * merged into one count. The old groupBy(['collection']) did exactly
+ * that merge, silently.
  */
 export async function getTopCollections(limit = 3): Promise<TopCollectionsResult> {
   const grouped = await prisma.tile.groupBy({
-    by: ['collection'],
+    by: ['brandId', 'collection'],
     where: { collection: { not: null } },
     _count: { collection: true },
     orderBy: { _count: { collection: 'desc' } },
     take: limit,
   });
 
+  const brandIds = [...new Set(grouped.map((g) => g.brandId))];
+  const brands = await prisma.brand.findMany({ where: { id: { in: brandIds } }, select: { id: true, name: true } });
+  const brandNameById = new Map(brands.map((b) => [b.id, b.name]));
+
   const collections = await Promise.all(
     grouped.map(async (g) => {
       const name = g.collection as string;
       const representative = await prisma.tile.findFirst({
-        where: { collection: name, imageUrl: { not: null } },
+        where: { brandId: g.brandId, collection: name, imageUrl: { not: null } },
         select: { imageUrl: true },
         orderBy: { createdAt: 'desc' },
       });
-      return { name, tileCount: g._count.collection, imageUrl: normalizeDriveImageUrl(representative?.imageUrl ?? null) };
+      return {
+        name,
+        brandId: g.brandId,
+        brandName: brandNameById.get(g.brandId) ?? '',
+        tileCount: g._count.collection,
+        imageUrl: normalizeDriveImageUrl(representative?.imageUrl ?? null),
+      };
     }),
   );
 
   const totalCollections = (
-    await prisma.tile.groupBy({ by: ['collection'], where: { collection: { not: null } } })
+    await prisma.tile.groupBy({ by: ['brandId', 'collection'], where: { collection: { not: null } } })
   ).length;
 
   return { collections, totalCollections };

@@ -24,6 +24,7 @@ import { qty } from '../lib/format.js';
 const TABS = {
   brands: 'Brands',
   heads: 'Product Heads',
+  products: 'Products',
   categories: 'Categories',
 };
 
@@ -35,9 +36,12 @@ export default function Categories() {
       <div className="page-intro">
         <div>
           <p>
-            The shape of the catalogue: <strong>Brand → Product Head → Variant</strong>.
+            The shape of the catalogue: <strong>Brand → Product Head → Product → Variant</strong>.
             Neo Sapien in Grey, Brown and Blue is one head with three variants,
             not three products — adding a colour never creates a second head.
+            A Product groups the variants that are the same thing in a different
+            finish or size — Matte and Glossy of the same 600×1200 slab are two
+            variants of one Product, not two products.
           </p>
         </div>
       </div>
@@ -52,6 +56,7 @@ export default function Categories() {
 
       {tab === 'brands' && <Brands />}
       {tab === 'heads' && <ProductHeads />}
+      {tab === 'products' && <Products />}
       {tab === 'categories' && <CategoryList />}
     </>
   );
@@ -375,6 +380,236 @@ function HeadVariants({ id, onClose }) {
               ))}
               {h.variants.length === 0 && (
                 <tr><td colSpan={7} className="muted">No variants yet. Add one from the Product Master.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p className="tiny muted" style={{ marginTop: 10 }}>
+        Each variant carries its own permanent SKU. Stock figures are read from
+        the inventory ledger and cannot be changed here.{' '}
+        <Link to="/products">Open the Product Master</Link> to add or edit one.
+      </p>
+    </Modal>
+  );
+}
+
+/* ── products ────────────────────────────────────────────────── */
+
+function Products() {
+  const [search, setSearch] = useState('');
+  const [brandId, setBrandId] = useState('all');
+  const [collectionId, setCollectionId] = useState('all');
+  const [editing, setEditing] = useState(null);
+  const [openId, setOpenId] = useState(null);
+
+  const brands = useApi(() => api.brands.list({ pageSize: 200 }), []);
+  const categories = useApi(() => api.reference.categories(), []);
+  const heads = useApi(
+    () => api.productHeads.list({ brandId: brandId === 'all' ? undefined : brandId, pageSize: 200 }),
+    [brandId],
+  );
+  const list = useApi(
+    () => api.productLines.list({
+      search: search || undefined,
+      brandId: brandId === 'all' ? undefined : brandId,
+      collectionId: collectionId === 'all' ? undefined : collectionId,
+      pageSize: 200,
+    }),
+    [search, brandId, collectionId],
+  );
+
+  if (list.error && !list.data) return <Failed error={list.error} onRetry={list.reload} />;
+
+  return (
+    <>
+      <section className="panel">
+        <div className="toolbar">
+          <input
+            className="input toolbar-search"
+            type="search"
+            value={search}
+            placeholder="Search products…"
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <select className="select" value={brandId} onChange={(e) => { setBrandId(e.target.value); setCollectionId('all'); }} aria-label="Brand">
+            <option value="all">All brands</option>
+            {(brands.data?.rows ?? []).map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+          </select>
+          <select className="select" value={collectionId} onChange={(e) => setCollectionId(e.target.value)} aria-label="Product head">
+            <option value="all">All product heads</option>
+            {(heads.data?.rows ?? []).map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
+          </select>
+          <button className="btn btn-primary toolbar-spacer" onClick={() => setEditing({})}>New product</button>
+        </div>
+
+        <div className="table-scroll">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Product</th><th>Brand</th><th>Product head</th><th>Category</th>
+                <th className="right">Variants</th><th>Status</th><th />
+              </tr>
+            </thead>
+            <tbody>
+              {(list.data?.rows ?? []).map((p) => (
+                <tr key={p.id}>
+                  <td><strong>{p.name}</strong><div className="sku">{p.code}</div></td>
+                  <td>{p.brand?.name}</td>
+                  <td>{p.collection?.name ?? <span className="muted tiny">no head</span>}</td>
+                  <td>{p.category?.name ?? <span className="muted tiny">not set</span>}</td>
+                  <td className="right num">{qty(p.variantCount)}</td>
+                  <td><StatusPill tone={p.isActive ? 'ok' : 'inert'}>{p.isActive ? 'Active' : 'Inactive'}</StatusPill></td>
+                  <td className="right">
+                    <button className="btn btn-sm" onClick={() => setOpenId(p.id)}>Variants</button>
+                    {' '}
+                    <button className="btn btn-sm" onClick={() => setEditing(p)}>Edit</button>
+                  </td>
+                </tr>
+              ))}
+              {(list.data?.rows ?? []).length === 0 && !list.loading && (
+                <tr><td colSpan={7} className="muted">No products match.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        <div className="table-foot">
+          <span>{list.data?.total ?? 0} product(s){list.loading && ' · refreshing'}</span>
+        </div>
+      </section>
+
+      {editing && (
+        <ProductLineForm
+          line={editing.id ? editing : null}
+          brands={brands.data?.rows ?? []}
+          categories={categories.data?.rows ?? []}
+          onClose={() => setEditing(null)}
+          onSaved={() => { setEditing(null); list.reload(); }}
+        />
+      )}
+
+      {openId && <ProductLineVariants id={openId} onClose={() => setOpenId(null)} />}
+    </>
+  );
+}
+
+function ProductLineForm({ line, brands, categories, onClose, onSaved }) {
+  const [name, setName] = useState(line?.name ?? '');
+  const [brandId, setBrandId] = useState(line?.brand?.id ?? '');
+  const [collectionId, setCollectionId] = useState(line?.collection?.id ?? '');
+  const [categoryId, setCategoryId] = useState(line?.category?.id ?? '');
+  const [description, setDescription] = useState(line?.description ?? '');
+  const [error, setError] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [confirmDistinct, setConfirmDistinct] = useState(false);
+
+  const heads = useApi(
+    () => (brandId ? api.productHeads.list({ brandId, pageSize: 200 }) : Promise.resolve({ rows: [] })),
+    [brandId],
+  );
+
+  const save = async () => {
+    setSaving(true); setError(null);
+    const body = { name, brandId, collectionId: collectionId || null, categoryId: categoryId || null, description: description || null };
+    try {
+      if (line) await api.productLines.update(line.id, body);
+      else await api.productLines.create({ ...body, ...(confirmDistinct ? { confirmDistinct: true } : {}) });
+      onSaved();
+    } catch (err) {
+      setError(err);
+      if (err.code === 'NEEDS_HUMAN_REVIEW') setConfirmDistinct(true);
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={line ? 'Edit ' + line.name : 'New product'}
+      subtitle="One product holds every finish and size it comes in."
+      footer={(
+        <>
+          <button className="btn" onClick={onClose} disabled={saving}>Cancel</button>
+          <button className="btn btn-primary" onClick={save} disabled={saving}>
+            {saving ? 'Saving…' : (confirmDistinct ? 'Yes, it is a different product' : 'Save')}
+          </button>
+        </>
+      )}
+    >
+      <FieldErrors error={error} />
+      <div className="stack">
+        <div className="field">
+          <label htmlFor="pl-brand">Brand</label>
+          <select id="pl-brand" className="select" value={brandId} onChange={(e) => { setBrandId(e.target.value); setCollectionId(''); }} disabled={!!line}>
+            <option value="">Choose a brand…</option>
+            {brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+          </select>
+          {line && <span className="tiny muted">A product cannot move brand while it has variants.</span>}
+        </div>
+        <div className="field">
+          <label htmlFor="pl-head">Product head</label>
+          <select id="pl-head" className="select" value={collectionId} onChange={(e) => setCollectionId(e.target.value)} disabled={!brandId}>
+            <option value="">Not under a head</option>
+            {(heads.data?.rows ?? []).map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
+          </select>
+        </div>
+        <div className="field">
+          <label htmlFor="pl-name">Product name</label>
+          <input id="pl-name" className="input" value={name} onChange={(e) => { setName(e.target.value); setConfirmDistinct(false); }} placeholder="Onery Elite Decore" />
+        </div>
+        <div className="field">
+          <label htmlFor="pl-cat">Category</label>
+          <select id="pl-cat" className="select" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+            <option value="">Not set</option>
+            {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+          <span className="tiny muted">A variant added under this product inherits it unless it genuinely differs.</span>
+        </div>
+        <div className="field">
+          <label htmlFor="pl-desc">Description</label>
+          <textarea id="pl-desc" className="textarea" rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function ProductLineVariants({ id, onClose }) {
+  const line = useApi(() => api.productLines.get(id), [id]);
+  const p = line.data;
+
+  return (
+    <Modal
+      open
+      wide
+      onClose={onClose}
+      title={p ? p.brand.name + ' ' + p.name : 'Loading…'}
+      subtitle={p ? p.variantCount + ' finish/size variant(s) of one product' : ''}
+      footer={<button className="btn" onClick={onClose}>Close</button>}
+    >
+      {line.error && <FieldErrors error={line.error} />}
+      {p && (
+        <div className="table-scroll">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>SKU</th><th>Finish</th><th>Size</th><th>Colour</th>
+                <th className="right">On hand</th><th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {p.variants.map((v) => (
+                <tr key={v.id}>
+                  <td><span className="sku">{v.sku}</span></td>
+                  <td>{v.finish ?? '—'}</td>
+                  <td><span className="sku">{v.size}</span></td>
+                  <td>{v.colour ?? '—'}</td>
+                  <td className="right num">{qty(v.quantityOnHand)}</td>
+                  <td><StatusPill tone={v.status === 'ACTIVE' ? 'ok' : v.status === 'DISCONTINUED' ? 'inert' : 'info'}>{v.status}</StatusPill></td>
+                </tr>
+              ))}
+              {p.variants.length === 0 && (
+                <tr><td colSpan={6} className="muted">No variants yet. Add one from the Product Master.</td></tr>
               )}
             </tbody>
           </table>

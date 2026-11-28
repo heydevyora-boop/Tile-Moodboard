@@ -215,6 +215,21 @@ export const config = {
   internal: {
     syncApiKey:
       env.INTERNAL_SYNC_API_KEY,
+    erpExportApiKey:
+      env.ERP_EXPORT_API_KEY,
+  },
+
+  // ============================================================
+  // ERP INTEGRATION (step 9) — CASA reading FROM the ERP
+  // ============================================================
+
+  erpIntegration: {
+    baseUrl:
+      env.ERP_API_BASE_URL,
+    apiKey:
+      env.ERP_INTEGRATION_API_KEY,
+    timeoutMs:
+      env.ERP_INTEGRATION_TIMEOUT_MS,
   },
 
   // ============================================================

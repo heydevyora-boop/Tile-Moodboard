@@ -3,6 +3,7 @@ import cors from 'cors';
 import { errorEnvelope } from './utils/response.mjs';
 import brands from './routes/brands.mjs';
 import productHeads from './routes/productHeads.mjs';
+import productLines from './routes/productLines.mjs';
 import products from './routes/products.mjs';
 import reference from './routes/reference.mjs';
 import imports from './routes/imports.mjs';
@@ -87,6 +88,7 @@ export function createApp() {
 
   app.use('/api/brands', brands);
   app.use('/api/product-heads', productHeads);
+  app.use('/api/product-lines', productLines);
   app.use('/api/products', products);
   app.use('/api/reference', reference);
   app.use('/api/imports', imports);
