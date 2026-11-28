@@ -1,8 +1,10 @@
+import crypto from 'node:crypto';
 import { prisma } from '../../db/client.mjs';
 import { postStockMovement, nextDocumentNumber } from '../../db/stock.mjs';
 import { companyTotals } from './inventory.service.mjs';
 import { record } from './audit.mjs';
 import { normaliseCode } from './normalise.mjs';
+import { toMilli, fromMilli } from './money.mjs';
 import { ValidationError, NotFoundError, ConflictError } from '../errors.mjs';
 
 /* ============================================================
@@ -490,8 +492,140 @@ export async function dispatchTransfer(id, actor) {
   return getTransfer(id);
 }
 
-/** RECEIVE — stock arrives and becomes on-hand at the destination. */
-export async function receiveTransfer(id, actor) {
+/** A quantity from a request body, or null if it cannot be parsed. */
+function qtyOf(value) {
+  if (value === undefined || value === null || value === '') return 0;
+  try {
+    return toMilli(value);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Validate a receipt request against a transfer's current,
+ * already-resolved totals. Never trusts the caller's arithmetic:
+ * "outstanding" is recomputed from the line's own stored running
+ * totals, not from whatever the request claims is left.
+ */
+function prepareReceipt(transfer, input) {
+  const fields = [];
+  if (!input || !Array.isArray(input.lines) || input.lines.length === 0) {
+    throw new ValidationError([{ field: 'lines', message: 'A receipt needs at least one line.' }]);
+  }
+
+  const byLineId = new Map(transfer.lines.map((l) => [l.id, l]));
+  const seen = new Set();
+  const prepared = [];
+  const parts = [];
+
+  input.lines.forEach((raw, i) => {
+    const at = (f) => 'lines[' + i + '].' + f;
+
+    const line = byLineId.get(raw?.transferLineId);
+    if (!line) {
+      fields.push({ field: at('transferLineId'), message: 'That line is not on this transfer.' });
+      return;
+    }
+    if (seen.has(line.id)) {
+      fields.push({
+        field: at('transferLineId'),
+        message: 'Line ' + line.lineNo + ' appears twice on this receipt. Put the whole quantity on one line.',
+      });
+      return;
+    }
+    seen.add(line.id);
+
+    const accepted = qtyOf(raw.acceptedQuantity);
+    const damaged = qtyOf(raw.damagedQuantity);
+    const missing = qtyOf(raw.missingQuantity);
+
+    if (accepted === null) { fields.push({ field: at('acceptedQuantity'), message: 'Not a usable quantity.' }); return; }
+    if (damaged === null) { fields.push({ field: at('damagedQuantity'), message: 'Not a usable quantity.' }); return; }
+    if (missing === null) { fields.push({ field: at('missingQuantity'), message: 'Not a usable quantity.' }); return; }
+    if (accepted < 0 || damaged < 0 || missing < 0) {
+      fields.push({ field: at('acceptedQuantity'), message: 'A received quantity cannot be negative.' });
+      return;
+    }
+    if (accepted + damaged + missing === 0) {
+      fields.push({
+        field: at('acceptedQuantity'),
+        message: 'Line ' + line.lineNo + ' records nothing. Leave it off the receipt instead.',
+      });
+      return;
+    }
+    if (missing > 0 && !String(raw.missingReason ?? '').trim()) {
+      fields.push({
+        field: at('missingReason'),
+        message: 'Writing off a missing quantity needs a reason on the record.',
+      });
+      return;
+    }
+
+    /* OVER-RECEIPT IS REFUSED OUTRIGHT, with no override. Unlike a
+       goods receipt from a supplier, there is no second party to
+       have made the mistake: the extra quantity, if it existed,
+       would have had to come from the SAME two warehouses this
+       ledger already accounts for, so claiming more than was
+       dispatched is always either a typo or a double receipt. */
+    const dispatchedMilli = toMilli(line.quantity);
+    const resolvedMilli = toMilli(line.acceptedQuantity) + toMilli(line.damagedQuantity) + toMilli(line.missingQuantity);
+    const outstandingMilli = dispatchedMilli - resolvedMilli;
+    const nowMilli = accepted + damaged + missing;
+
+    if (nowMilli > outstandingMilli) {
+      fields.push({
+        field: at('acceptedQuantity'),
+        message: 'Line ' + line.lineNo + ': ' + fromMilli(outstandingMilli) + ' still outstanding, but '
+          + fromMilli(nowMilli) + ' is being recorded. A transfer can never receive more than was dispatched.',
+      });
+      return;
+    }
+
+    prepared.push({
+      line, accepted, damaged, missing,
+      remarks: raw.remarks ? String(raw.remarks).trim() : null,
+      missingReason: missing > 0 ? String(raw.missingReason).trim() : null,
+    });
+
+    parts.push(fromMilli(accepted) + ' accepted'
+      + (damaged > 0 ? ', ' + fromMilli(damaged) + ' damaged' : '')
+      + (missing > 0 ? ', ' + fromMilli(missing) + ' missing' : '')
+      + ' on line ' + line.lineNo);
+  });
+
+  if (fields.length) throw new ValidationError(fields);
+
+  return { lines: prepared, summary: parts.join('; ') };
+}
+
+/**
+ * RECEIVE — resolve some or all of what is still outstanding on a
+ * transfer.
+ *
+ * Repeatable: a transfer can be received in several passes as
+ * lorries arrive in stages. Each line in `input.lines` records
+ * however much of the OUTSTANDING quantity this pass is resolving
+ * -- accepted (arrived intact), damaged (arrived broken) and
+ * missing (dispatched, and never going to arrive) -- never the
+ * line's running total. The transfer becomes COMPLETED only once
+ * every line has nothing left outstanding; until then it stays
+ * IN_TRANSIT, exactly reflecting that some stock is still
+ * genuinely on the road.
+ *
+ * Accepted and damaged both arrive physically (one TRANSFER_IN,
+ * same convention as a goods receipt note: a broken box is still
+ * in the building and a stock-take would count it), and damaged
+ * is then condemned separately with its own DAMAGE entry and its
+ * own reason, same as a purchase receipt. Missing never posts a
+ * TRANSFER_IN at all -- it did not arrive -- it posts exactly one
+ * TRANSFER_LOSS, decrementing the destination's in-transit balance
+ * and leaving a permanent, reasoned ledger entry.
+ *
+ * @param {object} input
+ * @param {Array} input.lines  { transferLineId, acceptedQuantity?, damagedQuantity?, missingQuantity?, missingReason?, remarks? }
+ */
+export async function receiveTransfer(id, input, actor) {
   const transfer = await prisma.warehouseTransfer.findUnique({
     where: { id },
     include: { lines: true, fromWarehouse: true, toWarehouse: true },
@@ -502,51 +636,132 @@ export async function receiveTransfer(id, actor) {
       + ' and cannot be received.');
   }
 
-  await prisma.$transaction(async (tx) => {
-    for (const line of transfer.lines) {
-      await postStockMovement({
-        productId: line.productId,
-        warehouseId: transfer.toWarehouseId,
-        movementType: 'TRANSFER_IN',
-        reason: 'WAREHOUSE_TRANSFER',
-        quantity: line.quantity,
-        uom: line.uom,
-        referenceType: 'WAREHOUSE_TRANSFER',
-        referenceId: transfer.id,
-        referenceNo: transfer.transferNo,
-        remarks: 'From ' + transfer.fromWarehouse.name,
-        idempotencyKey: 'transfer:in:' + line.id,
-        createdById: actor.id,
-        /* A transfer already on its way must be receivable even
-           if the destination has since been deactivated.
-           Refusing it would strand the stock in transit,
-           counted nowhere anybody can act on. */
-        allowInactiveWarehouse: true,
-      }, tx);
+  const prepared = prepareReceipt(transfer, input);
+  // One id per call, not per line: this is what makes several
+  // lines in the SAME receive() call distinct from each other
+  // while still letting the same line be received again in a
+  // LATER call without colliding with its own earlier entries.
+  const eventId = crypto.randomUUID();
 
-      await tx.$executeRaw`
-        UPDATE "inventory_balances"
-        SET "quantityInTransit" = "quantityInTransit" - ${line.quantity}, "updatedAt" = now()
-        WHERE "productId" = ${line.productId}::uuid AND "warehouseId" = ${transfer.toWarehouseId}::uuid
-      `;
+  await prisma.$transaction(async (tx) => {
+    let movementCount = 0;
+
+    for (const p of prepared.lines) {
+      const intoStock = p.accepted + p.damaged;
+
+      if (intoStock > 0) {
+        await postStockMovement({
+          productId: p.line.productId,
+          warehouseId: transfer.toWarehouseId,
+          movementType: 'TRANSFER_IN',
+          reason: 'WAREHOUSE_TRANSFER',
+          quantity: fromMilli(intoStock),
+          uom: p.line.uom,
+          referenceType: 'WAREHOUSE_TRANSFER',
+          referenceId: transfer.id,
+          referenceNo: transfer.transferNo,
+          remarks: 'From ' + transfer.fromWarehouse.name,
+          idempotencyKey: 'transfer:in:' + p.line.id + ':' + eventId,
+          createdById: actor.id,
+          /* A transfer already on its way must be receivable even
+             if the destination has since been deactivated.
+             Refusing it would strand the stock in transit,
+             counted nowhere anybody can act on. */
+          allowInactiveWarehouse: true,
+        }, tx);
+
+        await tx.$executeRaw`
+          UPDATE "inventory_balances"
+          SET "quantityInTransit" = "quantityInTransit" - ${fromMilli(intoStock)}, "updatedAt" = now()
+          WHERE "productId" = ${p.line.productId}::uuid AND "warehouseId" = ${transfer.toWarehouseId}::uuid
+        `;
+        movementCount += 1;
+      }
+
+      /* Damaged is condemned separately, so physical stock matches
+         the shelf while available stock excludes boxes nobody can
+         sell. Writing them off further is a separate decision,
+         taken later, with its own reason -- same as a purchase
+         receipt's damaged-on-arrival stock. */
+      if (p.damaged > 0) {
+        await postStockMovement({
+          productId: p.line.productId,
+          warehouseId: transfer.toWarehouseId,
+          movementType: 'DAMAGE',
+          reason: 'DAMAGE',
+          quantity: fromMilli(p.damaged),
+          uom: p.line.uom,
+          referenceType: 'WAREHOUSE_TRANSFER',
+          referenceId: transfer.id,
+          referenceNo: transfer.transferNo,
+          remarks: 'Damaged on arrival from ' + transfer.fromWarehouse.name
+            + (p.remarks ? ': ' + p.remarks : ''),
+          idempotencyKey: 'transfer:damage:' + p.line.id + ':' + eventId,
+          createdById: actor.id,
+        }, tx);
+        movementCount += 1;
+      }
+
+      /* Missing never arrived, so it never posts a TRANSFER_IN --
+         only the write-off itself, against the destination's
+         in-transit balance (where the dispatch put it), with the
+         reason a mandatory part of the record. */
+      if (p.missing > 0) {
+        await postStockMovement({
+          productId: p.line.productId,
+          warehouseId: transfer.toWarehouseId,
+          movementType: 'TRANSFER_LOSS',
+          reason: 'TRANSFER_LOSS',
+          quantity: fromMilli(p.missing),
+          uom: p.line.uom,
+          referenceType: 'WAREHOUSE_TRANSFER',
+          referenceId: transfer.id,
+          referenceNo: transfer.transferNo,
+          remarks: p.missingReason,
+          idempotencyKey: 'transfer:loss:' + p.line.id + ':' + eventId,
+          createdById: actor.id,
+          allowInactiveWarehouse: true,
+        }, tx);
+        movementCount += 1;
+      }
 
       await tx.warehouseTransferLine.update({
-        where: { id: line.id },
-        data: { receivedQuantity: line.quantity },
+        where: { id: p.line.id },
+        data: {
+          acceptedQuantity: { increment: fromMilli(p.accepted) },
+          damagedQuantity: { increment: fromMilli(p.damaged) },
+          missingQuantity: { increment: fromMilli(p.missing) },
+          receivedQuantity: { increment: fromMilli(intoStock) },
+        },
       });
     }
 
-    await tx.warehouseTransfer.update({
-      where: { id },
-      data: { status: 'COMPLETED', receivedAt: new Date(), receivedById: actor.id },
+    // Whether EVERY line -- not just the ones touched this call --
+    // now has nothing left outstanding. Re-read rather than
+    // assumed, so a transfer with lines this call did not touch
+    // never completes early.
+    const freshLines = await tx.warehouseTransferLine.findMany({ where: { transferId: id } });
+    const fullyResolved = freshLines.every((l) => {
+      const dispatchedMilli = toMilli(l.quantity);
+      const resolvedMilli = toMilli(l.acceptedQuantity) + toMilli(l.damagedQuantity) + toMilli(l.missingQuantity);
+      return resolvedMilli >= dispatchedMilli;
     });
+
+    if (fullyResolved) {
+      await tx.warehouseTransfer.update({
+        where: { id },
+        data: { status: 'COMPLETED', receivedAt: new Date(), receivedById: actor.id },
+      });
+    }
 
     await record(tx, {
       entityType: 'WarehouseTransfer',
       entityId: id,
       action: 'POST',
       actorUserId: actor.id,
-      summary: 'Received ' + transfer.transferNo + ' at ' + transfer.toWarehouse.name + '.',
+      summary: 'Received against ' + transfer.transferNo + ' at ' + transfer.toWarehouse.name
+        + ': ' + prepared.summary + '. ' + movementCount + ' stock movement(s) written; the transfer is now '
+        + (fullyResolved ? 'complete.' : 'still in transit, with quantity outstanding.'),
     });
   });
 
@@ -578,6 +793,21 @@ export async function cancelTransfer(id, actor, reason) {
   }
   if (transfer.status === 'CANCELLED') {
     throw new ConflictError('Transfer ' + transfer.transferNo + ' is already cancelled.');
+  }
+
+  /* Once any line has accepted, damaged or written-off quantity
+     against it, cancelling the whole transfer would either lose
+     that history or require deciding what to do with stock that
+     has already landed somewhere -- a reversal this phase does
+     not build. The transfer is only cancellable while every box
+     dispatched is still, genuinely, on the road. */
+  const partiallyResolved = transfer.lines.some((l) =>
+    Number(l.acceptedQuantity) > 0 || Number(l.damagedQuantity) > 0 || Number(l.missingQuantity) > 0);
+  if (partiallyResolved) {
+    throw new ConflictError(
+      'Transfer ' + transfer.transferNo + ' has already been partially received. '
+      + 'It cannot be cancelled once any quantity has been accepted, damaged or written off.',
+    );
   }
 
   const wasInTransit = transfer.status === 'IN_TRANSIT';
@@ -686,7 +916,7 @@ export async function getTransfer(id) {
   // receipt disagree is stock lost between two of our own doors.
   const [balance] = await prisma.$queryRaw`
     SELECT dispatched_quantity::text AS dispatched, received_quantity::text AS received,
-           still_in_transit::text AS in_transit,
+           missing_quantity::text AS missing, still_in_transit::text AS in_transit,
            received_at_destination::text AS at_destination,
            returned_to_source::text AS returned, balanced
     FROM v_transfer_reconciliation WHERE transfer_id = ${id}::uuid
@@ -701,13 +931,19 @@ export async function getTransfer(id) {
       sku: l.product.sku,
       name: l.product.name,
       quantity: Number(l.quantity),
+      acceptedQuantity: Number(l.acceptedQuantity),
+      damagedQuantity: Number(l.damagedQuantity),
+      missingQuantity: Number(l.missingQuantity),
       receivedQuantity: Number(l.receivedQuantity),
+      outstandingQuantity: Number(l.quantity) - Number(l.acceptedQuantity)
+        - Number(l.damagedQuantity) - Number(l.missingQuantity),
       uom: l.uom,
     })),
     movement: balance
       ? {
         dispatched: Number(balance.dispatched),
         received: Number(balance.received),
+        missing: Number(balance.missing),
         stillInTransit: Number(balance.in_transit),
         // Which of these is non-zero says what happened: stock
         // received at the destination completed the transfer;

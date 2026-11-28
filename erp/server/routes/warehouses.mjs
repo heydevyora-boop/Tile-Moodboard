@@ -86,8 +86,25 @@ router.post('/transfers/:id/dispatch', requirePermission('stock:post'), handler(
   res.json(await warehouses.dispatchTransfer(req.params.id, req.actor));
 }));
 
+const qty = z.union([z.number(), z.string()])
+  .transform((v) => Number(v))
+  .refine((v) => Number.isFinite(v) && v >= 0, 'Must be a quantity of zero or more.')
+  .optional();
+
+const ReceiveTransfer = z.object({
+  lines: z.array(z.object({
+    transferLineId: z.string().uuid(),
+    acceptedQuantity: qty,
+    damagedQuantity: qty,
+    missingQuantity: qty,
+    missingReason: z.string().max(1000).nullish(),
+    remarks: z.string().max(1000).nullish(),
+  })).min(1, 'A receipt needs at least one line.'),
+});
+
 router.post('/transfers/:id/receive', requirePermission('stock:post'), handler(async (req, res) => {
-  res.json(await warehouses.receiveTransfer(req.params.id, req.actor));
+  const body = parse(ReceiveTransfer, req.body ?? {});
+  res.json(await warehouses.receiveTransfer(req.params.id, body, req.actor));
 }));
 
 const Cancel = z.object({ reason: z.string().max(1000).nullish() });

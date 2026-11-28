@@ -227,7 +227,7 @@ export const api = {
     transfer: (id) => request('/warehouses/transfers/' + id),
     createTransfer: (body) => request('/warehouses/transfers', { method: 'POST', body }),
     dispatch: (id) => request('/warehouses/transfers/' + id + '/dispatch', { method: 'POST' }),
-    receive: (id) => request('/warehouses/transfers/' + id + '/receive', { method: 'POST' }),
+    receive: (id, body) => request('/warehouses/transfers/' + id + '/receive', { method: 'POST', body }),
     cancelTransfer: (id, reason) =>
       request('/warehouses/transfers/' + id + '/cancel', { method: 'POST', body: { reason } }),
   },

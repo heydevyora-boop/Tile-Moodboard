@@ -125,6 +125,15 @@ enum StockMovementType {
   DAMAGE
   DAMAGE_RECOVERY
 
+  // ── movements that change IN-TRANSIT stock ──────────────
+  // Held against the DESTINATION warehouse while stock is on its
+  // way. TRANSFER_LOSS writes off a quantity that was dispatched
+  // but never arrives and is never going to -- posted only
+  // through an explicit, reasoned resolution of a transfer
+  // receipt, never automatically.
+  TRANSFER_LOSS
+  TRANSFER_LOSS_REVERSAL
+
   // NO "REVERSAL" MEMBER, DELIBERATELY.
   //
   // A reversal is the OPPOSITE movement, carrying
@@ -155,6 +164,10 @@ enum StockMovementReason {
   /// the order is dispatched or cancelled.
   RESERVATION
   RESERVATION_RELEASE
+  /// Dispatched on a transfer but never arrived, written off
+  /// through an explicit, reasoned resolution -- never guessed or
+  /// posted automatically.
+  TRANSFER_LOSS
   OTHER
 }
 
@@ -1062,6 +1075,16 @@ model StockLedgerEntry {
   /// and what was broken" without joining to anything.
   reservedAfter Decimal @default(0) @db.Decimal(14, 3)
   damagedAfter  Decimal @default(0) @db.Decimal(14, 3)
+
+  /// In-transit at this product+warehouse after this entry.
+  /// NULL on every entry written before this column existed --
+  /// those rows never recorded what in-transit was at the time,
+  /// and backfilling them to 0 would claim a figure nobody
+  /// measured. Every entry from here on always carries a real
+  /// value, whether or not this entry's own movement touched the
+  /// in-transit dimension, for the same reason reservedAfter and
+  /// damagedAfter always do.
+  inTransitAfter Decimal? @db.Decimal(14, 3)
 
   referenceType StockReferenceType
   /// The id of the document that caused this. Not a foreign key:
@@ -2330,9 +2353,22 @@ model WarehouseTransferLine {
   lineNo     Int
   productId  String @db.Uuid
 
-  quantity         Decimal       @db.Decimal(14, 3)
-  uom              UnitOfMeasure
-  receivedQuantity Decimal       @default(0) @db.Decimal(14, 3)
+  quantity Decimal       @db.Decimal(14, 3)
+  uom      UnitOfMeasure
+
+  /// Running totals across however many receipt events this line
+  /// has had. receivedQuantity is what physically arrived --
+  /// accepted plus damaged, same convention as a goods receipt
+  /// line -- and is NOT the whole story on its own: missing is
+  /// dispatched stock that never arrives and never will.
+  /// Outstanding (what is still genuinely in transit) is
+  /// `quantity - acceptedQuantity - damagedQuantity - missingQuantity`,
+  /// enforced by a CHECK constraint, never stored as its own
+  /// column that could drift from the three it is derived from.
+  acceptedQuantity Decimal @default(0) @db.Decimal(14, 3)
+  damagedQuantity  Decimal @default(0) @db.Decimal(14, 3)
+  missingQuantity  Decimal @default(0) @db.Decimal(14, 3)
+  receivedQuantity Decimal @default(0) @db.Decimal(14, 3)
 
   transfer WarehouseTransfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
   product  Product           @relation(fields: [productId], references: [id], onDelete: Restrict)

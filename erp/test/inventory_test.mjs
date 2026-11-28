@@ -1,5 +1,7 @@
 import { execSync } from 'node:child_process';
-import { useTestDatabase, migrate, seed } from './helpers/testdb.mjs';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { useTestDatabase, migrate, seed, ERP_ROOT } from './helpers/testdb.mjs';
 
 /* ============================================================
    EVERY GUARANTEE STEP 5 CLAIMS, TESTED AGAINST A REAL DATABASE
@@ -446,7 +448,9 @@ async function main() {
   const twice = await refused(() => wh.dispatchTransfer(transfer.id, user));
   check('11i. a transfer cannot be dispatched twice', twice.threw, twice.err?.message);
 
-  const received = await wh.receiveTransfer(transfer.id, user);
+  const received = await wh.receiveTransfer(transfer.id, {
+    lines: transfer.lines.map((l) => ({ transferLineId: l.id, acceptedQuantity: l.quantity })),
+  }, user);
   const t2 = await company();
   check('11j. receipt puts the stock back on a shelf', t2.onHand === t0.onHand, JSON.stringify(t2));
   check('11k. and clears the in-transit figure', t2.inTransit === t0.inTransit, JSON.stringify(t2));
@@ -655,6 +659,256 @@ async function main() {
   const costed = await prisma.stockLedgerEntry.count({ where: { unitCost: { not: null } } });
   check('16c. but unit cost IS recorded per movement, which every method needs',
     costed > 0, costed);
+
+  /* ────────────────────────────────────────────────────────
+     17. PARTIAL TRANSFER RECEIPT, DAMAGE AND LOSS
+     ──────────────────────────────────────────────────────── */
+  console.log('\n17. a transfer can arrive in pieces, some of it broken, some of it lost');
+
+  // Enough on hand at the source for everything this section
+  // dispatches, regardless of what earlier sections left behind.
+  await stock.postStockMovement({
+    productId: product.id, warehouseId: main.id,
+    movementType: 'INWARD', reason: 'PURCHASE_RECEIPT', quantity: 100,
+    referenceType: 'MANUAL', idempotencyKey: uniq('t17-stock'), createdById: user.id,
+  });
+
+  const p0 = await company();
+  const dest0 = await balance(product.id, depot.id);
+  const t17 = await wh.createTransfer({
+    fromWarehouseId: main.id, toWarehouseId: depot.id,
+    lines: [{ productId: product.id, quantity: 20, uom: 'BOX' }],
+  }, user);
+  await wh.dispatchTransfer(t17.id, user);
+  const line17 = t17.lines[0];
+
+  const r1 = await wh.receiveTransfer(t17.id, {
+    lines: [{ transferLineId: line17.id, acceptedQuantity: 12 }],
+  }, user);
+  check('17a. a partial receipt is accepted and leaves the transfer in transit',
+    r1.status === 'IN_TRANSIT', r1.status);
+  check('17b. the line reports exactly what is still outstanding',
+    r1.lines[0].outstandingQuantity === 8, JSON.stringify(r1.lines[0]));
+
+  const d1 = await balance(product.id, depot.id);
+  check('17c. the accepted quantity landed on the destination\'s shelf',
+    d1.onHand === dest0.onHand + 12, JSON.stringify(d1));
+  check('17d. and the rest is still shown in transit, not on anyone\'s shelf',
+    d1.inTransit === dest0.inTransit + 8, JSON.stringify(d1));
+  check('17e. company-wide stock is unchanged by a partial receipt',
+    (await company()).total === p0.total);
+
+  // A second partial receipt on the SAME line, this time with some
+  // damage mixed in with the good boxes.
+  const r2 = await wh.receiveTransfer(t17.id, {
+    lines: [{ transferLineId: line17.id, acceptedQuantity: 3, damagedQuantity: 2, remarks: 'Corner crushed in transit.' }],
+  }, user);
+  check('17f. a second partial receipt on the same line is accepted',
+    r2.status === 'IN_TRANSIT', r2.status);
+  check('17g. outstanding has shrunk further, not reset by the new call',
+    r2.lines[0].outstandingQuantity === 3, JSON.stringify(r2.lines[0]));
+  check('17h. accepted and damaged ACCUMULATE across receipts, never overwrite',
+    r2.lines[0].acceptedQuantity === 15 && r2.lines[0].damagedQuantity === 2, JSON.stringify(r2.lines[0]));
+
+  const d2 = await balance(product.id, depot.id);
+  check('17i. damaged stock arrives physically but is not sellable',
+    d2.onHand === dest0.onHand + 17 && d2.damaged === dest0.damaged + 2, JSON.stringify(d2));
+  check('17j. in-transit keeps shrinking by exactly what has just been resolved',
+    d2.inTransit === 3, JSON.stringify(d2));
+
+  const missingNoReason = await refused(() => wh.receiveTransfer(t17.id, {
+    lines: [{ transferLineId: line17.id, missingQuantity: 3 }],
+  }, user));
+  check('17k. writing off a missing quantity without a reason is refused', missingNoReason.threw);
+
+  const r3 = await wh.receiveTransfer(t17.id, {
+    lines: [{ transferLineId: line17.id, missingQuantity: 3, missingReason: 'Never arrived; destination logged short on delivery.' }],
+  }, user);
+  check('17l. resolving the last outstanding quantity completes the transfer',
+    r3.status === 'COMPLETED', r3.status);
+  check('17m. nothing is left outstanding on the line', r3.lines[0].outstandingQuantity === 0, JSON.stringify(r3.lines[0]));
+
+  const d3 = await balance(product.id, depot.id);
+  check('17n. a missing quantity never arrives, so on-hand does not include it',
+    d3.onHand === dest0.onHand + 17, JSON.stringify(d3));
+  check('17o. and in-transit clears to zero once it is written off, not left stranded',
+    d3.inTransit === 0, JSON.stringify(d3));
+  const afterLoss = await company();
+  check('17p. company-wide stock DROPS by exactly the lost quantity -- it is genuinely gone',
+    afterLoss.total === p0.total - 3, JSON.stringify(afterLoss));
+
+  const lossEntry = await prisma.stockLedgerEntry.findFirst({
+    where: { referenceId: t17.id, movementType: 'TRANSFER_LOSS' },
+  });
+  check('17q. the write-off is on the permanent record, with its reason',
+    Boolean(lossEntry) && (lossEntry.remarks ?? '').includes('logged short'), lossEntry?.remarks);
+
+  const lossUpdate = await refused(() => prisma.$executeRaw`
+    UPDATE "stock_ledger_entries" SET "quantity" = 1 WHERE "id" = ${lossEntry.id}::uuid`);
+  check('17r. a TRANSFER_LOSS entry is append-only too, same as every other movement',
+    lossUpdate.threw, lossUpdate.err?.message);
+
+  const { entry: lossReversal } = await stock.reverseStockMovement({
+    entryId: lossEntry.id, createdById: user.id, remarks: 'Found the missing boxes after all.',
+  });
+  check('17s. a transfer loss can be corrected, as the opposite movement, not erased',
+    lossReversal.movementType === 'TRANSFER_LOSS_REVERSAL', lossReversal.movementType);
+  const d3r = await balance(product.id, depot.id);
+  check('17t. the reversal puts the quantity back in transit',
+    d3r.inTransit === 3, JSON.stringify(d3r));
+  // Leave the data as section 17's later checks expect it.
+  await stock.reverseStockMovement({
+    entryId: lossReversal.id, createdById: user.id, remarks: 'Confirmed still missing; re-applying the write-off.',
+  });
+
+  /* ── invalid combinations, and over-receipt with no override ── */
+
+  const t17b = await wh.createTransfer({
+    fromWarehouseId: main.id, toWarehouseId: depot.id,
+    lines: [{ productId: product.id, quantity: 10, uom: 'BOX' }],
+  }, user);
+  await wh.dispatchTransfer(t17b.id, user);
+  const line17b = t17b.lines[0];
+
+  const negativeReceipt = await refused(() => wh.receiveTransfer(t17b.id, {
+    lines: [{ transferLineId: line17b.id, acceptedQuantity: -1 }],
+  }, user));
+  check('17u. a negative received quantity is refused', negativeReceipt.threw);
+
+  const nothing = await refused(() => wh.receiveTransfer(t17b.id, {
+    lines: [{ transferLineId: line17b.id, acceptedQuantity: 0 }],
+  }, user));
+  check('17v. a line that records nothing at all is refused', nothing.threw);
+
+  const overReceipt = await refused(() => wh.receiveTransfer(t17b.id, {
+    lines: [{ transferLineId: line17b.id, acceptedQuantity: 11 }],
+  }, user));
+  check('17w. receiving more than was dispatched is refused outright, with no override',
+    overReceipt.threw, overReceipt.err?.message);
+
+  const duplicateLine = await refused(() => wh.receiveTransfer(t17b.id, {
+    lines: [
+      { transferLineId: line17b.id, acceptedQuantity: 2 },
+      { transferLineId: line17b.id, acceptedQuantity: 3 },
+    ],
+  }, user));
+  check('17x. the same line twice in one receipt call is refused', duplicateLine.threw);
+
+  const exactBoundary = await wh.receiveTransfer(t17b.id, {
+    lines: [{ transferLineId: line17b.id, acceptedQuantity: 10 }],
+  }, user);
+  check('17y. receiving EXACTLY what is outstanding succeeds and completes the transfer',
+    exactBoundary.status === 'COMPLETED', exactBoundary.status);
+
+  const overAfterFull = await refused(() => wh.receiveTransfer(t17b.id, {
+    lines: [{ transferLineId: line17b.id, acceptedQuantity: 1 }],
+  }, user));
+  check('17z. a completed transfer cannot be received again', overAfterFull.threw, overAfterFull.err?.message);
+
+  /* ── cancellation is refused once anything has been resolved ── */
+
+  const t17c = await wh.createTransfer({
+    fromWarehouseId: main.id, toWarehouseId: depot.id,
+    lines: [{ productId: product.id, quantity: 10, uom: 'BOX' }],
+  }, user);
+  await wh.dispatchTransfer(t17c.id, user);
+  await wh.receiveTransfer(t17c.id, {
+    lines: [{ transferLineId: t17c.lines[0].id, acceptedQuantity: 4 }],
+  }, user);
+
+  const cancelPartial = await refused(() => wh.cancelTransfer(t17c.id, user, 'changed my mind'));
+  check('17aa. a transfer cannot be cancelled once any quantity has been received',
+    cancelPartial.threw, cancelPartial.err?.message);
+
+  // The OLD behaviour must still work: a transfer nothing has yet
+  // been received against stays freely cancellable.
+  const t17d = await wh.createTransfer({
+    fromWarehouseId: main.id, toWarehouseId: depot.id,
+    lines: [{ productId: product.id, quantity: 5, uom: 'BOX' }],
+  }, user);
+  await wh.dispatchTransfer(t17d.id, user);
+  const cancelUntouched = await wh.cancelTransfer(t17d.id, user, 'no longer needed');
+  check('17ab. a transfer with nothing yet received can still be cancelled',
+    cancelUntouched.status === 'CANCELLED', cancelUntouched.status);
+
+  /* ── reconciliation tolerates a legitimate partial receipt ── */
+
+  const t17e = await wh.createTransfer({
+    fromWarehouseId: main.id, toWarehouseId: depot.id,
+    lines: [{ productId: product.id, quantity: 6, uom: 'BOX' }],
+  }, user);
+  await wh.dispatchTransfer(t17e.id, user);
+  const partialMid = await wh.receiveTransfer(t17e.id, {
+    lines: [{ transferLineId: t17e.lines[0].id, acceptedQuantity: 2 }],
+  }, user);
+  check('17ac. a transfer sitting mid-partial-receipt reconciles as balanced, not a false alarm',
+    partialMid.movement.balanced === true, JSON.stringify(partialMid.movement));
+
+  const reportMid = await wh.reconciliationReport();
+  check('17ad. the reconciliation report does not flag a normal partial receipt as unbalanced',
+    !reportMid.unbalancedTransfers.some((t) => t.transferNo === t17e.transferNo),
+    JSON.stringify(reportMid.unbalancedTransfers));
+
+  /* ── concurrent receipts against the same line ── */
+
+  const t17f = await wh.createTransfer({
+    fromWarehouseId: main.id, toWarehouseId: depot.id,
+    lines: [{ productId: product.id, quantity: 10, uom: 'BOX' }],
+  }, user);
+  await wh.dispatchTransfer(t17f.id, user);
+  const line17f = t17f.lines[0];
+  const destBefore = await balance(product.id, depot.id);
+
+  const raced = await Promise.allSettled([
+    wh.receiveTransfer(t17f.id, { lines: [{ transferLineId: line17f.id, acceptedQuantity: 6 }] }, user),
+    wh.receiveTransfer(t17f.id, { lines: [{ transferLineId: line17f.id, acceptedQuantity: 6 }] }, user),
+  ]);
+  const raceWon = raced.filter((r) => r.status === 'fulfilled');
+  check('17ae. of two concurrent receipts that together would over-receive, exactly one sticks',
+    raceWon.length === 1, raced.map((r) => r.status + ':' + (r.reason?.message ?? '')).join(' | '));
+
+  const line17fAfter = (await wh.getTransfer(t17f.id)).lines[0];
+  check('17af. the line\'s accepted quantity is exactly six -- never twelve, never lost to zero',
+    line17fAfter.acceptedQuantity === 6, JSON.stringify(line17fAfter));
+
+  const destAfter = await balance(product.id, depot.id);
+  check('17ag. the destination only shows stock for the receipt that actually stuck',
+    destAfter.onHand === destBefore.onHand + 6, JSON.stringify(destAfter));
+  check('17ah. and in-transit only dropped by that same six, not by twelve',
+    destAfter.inTransit === destBefore.inTransit - 6, JSON.stringify(destAfter));
+
+  /* ────────────────────────────────────────────────────────
+     18. stock:read IS DEFINED, AND DELIBERATELY NOT ENFORCED
+     ──────────────────────────────────────────────────────── */
+  console.log('\n18. reading stock needs no permission today -- by documented design, not oversight');
+
+  const stockReadGrants = await prisma.rolePermission.count({ where: { permission: 'stock:read' } });
+  check('18a. stock:read is a real permission the seed assigns to roles',
+    stockReadGrants > 0, stockReadGrants);
+
+  const invRoutes = readFileSync(path.join(ERP_ROOT, 'server/routes/inventory.mjs'), 'utf8');
+  const whRoutes = readFileSync(path.join(ERP_ROOT, 'server/routes/warehouses.mjs'), 'utf8');
+
+  check('18b. no GET route in inventory.mjs checks stock:read',
+    !/requirePermission\(\s*['"]stock:read['"]/.test(invRoutes));
+  check('18c. no GET route in warehouses.mjs checks stock:read either',
+    !/requirePermission\(\s*['"]stock:read['"]/.test(whRoutes));
+
+  const permissionSource = readFileSync(
+    path.join(ERP_ROOT, 'server/services/permission.mjs'), 'utf8');
+  check('18d. the file itself documents x-erp-user as a placeholder, not real authentication',
+    /placeholder/i.test(permissionSource) && /x-erp-user/.test(permissionSource));
+
+  /* THIS IS A DELIBERATE, DOCUMENTED LIMITATION, not a bug this
+     phase silently papered over. req.actor is set from the
+     x-erp-user header -- anyone who can reach the port could claim
+     to be anybody -- so adding requirePermission('stock:read') to
+     a read route would check a permission against an identity
+     nobody has verified. That is worse than no check: it would
+     look like security and provide none. The real mitigation is
+     that the server binds to 127.0.0.1 only; enforcing stock:read
+     here is left for the phase that gives this server real
+     authentication. */
 }
 
 try {

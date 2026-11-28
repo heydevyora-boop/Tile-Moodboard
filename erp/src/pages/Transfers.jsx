@@ -113,7 +113,18 @@ export default function Transfers() {
     try {
       const { action, transfer } = confirming;
       if (action === 'dispatch') await api.warehouses.dispatch(transfer.id);
-      if (action === 'receive') await api.warehouses.receive(transfer.id);
+      if (action === 'receive') {
+        /* The button is a one-click FULL receipt: everything still
+           outstanding on every line, all accepted. Recording a
+           partial or damaged/missing receipt is not exposed here
+           -- that is an authorised, reasoned decision, not a
+           single click, and has no UI yet. */
+        const full = await api.warehouses.transfer(transfer.id);
+        const lines = full.lines
+          .filter((l) => l.outstandingQuantity > 0)
+          .map((l) => ({ transferLineId: l.id, acceptedQuantity: l.outstandingQuantity }));
+        await api.warehouses.receive(transfer.id, { lines });
+      }
       if (action === 'cancel') await api.warehouses.cancelTransfer(transfer.id, reason.trim() || undefined);
       setConfirming(null);
       setReason('');
