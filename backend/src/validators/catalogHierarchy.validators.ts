@@ -105,7 +105,12 @@ export const assignVariantSchema = z.object({
 
 export const erpCatalogFeedQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
-  limit: z.coerce.number().int().min(1).max(200).default(50),
+  // 100, not 200: the shared getPagination/MAX_LIMIT in utils/pagination.ts
+  // silently caps every list endpoint in this API at 100 regardless of
+  // what a validator allows. A higher ceiling here would validate but
+  // never actually be honored -- matching it is what "reuse the shared
+  // helper" means in practice, not just importing the function.
+  limit: z.coerce.number().int().min(1).max(100).default(50),
   brandId: z.string().min(1).optional(),
   collectionId: z.string().min(1).optional(),
 });

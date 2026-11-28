@@ -172,17 +172,34 @@ async function main() {
   check('4e. the variant image URL is resolved, not a raw local path', variant.imageUrl && !variant.imageUrl.startsWith('/uploads') && !variant.imageUrl.startsWith('file:'));
   const unpricedVariant = erpRow.product.variants.find((v) => v.sku === 'KAJ-OED-G-600');
   check('4f. the unpriced variant is still present, with price null rather than omitted or fabricated', !!unpricedVariant && unpricedVariant.price === null);
-  check('4g. a tile not yet assigned to any product is excluded from this feed, never force-fit into one', !rows.some((r) => r.product.variants.some((v) => v.sku === 'KAJ-LEG-900')));
+  check('4g. a tile not yet assigned to any product is excluded from `data`, never force-fit into one', !rows.some((r) => r.product.variants.some((v) => v.sku === 'KAJ-LEG-900')));
   check('4h. meta carries a version and real pagination totals', rightKey.body.meta.version === '1' && rightKey.body.meta.total === 2);
+
+  // ---- 4i-4k. Pre-implementation-check fixes: pagination limit aligned with the shared helper, unassigned-tile visibility + reconciliation ----
+  step('4i-4k. pagination limit matches the shared helper; unassigned tiles are visible and reconciled, never auto-assigned');
+  const overLimit = await api('GET', '/integrations/erp/catalog-feed?limit=150', null, { 'x-erp-key': ERP_KEY });
+  check('4i. a limit above the shared pagination helper\'s cap (100) is now rejected, not silently clamped', overLimit.status === 400);
+  check('4j. the unassigned tile IS visible, under its own section, never inside a product\'s variants',
+    rightKey.body.unassignedTiles.some((u) => u.sku === 'KAJ-LEG-900' && u.companyId === kajaria.id && u.companyName === 'Kajaria'));
+  check('4k. reconciliation counts are correct: 3 assigned tiles, 1 unassigned, across both companies',
+    rightKey.body.meta.reconciliation.assignedTileCount === 3 && rightKey.body.meta.reconciliation.unassignedTileCount === 1);
+  const unassignedTile = rightKey.body.unassignedTiles.find((u) => u.sku === 'KAJ-LEG-900');
+  check('4l. the unassigned tile is never silently given a productId by this feed', !!unassignedTile && !('productId' in unassignedTile));
+  const rereadUnassigned = await prisma.tile.findUnique({ where: { id: unassigned.id } });
+  check('4m. ...and in the database it is still genuinely unassigned, not auto-mapped', rereadUnassigned.productId === null);
 
   // ---- 5. ERP export pagination and company filtering ----
   step('5. the ERP feed paginates and can be scoped to one company');
   const page1 = await api('GET', '/integrations/erp/catalog-feed?limit=1&page=1', null, { 'x-erp-key': ERP_KEY });
   check('5a. limit=1 returns exactly one row with correct meta', page1.body.data.length === 1 && page1.body.meta.limit === 1 && page1.body.meta.total === 2 && page1.body.meta.hasNextPage === true);
+  check('5a-ii. unassigned tiles are listed on page 1', page1.body.unassignedTiles.length === 1);
   const page2 = await api('GET', '/integrations/erp/catalog-feed?limit=1&page=2', null, { 'x-erp-key': ERP_KEY });
   check('5b. page 2 returns the other row, not the same one again', page2.body.data[0].product.id !== page1.body.data[0].product.id && page2.body.meta.hasNextPage === false);
+  check('5b-ii. unassigned tiles are NOT repeated on page 2 (reconciliation count still correct, list only on page 1)',
+    page2.body.unassignedTiles.length === 0 && page2.body.meta.reconciliation.unassignedTileCount === 1);
   const scoped = await api('GET', `/integrations/erp/catalog-feed?brandId=${somany.id}`, null, { 'x-erp-key': ERP_KEY });
   check('5c. filtering by brandId returns only that company\'s products', scoped.body.data.length === 1 && scoped.body.data[0].company.id === somany.id && scoped.body.data[0].product.name === 'Royale Marble Finish');
+  check('5c-ii. ...and brandId also scopes the reconciliation counts and unassigned list to that company', scoped.body.meta.reconciliation.unassignedTileCount === 0 && scoped.body.unassignedTiles.length === 0);
 
   // ---- 5. recent-generations resolver: brand/collection read back live ----
   step('6. recent-generations resolves Brand/Collection for a product from its live tile, never from the stored log');

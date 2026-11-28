@@ -458,6 +458,6 @@ export const testPythonAiConnection = catchAsync(async (_req: Request, res: Resp
  * not the normal user session -- see erpAuth.ts.
  */
 export const getErpCatalogFeedHandler = catchAsync(async (req: Request, res: Response) => {
-  const { data, meta } = await getErpCatalogFeed(req.query as unknown as ErpCatalogFeedQuery);
-  res.status(200).json({ success: true, data, meta });
+  const { data, unassignedTiles, meta } = await getErpCatalogFeed(req.query as unknown as ErpCatalogFeedQuery);
+  res.status(200).json({ success: true, data, unassignedTiles, meta });
 });

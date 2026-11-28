@@ -28,12 +28,20 @@ const ERP_CATALOG_FEED_VERSION = '1';
  * reads by (Tile carries no separate visibility flag of its own: a
  * removed Tile is hard-deleted, so it is simply absent from the query).
  *
- * A Tile not yet assigned to a Product has no row here: a Product-
- * shaped entry would have to either leave `product` empty (breaking
- * the documented contract) or invent a Product that does not exist.
- * Per Section 3's "do not invent a relationship," it is left out of
- * this feed entirely rather than force-fit — see the final report's
- * "remaining issues" for the recommended follow-up.
+ * A Tile not yet assigned to a Product has no row in `data`: a
+ * Product-shaped entry would have to either leave `product` empty
+ * (breaking the documented contract) or invent a Product that does not
+ * exist. Per Section 3's "do not invent a relationship," none is
+ * created and none is guessed here either -- this feed only ever
+ * reports what already exists.
+ *
+ * It is NOT, however, silently dropped. `meta.reconciliation` always
+ * carries real counts (how many tiles are assigned vs. unassigned,
+ * scoped the same way `data` is), and page 1 additionally lists the
+ * unassigned tiles themselves under `unassignedTiles` -- visibility
+ * and reconciliation, nothing more. Resolving them into a Product is
+ * Stage 2's backfill tool's job (a person's decision, with every
+ * ambiguous case flagged), not this feed's.
  */
 export async function getErpCatalogFeed(query: ErpCatalogFeedQuery) {
   const { page, limit, skip, take } = getPagination(query);
@@ -121,10 +129,63 @@ export async function getErpCatalogFeed(query: ErpCatalogFeedQuery) {
     },
   }));
 
+  // Reconciliation: assigned/unassigned tile counts, scoped the same
+  // way `data` is (an active brand, and -- for "assigned" -- an active
+  // collection and product too, matching the visibility rule `data`
+  // already applies). `collectionId` has no meaning for a tile with no
+  // product, so it narrows `assignedTileCount` only; given alone it
+  // excludes unassigned tiles from the count and the list entirely,
+  // rather than show unassigned tiles unrelated to the collection asked for.
+  const brandFilter = query.brandId ? { brandId: query.brandId } : {};
+  const skipUnassigned = Boolean(query.collectionId);
+
+  const [assignedTileCount, unassignedTileCount] = await Promise.all([
+    prisma.tile.count({
+      where: {
+        productId: { not: null },
+        ...brandFilter,
+        product: { isActive: true, collection: { isActive: true, brand: { isActive: true }, ...(query.collectionId ? { id: query.collectionId } : {}) } },
+      },
+    }),
+    skipUnassigned
+      ? Promise.resolve(0)
+      : prisma.tile.count({ where: { productId: null, brand: { isActive: true }, ...brandFilter } }),
+  ]);
+
+  // Visibility: page 1 only, so the same list is never repeated on
+  // every page of `data` -- this is reconciliation + visibility, not a
+  // second paginated resource of its own.
+  const unassignedTiles = (!skipUnassigned && page === 1)
+    ? await prisma.tile.findMany({
+      where: { productId: null, brand: { isActive: true }, ...brandFilter },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      select: {
+        id: true,
+        name: true,
+        productCode: true,
+        collection: true,
+        brandId: true,
+        brand: { select: { name: true } },
+      },
+    })
+    : [];
+
   const meta = buildPaginationMeta(total, page, limit) as PaginationMeta;
 
   return {
     data,
-    meta: { ...meta, version: ERP_CATALOG_FEED_VERSION },
+    unassignedTiles: unassignedTiles.map((t) => ({
+      tileId: t.id,
+      name: t.name,
+      sku: t.productCode,
+      companyId: t.brandId,
+      companyName: t.brand.name,
+      freeTextCollectionLabel: t.collection,
+    })),
+    meta: {
+      ...meta,
+      version: ERP_CATALOG_FEED_VERSION,
+      reconciliation: { assignedTileCount, unassignedTileCount },
+    },
   };
 }
