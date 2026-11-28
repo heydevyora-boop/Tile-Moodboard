@@ -84,6 +84,7 @@
     "test:library-multitheme": "node test-scripts/library_multitheme_test.js",
     "test:public-pages": "node test-scripts/public_pages_test.js",
     "test:catalog-hierarchy": "node test-scripts/catalog_hierarchy_test.js",
+    "test:catalog-data-format": "node test-scripts/catalog_data_format_test.js",
     "backfill:catalog-hierarchy": "node scripts/backfill-catalog-hierarchy.js"
   },
   "prisma": {

@@ -281,8 +281,10 @@ async function main() {
   await page.locator('#finishChips .option-chip', { hasText: 'Matte' }).click();
   await page.locator('#sizeChips .option-chip', { hasText: '600x1200mm' }).click();
   await page.waitForSelector('.variant-resolved');
-  const resolvedText = await page.locator('.variant-resolved').textContent();
-  check('17f. selecting finish+size resolves and displays the exact SKU', resolvedText.includes('KAJ-OED-M-600'));
+  // The resolved-variant summary is now SKU/price/stock as three separate
+  // lines (data format standardization stage), not one combined line.
+  const resolvedTexts = await page.locator('.variant-resolved').allTextContents();
+  check('17f. selecting finish+size resolves and displays the exact SKU', resolvedTexts.some((t) => t.includes('KAJ-OED-M-600')));
 
   await page.locator('[data-crumb="companies"]').click();
   await page.waitForSelector('#companyGrid .company-card');
