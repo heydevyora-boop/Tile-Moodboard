@@ -2,6 +2,7 @@ import { prisma } from '@db/connection';
 import { normalizeDriveImageUrl } from './referenceImages.service';
 import { getPagination, buildPaginationMeta, PaginationMeta } from '@utils/pagination';
 import { ErpCatalogFeedQuery } from '@validators/catalogHierarchy.validators';
+import { countUnassignedTiles, findUnassignedTiles, visibleProductWhere, validateProduct } from './catalogValidation.service';
 
 /** Bump this whenever the shape of a row in `data` changes in a way a
  * consumer would need to react to. Carried in every response's
@@ -42,61 +43,81 @@ const ERP_CATALOG_FEED_VERSION = '1';
  * and reconciliation, nothing more. Resolving them into a Product is
  * Stage 2's backfill tool's job (a person's decision, with every
  * ambiguous case flagged), not this feed's.
+ *
+ * DOCUMENTED BEHAVIOR CHANGE (Phase 3): a visible Product that
+ * catalogValidation.service.ts's validateProduct() marks BLOCKED (no
+ * tiles at all, a tile with no SKU, or two tiles claiming the same
+ * finish+size) is now also excluded from `data` -- it has nothing an
+ * ERP could usefully sync. NEEDS_REVIEW and READY products are
+ * returned exactly as before; nothing about their shape changed. Full
+ * visibility into what was excluded and why is the readiness
+ * endpoint's job (GET /integrations/erp/catalog-feed never explained
+ * exclusions itself, and still doesn't -- it just no longer returns
+ * rows with nothing usable in them).
+ *
+ * This also changes the query itself: because "is this product
+ * BLOCKED" depends on its own tiles and cannot be expressed as a SQL
+ * WHERE clause, pagination is now applied in application code AFTER
+ * loading every visible product for the requested company/collection,
+ * rather than with a database-level LIMIT/OFFSET. At CASA's actual
+ * scale (thousands of tiles, not millions) this is one bounded query;
+ * it is called out here as a known tradeoff, not left silent.
  */
 export async function getErpCatalogFeed(query: ErpCatalogFeedQuery) {
   const { page, limit, skip, take } = getPagination(query);
 
-  const where = {
-    isActive: true,
-    collection: {
-      isActive: true,
-      brand: { isActive: true },
-      ...(query.brandId ? { brandId: query.brandId } : {}),
-    },
-    ...(query.collectionId ? { collectionId: query.collectionId } : {}),
-  };
+  // Same visibility rule catalogValidation.service.ts's readiness
+  // report applies -- shared so the feed and the readiness check can
+  // never silently disagree about which products are visible.
+  const where = visibleProductWhere(query);
 
-  const [products, total] = await Promise.all([
-    prisma.product.findMany({
-      where,
-      skip,
-      take,
-      // createdAt first, id as a tiebreaker: a stable, deterministic
-      // order so paging through this feed never skips or repeats a row.
-      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-      select: {
-        id: true,
-        name: true,
-        code: true,
-        category: true,
-        specifications: true,
-        coverImageUrl: true,
-        collection: {
-          select: {
-            id: true,
-            name: true,
-            brand: { select: { id: true, name: true } },
-          },
-        },
-        tiles: {
-          orderBy: [{ finish: 'asc' }, { size: 'asc' }],
-          select: {
-            id: true,
-            productCode: true,
-            imageUrl: true,
-            material: true,
-            size: true,
-            thickness: true,
-            finish: true,
-            sellingPrice: true,
-            unitOfMeasure: true,
-            inStock: true,
-          },
+  const allVisible = await prisma.product.findMany({
+    where,
+    // createdAt first, id as a tiebreaker: a stable, deterministic
+    // order so paging through this feed never skips or repeats a row.
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    select: {
+      id: true,
+      name: true,
+      code: true,
+      category: true,
+      specifications: true,
+      coverImageUrl: true,
+      collection: {
+        select: {
+          id: true,
+          name: true,
+          brand: { select: { id: true, name: true } },
         },
       },
-    }),
-    prisma.product.count({ where }),
-  ]);
+      tiles: {
+        orderBy: [{ finish: 'asc' }, { size: 'asc' }],
+        select: {
+          id: true,
+          productCode: true,
+          imageUrl: true,
+          material: true,
+          size: true,
+          thickness: true,
+          finish: true,
+          sellingPrice: true,
+          unitOfMeasure: true,
+          inStock: true,
+        },
+      },
+    },
+  });
+
+  // `where` already guarantees an active product/collection/brand, so
+  // isActive is supplied literally here rather than re-selected, just
+  // to satisfy validateProduct's shape.
+  const exportable = allVisible.filter((p) => {
+    const { status } = validateProduct({ ...p, collection: { isActive: true, brand: { isActive: true } } });
+    return status !== 'BLOCKED';
+  });
+
+  const total = exportable.length;
+  const products = exportable.slice(skip, skip + take);
 
   const data = products.map((product) => ({
     company: {
@@ -147,41 +168,21 @@ export async function getErpCatalogFeed(query: ErpCatalogFeedQuery) {
         product: { isActive: true, collection: { isActive: true, brand: { isActive: true }, ...(query.collectionId ? { id: query.collectionId } : {}) } },
       },
     }),
-    skipUnassigned
-      ? Promise.resolve(0)
-      : prisma.tile.count({ where: { productId: null, brand: { isActive: true }, ...brandFilter } }),
+    skipUnassigned ? Promise.resolve(0) : countUnassignedTiles(brandFilter),
   ]);
 
   // Visibility: page 1 only, so the same list is never repeated on
   // every page of `data` -- this is reconciliation + visibility, not a
-  // second paginated resource of its own.
-  const unassignedTiles = (!skipUnassigned && page === 1)
-    ? await prisma.tile.findMany({
-      where: { productId: null, brand: { isActive: true }, ...brandFilter },
-      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-      select: {
-        id: true,
-        name: true,
-        productCode: true,
-        collection: true,
-        brandId: true,
-        brand: { select: { name: true } },
-      },
-    })
-    : [];
+  // second paginated resource of its own. Shared with
+  // catalogValidation.service.ts's own unassigned-tile reporting --
+  // one query, not a second catalog data source.
+  const unassignedTiles = (!skipUnassigned && page === 1) ? await findUnassignedTiles(brandFilter) : [];
 
   const meta = buildPaginationMeta(total, page, limit) as PaginationMeta;
 
   return {
     data,
-    unassignedTiles: unassignedTiles.map((t) => ({
-      tileId: t.id,
-      name: t.name,
-      sku: t.productCode,
-      companyId: t.brandId,
-      companyName: t.brand.name,
-      freeTextCollectionLabel: t.collection,
-    })),
+    unassignedTiles,
     meta: {
       ...meta,
       version: ERP_CATALOG_FEED_VERSION,

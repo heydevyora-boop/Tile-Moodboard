@@ -3,7 +3,7 @@ import * as integrationsController from '@controllers/integrations.controller';
 import { authenticate, authorize } from '@middlewares/auth';
 import { validate } from '@middlewares/validate';
 import { erpAuth } from '@middlewares/erpAuth';
-import { erpCatalogFeedQuerySchema } from '@validators/catalogHierarchy.validators';
+import { erpCatalogFeedQuerySchema, catalogReadinessQuerySchema } from '@validators/catalogHierarchy.validators';
 
 const router = Router();
 
@@ -57,5 +57,16 @@ router.post('/google/disconnect', integrationsController.disconnectGoogleOAuth);
 router.post('/google/picker-token', integrationsController.getGooglePickerToken);
 router.get('/python-ai/status', integrationsController.getPythonAiStatus);
 router.post('/python-ai/test', integrationsController.testPythonAiConnection);
+
+/*
+ * OWNER-gated, same as every other status report above -- a human
+ * reviewing data quality before a future ERP sync, not the ERP itself.
+ * Read-only: validates and reconciles, never repairs or reassigns.
+ */
+router.get(
+  '/erp/catalog-readiness',
+  validate(catalogReadinessQuerySchema, 'query'),
+  integrationsController.getCatalogReadinessHandler,
+);
 
 export default router;

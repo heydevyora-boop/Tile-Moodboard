@@ -1,7 +1,8 @@
 import { Request, Response } from 'express';
 import { catchAsync } from '@utils/catchAsync';
 import { getErpCatalogFeed } from '@services/erpExport.service';
-import { ErpCatalogFeedQuery } from '@validators/catalogHierarchy.validators';
+import { getReconciliationReport, listCatalogReadinessIssues } from '@services/catalogValidation.service';
+import { ErpCatalogFeedQuery, CatalogReadinessApiQuery } from '@validators/catalogHierarchy.validators';
 import { config } from '@config/index';
 import { describeLibraryFolder } from '@services/library.service';
 import { geminiClient } from '@services/gemini.service';
@@ -460,4 +461,20 @@ export const testPythonAiConnection = catchAsync(async (_req: Request, res: Resp
 export const getErpCatalogFeedHandler = catchAsync(async (req: Request, res: Response) => {
   const { data, unassignedTiles, meta } = await getErpCatalogFeed(req.query as unknown as ErpCatalogFeedQuery);
   res.status(200).json({ success: true, data, unassignedTiles, meta });
+});
+
+/**
+ * Administrative, read-only data-readiness report over the existing
+ * catalog hierarchy -- for a human (OWNER) to review before any future
+ * ERP sync, not for the ERP itself (see erpAuth.ts for that one).
+ * `summary` is Section 2's full reconciliation report; `data` is the
+ * paginated, per-product list of validation issues Section 4 asks for.
+ */
+export const getCatalogReadinessHandler = catchAsync(async (req: Request, res: Response) => {
+  const query = req.query as unknown as CatalogReadinessApiQuery;
+  const [summary, issues] = await Promise.all([
+    getReconciliationReport(query),
+    listCatalogReadinessIssues(query),
+  ]);
+  res.status(200).json({ success: true, summary, data: issues.data, meta: issues.meta });
 });

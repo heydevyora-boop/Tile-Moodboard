@@ -117,6 +117,20 @@ export const erpCatalogFeedQuerySchema = z.object({
 
 export type ErpCatalogFeedQuery = z.infer<typeof erpCatalogFeedQuerySchema>;
 
+/* ============================================================
+   ERP CATALOG READINESS (data validation / reconciliation)
+   ============================================================ */
+
+export const catalogReadinessQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  status: z.enum(['READY', 'NEEDS_REVIEW', 'BLOCKED']).optional(),
+  brandId: z.string().min(1).optional(),
+  collectionId: z.string().min(1).optional(),
+});
+
+export type CatalogReadinessApiQuery = z.infer<typeof catalogReadinessQuerySchema>;
+
 export type CreateCompanyInput = z.infer<typeof createCompanySchema>;
 export type UpdateCompanyInput = z.infer<typeof updateCompanySchema>;
 export type ListCompaniesQuery = z.infer<typeof listCompaniesQuerySchema>;
