@@ -631,17 +631,22 @@ asserts the **final state**, not just that something happened:
 exactly one of the two sticks, the line's total is exactly what one
 call claims — never the sum of both, never zero.
 
-The same reasoning extends to a (far less likely) concurrent
-cancel-and-receive on the same transfer: cancellation's own
-in-transit decrement is backstopped by the pre-existing
-`inventory_in_transit_not_negative` CHECK, so the worst case is a raw
-constraint-violation error on the loser, never a corrupted balance.
-This was reviewed, not newly fixed — the same stale-read-before-
-transaction pattern already existed for the original all-or-nothing
-`receiveTransfer()` and `cancelTransfer()`, and closing it generally
-(locking the transfer row itself across every lifecycle call) is a
-broader change than this phase's two named gaps called for.
-**Recorded here as a remaining risk, not fixed as a bonus.**
+**A later verification pass tested the concurrent cancel-and-receive
+case directly, rather than reasoning about it, and found the
+original claim here wrong.** It is not always backstopped by the
+in-transit CHECK: of five real concurrent trials, two produced a
+genuinely corrupted business state (10 units counted as both
+returned to the source and received at the destination — the same
+dispatched quantity, physically duplicated), caught after the fact by
+the reconciliation report but not prevented. The other three trials
+were the previously-described safe case (the CHECK rejects the
+loser's raw UPDATE). Which of the two happens depends on which
+transaction reaches the destination warehouse's `inventory_balances`
+row first — a race, not a guarantee. **This is now a confirmed,
+not theoretical, risk**, with a minimal proposed fix (lock and
+re-validate the `warehouse_transfers` row itself, inside each
+transaction, before posting anything) presented for approval rather
+than implemented, per that verification's own scope.
 
 ### `stock:read` — re-examined, not closed
 
