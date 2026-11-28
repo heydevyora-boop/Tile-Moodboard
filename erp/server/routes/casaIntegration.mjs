@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { requireCasaKey } from '../middleware/casaAuth.mjs';
 import { handler } from '../validate.mjs';
 import { getCasaCatalogFeed } from '../services/casaExport.service.mjs';
+import { stockBySkus } from '../services/inventory.service.mjs';
 
 /* ============================================================
    /api/v1/integrations/casa — THE ONE SURFACE CASA CALLS
@@ -30,6 +31,21 @@ router.get('/catalog-feed', handler(async (req, res) => {
     brandId: q.brandId || undefined,
     collectionId: q.collectionId || undefined,
   }));
+}));
+
+/*
+ * Step 10: CASA's website stock display. Deliberately a batch of
+ * SKUs, never a product name or a CASA id -- this ERP only knows
+ * its own Products by sku, brandId etc., nothing about CASA's
+ * Tile/Product rows. Read-only, same as every other route here:
+ * it answers with current totals, it never adjusts anything.
+ */
+router.get('/stock', handler(async (req, res) => {
+  const raw = req.query.skus;
+  const skus = (Array.isArray(raw) ? raw : String(raw || '').split(','))
+    .map((s) => s.trim())
+    .filter(Boolean);
+  res.json(await stockBySkus(skus));
 }));
 
 export default router;

@@ -2165,6 +2165,23 @@
         meta:
           r.meta
       }));
+    },
+
+    /**
+     * Step 10: live ERP stock for a batch of SKUs (Tile.productCode).
+     * Resolves to a map `{ [sku]: { state, quantity? } }` -- never
+     * rejects for an ERP problem (that is a per-SKU `state`, see the
+     * backend's erpStock.service.ts), only for a real request
+     * failure (session expired, network down to our OWN backend),
+     * which the caller should treat the same as any other ApiError.
+     */
+    stock(skus) {
+      if (!skus || skus.length === 0) {
+        return Promise.resolve({});
+      }
+      return apiFetch(
+        `/tiles/stock${qs({ skus: skus.join(',') })}`
+      ).then((r) => r.data.stock);
     }
   };
 

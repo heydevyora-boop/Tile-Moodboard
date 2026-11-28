@@ -83,30 +83,24 @@ export function isErpIntegrationConfigured(): boolean {
 }
 
 /**
- * One page of the ERP's catalog feed.
- *
- * Retries exactly once, and only for a genuine network-level
- * failure (connection refused, DNS, timeout) — never for an HTTP
- * error response, which is a deterministic answer from the ERP
- * that retrying cannot change.
+ * The one place every ERP GET goes through — bounded single retry
+ * (network failure only, never for an HTTP error response, which is
+ * a deterministic answer retrying cannot change), request timeout,
+ * and JSON parsing. Shared by every exported function below so that
+ * behavior, not just the API, stays identical between them; each
+ * caller still validates the envelope shape it specifically expects.
  */
-export async function fetchErpCatalogFeedPage(params: {
-  page?: number;
-  pageSize?: number;
-  brandId?: string;
-  collectionId?: string;
-} = {}): Promise<ErpCatalogFeedPage> {
+async function requestErpJson(path: string, searchParams: Record<string, string | undefined>): Promise<unknown> {
   if (!isErpIntegrationConfigured()) {
     throw new ErpUnavailableError(
       'The ERP integration is not configured on this server (ERP_INTEGRATION_API_KEY is unset).',
     );
   }
 
-  const url = new URL(`${config.erpIntegration.baseUrl}/integrations/casa/catalog-feed`);
-  if (params.page) url.searchParams.set('page', String(params.page));
-  if (params.pageSize) url.searchParams.set('pageSize', String(params.pageSize));
-  if (params.brandId) url.searchParams.set('brandId', params.brandId);
-  if (params.collectionId) url.searchParams.set('collectionId', params.collectionId);
+  const url = new URL(`${config.erpIntegration.baseUrl}${path}`);
+  for (const [key, value] of Object.entries(searchParams)) {
+    if (value) url.searchParams.set(key, value);
+  }
 
   let lastNetworkError: unknown;
   let response: Response | undefined;
@@ -126,7 +120,7 @@ export async function fetchErpCatalogFeedPage(params: {
     } catch (error) {
       lastNetworkError = error;
       if (attempt === 1) {
-        logger.warn(`ERP catalog feed: attempt 1 failed (${error instanceof Error ? error.message : String(error)}), retrying once`);
+        logger.warn(`ERP request to ${path}: attempt 1 failed (${error instanceof Error ? error.message : String(error)}), retrying once`);
       }
     }
   }
@@ -156,6 +150,25 @@ export async function fetchErpCatalogFeedPage(params: {
     );
   }
 
+  return body;
+}
+
+/**
+ * One page of the ERP's catalog feed.
+ */
+export async function fetchErpCatalogFeedPage(params: {
+  page?: number;
+  pageSize?: number;
+  brandId?: string;
+  collectionId?: string;
+} = {}): Promise<ErpCatalogFeedPage> {
+  const body = await requestErpJson('/integrations/casa/catalog-feed', {
+    page: params.page ? String(params.page) : undefined,
+    pageSize: params.pageSize ? String(params.pageSize) : undefined,
+    brandId: params.brandId,
+    collectionId: params.collectionId,
+  });
+
   const envelope = body as { success?: boolean; data?: unknown; meta?: unknown } | null;
   if (
     !envelope
@@ -173,6 +186,42 @@ export async function fetchErpCatalogFeedPage(params: {
     data: envelope.data as ErpCatalogFeedRow[],
     meta: envelope.meta as ErpCatalogFeedMeta,
   };
+}
+
+/**
+ * Step 10: batch stock lookup by SKU alone, for the website stock
+ * display. One entry per distinct requested string, in the exact
+ * casing it was requested in (see erp/docs/API_REFERENCE.md §6.14) —
+ * never by product name, never by a CASA id.
+ */
+export interface ErpStockRow {
+  sku: string;
+  found: boolean;
+  productId?: string;
+  status?: string;
+  totals?: {
+    physical: number;
+    reserved: number;
+    damaged: number;
+    inTransit: number;
+    available: number;
+  };
+}
+
+export async function fetchErpStockBySkus(skus: string[]): Promise<ErpStockRow[]> {
+  const distinct = [...new Set(skus.map((s) => s.trim()).filter(Boolean))];
+  if (distinct.length === 0) return [];
+
+  const body = await requestErpJson('/integrations/casa/stock', { skus: distinct.join(',') });
+
+  const envelope = body as { success?: boolean; data?: unknown } | null;
+  if (!envelope || envelope.success !== true || !Array.isArray(envelope.data)) {
+    throw new ErpUnavailableError(
+      'The ERP returned a response that does not match the expected stock shape.',
+    );
+  }
+
+  return envelope.data as ErpStockRow[];
 }
 
 /**

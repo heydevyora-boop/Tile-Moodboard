@@ -1,12 +1,15 @@
-# Step 9 — CASA Backend Integration (CASA reads the ERP)
+# Step 9/10 — CASA Backend Integration (CASA reads the ERP)
 
 Status: **implemented**, server-to-server only. This is the opposite
 direction from `docs/ERP_SYNC_CONTRACT.md` (which describes a
 *future* ERP consuming CASA's feed): here, **CASA's own backend**
-calls **into the ERP's `/api/v1`** to build a read-only
-reconciliation preview. Per this step's explicit brief:
+calls **into the ERP's `/api/v1`**. Step 9 built a read-only
+reconciliation preview (§1-8 below); Step 10 (§9) adds the website's
+live stock display, on the same client and the same shared secret.
+Per step 9's explicit brief:
 
-- No website stock display.
+- No website stock display. *(lifted in step 10 — §9 — but every
+  other constraint below still holds for it.)*
 - No live production migration.
 - No write to either database, ever, from this integration.
 - No ERP credential reaches a browser.
@@ -190,9 +193,12 @@ direction.
 
 ## 7. What this step deliberately does not do
 
-- **No website stock display.** `catalog-preview` is an OWNER-gated
-  report, not a public or customer-facing route, and nothing in
-  `catalog.html` or any other storefront page calls it.
+- **No website stock display — in step 9.** `catalog-preview` is an
+  OWNER-gated report, not a public or customer-facing route, and
+  nothing in `catalog.html` or any other storefront page calls it.
+  Step 10 (§9) adds the stock display itself, through a different,
+  dedicated route — `catalog-preview` is still never called from the
+  catalog pages.
 - **No write-through.** Neither side's database is ever mutated by
   this integration — not a new column populated, not a record
   created or updated. The schema is unchanged on both sides.
@@ -217,3 +223,88 @@ direction.
   writes, key never leaked), `brandId` filter passthrough, and the
   ERP-unavailable-mid-run case (still `200`, real reason, answers
   promptly, zero DB writes).
+
+## 9. Step 10 — the website stock display
+
+Status: **implemented**. Reuses every piece of §1-8 above
+(`erpClient.service.ts`'s timeout/retry/`ErpUnavailableError`
+handling, the same shared secret, the same "always 200, state
+instead of an HTTP error" convention) for a different, catalog-facing
+purpose: showing shoppers' browsing staff live ERP stock next to the
+tiles they are already looking at, never writing anything, never
+sending the ERP key anywhere near a browser.
+
+### 9.1 What it added
+
+| Side | New | Purpose |
+|---|---|---|
+| ERP | `GET /api/v1/integrations/casa/stock` | batch stock lookup by SKU alone, gated by the same `requireCasaKey` as `catalog-feed` (see `erp/docs/API_REFERENCE.md` §6.14) |
+| CASA | `fetchErpStockBySkus()` in `erpClient.service.ts` | the one new call out to the ERP, sharing the existing retry/timeout helper |
+| CASA | `src/services/erpStock.service.ts` | maps a batch of SKUs to one of four states — never CASA's own database, never thrown for an ERP problem |
+| CASA | `GET /api/v1/tiles/stock` (authenticated, `tiles:read`) | the route the catalog pages actually call |
+| Frontend | `CasaApi.tiles.stock()` in `assets/api-client.js`, wired into `catalog.html` | batch-fetches stock for the Surface Archive grid and the resolved-variant panel, after the existing render, never blocking it |
+
+### 9.2 The four states, and why there are four
+
+A bare true/false would conflate three different facts into one bit.
+This step reports exactly one of:
+
+- **`available`** (with `quantity`) — the ERP has this SKU and it
+  currently has stock.
+- **`zero`** (with `quantity: 0`) — the ERP has this SKU and it
+  currently has none.
+- **`unknown`** — either the CASA tile has no `productCode` at all
+  (nothing to ask about), or the ERP has never heard of this SKU. No
+  fetch is even attempted for a tile with no `productCode`.
+- **`unavailable`** — a fact about *this request*, not the product:
+  the ERP integration is unconfigured, or this particular call
+  failed (down, slow, malformed response). Every SKU in a batch gets
+  this state together when the ERP itself is unreachable.
+
+`erpStock.service.ts#getErpStockForSkus()` never throws for any ERP
+problem — only a genuine bug (e.g. a failure reading its own inputs)
+would propagate, the same split `erpCatalogMapping.service.ts`
+already draws in §3 above.
+
+### 9.3 Where it shows, and what it does not replace
+
+Both the Surface Archive grid and the product detail panel's
+resolved-variant summary already showed a `inStock` badge — CASA's
+own, locally-stored, un-managed boolean (`Tile.inStock`, defaulting
+`true`). This step adds a **second**, clearly-labeled "(ERP)" line
+**next to** that badge; it does not remove, rename, or recompute the
+existing one. Preserving that line, in its original place and
+meaning, was an explicit requirement of this step's brief
+("Preserve existing catalog, product detail and browsing
+behavior"). A future step may decide `inStock` should be retired in
+favor of the ERP figure — that decision is explicitly not made here.
+
+The batch fetch always runs **after** the existing synchronous
+render from CASA's own already-fetched data, and is guarded by a
+per-render generation counter (`surfaceStockGen` / `productStockGen`
+in `catalog.html`) so a stale response — from a page the shopper has
+since navigated away from, or a variant they're no longer looking
+at — can never overwrite a newer render.
+
+### 9.4 Tests
+
+- `erp/test/api_v1_test.mjs` §18 — the same gating as `catalog-feed`
+  on the new `/stock` route; case-insensitive matching with the
+  original casing echoed back; an unseeded SKU answers `found:false`
+  with no fabricated totals; totals agree with the ERP's own
+  authenticated inventory view.
+- `backend/test-scripts/erp_client_unavailable_test.js` §3 — an
+  unconfigured integration reports every SKU `unavailable`, fast, no
+  network call attempted.
+- `backend/test-scripts/erp_stock_test.js` — full end-to-end run
+  against a mock ERP: auth (no token, no `tiles:read` both refused),
+  validation (missing/over-100 `skus`), the happy path (available /
+  zero / unknown / a duplicate SKU, in one batch), zero CASA DB
+  writes, key never leaked, and the ERP-unavailable-mid-run case
+  (every SKU `unavailable`, still `200`, answers promptly).
+- `backend/test-scripts/catalog_hierarchy_test.js` and
+  `catalog_data_format_test.js` — re-run end to end in a real
+  Chromium page against the real `catalog.html`, confirming the new
+  ERP-stock line coexists with every pre-existing assertion (product
+  image order, the Surface Archive card's field order, the resolved
+  variant's SKU/price/stock sequence) with no uncaught JS error.

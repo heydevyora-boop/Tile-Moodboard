@@ -484,6 +484,76 @@ async function main() {
     true); // structural guarantee, confirmed by reading server/routes/casaIntegration.mjs: only requireCasaKey is applied
 
   delete process.env.CASA_INTEGRATION_API_KEY;
+
+  console.log('\n18. the CASA stock-by-SKU route (step 10 website stock display)');
+
+  // Ground truth: whatever this suite's cumulative mutations have left
+  // `product`'s balance at, read through the ERP's own authenticated
+  // view. The new route aggregates across EVERY warehouse (the same
+  // aggregateStock() every other drill-down in this file uses) -- and
+  // by this point in the suite there are two (section 16 created its
+  // own transfer-destination warehouse), so the ground truth here
+  // must sum every matching row too, not just take the first.
+  const groundTruthRows = (await call('GET', '/inventory?search=' + encodeURIComponent(product.sku), { actor: ADMIN }))
+    .json.data.filter((r) => r.sku === product.sku);
+  const groundTruth = groundTruthRows.reduce((acc, r) => ({
+    physical: acc.physical + r.physical,
+    reserved: acc.reserved + r.reserved,
+    damaged: acc.damaged + r.damaged,
+    inTransit: acc.inTransit + r.inTransit,
+    available: acc.available + r.available,
+  }), { physical: 0, reserved: 0, damaged: 0, inTransit: 0, available: 0 });
+  check('18a. precondition: the ground-truth balance for this SKU is readable', groundTruthRows.length > 0, groundTruthRows);
+
+  check('18b. unconfigured: /stock is gated exactly like /catalog-feed, refused with no key at all',
+    (await fetch(BASE + '/api/v1/integrations/casa/stock?skus=' + product.sku)).status === 403);
+
+  process.env.CASA_INTEGRATION_API_KEY = 'test-only-casa-key-for-api-v1-suite';
+  const casaKeyHeader = { 'x-casa-key': process.env.CASA_INTEGRATION_API_KEY };
+
+  check('18c. configured: still refused with no key', (await fetch(BASE + '/api/v1/integrations/casa/stock?skus=' + product.sku)).status === 403);
+
+  const lowerCaseSku = product.sku.toLowerCase();
+  const garbageSku = 'NO-SUCH-SKU-EVER-SEEDED-404';
+  const batchRes = await fetch(
+    BASE + '/api/v1/integrations/casa/stock?skus='
+    // The real SKU requested in two different cases, a SKU that was
+    // never seeded, and an EXACT duplicate of the lower-cased one --
+    // three distinct strings plus one repeat.
+    + encodeURIComponent([lowerCaseSku, garbageSku, product.sku, lowerCaseSku].join(',')),
+    { headers: casaKeyHeader },
+  );
+  const batchJson = await batchRes.json();
+  check('18d. a mixed batch answers 200 in the ordinary v1 envelope', batchRes.status === 200 && batchJson.success === true, batchJson);
+  check('18e. three rows for three distinct requested strings -- the exact repeat collapses, two different casings of the same SKU do not',
+    Array.isArray(batchJson.data) && batchJson.data.length === 3, batchJson.data);
+
+  const lowerRow = batchJson.data.find((r) => r.sku === lowerCaseSku);
+  const upperRow = batchJson.data.find((r) => r.sku === product.sku);
+  check('18f. each row echoes back the EXACT casing requested, not a normalized form',
+    Boolean(lowerRow) && Boolean(upperRow), batchJson.data);
+  check('18g. matching is case-insensitive: the lower-cased request still resolves to the real product',
+    lowerRow?.found === true && Boolean(lowerRow?.productId) && lowerRow.productId === upperRow?.productId,
+    { lowerRow, upperRow });
+  check('18h. the matched totals agree with the ERP\'s own authenticated inventory view -- same five dimensions',
+    lowerRow
+    && lowerRow.totals.physical === groundTruth.physical
+    && lowerRow.totals.reserved === groundTruth.reserved
+    && lowerRow.totals.damaged === groundTruth.damaged
+    && lowerRow.totals.inTransit === groundTruth.inTransit
+    && lowerRow.totals.available === groundTruth.available,
+    { lowerRow, groundTruth });
+
+  const unmatchedRow = batchJson.data.find((r) => r.sku === garbageSku);
+  check('18i. a SKU this ERP has never seeded answers found:false, never a fabricated zero',
+    unmatchedRow?.found === false && !('totals' in unmatchedRow), unmatchedRow);
+
+  const emptyRes = await fetch(BASE + '/api/v1/integrations/casa/stock?skus=', { headers: casaKeyHeader });
+  const emptyJson = await emptyRes.json();
+  check('18j. an empty skus param answers 200 with an empty list, not an error',
+    emptyRes.status === 200 && Array.isArray(emptyJson.data) && emptyJson.data.length === 0, emptyJson);
+
+  delete process.env.CASA_INTEGRATION_API_KEY;
 }
 
 try {

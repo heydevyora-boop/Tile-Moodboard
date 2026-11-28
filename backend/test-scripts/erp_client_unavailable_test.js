@@ -84,6 +84,21 @@ async function main() {
   check('2c. no erp/casa/matches fields are present when unreachable -- nothing invented',
     preview.erp === undefined && preview.casa === undefined && preview.matches === undefined);
 
+  step('3. the website stock display (step 10) also reports unavailable, never throws, for the same reason');
+
+  const erpStock = require(path.join(ROOT, 'src/services/erpStock.service'));
+
+  const stockBefore = Date.now();
+  const stock = await erpStock.getErpStockForSkus(['DV-1001', 'DV-1002']);
+  const stockElapsedMs = Date.now() - stockBefore;
+
+  check('3a. every requested SKU reports state "unavailable", not "unknown" or a thrown error',
+    stock['DV-1001']?.state === 'unavailable' && stock['DV-1002']?.state === 'unavailable', stock);
+  check('3b. it failed FAST -- under 500ms -- proving no network call was attempted at all',
+    stockElapsedMs < 500, stockElapsedMs);
+  check('3c. no quantity is invented for an unavailable SKU',
+    !('quantity' in (stock['DV-1001'] || {})) && !('quantity' in (stock['DV-1002'] || {})));
+
   console.log(fail ? `\n  failed: ${failures.join(' | ')}` : '');
   console.log(`\n${'='.repeat(58)}\n${pass} passed, ${fail} failed, ${pass + fail} checks\n${'='.repeat(58)}`);
   process.exit(fail ? 1 : 0);

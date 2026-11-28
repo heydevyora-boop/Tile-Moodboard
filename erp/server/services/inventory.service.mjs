@@ -276,6 +276,42 @@ export async function productLineStock(productLineId) {
   return { productLine: line, totals, variants };
 }
 
+/**
+ * Step 10: batch stock lookup BY SKU ALONE -- the one thing CASA's
+ * website stock display is allowed to ask for, never a product name
+ * or an ERP internal id. Matches case-insensitively (the Product.sku
+ * unique constraint is case-sensitive; callers may not know the
+ * stored casing), but every returned row's `sku` field echoes back
+ * exactly what was requested, not the normalized form, so a caller
+ * can map results back to its own request without re-normalizing.
+ *
+ * One row per distinct requested SKU, always, so a caller never has
+ * to guess whether a missing row meant "not found" or "dropped":
+ * `found: false` when this ERP has no Product with that SKU at all;
+ * `found: true` with `totals` (same five dimensions as every other
+ * stock read in this file) when it does. Capped at 200 per call --
+ * far more than one catalog page or one product's variant list ever
+ * needs, and a hard stop against an unbounded request.
+ */
+export async function stockBySkus(skus) {
+  const requested = [...new Set((skus || []).map((s) => String(s ?? '').trim()).filter(Boolean))].slice(0, 200);
+  if (requested.length === 0) return [];
+
+  const normalized = requested.map((s) => s.toUpperCase());
+  const products = await prisma.product.findMany({
+    where: { sku: { in: normalized }, archivedAt: null },
+    select: { id: true, sku: true, status: true },
+  });
+  const byNormalizedSku = new Map(products.map((p) => [p.sku.toUpperCase(), p]));
+
+  return Promise.all(requested.map(async (sku) => {
+    const product = byNormalizedSku.get(sku.toUpperCase());
+    if (!product) return { sku, found: false };
+    const totals = await aggregateStock({ productId: product.id });
+    return { sku, found: true, productId: product.id, status: product.status, totals };
+  }));
+}
+
 /** Everything the inventory dashboard shows, from the database. */
 export async function dashboard() {
   const [totals, warehouses, products, balances, recent, recon, transfers] = await Promise.all([

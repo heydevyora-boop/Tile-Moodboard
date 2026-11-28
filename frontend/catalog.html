@@ -144,6 +144,8 @@
   .stock-dot { display:inline-block; width:6px; height:6px; border-radius:50%; margin-right:5px; }
   .stock-dot.yes { background:#6E5228; }
   .stock-dot.no { background:#A8552A; }
+  .stock-dot.unknown, .stock-dot.checking { background:var(--muted); }
+  .erp-stock-line { display:block; margin-top:3px; }
 
   .load-more-row { display:flex; justify-content:center; margin-top:22px; }
   .btn-secondary { min-height:48px; padding:0 22px; background:#fff; color:var(--ink); border:1px solid var(--line); border-radius:13px; cursor:pointer; font-size:10.5px; letter-spacing:.14em; }
@@ -263,6 +265,60 @@
     const div = document.createElement('div');
     div.textContent = s == null ? '' : s;
     return div.innerHTML;
+  }
+
+  // ============================================================
+  // ERP LIVE STOCK (Step 10)
+  // ============================================================
+  // Batch-fetched after the catalog grid/detail panel already
+  // rendered from CASA's own data -- never blocks that render, and
+  // degrades to a clear, distinct badge (never a guess) when the
+  // ERP integration is down, unconfigured, or simply has no
+  // counterpart for a given SKU. Deliberately separate from, and
+  // never a replacement for, the existing CASA `inStock` flag shown
+  // alongside it.
+
+  let surfaceStockGen = 0;
+  let productStockGen = 0;
+
+  function erpStockBadgeHtml(info) {
+    if (!info) {
+      return '<span class="stock-dot checking"></span>CHECKING LIVE STOCK…';
+    }
+    if (info.state === 'available') {
+      return '<span class="stock-dot yes"></span>' + info.quantity + ' AVAILABLE (ERP)';
+    }
+    if (info.state === 'zero') {
+      return '<span class="stock-dot no"></span>OUT OF STOCK (ERP)';
+    }
+    if (info.state === 'unknown') {
+      return '<span class="stock-dot unknown"></span>NOT LINKED TO ERP';
+    }
+    return '<span class="stock-dot unknown"></span>LIVE STOCK UNAVAILABLE';
+  }
+
+  /**
+   * Batch-fetches ERP stock for `targets` ({sku, el} pairs already
+   * in the DOM) and patches each one's badge in place once
+   * resolved. `gen`/`getCurrentGen` guard against a stale fetch (a
+   * reload, filter change, or page nav that happened while this was
+   * in flight) overwriting a newer render -- never throws, a failed
+   * request just leaves every target "unavailable".
+   */
+  async function applyErpStock(targets, gen, getCurrentGen) {
+    if (targets.length === 0) return;
+    const skus = [...new Set(targets.map((t) => t.sku))];
+    let stockMap;
+    try {
+      stockMap = await CasaApi.tiles.stock(skus);
+    } catch (err) {
+      stockMap = {};
+    }
+    if (gen !== getCurrentGen()) return;
+    targets.forEach(({ sku, el }) => {
+      if (!el.isConnected) return;
+      el.innerHTML = erpStockBadgeHtml(stockMap[sku] || { state: 'unavailable' });
+    });
   }
 
   // ============================================================
@@ -679,7 +735,18 @@
         slot.innerHTML =
           '<div class="variant-resolved mono">SKU ' + escapeHtml(resolvedTile.productCode || resolvedTile.id) + '</div>' +
           (priceLine ? '<div class="variant-resolved mono">' + escapeHtml(priceLine) + '</div>' : '') +
-          '<div class="variant-resolved mono">' + (resolvedTile.inStock ? 'IN STOCK' : 'OUT OF STOCK') + '</div>';
+          '<div class="variant-resolved mono">' + (resolvedTile.inStock ? 'IN STOCK' : 'OUT OF STOCK') + '</div>' +
+          // ERP-backed line, additional to the CASA inStock line
+          // above it -- not a replacement. No fetch at all for a
+          // tile with no productCode; it goes straight to "not
+          // linked".
+          '<div class="variant-resolved mono erp-stock-line">' + erpStockBadgeHtml(resolvedTile.productCode ? null : { state: 'unknown' }) + '</div>';
+
+        const gen = ++productStockGen;
+        if (resolvedTile.productCode) {
+          const el = slot.querySelector('.erp-stock-line');
+          if (el) applyErpStock([{ sku: resolvedTile.productCode, el }], gen, () => productStockGen);
+        }
       } else {
         slot.innerHTML = browse.selectedFinish ? '<div class="variant-resolved mono">Select a size to resolve the exact variant.</div>' : '';
       }
@@ -751,6 +818,7 @@
 
     host.innerHTML = '<div class="surface-grid" id="surfaceGrid"></div>';
     const grid = document.getElementById('surfaceGrid');
+    const erpStockTargets = [];
     state.surfaces.forEach((s) => {
       const card = document.createElement('article');
       card.className = 'surface-card';
@@ -767,6 +835,10 @@
       const specParts = [s.size, s.material, s.thickness].filter(Boolean).join(' · ');
       const skuSpecLine = [s.productCode, specParts, s.finish].filter(Boolean).join(' · ');
       const priceLine = s.sellingPrice ? ('₹' + s.sellingPrice + (s.unitOfMeasure ? '/' + s.unitOfMeasure.toLowerCase() : '')) : null;
+      // The ERP-backed line is ADDITIONAL to, never a replacement
+      // for, the existing CASA inStock badge right above it -- a
+      // tile with no productCode has nothing to ask the ERP about,
+      // so it goes straight to "not linked" with no fetch at all.
       card.innerHTML =
         img +
         '<span style="min-width:0">' +
@@ -774,13 +846,21 @@
         '<span class="sn">' + escapeHtml(productName) + '</span>' +
         (skuSpecLine ? '<span class="ss mono">' + escapeHtml(skuSpecLine) + '</span>' : '') +
         '<span class="ss mono">' + (priceLine ? escapeHtml(priceLine) + ' · ' : '') + '<span class="stock-dot ' + (s.inStock ? 'yes' : 'no') + '"></span>' + (s.inStock ? 'IN STOCK' : 'OUT OF STOCK') + '</span>' +
+        '<span class="ss mono erp-stock-line">' + erpStockBadgeHtml(s.productCode ? null : { state: 'unknown' }) + '</span>' +
         '</span>';
       grid.appendChild(card);
+      if (s.productCode) {
+        const el = card.querySelector('.erp-stock-line');
+        if (el) erpStockTargets.push({ sku: s.productCode, el });
+      }
     });
 
     const hasMore = !!(state.meta && state.meta.hasNextPage);
     loadMoreRow.style.display = hasMore ? 'flex' : 'none';
     document.getElementById('loadMoreBtn').disabled = state.surfacesLoading;
+
+    const gen = ++surfaceStockGen;
+    applyErpStock(erpStockTargets, gen, () => surfaceStockGen);
   }
 
   function clearSearch() {

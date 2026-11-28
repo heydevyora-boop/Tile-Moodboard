@@ -258,8 +258,14 @@ async function main() {
   await page.locator('#sizeChips .option-chip', { hasText: '600x600mm' }).click();
   await page.waitForSelector('.variant-resolved');
   const resolvedTexts = await page.locator('.variant-resolved').allTextContents();
+  // Step 10 added a fourth line -- the ERP-backed live stock badge,
+  // after the three this check already covers. Its own text is not
+  // asserted here: it starts as "checking" and updates once the
+  // (here unconfigured, so always-unavailable) ERP lookup resolves,
+  // which races this capture -- see test:erp-stock for its own
+  // dedicated, deterministic coverage of that line's content.
   check('7b. the resolved variant shows SKU, then price, then stock status, in that order',
-    resolvedTexts.length === 3 && resolvedTexts[0].includes('KAJ-OED-M-600') && resolvedTexts[1].includes('185.5') && resolvedTexts[2].includes('IN STOCK'));
+    resolvedTexts.length === 4 && resolvedTexts[0].includes('KAJ-OED-M-600') && resolvedTexts[1].includes('185.5') && resolvedTexts[2].includes('IN STOCK'));
 
   await page.waitForSelector('#surfaceGrid .surface-card', { timeout: 15000 });
   const firstCardLines = await page.locator('#surfaceGrid .surface-card').first().locator('.ss, .sn').allTextContents();

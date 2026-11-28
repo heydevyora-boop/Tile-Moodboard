@@ -70,6 +70,10 @@ place in §6, not here:
   for the CASA De Aurum backend to call as a separate service, so it
   is gated by its own shared secret instead of `x-erp-user` +
   `requirePermission()`.
+- **Step 10 (CASA website stock display)** added a second route on
+  the same router, `GET /integrations/casa/stock` (§6.14) — the
+  batch, SKU-only lookup CASA's catalog pages call per page of tiles
+  rendered, gated by the same shared secret as the route above.
 
 Closing this gap — these additions existed in the code and were
 smoke-tested in `test/api_v1_test.mjs` §1, but were never added to
@@ -669,7 +673,7 @@ system," which nothing in this ERP asks for, and `type=CUSTOMER` or
 `type=SUPPLIER` should be used whenever the caller already knows
 which side it wants.
 
-### 6.14 CASA Integration — new in step 9
+### 6.14 CASA Integration — new in step 9, extended in step 10
 
 The only route in this file that does not speak `x-erp-user` at all.
 It exists so the **CASA De Aurum backend** (a separate Node service,
@@ -698,6 +702,7 @@ unset in any environment the CASA backend has no business reaching.
 | Method | Path | Perm. | Params | Response `data` |
 |---|---|---|---|---|
 | GET | `/integrations/casa/catalog-feed` | *(shared secret only)* | query: `page?`, `pageSize?` (≤100), `brandId?`, `collectionId?` | page of `{company:{id,name}, collection:{id,name}\|null, productLine:{id,code,name,description,imageUrl}, variants:[{id,sku,finish,size,colour,status,inventory:{onHand,reserved,damaged,inTransit,available}}]}` |
+| GET | `/integrations/casa/stock` | *(shared secret only)* | query: `skus` (comma-separated, ≤200, deduplicated by exact string) | array of `{sku, found: boolean, productId?, status?, totals?: {physical,reserved,damaged,inTransit,available}}` — one row per distinct requested string, always, in the same case it was requested in |
 
 Built on the existing `productLine.service.mjs#list()` and
 `inventory.service.mjs#productLineStock()` — no new service logic,
@@ -737,6 +742,41 @@ A missing or wrong key:
 // 403 Forbidden
 { "success": false, "message": "Invalid or missing x-casa-key.", "code": "FORBIDDEN" }
 ```
+
+**`GET /integrations/casa/stock` (step 10)** — CASA's website stock
+display calls this one, per batch of SKUs it is about to render, to
+show live availability. Built on `inventory.service.mjs#stockBySkus()`,
+which reuses the same (private) `aggregateStock()` every other
+drill-down in §6.6 already sums with — the totals it returns agree
+with this ERP's own authenticated inventory view for the same SKU,
+summed across every warehouse, never one warehouse's balance alone.
+Matches **by SKU only, case-insensitively** — never by name, never by
+a CASA id, because this ERP knows nothing about CASA's own ids.
+
+```json
+// GET /integrations/casa/stock?skus=dv-1001,no-such-sku
+// x-casa-key: <the configured secret>
+{
+  "success": true, "message": "Request completed successfully",
+  "data": [
+    { "sku": "dv-1001", "found": true, "productId": "…", "status": "ACTIVE",
+      "totals": { "physical": 283, "reserved": 0, "damaged": 0, "inTransit": 0, "available": 283 } },
+    { "sku": "no-such-sku", "found": false }
+  ],
+  "meta": {}
+}
+```
+
+A row's `sku` is always exactly the string that was requested (never
+the normalized/uppercased form), so a caller can map a result back to
+its own request without re-normalizing. `found: false` carries no
+`totals` at all — never a fabricated zero — so a caller can tell
+"this ERP has never heard of this SKU" apart from "this ERP has heard
+of it and it has none." Two requests for the same exact string
+collapse to one row; two different **casings** of the same SKU do
+not (there is no single casing to prefer when a caller sends more
+than one), so a caller who cares should normalize its own request
+list before asking, not rely on this route to do it silently.
 
 ---
 
