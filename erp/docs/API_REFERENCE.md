@@ -46,6 +46,32 @@ for step 8; `server/services/permission.mjs`'s `requirePermission()`
 previously-open route files now call it the same way purchase and
 sales already did.
 
+### 0.1 Kept current after step 8 (maintenance note)
+
+The table above is the step-8 point-in-time record and is left as
+written. Two later pieces of work extended the same `/api/v1`
+surface by the same mechanism (reusing the existing router objects,
+no new envelope or versioning work needed) and are documented in
+place in §6, not here:
+
+- **The product hierarchy** added `product-lines` (full CRUD,
+  `product:write`-gated writes, §6.3a) and four inventory drill-down
+  routes (§6.6: `/inventory/hierarchy`, `/inventory/companies/:id`,
+  `/inventory/collections/:id`, `/inventory/products/:id`). Both were
+  mounted in `server/routes/v1.mjs` the same way everything in the
+  table above is.
+- **Partial transfer receipt** changed `POST /warehouses/transfers/
+  :id/receive`'s body and the transfer line response shape (§6.7) —
+  the route and its permission (`stock:post`) are unchanged; only
+  what the body accepts and what the response reports grew.
+
+Closing this gap — these additions existed in the code and were
+smoke-tested in `test/api_v1_test.mjs` §1, but were never added to
+§1's module list, never given their own request/response
+documentation here, and the transfer lifecycle had never been
+exercised end-to-end over real HTTP — is itself a later piece of work
+on top of step 8, not a correction to what step 8 shipped.
+
 ---
 
 ## 1. Base URL, versioning and transport
@@ -295,6 +321,29 @@ NEEDS_HUMAN_REVIEW` unless `confirmDistinct: true` is sent.
 cannot be removed without orphaning the ledger entries that explain
 where the stock went; archiving is the supported "remove from use."
 
+### 6.3a Product Master — Product Lines
+
+Added after step 8, by the product hierarchy work (§0.1). Sits
+between Collection and the variant-level `Product` (§6.3): "Onery
+Elite Decore" as its own row, rather than a name repeated across
+every one of its finish/size variants. A sibling inside the existing
+Product Master module, not a module of its own — no separate
+`routes/controllers/validators` split, the same shape `brands.mjs`
+and `product-heads.mjs` already have.
+
+| Method | Path | Perm. | Params / body | Response `data` |
+|---|---|---|---|---|
+| GET | `/product-lines` | | query: `search?`, `brandId?`, `collectionId?`, `categoryId?`, `isActive?`, `page?`, `pageSize?` (≤200) | page of `{id, code, name, description, specifications, imageUrl, isActive, brand: {id,name,code}, collection: {id,name,code}\|null, category: {id,name,code}\|null, variantCount, createdAt, updatedAt}` |
+| GET | `/product-lines/similar` | | query: `name`, `brandId?`, `collectionId?` | `{candidates: [...]}` — near-matches before saving |
+| GET | `/product-lines/:id` | | | one product line, in the same shape as a list row |
+| POST | `/product-lines` | `product:write` | `{name, brandId, collectionId?, categoryId?, code?, description?, specifications?, imageUrl?, isActive?, confirmDistinct?}` | created product line, `201` |
+| PATCH | `/product-lines/:id` | `product:write` | `{name?, brandId?, collectionId?, categoryId?, description?, specifications?, imageUrl?, isActive?}` | updated product line |
+
+**"View every variant under a product" is `GET /products?
+productLineId=:id`** — the existing variant-level list endpoint
+(§6.3) with one more filter, not a second, duplicate nested route.
+There is no `DELETE`, for the same reason `/products/:id` has none.
+
 ### 6.4 Reference data
 
 | Method | Path | Perm. | Response `data` |
@@ -335,6 +384,10 @@ service (`db/stock.mjs`); there is no second way to change a balance.
 | GET | `/inventory/totals` | | | company-wide totals, from the database view, never re-summed in JavaScript |
 | GET | `/inventory/ledger` | | query: `productId?`, `sku?`, `search?`, `warehouseId?`, `brandId?`, `headId?`, `movementType?`, `referenceNo?`, `performedById?`, `from?`, `to?`, `page?`, `pageSize?` | the stock card: every movement, with the balance it produced |
 | GET | `/inventory/reconciliation` | | | the reconciliation report — **reporting-only, never repairs** |
+| GET | `/inventory/hierarchy` | | | **added after step 8** (§0.1) — every active company (brand), each with its own stock totals, live-summed from the same SKU-level balances as everything else here; nothing is stored at this level |
+| GET | `/inventory/companies/:id` | | | one company's totals plus each of its collections' own totals, and an `unassigned` bucket for product lines with no collection; `404` if the brand does not exist |
+| GET | `/inventory/collections/:id` | | | one collection's totals plus each of its product lines' own totals, and an `unassigned` bucket for variants with no product line; `404` if the collection does not exist |
+| GET | `/inventory/products/:id` | | | one product line's totals plus each of its own finish/size variants; `404` if the product line does not exist |
 | POST | `/inventory/opening` | `stock:post` | `{product, warehouseId, quantity≥0, unitCost?, remarks?, transactionDate?}` | the movement, `201` |
 | POST | `/inventory/inward` | `stock:post` | `{product, warehouseId, quantity>0, uom?, reason?, unitCost?, referenceType?, referenceId?, referenceNo?, remarks?, transactionDate?, idempotencyKey?}` | the movement, `201` |
 | POST | `/inventory/outward` | `stock:post` | same shape, `reason` is one of `SALES_DISPATCH\|SAMPLE_ISSUE\|PURCHASE_RETURN\|OTHER` | the movement, `201` |
@@ -362,15 +415,61 @@ double-counting stock.
 | POST | `/warehouses/:id/active` | `warehouse:write` | `{isActive, reason?}` | updated warehouse; refused while the warehouse still holds stock |
 | GET | `/warehouses/transfers` | | query: `status?`, `warehouseId?`, `page?`, `pageSize?` | page of transfers |
 | POST | `/warehouses/transfers` | `stock:post` | `{fromWarehouseId, toWarehouseId, notes?, lines: [{productId, quantity>0, uom?}] (≥1)}` | created transfer, `201` |
-| GET | `/warehouses/transfers/:id` | | | one transfer |
-| POST | `/warehouses/transfers/:id/dispatch` | `stock:post` | — | the transfer, now in transit |
-| POST | `/warehouses/transfers/:id/receive` | `stock:post` | — | the transfer, now received |
-| POST | `/warehouses/transfers/:id/cancel` | `stock:post` | `{reason?}` | the transfer, cancelled |
+| GET | `/warehouses/transfers/:id` | | | one transfer, with its lines and reconciliation summary — see below |
+| POST | `/warehouses/transfers/:id/dispatch` | `stock:post` | — | the transfer, now `IN_TRANSIT` |
+| POST | `/warehouses/transfers/:id/receive` | `stock:post` | **changed after step 8** (§0.1), see below | the transfer; `IN_TRANSIT` if anything is still outstanding, `COMPLETED` once every line is fully resolved |
+| POST | `/warehouses/transfers/:id/cancel` | `stock:post` | `{reason?}` | the transfer, `CANCELLED`; **`409 CONFLICT`** if any line has already had a quantity accepted, damaged or written off (see below) — an untouched transfer (nothing dispatched, or dispatched and nothing yet received) is cancellable exactly as before |
 
 **There is no `DELETE /warehouses/:id`.** A warehouse with stock
 movements against it cannot be removed; deactivating is the
 supported path, and the database and the service both refuse it
 while the warehouse still holds anything.
+
+#### Partial transfer receipt (changed after step 8)
+
+A transfer can be received in more than one pass — some boxes
+accepted, some arriving damaged, some never arriving at all — rather
+than only all at once. `POST /warehouses/transfers/:id/receive`'s
+body is:
+
+```json
+{
+  "lines": [
+    {
+      "transferLineId": "uuid, required",
+      "acceptedQuantity": "number ≥ 0, optional, default 0",
+      "damagedQuantity": "number ≥ 0, optional, default 0",
+      "missingQuantity": "number ≥ 0, optional, default 0",
+      "missingReason": "string, required if missingQuantity > 0",
+      "remarks": "string, optional — recorded against a damaged quantity"
+    }
+  ]
+}
+```
+
+Rules, enforced with `422 VALIDATION_FAILED` naming the field:
+
+- At least one of `acceptedQuantity`/`damagedQuantity`/`missingQuantity`
+  must be greater than zero per line — a line recording nothing should
+  be left off the request, not sent as all-zero.
+- The three, summed with whatever was already accepted/damaged/missing
+  on that line in earlier passes, can never exceed the line's
+  dispatched `quantity` — over-receipt is refused outright, with
+  **no override**.
+- `missingQuantity > 0` requires a non-blank `missingReason`.
+- Accepted and damaged both arrive physically (one combined stock
+  movement); damaged is then separately condemned (unsellable, but
+  still physically on the shelf). Missing never arrives at all and is
+  written off against the destination's in-transit balance — never
+  automatic, always this explicit, reasoned call.
+
+Each `GET /warehouses/transfers/:id` line in the response now carries
+`quantity` (dispatched), `acceptedQuantity`, `damagedQuantity`,
+`missingQuantity` (each a running total across every receive call so
+far) and `outstandingQuantity` (`quantity` minus the other three —
+compute nothing independently; this field is already the
+authoritative figure). The transfer's own `movement` summary gains a
+`missing` field alongside `dispatched`/`received`/`stillInTransit`.
 
 ### 6.8 Purchase — Suppliers
 
