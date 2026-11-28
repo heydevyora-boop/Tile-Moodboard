@@ -466,10 +466,17 @@ they are the most direct check that extending `db/stock.mjs` with the
 movement type's behaviour untouched. Also re-run clean:
 `test:product-master` (92/92), `test:hierarchy` (29/29), `test:api`
 (61/61), `test:data` (38/38), `test:import` (85/85).
-`test:frontend` was **not** run this phase — it drives a real browser
-against a running dev server and API, neither of which this
-container starts by default, and it exercises UI screens this phase
-did not touch.
+
+**The concurrency fix's own closure pass went further and actually
+stood up a live dev server, API and browser** (`npm run api` +
+`npm run dev`, against a disposable database, never the development
+one) to run `test:frontend` (66/66) and a dedicated Transfers-page
+Playwright script that drives the partial-receipt form itself —
+accepted, damaged and missing dispositions, the mandatory missing
+reason, over-receipt refused client-side, the duplicate-submit guard
+— all through actual clicks and typed input, 19/19. Plus the new
+`test/transfer_concurrency_test.mjs` (21/21) — see "Concurrency: the
+transfer row is locked first" above.
 
 ### A defect this found: `db:verify` was writing to the development database
 
@@ -615,38 +622,58 @@ not all, of its dispatched quantity resolved as balanced, and to fold
 a `TRANSFER_LOSS` quantity into the completed/cancelled invariant:
 `dispatched = received + missing`.
 
-### Concurrency: reviewed, not assumed
+### Concurrency: the transfer row is locked first, in both directions
 
-Two receive calls fired at the same line, together claiming more than
-is outstanding, are not serialized by any lock this phase added —
-both read the line's current totals before either's transaction
-opens, the same pattern the rest of this file's reads already use.
-What actually prevents an over-receipt from sticking is the database:
-`postStockMovement()`'s row lock on the destination's balance
-serializes the two transactions regardless, and the new
-`transfer_line_resolved_not_over_dispatched` CHECK on the second one's
-`UPDATE` is the backstop that makes the second call fail outright
-rather than quietly succeed. Test 17ae fires exactly this race and
-asserts the **final state**, not just that something happened:
-exactly one of the two sticks, the line's total is exactly what one
-call claims — never the sum of both, never zero.
+A verification pass tested the concurrent cancel-and-receive case
+directly rather than reasoning about it, and found that the
+in-transit CHECK did **not** always backstop it: of five real
+concurrent trials, two produced a genuinely corrupted business state
+(10 units counted as both returned to the source and received at the
+destination — the same dispatched quantity, physically duplicated),
+caught after the fact by the reconciliation report but not prevented.
+Which of the two outcomes happened depended on which transaction
+reached the destination warehouse's `inventory_balances` row first —
+a race, not a guarantee.
 
-**A later verification pass tested the concurrent cancel-and-receive
-case directly, rather than reasoning about it, and found the
-original claim here wrong.** It is not always backstopped by the
-in-transit CHECK: of five real concurrent trials, two produced a
-genuinely corrupted business state (10 units counted as both
-returned to the source and received at the destination — the same
-dispatched quantity, physically duplicated), caught after the fact by
-the reconciliation report but not prevented. The other three trials
-were the previously-described safe case (the CHECK rejects the
-loser's raw UPDATE). Which of the two happens depends on which
-transaction reaches the destination warehouse's `inventory_balances`
-row first — a race, not a guarantee. **This is now a confirmed,
-not theoretical, risk**, with a minimal proposed fix (lock and
-re-validate the `warehouse_transfers` row itself, inside each
-transaction, before posting anything) presented for approval rather
-than implemented, per that verification's own scope.
+**Fixed.** `receiveTransfer()` and `cancelTransfer()` both now take a
+`SELECT ... FOR UPDATE` lock on the `warehouse_transfers` row itself
+— as the very first statement inside their transaction, before
+reading anything that decides whether the call is valid. Each then
+re-reads the transfer's current status and every line's resolved
+quantities from *inside* that lock, and re-runs the same validation
+that always existed (status must be `IN_TRANSIT`, nothing already
+resolved for a cancel, outstanding not exceeded for a receive) against
+that fresh read — never against the plain, unlocked read taken before
+the transaction opened. This is the same row-lock idiom
+`postStockMovement()` already uses on `inventory_balances`, applied
+to the one row every lifecycle operation on a transfer now serializes
+through.
+
+`test/transfer_concurrency_test.mjs` exercises this directly rather
+than trusting the reasoning: 30 iterations of cancel-vs-receive in
+each array order (60 total), 30 of two simultaneous partial receipts,
+30 of two simultaneous full receipts, plus repeated deterministic
+checks of over-receipt refusal and cancellation-after-partial/damaged/
+missing. Across all of it: both sides never both succeed, the loser
+always gets the existing named `ConflictError` (409) rather than a
+raw database exception, and a closing pass of
+`reconciliationReport()` plus direct queries for duplicate
+idempotency keys, negative balances and over-resolved transfer lines
+all come back clean. The two-receives-over-receiving case (test 17ae
+in `inventory_test.mjs`) is additionally still backstopped by the
+`transfer_line_resolved_not_over_dispatched` CHECK as defense in
+depth, but is no longer the *only* thing standing between a race and
+a corrupted balance.
+
+**Known remaining gap, by the same mechanism, out of this fix's named
+scope:** `dispatchTransfer()` does not take this lock. A dispatch
+racing a cancel on the same `DRAFT` transfer is not protected the same
+way — dispatch's own idempotency key makes a double-dispatch safe, but
+a dispatch that reads stale `DRAFT` status concurrently with a cancel
+could still overwrite a cancellation's status on commit. This was not
+one of the two functions this fix was scoped to, and extending the
+same lock to `dispatchTransfer()` would be a small, consistent
+follow-up if asked for, not implemented here.
 
 ### `stock:read` — re-examined, not closed
 
@@ -661,8 +688,25 @@ describe it from memory.
 No CASA catalogue code. No Google Drive/Sheets workflow. No new
 authentication. No production data. No merge to `main` — everything
 here is on `claude/seed-feminine-404-fix-aq50lk`, same as every phase
-before it. The one UI change is the smallest one that keeps the
-existing Transfers screen's single-click "Receive" button working
-under the new API shape (it now submits a full accept of whatever is
-outstanding, matching its exact previous behaviour) — not a new
-discrepancy-entry screen, which nothing in this phase asked for.
+before it.
+
+### The Transfers screen's Receive dialog (closure pass)
+
+The first cut of this phase kept Receive a one-click full accept,
+deliberately, because nothing in the original brief asked for a
+discrepancy-entry screen. The closure pass built it anyway, once
+asked for: Receive is now a per-line form showing dispatched,
+previously accepted/damaged/missing and outstanding (every figure
+read straight off the API, never recomputed here), with three inputs
+— accepted now, damaged now, missing now — that default to a full
+accept of the outstanding quantity, so confirming without touching
+anything is still exactly the old one-click behaviour. The three
+figures together are checked against outstanding client-side before
+Confirm is even enabled; a missing quantity requires its own reason,
+per line, before Confirm enables; Confirm disables itself the instant
+it is clicked. The transfer detail view sums the same per-line
+figures into dispatched/accepted/damaged/missing/outstanding totals
+and shows them beside the existing balanced/unbalanced notice and
+status pill — again, summed from backend values, never an
+independently computed stock balance. No new screen, no new route:
+the existing confirm-dialog and detail-dialog components, widened.

@@ -626,24 +626,55 @@ function prepareReceipt(transfer, input) {
  * @param {Array} input.lines  { transferLineId, acceptedQuantity?, damagedQuantity?, missingQuantity?, missingReason?, remarks? }
  */
 export async function receiveTransfer(id, input, actor) {
-  const transfer = await prisma.warehouseTransfer.findUnique({
-    where: { id },
-    include: { lines: true, fromWarehouse: true, toWarehouse: true },
-  });
-  if (!transfer) throw new NotFoundError('Transfer');
-  if (transfer.status !== 'IN_TRANSIT') {
-    throw new ConflictError('Transfer ' + transfer.transferNo + ' is ' + transfer.status
-      + ' and cannot be received.');
-  }
-
-  const prepared = prepareReceipt(transfer, input);
-  // One id per call, not per line: this is what makes several
-  // lines in the SAME receive() call distinct from each other
-  // while still letting the same line be received again in a
-  // LATER call without colliding with its own earlier entries.
-  const eventId = crypto.randomUUID();
+  // A fast existence check, so a wrong id gets a clean 404 without
+  // taking the lock below pointlessly. This is NOT the check that
+  // decides whether the receipt is valid -- that happens again,
+  // against a LOCKED read, inside the transaction.
+  const exists = await prisma.warehouseTransfer.findUnique({ where: { id }, select: { id: true } });
+  if (!exists) throw new NotFoundError('Transfer');
 
   await prisma.$transaction(async (tx) => {
+    /* LOCK THE TRANSFER ITSELF, FIRST -- before reading anything
+       that decides whether this call is valid.
+
+       Without this, two concurrent calls against the same
+       transfer (a cancel racing a receive, or two receives) each
+       validate against a plain, unlocked read, and can both pass
+       validation against a state that is stale by the time either
+       actually writes. That is exactly how a race was found to
+       double-count a dispatched quantity as both returned to the
+       source and received at the destination: cancelTransfer's
+       return leg and receiveTransfer's accept leg each believed,
+       independently and correctly AT THE MOMENT THEY CHECKED, that
+       the stock they were about to move was still theirs to move.
+
+       Same row-lock idiom postStockMovement already uses on
+       inventory_balances -- SELECT ... FOR UPDATE before anything
+       is read for a decision -- applied here to the one row every
+       lifecycle operation on this transfer contends for. */
+    await tx.$queryRaw`SELECT 1 FROM "warehouse_transfers" WHERE "id" = ${id}::uuid FOR UPDATE`;
+
+    // Now read the CURRENT state. Nothing else holding this lock
+    // can be mid-write, so this is no longer the stale read the
+    // race exploited.
+    const transfer = await tx.warehouseTransfer.findUnique({
+      where: { id },
+      include: { lines: true, fromWarehouse: true, toWarehouse: true },
+    });
+    if (!transfer) throw new NotFoundError('Transfer');
+    if (transfer.status !== 'IN_TRANSIT') {
+      throw new ConflictError('Transfer ' + transfer.transferNo + ' is ' + transfer.status
+        + ' and cannot be received.');
+    }
+
+    // The existing validation, unchanged, run against THIS locked
+    // read -- not against whatever was true before the lock.
+    const prepared = prepareReceipt(transfer, input);
+    // One id per call, not per line: this is what makes several
+    // lines in the SAME receive() call distinct from each other
+    // while still letting the same line be received again in a
+    // LATER call without colliding with its own earlier entries.
+    const eventId = crypto.randomUUID();
     let movementCount = 0;
 
     for (const p of prepared.lines) {
@@ -779,40 +810,55 @@ export async function receiveTransfer(id, input, actor) {
  * what actually happened.
  */
 export async function cancelTransfer(id, actor, reason) {
-  const transfer = await prisma.warehouseTransfer.findUnique({
-    where: { id },
-    include: { lines: true, fromWarehouse: true, toWarehouse: true },
-  });
-  if (!transfer) throw new NotFoundError('Transfer');
-
-  if (transfer.status === 'COMPLETED') {
-    throw new ConflictError(
-      'Transfer ' + transfer.transferNo + ' has already been received. '
-      + 'Send the stock back as a new transfer — that is what would actually happen.',
-    );
-  }
-  if (transfer.status === 'CANCELLED') {
-    throw new ConflictError('Transfer ' + transfer.transferNo + ' is already cancelled.');
-  }
-
-  /* Once any line has accepted, damaged or written-off quantity
-     against it, cancelling the whole transfer would either lose
-     that history or require deciding what to do with stock that
-     has already landed somewhere -- a reversal this phase does
-     not build. The transfer is only cancellable while every box
-     dispatched is still, genuinely, on the road. */
-  const partiallyResolved = transfer.lines.some((l) =>
-    Number(l.acceptedQuantity) > 0 || Number(l.damagedQuantity) > 0 || Number(l.missingQuantity) > 0);
-  if (partiallyResolved) {
-    throw new ConflictError(
-      'Transfer ' + transfer.transferNo + ' has already been partially received. '
-      + 'It cannot be cancelled once any quantity has been accepted, damaged or written off.',
-    );
-  }
-
-  const wasInTransit = transfer.status === 'IN_TRANSIT';
+  // A fast existence check, so a wrong id gets a clean 404 without
+  // taking the lock below pointlessly. This is NOT the check that
+  // decides whether the cancellation is valid -- that happens
+  // again, against a LOCKED read, inside the transaction.
+  const exists = await prisma.warehouseTransfer.findUnique({ where: { id }, select: { id: true } });
+  if (!exists) throw new NotFoundError('Transfer');
 
   await prisma.$transaction(async (tx) => {
+    /* LOCK THE TRANSFER ITSELF, FIRST -- see receiveTransfer()'s
+       matching comment for why. A cancel racing a receive on the
+       same transfer is exactly the pairing that was found to
+       double-count stock: both must serialize against this one
+       row before either decides whether it is still allowed to
+       proceed. */
+    await tx.$queryRaw`SELECT 1 FROM "warehouse_transfers" WHERE "id" = ${id}::uuid FOR UPDATE`;
+
+    const transfer = await tx.warehouseTransfer.findUnique({
+      where: { id },
+      include: { lines: true, fromWarehouse: true, toWarehouse: true },
+    });
+    if (!transfer) throw new NotFoundError('Transfer');
+
+    if (transfer.status === 'COMPLETED') {
+      throw new ConflictError(
+        'Transfer ' + transfer.transferNo + ' has already been received. '
+        + 'Send the stock back as a new transfer — that is what would actually happen.',
+      );
+    }
+    if (transfer.status === 'CANCELLED') {
+      throw new ConflictError('Transfer ' + transfer.transferNo + ' is already cancelled.');
+    }
+
+    /* Once any line has accepted, damaged or written-off quantity
+       against it, cancelling the whole transfer would either lose
+       that history or require deciding what to do with stock that
+       has already landed somewhere -- a reversal this phase does
+       not build. The transfer is only cancellable while every box
+       dispatched is still, genuinely, on the road. */
+    const partiallyResolved = transfer.lines.some((l) =>
+      Number(l.acceptedQuantity) > 0 || Number(l.damagedQuantity) > 0 || Number(l.missingQuantity) > 0);
+    if (partiallyResolved) {
+      throw new ConflictError(
+        'Transfer ' + transfer.transferNo + ' has already been partially received. '
+        + 'It cannot be cancelled once any quantity has been accepted, damaged or written off.',
+      );
+    }
+
+    const wasInTransit = transfer.status === 'IN_TRANSIT';
+
     if (wasInTransit) {
       for (const line of transfer.lines) {
         // Back to the source, as its own movement. The original
