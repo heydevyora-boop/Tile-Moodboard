@@ -91,6 +91,16 @@ async function main() {
     data: { name: 'Legacy Loose Tile', brandId: kajaria.id, productCode: 'KAJ-LEG-900' },
   });
 
+  // A second company/collection/product, to prove pagination and the
+  // brandId filter actually narrow the feed rather than always
+  // returning everything.
+  const somany = await prisma.brand.create({ data: { name: 'Somany', slug: 'somany' } });
+  const somanyClassic = await prisma.collection.create({ data: { brandId: somany.id, name: 'Classic' } });
+  const royale = await prisma.product.create({ data: { name: 'Royale Marble Finish', collectionId: somanyClassic.id } });
+  await prisma.tile.create({
+    data: { name: 'Royale Marble Finish', brandId: somany.id, productId: royale.id, finish: 'Matte', size: '600x600mm', productCode: 'SOM-RMF-M-600' },
+  });
+
   const express = require('express');
   const host = express();
   host.use(express.static(FRONTEND));
@@ -145,31 +155,37 @@ async function main() {
   check('3a. no x-erp-key header is refused', noKey.status === 403);
   const wrongKey = await api('GET', '/integrations/erp/catalog-feed', null, { 'x-erp-key': 'wrong' });
   check('3b. a wrong x-erp-key is refused', wrongKey.status === 403);
-  const rightKey = await api('GET', '/integrations/erp/catalog-feed', null, { 'x-erp-key': ERP_KEY });
+  const rightKey = await api('GET', '/integrations/erp/catalog-feed?limit=50', null, { 'x-erp-key': ERP_KEY });
   check('3c. the correct x-erp-key succeeds', rightKey.status === 200);
 
-  // ---- 4. ERP export payload shape ----
+  // ---- 4. ERP export payload shape (documented contract: data[], meta) ----
   step('4. the ERP feed payload: stable ids, structured variants, real image URLs, nothing invented');
-  const feed = rightKey.body.data;
-  const company = feed.companies.find((c) => c.companyId === kajaria.id);
-  check('4a. the company carries its stable id, name and code', !!company && company.companyName === 'Kajaria' && company.companyCode === 'KAJ');
-  const collection = company?.collections.find((c) => c.collectionId === classic.id);
-  check('4b. the collection carries its stable id and name, nested under its company', !!collection && collection.collectionName === 'Onery Elite Collection');
-  const product = collection?.products.find((p) => p.productId === decore.id);
-  check('4c. the product carries id, name, category and specifications', !!product && product.productName === 'Onery Elite Decore' && product.category === 'Floor Tile' && product.specifications.includes('Porcelain'));
-  check('4d. available sizes/finishes are derived from the real variants', product.availableSizes.includes('600x600mm') && product.availableFinishes.includes('Matte') && product.availableFinishes.includes('Glossy'));
-  const variant = product?.variants.find((v) => v.sku === 'KAJ-OED-M-600');
-  check('4e. the priced variant is structured (not flat text) with every required field', !!variant
-    && variant.variantId === priced.id && variant.material === 'Porcelain' && variant.dimensions === '600x600mm'
-    && variant.thickness === '10mm' && variant.finish === 'Matte' && Number(variant.sellingPrice) === 185.5 && variant.unitOfMeasure === 'SQFT');
-  check('4f. the variant image URL is resolved, not a raw local path', variant.imageUrl && !variant.imageUrl.startsWith('/uploads') && !variant.imageUrl.startsWith('file:'));
-  const unpricedVariant = product?.variants.find((v) => v.sku === 'KAJ-OED-G-600');
-  check('4g. the unpriced variant is still present, with sellingPrice null rather than omitted or fabricated', !!unpricedVariant && unpricedVariant.sellingPrice === null);
-  check('4h. unassigned tiles are listed separately per company, never guessed into a product', company.unassignedVariants.some((v) => v.sku === 'KAJ-LEG-900'));
-  check('4i. the unassigned tile is not ALSO duplicated inside any product\'s variants', !company.collections.some((c) => c.products.some((p) => p.variants.some((v) => v.sku === 'KAJ-LEG-900'))));
+  const rows = rightKey.body.data;
+  const erpRow = rows.find((r) => r.product.id === decore.id);
+  check('4a. the company carries its stable id and name', !!erpRow && erpRow.company.id === kajaria.id && erpRow.company.name === 'Kajaria');
+  check('4b. the collection carries its stable id and name, alongside its company', erpRow.collection.id === classic.id && erpRow.collection.name === 'Onery Elite Collection');
+  check('4c. the product carries id, name, category and specifications', erpRow.product.name === 'Onery Elite Decore' && erpRow.product.category === 'Floor Tile' && erpRow.product.specifications.includes('Porcelain'));
+  const variant = erpRow.product.variants.find((v) => v.sku === 'KAJ-OED-M-600');
+  check('4d. the priced variant is structured (not flat text) with every documented field', !!variant
+    && variant.tileId === priced.id && variant.material === 'Porcelain' && variant.dimensions === '600x600mm'
+    && variant.thickness === '10mm' && variant.finish === 'Matte' && variant.price === 185.5 && variant.unit === 'SQFT');
+  check('4e. the variant image URL is resolved, not a raw local path', variant.imageUrl && !variant.imageUrl.startsWith('/uploads') && !variant.imageUrl.startsWith('file:'));
+  const unpricedVariant = erpRow.product.variants.find((v) => v.sku === 'KAJ-OED-G-600');
+  check('4f. the unpriced variant is still present, with price null rather than omitted or fabricated', !!unpricedVariant && unpricedVariant.price === null);
+  check('4g. a tile not yet assigned to any product is excluded from this feed, never force-fit into one', !rows.some((r) => r.product.variants.some((v) => v.sku === 'KAJ-LEG-900')));
+  check('4h. meta carries a version and real pagination totals', rightKey.body.meta.version === '1' && rightKey.body.meta.total === 2);
+
+  // ---- 5. ERP export pagination and company filtering ----
+  step('5. the ERP feed paginates and can be scoped to one company');
+  const page1 = await api('GET', '/integrations/erp/catalog-feed?limit=1&page=1', null, { 'x-erp-key': ERP_KEY });
+  check('5a. limit=1 returns exactly one row with correct meta', page1.body.data.length === 1 && page1.body.meta.limit === 1 && page1.body.meta.total === 2 && page1.body.meta.hasNextPage === true);
+  const page2 = await api('GET', '/integrations/erp/catalog-feed?limit=1&page=2', null, { 'x-erp-key': ERP_KEY });
+  check('5b. page 2 returns the other row, not the same one again', page2.body.data[0].product.id !== page1.body.data[0].product.id && page2.body.meta.hasNextPage === false);
+  const scoped = await api('GET', `/integrations/erp/catalog-feed?brandId=${somany.id}`, null, { 'x-erp-key': ERP_KEY });
+  check('5c. filtering by brandId returns only that company\'s products', scoped.body.data.length === 1 && scoped.body.data[0].company.id === somany.id && scoped.body.data[0].product.name === 'Royale Marble Finish');
 
   // ---- 5. recent-generations resolver: brand/collection read back live ----
-  step('5. recent-generations resolves Brand/Collection for a product from its live tile, never from the stored log');
+  step('6. recent-generations resolves Brand/Collection for a product from its live tile, never from the stored log');
   const tilesByCode = new Map([
     ['KAJ-OED-M-600', { imageUrl: priced.imageUrl, name: priced.name, size: priced.size, finish: priced.finish, brandName: 'Kajaria', collectionName: 'Onery Elite Collection' }],
   ]);
@@ -185,7 +201,7 @@ async function main() {
   check('5b. a code with no matching tile gets empty brand/collection, never a guess', generationNoTile.products[0].brandName === '' && generationNoTile.products[0].collectionName === '');
 
   // ---- 6. catalog.html: image-first product detail, ordered Surface Archive cards ----
-  step('6. catalog.html in Chromium: image appears first, Surface Archive cards carry the standardized order');
+  step('7. catalog.html in Chromium: image appears first, Surface Archive cards carry the standardized order');
   const browser = await chromium.launch();
   const pageErrors = [];
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
@@ -219,19 +235,19 @@ async function main() {
     const eyebrow = panel.querySelector('.detail-eyebrow');
     return !!img && !!eyebrow && !!(img.compareDocumentPosition(eyebrow) & Node.DOCUMENT_POSITION_FOLLOWING);
   });
-  check('6a. the product image is the first element in the detail panel, before Brand/Collection/Name', imageFirst);
+  check('7a. the product image is the first element in the detail panel, before Brand/Collection/Name', imageFirst);
 
   await page.locator('#finishChips .option-chip', { hasText: 'Matte' }).click();
   await page.locator('#sizeChips .option-chip', { hasText: '600x600mm' }).click();
   await page.waitForSelector('.variant-resolved');
   const resolvedTexts = await page.locator('.variant-resolved').allTextContents();
-  check('6b. the resolved variant shows SKU, then price, then stock status, in that order',
+  check('7b. the resolved variant shows SKU, then price, then stock status, in that order',
     resolvedTexts.length === 3 && resolvedTexts[0].includes('KAJ-OED-M-600') && resolvedTexts[1].includes('185.5') && resolvedTexts[2].includes('IN STOCK'));
 
   await page.waitForSelector('#surfaceGrid .surface-card', { timeout: 15000 });
   const firstCardLines = await page.locator('#surfaceGrid .surface-card').first().locator('.ss, .sn').allTextContents();
-  check('6c. the first Surface Archive card leads with a metadata line (brand/collection) before the product-name line', firstCardLines.length >= 2 && firstCardLines[0].length > 0);
-  check('6d. no uncaught JS errors through this whole flow', pageErrors.length === 0, pageErrors);
+  check('7c. the first Surface Archive card leads with a metadata line (brand/collection) before the product-name line', firstCardLines.length >= 2 && firstCardLines[0].length > 0);
+  check('7d. no uncaught JS errors through this whole flow', pageErrors.length === 0, pageErrors);
 
   await browser.close();
 

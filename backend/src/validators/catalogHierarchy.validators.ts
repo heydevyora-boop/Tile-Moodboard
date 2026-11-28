@@ -99,6 +99,19 @@ export const assignVariantSchema = z.object({
   tileId: z.string().min(1),
 });
 
+/* ============================================================
+   ERP CATALOG FEED
+   ============================================================ */
+
+export const erpCatalogFeedQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  brandId: z.string().min(1).optional(),
+  collectionId: z.string().min(1).optional(),
+});
+
+export type ErpCatalogFeedQuery = z.infer<typeof erpCatalogFeedQuerySchema>;
+
 export type CreateCompanyInput = z.infer<typeof createCompanySchema>;
 export type UpdateCompanyInput = z.infer<typeof updateCompanySchema>;
 export type ListCompaniesQuery = z.infer<typeof listCompaniesQuerySchema>;

@@ -1,7 +1,9 @@
 import { Router } from 'express';
 import * as integrationsController from '@controllers/integrations.controller';
 import { authenticate, authorize } from '@middlewares/auth';
+import { validate } from '@middlewares/validate';
 import { erpAuth } from '@middlewares/erpAuth';
+import { erpCatalogFeedQuerySchema } from '@validators/catalogHierarchy.validators';
 
 const router = Router();
 
@@ -11,7 +13,12 @@ const router = Router();
  * x-erp-key shared secret -- see erpAuth.ts. Read-only; writes nothing,
  * connects nowhere.
  */
-router.get('/erp/catalog-feed', erpAuth, integrationsController.getErpCatalogFeedHandler);
+router.get(
+  '/erp/catalog-feed',
+  erpAuth,
+  validate(erpCatalogFeedQuerySchema, 'query'),
+  integrationsController.getErpCatalogFeedHandler,
+);
 
 /*
  * PUBLIC, and before the guards below on purpose.
