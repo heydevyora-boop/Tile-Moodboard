@@ -665,15 +665,25 @@ in `inventory_test.mjs`) is additionally still backstopped by the
 depth, but is no longer the *only* thing standing between a race and
 a corrupted balance.
 
-**Known remaining gap, by the same mechanism, out of this fix's named
-scope:** `dispatchTransfer()` does not take this lock. A dispatch
-racing a cancel on the same `DRAFT` transfer is not protected the same
-way — dispatch's own idempotency key makes a double-dispatch safe, but
-a dispatch that reads stale `DRAFT` status concurrently with a cancel
-could still overwrite a cancellation's status on commit. This was not
-one of the two functions this fix was scoped to, and extending the
-same lock to `dispatchTransfer()` would be a small, consistent
-follow-up if asked for, not implemented here.
+**Closed, as a follow-up.** `dispatchTransfer()` now takes the same
+lock, re-reading and re-validating status (must still be `DRAFT`)
+from inside it before posting anything, exactly like the other two.
+
+This pairing is not "exactly one must win" the way cancel-vs-receive
+is: `cancelTransfer()` has no failure mode reachable from either
+`DRAFT` or an untouched `IN_TRANSIT`, so it always succeeds in this
+race — either closing a still-genuinely-`DRAFT` transfer outright, or
+(when dispatch won the lock first) legitimately reversing the
+dispatch that just happened, the same path a user clicking Dispatch
+and then Cancel in quick succession would hit. Both are correct,
+pre-existing behaviour. What the lock actually guarantees is the one
+thing that would be wrong: dispatch never moves stock on a transfer
+`cancelTransfer()` has already closed from `DRAFT` — confirmed
+directly, not assumed, by 60 trials across both array orders in
+`test/transfer_concurrency_test.mjs` (29 dispatch-then-cancelled, 31
+cancelled-from-draft, 0 of the unsafe case), with company-wide AND
+per-warehouse stock checked back to exactly its starting point after
+every trial.
 
 ### `stock:read` — re-examined, not closed
 

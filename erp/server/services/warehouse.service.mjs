@@ -423,17 +423,34 @@ export async function createTransfer({ fromWarehouseId, toWarehouseId, lines, no
 
 /** DISPATCH — stock leaves the source and is in transit. */
 export async function dispatchTransfer(id, actor) {
-  const transfer = await prisma.warehouseTransfer.findUnique({
-    where: { id },
-    include: { lines: true, fromWarehouse: true, toWarehouse: true },
-  });
-  if (!transfer) throw new NotFoundError('Transfer');
-  if (transfer.status !== 'DRAFT') {
-    throw new ConflictError('Transfer ' + transfer.transferNo + ' is ' + transfer.status
-      + ' and cannot be dispatched.');
-  }
+  // A fast existence check, so a wrong id gets a clean 404 without
+  // taking the lock below pointlessly. This is NOT the check that
+  // decides whether the dispatch is valid -- that happens again,
+  // against a LOCKED read, inside the transaction.
+  const exists = await prisma.warehouseTransfer.findUnique({ where: { id }, select: { id: true } });
+  if (!exists) throw new NotFoundError('Transfer');
 
   await prisma.$transaction(async (tx) => {
+    /* LOCK THE TRANSFER ITSELF, FIRST -- same reasoning as
+       receiveTransfer()'s and cancelTransfer()'s matching comment.
+       A dispatch racing a cancel on the same DRAFT transfer must
+       serialize against this one row before either decides
+       whether it is still allowed to proceed, exactly like a
+       cancel racing a receive already does. */
+    await tx.$queryRaw`SELECT 1 FROM "warehouse_transfers" WHERE "id" = ${id}::uuid FOR UPDATE`;
+
+    // Now read the CURRENT state. Nothing else holding this lock
+    // can be mid-write.
+    const transfer = await tx.warehouseTransfer.findUnique({
+      where: { id },
+      include: { lines: true, fromWarehouse: true, toWarehouse: true },
+    });
+    if (!transfer) throw new NotFoundError('Transfer');
+    if (transfer.status !== 'DRAFT') {
+      throw new ConflictError('Transfer ' + transfer.transferNo + ' is ' + transfer.status
+        + ' and cannot be dispatched.');
+    }
+
     for (const line of transfer.lines) {
       // Out of the source. This checks availability, takes the
       // row lock and refuses an inactive warehouse, like every

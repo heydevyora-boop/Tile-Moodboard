@@ -99,6 +99,14 @@ async function freshTransfer(main, depot, product, qty) {
   return t;
 }
 
+/** Raised but never dispatched -- for racing dispatch against cancel. */
+async function freshDraft(main, depot, product, qty) {
+  return wh.createTransfer({
+    fromWarehouseId: main.id, toWarehouseId: depot.id,
+    lines: [{ productId: product.id, quantity: qty, uom: 'BOX' }],
+  }, user);
+}
+
 let user, main, depot, product;
 
 async function main_() {
@@ -300,37 +308,144 @@ async function main_() {
     cancelAfterMissingAccepted === 0, cancelAfterMissingAccepted);
 
   /* ────────────────────────────────────────────────────────
-     8. WHOLE-SUITE INTEGRITY, AFTER EVERYTHING ABOVE
+     8. DISPATCH vs CANCEL, BOTH STARTING ORDERS
      ──────────────────────────────────────────────────────── */
-  console.log('\n8. integrity, after ' + (ITERATIONS * 4 + 50) + ' transfers and every race above');
+  console.log('\n8. dispatch and cancel, fired concurrently on a fresh DRAFT transfer, both array orders, '
+    + ITERATIONS + ' iterations each');
+
+  /* UNLIKE cancel-vs-receive, this is not a "exactly one must win"
+     pairing. cancelTransfer() has no failure mode reachable from
+     either DRAFT or IN_TRANSIT with nothing yet received -- it is
+     always EITHER closing an untouched draft OR legitimately
+     reversing a dispatch that got there first, and both are
+     correct, pre-existing behaviour. So cancel is expected to
+     succeed in every trial; the question the lock actually has to
+     answer is which ONE of these two correct outcomes happens, and
+     whether dispatch is ever allowed to move stock AFTER cancel has
+     already closed the draft (which would be the real bug: stock
+     dispatched out from under a cancelled transfer). */
+  const dispatchTally = { dispatchThenCancelled: 0, cancelledFromDraft: 0, dispatchWonAlone: 0, neitherSucceeded: 0 };
+  let dispatchPhantomStockEver = false;
+  let dispatchRawDbErrorEver = false;
+  let dispatchAfterCancelEver = false;
+
+  for (let order = 0; order < 2; order++) {
+    for (let i = 0; i < ITERATIONS; i++) {
+      const t = await freshDraft(main, depot, product, 10);
+      const before = await company();
+      const mainBefore = await balance(product.id, main.id);
+      const depotBefore = await balance(product.id, depot.id);
+
+      const dispatchCall = () => wh.dispatchTransfer(t.id, user);
+      const cancelCall = () => wh.cancelTransfer(t.id, user, 'race test: cancel vs dispatch');
+
+      const calls = order === 0 ? [dispatchCall(), cancelCall()] : [cancelCall(), dispatchCall()];
+      const results = await Promise.allSettled(calls);
+      const [first, second] = order === 0 ? results : [results[1], results[0]];
+      const dispatchResult = first;
+      const cancelResult = second;
+
+      const dispatchOk = dispatchResult.status === 'fulfilled';
+      const cancelOk = cancelResult.status === 'fulfilled';
+
+      const finalTransfer = await wh.getTransfer(t.id);
+
+      if (!dispatchOk && !cancelOk) {
+        dispatchTally.neitherSucceeded += 1;
+      } else if (dispatchOk && cancelOk) {
+        // dispatch won the lock first, committed IN_TRANSIT, and
+        // cancel -- unblocked afterward, re-reading fresh -- then
+        // legitimately reversed it. Nothing is wrong with this; it
+        // is the SAME cancel-an-in-transit-transfer path a user
+        // clicking the two buttons in quick succession would hit.
+        dispatchTally.dispatchThenCancelled += 1;
+        if (finalTransfer.status !== 'CANCELLED') dispatchAfterCancelEver = true;
+      } else if (cancelOk) {
+        // cancel won the lock first, while still genuinely DRAFT,
+        // and closed it. Dispatch, unblocked afterward, must see
+        // CANCELLED (not DRAFT) and refuse -- if it instead moved
+        // stock on an already-cancelled transfer, THAT is the bug
+        // this lock exists to prevent.
+        dispatchTally.cancelledFromDraft += 1;
+        if (finalTransfer.status !== 'CANCELLED') dispatchAfterCancelEver = true;
+      } else {
+        // dispatchOk && !cancelOk -- not reachable in this
+        // two-state window (cancel has no failure mode here), but
+        // tallied rather than assumed away.
+        dispatchTally.dispatchWonAlone += 1;
+      }
+
+      // The loser, when there is one, must get a NAMED business
+      // error (ConflictError, status 409) -- never a raw
+      // Prisma/Postgres exception.
+      for (const r of [dispatchResult, cancelResult]) {
+        if (r.status === 'rejected' && r.reason?.code !== 'CONFLICT' && r.reason?.status !== 409) {
+          dispatchRawDbErrorEver = true;
+        }
+      }
+
+      // Whichever path this trial took, company-wide physical
+      // stock, and each warehouse's own on-hand/in-transit, must
+      // end up EXACTLY where they started: a draft cancelled moves
+      // nothing, and a dispatch-then-cancelled sequence nets to
+      // zero (out and back). Checked per-warehouse, not just the
+      // company total, so a split error (right total, wrong
+      // warehouse) cannot hide.
+      const after = await company();
+      const mainAfter = await balance(product.id, main.id);
+      const depotAfter = await balance(product.id, depot.id);
+      if (after.total !== before.total
+        || mainAfter.onHand !== mainBefore.onHand || mainAfter.inTransit !== mainBefore.inTransit
+        || depotAfter.onHand !== depotBefore.onHand || depotAfter.inTransit !== depotBefore.inTransit) {
+        dispatchPhantomStockEver = true;
+      }
+    }
+  }
+
+  check('8a. cancel always succeeds in this race -- it has no failure mode reachable from here',
+    dispatchTally.neitherSucceeded === 0, JSON.stringify(dispatchTally));
+  check('8b. both lock-acquisition orders were actually exercised (dispatch sometimes first, sometimes not)',
+    dispatchTally.dispatchThenCancelled > 0 && dispatchTally.cancelledFromDraft > 0, JSON.stringify(dispatchTally));
+  check('8c. dispatch never moves stock on a transfer cancel has already closed from DRAFT',
+    !dispatchAfterCancelEver);
+  check('8d. company-wide AND per-warehouse stock always nets back to exactly where it started',
+    !dispatchPhantomStockEver);
+  check('8e. the losing call always received a controlled business error, never a raw database exception',
+    !dispatchRawDbErrorEver);
+  console.log('    tally: ' + JSON.stringify(dispatchTally));
+
+  /* ────────────────────────────────────────────────────────
+     9. WHOLE-SUITE INTEGRITY, AFTER EVERYTHING ABOVE
+     ──────────────────────────────────────────────────────── */
+  console.log('\n9. integrity, after ' + (ITERATIONS * 6 + 50) + ' transfers and every race above');
 
   const report = await wh.reconciliationReport();
-  check('8a. zero reconciliation drift across every balance touched by this suite',
+  check('9a. zero reconciliation drift across every balance touched by this suite',
     report.driftedBalances.length === 0, report.driftedBalances);
-  check('8b. zero negative balances', report.negativeBalances.length === 0, report.negativeBalances);
-  check('8c. zero missing projections', report.missingProjections.length === 0, report.missingProjections);
-  check('8d. zero unbalanced transfers, across every transfer this suite created',
+  check('9b. zero negative balances', report.negativeBalances.length === 0, report.negativeBalances);
+  check('9c. zero missing projections', report.missingProjections.length === 0, report.missingProjections);
+  check('9d. zero unbalanced transfers, across every transfer this suite created',
     report.unbalancedTransfers.length === 0, report.unbalancedTransfers);
 
   const dupKeys = await prisma.$queryRaw`
     SELECT "idempotencyKey", COUNT(*)::int AS n FROM stock_ledger_entries
     GROUP BY "idempotencyKey" HAVING COUNT(*) > 1
   `;
-  check('8e. no idempotency key was ever reused -- no duplicate stock movement',
+  check('9e. no idempotency key was ever reused -- no duplicate stock movement',
     dupKeys.length === 0, dupKeys);
 
   const negativeLedgerRows = await prisma.$queryRaw`
     SELECT COUNT(*)::int AS n FROM inventory_balances
     WHERE "quantityOnHand" < 0 OR "quantityInTransit" < 0 OR "quantityDamaged" < 0 OR "quantityReserved" < 0
   `;
-  check('8f. no inventory balance went negative in any dimension, at the database level',
+  check('9f. no inventory balance went negative in any dimension, at the database level',
     Number(negativeLedgerRows[0].n) === 0, negativeLedgerRows[0].n);
 
   const overResolved = await prisma.$queryRaw`
     SELECT COUNT(*)::int AS n FROM warehouse_transfer_lines
     WHERE "acceptedQuantity" + "damagedQuantity" + "missingQuantity" > quantity
   `;
-  check('8g. no transfer line was ever resolved beyond what was dispatched',
+  check('9g. no transfer line was ever resolved beyond what was dispatched',
     Number(overResolved[0].n) === 0, overResolved[0].n);
 }
 
